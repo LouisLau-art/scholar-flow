@@ -253,4 +253,7 @@ With multiple developers:
   - 包冲突处理: 优先保留系统包，可清理对应的 `npm`/`pip` 全局包。
   - Python 强制安装: 若 `pip` 被拒，使用 `--break-system-packages`。
   - Docker 任务需显式包含镜像源配置校验。
+- **DoD 验收**: 
+  - 后端：接口必须在 Swagger (/docs) 可点。
+  - 前端：页面必须有入口链接。
 - Stop at any checkpoint to validate story independently

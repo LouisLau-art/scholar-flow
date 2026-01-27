@@ -83,9 +83,11 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase N: Polish & Cross-Cutting Concerns
 
-- [ ] T031 实现前端全局 Error Boundary
-- [ ] T032 全链路 Quickstart 验证
-- [ ] T033 代码清理与文档同步
+- [x] T031 实现前端全局 Error Boundary
+- [x] T032 全链路 Quickstart 验证
+- [x] T033 代码清理与文档同步
+- [x] T034 [Hotfix] 补全缺失的业务 API 路由 (Quality Check, Publish, Finance)
+- [x] T035 [Hotfix] 开发门户首页 (Landing Page) 与全局导航
 - [ ] **CP08** [最终存档] 执行 `git push` 同步全功能变更
 
 ---

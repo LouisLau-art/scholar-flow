@@ -73,9 +73,25 @@ Sync Impact Report
 - **Docker 规范**: 必须确保配置了国内镜像源。
 
 ## 九、 持续集成与存档 (CI & Savepoints)
+
 - **即时存档**: 每一个原子化任务（如完成一个 Issue）完成后，必须立即执行 `git push` 同步至 GitHub。
+
 - **存档意义**: 此举作为项目的“存档点”，确保在发生意外情况时能及时回滚并减少损失。
 
+
+
+## 十、 全栈切片与交付定义 (Full-Stack Slice & DoD)
+
+- **拒绝隐形逻辑**: 后端任务完成的标准**必须**包含 API Router 注册，且在 `/docs` (Swagger) 可见。仅有 Service 层逻辑视为未完成。
+
+- **拒绝孤岛页面**: 前端任务完成的标准**必须**包含从主页或导航栏的可达入口。仅有路由页面视为未完成。
+
+- **骨架先行**: 项目启动的 Phase 1 **必须**显式包含 Landing Page (首页) 和 Navigation (导航) 的搭建，确保后续功能有“家”可归。
+
+
+
 ## Governance
+
 本项目章程是最高准则。
-**Version**: 1.7.0 | **Ratified**: 2026-01-27 | **Last Amended**: 2026-01-27
+
+**Version**: 1.8.0 | **Ratified**: 2026-01-27 | **Last Amended**: 2026-01-27
