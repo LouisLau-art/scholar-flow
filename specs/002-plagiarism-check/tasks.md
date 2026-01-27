@@ -21,11 +21,11 @@ description: "ScholarFlow 自动查重功能任务列表 (v1.6.0 合宪修订版
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 创建 `PlagiarismReports` 数据库表 (包含 `manuscript_id` 唯一索引)
-- [ ] T004 [P] 定义查重报告 Pydantic v2 模型 (**含中文注释**)
-- [ ] T005 [P] 定义前端查重状态 TypeScript 接口
-- [ ] T006 [P] 封装后端 Crossref API 异步客户端 (**含中文注释**)
-- [ ] **CP02** [存档点] 执行 `git push` 同步 Phase 2 基础定义
+- [x] T003 创建 `PlagiarismReports` 数据库表 (包含 `manuscript_id` 唯一索引)
+- [x] T004 [P] 定义查重报告 Pydantic v2 模型 (**含中文注释**)
+- [x] T005 [P] 定义前端查重状态 TypeScript 接口
+- [x] T006 [P] 封装后端 Crossref API 异步客户端 (**含中文注释**)
+- [x] **CP02** [存档点] 执行 `git push` 同步 Phase 2 基础定义
 
 ---
 
