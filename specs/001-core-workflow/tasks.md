@@ -37,9 +37,9 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 - [x] T012 [P] [US1] Implement PDF extraction (**含中文注释**)
 - [x] T013 [P] [US1] Implement AI parsing (**含中文注释**)
 - [x] T014 [US1] Create manuscript upload API endpoint
-- [ ] T015 [P] [US1] 开发投稿页面（Server Components 优先，`slate-900` 配色）
-- [ ] T016 [US1] Implement frontend submission form with AI fallback logic
-- [ ] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
+- [x] T015 [P] [US1] 开发投稿页面（Server Components 优先，`slate-900` 配色）
+- [x] T016 [US1] Implement frontend submission form with AI fallback logic
+- [x] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
 
 ---
 
