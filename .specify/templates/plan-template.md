@@ -100,11 +100,15 @@ ios/ or android/
 **Structure Decision**: [Document the selected structure and reference the real
 directories captured above]
 
-## Complexity Tracking
+## Technical Decisions
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+### 1. Architecture & Routing
+- **显性路由**: 必须在方法装饰器上定义完整路径（如 `/manuscripts/upload`），严禁过度依赖 APIRouter 的 prefix。
+- **全栈切片**: 每一个交付单元必须包含 API、UI 及导航入口。
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+### 2. Dependencies & SDKs
+- **原生优先**: 优先使用 Supabase 原生 `supabase-js`/`supabase-py`，严禁使用不稳定的第三方 Helper 库。
+- **交互标准**: 严禁使用浏览器原生 `alert()`，必须统一使用 Shadcn/Sonner Toast。
+
+## Quality Assurance (QA Suite)
+- **QA 刚性要求**: 任何 Feature 必须包含对应的自动化测试（Backend Pytest, Frontend Vitest）。DoD 必须包含测试全通过截图/报告。

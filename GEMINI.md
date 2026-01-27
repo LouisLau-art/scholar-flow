@@ -40,10 +40,13 @@ frontend/
 - **Naming**: camelCase for Frontend, snake_case for Backend.
 - **Comments**: Mandatory **Chinese comments** for core logic (algorithms, security).
 - **Architecture**: Server Components first, unified API client encapsulation.
+- **Strict QA**: **100% test pass rate** required for all feature deliveries.
+- **Native Only**: Use native Supabase SDKs; explicit full-path routing only.
 
 ## Recent Changes
-- 002-plagiarism-check: Async plagiarism check with similarity gate (0.3).
-- 001-core-workflow: Full submission lifecycle with EIC publication gate.
+- 006-quality-assurance-suite: Full test coverage with unified `run_tests.sh`.
+- 005-system-integrity-and-auth: Native Auth integration and blank page elimination.
+- 004-content-ecosystem: Public portal and PDF reader打通.
 
 <!-- MANUAL ADDITIONS START -->
 - Environment: Arch Linux (pacman/paru priority).

@@ -6,8 +6,8 @@
 ## Technical Decisions
 
 ### 1. Auth 选型
-- **Decision**: 纯净的 **Supabase Auth**。
-- **Rationale**: 既然我们已经在用 Supabase 数据库，Auth 集成是最自然的选择。前端使用 `supabase.auth` 方法，后端中间件校验 JWT。
+- **Decision**: 纯净的 **Supabase Auth (Native SDK)**。
+- **Rationale**: 既然我们已经在用 Supabase 数据库，Auth 集成是最自然的选择。前端直接使用原生 `@supabase/supabase-js`，摒弃不稳定的 Helper 库。后端中间件校验 JWT。
 
 ### 2. 空白页填充策略
 - 使用 **Shadcn/UI** 的 `Card`, `Skeleton`, `EmptyState` 模式。

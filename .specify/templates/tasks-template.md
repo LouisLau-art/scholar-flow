@@ -254,6 +254,7 @@ With multiple developers:
   - Python 强制安装: 若 `pip` 被拒，使用 `--break-system-packages`。
   - Docker 任务需显式包含镜像源配置校验。
 - **DoD 验收**: 
-  - 后端：接口必须在 Swagger (/docs) 可点。
-  - 前端：页面必须有入口链接。
+  - 后端：接口必须在 Swagger (/docs) 显式定义且可点。
+  - 前端：页面必须有从主页或导航栏的可达入口。
+  - **QA**: 自动化测试（Backend/Frontend）必须 100% 通过。
 - Stop at any checkpoint to validate story independently
