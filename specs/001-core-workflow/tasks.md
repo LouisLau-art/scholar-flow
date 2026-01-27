@@ -45,11 +45,11 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 4: User Story 2 - 编辑质检与 KPI 归属 (Priority: P2)
 
-- [ ] T017 [P] [US2] Create editor dashboard management page
-- [ ] T018 [US2] Implement quality check API and "Return for Revision" logic
-- [ ] T019 [US2] 开发质检对话框与 KPI 归属选择组件
-- [ ] T020 [US2] 开发编辑 KPI 统计看板
-- [ ] **CP04** [存档点] 完成 US2 Issue 后立即 `git push` 存档
+- [x] T017 [P] [US2] Create editor dashboard management page
+- [x] T018 [US2] Implement quality check API and "Return for Revision" logic
+- [x] T019 [US2] 开发质检对话框与 KPI 归属选择组件
+- [x] T020 [US2] 开发编辑 KPI 统计看板
+- [x] **CP04** [存档点] 完成 US2 Issue 后立即 `git push` 存档
 
 ---
 
