@@ -10,9 +10,9 @@ export default function SiteHeader() {
 
   const navLinks = [
     { name: 'Journals', href: '#', hasMega: true },
-    { name: 'Articles', href: '#' },
+    { name: 'Topics', href: '/topics' },
     { name: 'Publish', href: '/submit' },
-    { name: 'About', href: '#' },
+    { name: 'About', href: '/about' },
   ]
 
   return (

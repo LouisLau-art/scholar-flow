@@ -25,11 +25,11 @@ description: "ScholarFlow 系统完整性与 Auth 任务清单"
 
 ## Phase 3: Dashboard & Blank Pages
 
-- [ ] T009 开发统一 Dashboard 骨架页
-- [ ] T010 开发 Author 视角统计卡片与列表
-- [ ] T011 开发 `/about` 平台介绍页 (Frontiers 风格)
-- [ ] T012 开发 `/topics` 学科网格动态页
-- [ ] **CP03** [存档点] 消除所有空白页并推送
+- [x] T009 开发统一 Dashboard 骨架页
+- [x] T010 开发 Author 视角统计卡片与列表
+- [x] T011 开发 `/about` 平台介绍页 (Frontiers 风格)
+- [x] T012 开发 `/topics` 学科网格动态页
+- [x] **CP03** [存档点] 消除所有空白页并推送
 
 ## Phase 4: Integration & Polish
 
