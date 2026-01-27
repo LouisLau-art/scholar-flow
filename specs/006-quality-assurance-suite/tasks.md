@@ -16,10 +16,10 @@ description: "ScholarFlow 自动化测试套件任务清单"
 
 ## Phase 2: Core Backend Tests (TDD Style)
 
-- [ ] T004 编写稿件业务测试 `tests/test_manuscripts.py` (覆盖 CRUD)
-- [ ] T005 编写认证逻辑测试 `tests/test_auth.py`
-- [ ] T006 编写查重逻辑集成测试 `tests/test_plagiarism.py`
-- [ ] **CP02** [存档点] 后端核心覆盖完成并推送
+- [x] T004 编写稿件业务测试 `tests/test_manuscripts.py` (覆盖 CRUD)
+- [x] T005 编写认证逻辑测试 `tests/test_auth.py`
+- [x] T006 编写查重逻辑集成测试 `tests/test_plagiarism.py`
+- [x] **CP02** [存档点] 后端核心覆盖完成并推送
 
 ## Phase 3: UI & Integration Tests
 
