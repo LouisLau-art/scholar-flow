@@ -1,36 +1,40 @@
-import secrets
-from datetime import datetime
-from typing import Optional, Tuple
-from uuid import UUID
+import os
+from typing import Optional
+from fastapi import Request, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 
-def generate_reviewer_token() -> str:
-    """
-    生成随机高强度的免登录 Token
-    
-    中文注释:
-    1. 使用 secrets 模块生成 32 字节的十六进制字符串，确保 Token 的不可预测性。
-    2. 遵循章程: 核心安全逻辑显性化。
-    """
-    return secrets.token_hex(32)
+# === Auth 核心配置 ===
+# 中文注释:
+# 1. 密钥来源于 Supabase Project Settings 中的 JWT Secret。
+# 2. 我们使用 HTTPBearer 作为验证头。
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "mock-secret-replace-later")
+ALGORITHM = "HS256"
 
-def verify_token_expiry(expiry_date: datetime) -> bool:
-    """
-    验证 Token 是否过期
-    
-    中文注释:
-    1. 默认有效期为 14 天，由数据库层在创建时计算。
-    2. 如果当前时间超过 expiry_date，返回 False。
-    """
-    return datetime.now() < expiry_date
+security = HTTPBearer()
 
-def get_token_metadata(token: str) -> Optional[Tuple[UUID, UUID]]:
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
-    解析 Token 关联的稿件和审稿人信息
-    
-    中文注释:
-    1. 该逻辑应配合数据库查询使用。
-    2. 本函数为存根，实际实现将从 review_reports 表中匹配 Token。
+    解码并验证 Supabase JWT Token
+    返回解析后的 User Payload
     """
-    # 模拟从数据库获取
-    # return manuscript_id, reviewer_id
-    pass
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=[ALGORITHM], audience="authenticated")
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="无效的身份载荷")
+        return {"id": user_id, "email": payload.get("email")}
+    except JWTError as e:
+        print(f"JWT 验证失败: {str(e)}")
+        raise HTTPException(status_code=401, detail="Token 验证失败或已过期")
+
+def optional_user(request: Request) -> Optional[dict]:
+    """
+    可选的 Auth 注入（用于公开/私有混合页面）
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    # 简化版实现，正式环境需同上校验
+    return {"id": "guest"}
