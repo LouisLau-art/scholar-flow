@@ -34,9 +34,9 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 3: User Story 1 - 作者投稿与 AI 辅助解析 (Priority: P1)
 
-- [ ] T012 [P] [US1] Implement PDF extraction (**含中文注释**)
-- [ ] T013 [P] [US1] Implement AI parsing (**含中文注释**)
-- [ ] T014 [US1] Create manuscript upload API endpoint
+- [x] T012 [P] [US1] Implement PDF extraction (**含中文注释**)
+- [x] T013 [P] [US1] Implement AI parsing (**含中文注释**)
+- [x] T014 [US1] Create manuscript upload API endpoint
 - [ ] T015 [P] [US1] 开发投稿页面（Server Components 优先，`slate-900` 配色）
 - [ ] T016 [US1] Implement frontend submission form with AI fallback logic
 - [ ] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
