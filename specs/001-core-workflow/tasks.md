@@ -55,11 +55,11 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 5: User Story 3 - 审稿人免登录预览与评价 (Priority: P3)
 
-- [ ] T021 [P] [US3] 实现安全 Token 生成与验证逻辑 (**含中文注释**)
-- [ ] T022 [US3] Create reviewer landing page (衬线体标题，`slate-900` 风格)
-- [ ] T023 [US3] Implement PDF preview component with signed URL
-- [ ] T024 [US3] Create submit review API
-- [ ] **CP05** [存档点] 完成 US3 Issue 后立即 `git push` 存档
+- [x] T021 [P] [US3] 实现安全 Token 生成与验证逻辑 (**含中文注释**)
+- [x] T022 [US3] Create reviewer landing page (衬线体标题，`slate-900` 风格)
+- [x] T023 [US3] Implement PDF preview component with signed URL
+- [x] T024 [US3] Create submit review API
+- [x] **CP05** [存档点] 完成 US3 Issue 后立即 `git push` 存档
 
 ---
 
