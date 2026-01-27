@@ -1,7 +1,6 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from app.models.schemas import Manuscript
 
 async def process_quality_check(
     manuscript_id: UUID, 
@@ -21,11 +20,11 @@ async def process_quality_check(
     new_status = "under_review" if passed else "returned_for_revision"
     
     # 模拟数据库更新操作 (实际逻辑应通过 Supabase Client 执行)
-    update_data = {
-        "status": new_status,
-        "kpi_owner_id": kpi_owner_id,
-        "updated_at": datetime.now()
-    }
+    # update_data = {
+    #     "status": new_status,
+    #     "kpi_owner_id": kpi_owner_id,
+    #     "updated_at": datetime.now()
+    # }
     
     if not passed and revision_notes:
         # 这里应记录修改意见并触发邮件通知逻辑 (T019 之后扩展)

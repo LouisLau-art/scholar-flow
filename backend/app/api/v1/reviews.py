@@ -1,7 +1,4 @@
 from fastapi import APIRouter, HTTPException, Body
-from app.models.schemas import ReviewReport
-from app.core.auth_utils import verify_token_expiry
-from uuid import UUID
 from datetime import datetime
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])

@@ -75,9 +75,9 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 7: User Story 5 - AI 自动推荐审稿人 (Priority: P5)
 
-- [ ] T029 [P] [US5] Implement TF-IDF matching algorithm (**含中文注释**)
-- [ ] T030 [US5] Create recommend API and "Invite" logic
-- [ ] **CP07** [存档点] 完成 US5 Issue 后立即 `git push` 存档
+- [x] T029 [P] [US5] Implement TF-IDF matching algorithm (**含中文注释**)
+- [x] T030 [US5] Create recommend API and "Invite" logic
+- [x] **CP07** [存档点] 完成 US5 Issue 后立即 `git push` 存档
 
 ---
 

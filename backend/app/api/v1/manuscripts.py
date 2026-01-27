@@ -1,9 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.core.pdf_processor import extract_text_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
-from typing import Dict, Any
 import shutil
-import os
 
 router = APIRouter(prefix="/manuscripts", tags=["Manuscripts"])
 
