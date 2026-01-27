@@ -88,7 +88,7 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 - [x] T033 代码清理与文档同步
 - [x] T034 [Hotfix] 补全缺失的业务 API 路由 (Quality Check, Publish, Finance)
 - [x] T035 [Hotfix] 开发门户首页 (Landing Page) 与全局导航
-- [ ] **CP08** [最终存档] 执行 `git push` 同步全功能变更
+- [x] **CP08** [最终存档] 执行 `git push` 同步全功能变更
 
 ---
 

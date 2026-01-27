@@ -1,32 +1,42 @@
 import os
 import json
-from openai import OpenAI
 from typing import Dict, Any
-
-# 初始化 OpenAI 客户端 (需配置环境变量 OPENAI_API_KEY)
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
     """
-    调用 OpenAI GPT-4o 解析稿件文本并提取结构化元数据
+    解析稿件元数据 (兼容模式)
     
     中文注释:
-    1. 使用 json_mode 确保返回的是合法的 JSON 格式。
-    2. 提取的核心字段包括：title (标题), abstract (摘要), authors (作者列表)。
-    3. 该逻辑为“显性逻辑”，解析结果直接用于填充前端投稿表单。
+    1. 懒加载: 只有在调用时才检查 API Key。
+    2. 兼容性: 如果未配置 AI 服务，返回 Mock 数据以保证流程跑通。
     """
-    prompt = f"""
-    你是一个专业的学术助理。请从以下提供的论文文本中提取关键元数据。
-    返回格式必须为 JSON，包含以下字段：
-    - title: 论文的完整标题
-    - abstract: 论文摘要
-    - authors: 作者姓名列表（数组）
+    api_key = os.environ.get("OPENAI_API_KEY")
+    
+    # === Mock 模式 (当没有 Key 或 Key 为 mock 值时) ===
+    if not api_key or api_key.startswith("sk-mock"):
+        print("警告: 未检测到有效 AI Key，使用 Mock 数据返回。")
+        return {
+            "title": "Mock Title: Deep Learning in Academic Workflows",
+            "abstract": "This is a mock abstract generated because no real AI API key was provided. The system is running in demonstration mode.",
+            "authors": ["Louis Lau", "AI Assistant"]
+        }
 
-    论文文本内容：
-    {content[:4000]}  # 限制输入长度以节省 Token
-    """
-
+    # === 真实调用模式 (保留给未来对接) ===
     try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        prompt = f"""
+        你是一个专业的学术助理。请从以下提供的论文文本中提取关键元数据。
+        返回格式必须为 JSON，包含以下字段：
+        - title: 论文的完整标题
+        - abstract: 论文摘要
+        - authors: 作者姓名列表（数组）
+
+        论文文本内容：
+        {content[:4000]}
+        """
+
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -35,11 +45,9 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
             ],
             response_format={"type": "json_object"}
         )
+        return json.loads(response.choices[0].message.content)
         
-        # 解析返回的 JSON 内容
-        metadata = json.loads(response.choices[0].message.content)
-        return metadata
     except Exception as e:
-        # 如果解析失败，返回空结构，触发前端的手动回退机制 (Fallback)
-        print(f"AI 解析元数据失败: {str(e)}")
+        print(f"AI 解析异常: {str(e)}")
+        # 降级返回空数据，防止前端崩溃
         return {"title": "", "abstract": "", "authors": []}
