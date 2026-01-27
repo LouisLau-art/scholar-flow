@@ -1,5 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
+
+# 在应用启动前加载环境变量
+load_dotenv()
+
 from app.api.v1 import manuscripts, reviews, plagiarism, users, stats, public
 from app.core.middleware import ExceptionHandlerMiddleware
 

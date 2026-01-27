@@ -23,10 +23,10 @@ description: "ScholarFlow 自动化测试套件任务清单"
 
 ## Phase 3: UI & Integration Tests
 
-- [ ] T007 编写投稿表单交互测试 `SubmissionForm.test.tsx`
-- [ ] T008 编写导航栏响应式测试 `SiteHeader.test.tsx`
-- [ ] T009 开发根目录 `run_tests.sh` 一键测试脚本
-- [ ] **CP03** [最终存档] 质量护城河建成并推送
+- [x] T007 编写投稿表单交互测试 `SubmissionForm.test.tsx`
+- [x] T008 编写导航栏响应式测试 `SiteHeader.test.tsx`
+- [x] T009 开发根目录 `run_tests.sh` 一键测试脚本
+- [x] **CP03** [最终存档] 质量护城河建成并推送
 
 ## Notes
 - **DoD**: 所有测试必须能在开发环境一键跑通。

@@ -27,13 +27,13 @@ description: "ScholarFlow 系统完整性与 Auth 任务清单"
 
 - [x] T009 开发统一 Dashboard 骨架页
 - [x] T010 开发 Author 视角统计卡片与列表
-- [x] T011 开发 `/about` 平台介绍页 (Frontiers 风格)
+- [x] T011 开发 `/about` platform 介绍页 (Frontiers 风格)
 - [x] T012 开发 `/topics` 学科网格动态页
 - [x] **CP03** [存档点] 消除所有空白页并推送
 
 ## Phase 4: Integration & Polish
 
-- [ ] T013 链接修复：首页导航、页脚、各处跳转闭环
-- [ ] T014 权限修复：非登录用户禁止进入 Dashboard
-- [ ] T015 [DoD] 验证全流程：注册 -> 登录 -> 我的投稿展示
-- [ ] **CP04** [最终存档] 系统完整性大版本推送
+- [x] T013 链接修复：首页导航、页脚、各处跳转闭环
+- [x] T014 权限修复：非登录用户禁止进入 Dashboard
+- [x] T015 [DoD] 验证全流程：注册 -> 登录 -> 我的投稿展示
+- [x] **CP04** [最终存档] 系统完整性大版本推送

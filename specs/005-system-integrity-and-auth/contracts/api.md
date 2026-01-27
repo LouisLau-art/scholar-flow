@@ -15,5 +15,6 @@
 - `GET /api/v1/public/announcements`: 获取系统公告。
 
 ## 4. 稿件交互扩展 (Manuscript Extensions)
-- `GET /api/v1/manuscripts/{id}/history`: 查看稿件流转日志。
-- `POST /api/v1/manuscripts/{id}/comments`: 编辑/审稿人内部评论。
+- `POST /api/v1/manuscripts/upload`: 投稿上传。
+- `GET /api/v1/manuscripts/search`: 动态检索已发表文章。
+- `GET /api/v1/manuscripts/history`: 查看稿件流转日志 (Planned)。
