@@ -57,16 +57,25 @@ export default function FinanceDashboard() {
                   </td>
                   <td className="px-6 py-4 text-right flex justify-end gap-2">
                     {inv.status === 'unpaid' ? (
-                      <button onClick={() => handleConfirm(inv.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors">
-                        <CheckCircle className="h-5 w-5" />
+                      <button 
+                        onClick={() => handleConfirm(inv.id)} 
+                        className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs"
+                      >
+                        <CheckCircle className="h-4 w-4" /> Confirm Payment
                       </button>
                     ) : (
-                      <button onClick={() => handleRollback(inv.id)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
-                        <RotateCcw className="h-5 w-5" />
+                      <button 
+                        onClick={() => handleRollback(inv.id)} 
+                        className="flex items-center gap-1 px-3 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors text-xs"
+                      >
+                        <RotateCcw className="h-4 w-4" /> Rollback
                       </button>
                     )}
-                    <button className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
-                      <FileText className="h-5 w-5" />
+                    <button 
+                      onClick={() => alert("Invoice PDF is being generated...")}
+                      className="flex items-center gap-1 px-3 py-1 border border-slate-300 text-slate-600 rounded hover:bg-slate-50 transition-colors text-xs"
+                    >
+                      <FileText className="h-4 w-4" /> View Invoice
                     </button>
                   </td>
                 </tr>

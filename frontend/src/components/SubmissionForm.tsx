@@ -46,12 +46,33 @@ export default function SubmissionForm() {
   const handleFinalize = async () => {
     if (!metadata.title) return
     setIsSubmitting(true)
-    // 模拟最终提交
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    toast.success("Manuscript submitted successfully!")
-    setIsSubmitting(false)
-    // 可以在这里跳转回首页
-    window.location.href = '/'
+    const toastId = toast.loading("Saving manuscript to database...")
+
+    try {
+      // 真实调用后端保存接口
+      const response = await fetch('/api/v1/manuscripts/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: metadata.title,
+          abstract: metadata.abstract,
+          author_id: "00000000-0000-0000-0000-000000000000" // 模拟一个固定作者ID
+        }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success("Manuscript submitted successfully!", { id: toastId })
+        window.location.href = '/'
+      } else {
+        throw new Error("Persistence failed")
+      }
+    } catch (error) {
+      console.error('Submission failed:', error)
+      toast.error("Failed to save. Check database connection.", { id: toastId })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

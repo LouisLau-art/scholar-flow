@@ -26,8 +26,15 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+@layer base {
+  body {
+    @apply text-slate-900 bg-white antialiased;
+  }
+}
+
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .bg-grid-slate {
+    background-image: radial-gradient(circle, #e2e8f0 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }
