@@ -17,16 +17,16 @@ description: "ScholarFlow 内容生态构建任务列表"
 
 ## Phase 2: Article Reading Experience (The Public View)
 
-- [ ] T005 开发文章详情页 `/articles/[id]` (学术元数据展示)
-- [ ] T006 集成 PDF 在线预览组件 (基于 Iframe/Object)
-- [ ] T007 设计并实现文章页侧边栏 (Related Articles, Metrics)
+- [x] T005 开发文章详情页 `/articles/[id]` (学术元数据展示)
+- [x] T006 集成 PDF 在线预览组件 (基于 Iframe/Object)
+- [x] T007 设计并实现文章页侧边栏 (Related Articles, Metrics)
 
 ## Phase 3: Journal Portfolio & Discovery
 
-- [ ] T008 开发期刊详情页 `/journals/[id]` (列表展示 published 文章)
-- [ ] T009 对接首页搜索框与 `/search` 结果页的真实后端数据
-- [ ] T010 更新首页轮播图链接，使其指向真实的期刊详情页
-- [ ] **CP02** [存档点] 完成前端公共展示层并推送
+- [x] T008 开发期刊详情页 `/journals/[id]` (列表展示 published 文章)
+- [x] T009 对接首页搜索框与 `/search` 结果页的真实后端数据
+- [x] T010 更新首页轮播图链接，使其指向真实的期刊详情页
+- [x] **CP02** [存档点] 完成前端公共展示层并推送
 
 ## Phase 4: Integration & Polish
 

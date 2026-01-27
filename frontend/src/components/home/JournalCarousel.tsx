@@ -6,11 +6,11 @@ import Autoplay from 'embla-carousel-autoplay'
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react'
 
 const journals = [
-  { id: 1, title: 'Frontiers in Artificial Intelligence', category: 'Technology', impact: '8.4', color: 'bg-blue-600' },
-  { id: 2, title: 'Journal of Precision Medicine', category: 'Medical', impact: '12.1', color: 'bg-emerald-600' },
-  { id: 3, title: 'Nature Communications (Arch)', category: 'General Science', impact: '17.2', color: 'bg-slate-800' },
-  { id: 4, title: 'Quantum Information Systems', category: 'Physics', impact: '9.8', color: 'bg-purple-600' },
-  { id: 5, title: 'Global Economics & Policy', category: 'Social Science', impact: '6.5', color: 'bg-amber-600' },
+  { id: 1, title: 'Frontiers in Artificial Intelligence', slug: 'ai-ethics', category: 'Technology', impact: '8.4', color: 'bg-blue-600' },
+  { id: 2, title: 'Journal of Precision Medicine', slug: 'medicine', category: 'Medical', impact: '12.1', color: 'bg-emerald-600' },
+  { id: 3, title: 'Nature Communications (Arch)', slug: 'general-science', category: 'General Science', impact: '17.2', color: 'bg-slate-800' },
+  { id: 4, title: 'Quantum Information Systems', slug: 'physics', category: 'Physics', impact: '9.8', color: 'bg-purple-600' },
+  { id: 5, title: 'Global Economics & Policy', slug: 'economics', category: 'Social Science', impact: '6.5', color: 'bg-amber-600' },
 ]
 
 export default function JournalCarousel() {
@@ -54,9 +54,9 @@ export default function JournalCarousel() {
                       <span className="text-xs text-slate-400 font-bold block uppercase">Impact Factor</span>
                       <span className="text-lg font-mono font-bold text-slate-900">{j.impact}</span>
                     </div>
-                    <button className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                    <Link href={`/journals/${j.slug}`} className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">
                       Learn More →
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -67,3 +67,5 @@ export default function JournalCarousel() {
     </section>
   )
 }
+
+import Link from 'next/link'
