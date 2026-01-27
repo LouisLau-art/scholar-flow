@@ -65,11 +65,11 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 6: User Story 4 - 财务开票与上线控制 (Priority: P4)
 
-- [ ] T025 [P] [US4] 实现 PDF 账单生成模块 (**含中文注释**)
-- [ ] T026 [US4] Create finance dashboard and confirm payment API
-- [ ] T027 [US4] 实现主编终审管理界面与 API 触发
-- [ ] T028 [US4] 实现最终发布逻辑
-- [ ] **CP06** [存档点] 完成 US4 Issue 后立即 `git push` 存档
+- [x] T025 [P] [US4] 实现 PDF 账单生成模块 (**含中文注释**)
+- [x] T026 [US4] Create finance dashboard and confirm payment API
+- [x] T027 [US4] 实现主编终审管理界面与 API 触发
+- [x] T028 [US4] 实现最终发布逻辑
+- [x] **CP06** [存档点] 完成 US4 Issue 后立即 `git push` 存档
 
 ---
 
