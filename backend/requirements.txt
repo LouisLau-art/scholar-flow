@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+pydantic>=2.0.0
+uvicorn
+httpx
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pdfplumber
+weasyprint
+openai
+supabase>=2.0.0

@@ -1,0 +1,57 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow Plagiarism API
+  version: 1.0.0
+paths:
+  /api/v1/plagiarism/status/{manuscript_id}:
+    get:
+      summary: 获取稿件的查重状态与结果
+      parameters:
+        - name: manuscript_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlagiarismReport'
+  /api/v1/plagiarism/retry/{manuscript_id}:
+    post:
+      summary: 手动重新触发查重任务 (限编辑)
+      parameters:
+        - name: manuscript_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        202:
+          description: 任务已重新加入队列
+  /api/v1/plagiarism/report/{id}/download:
+    get:
+      summary: 获取查重报告的带签名下载链接
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_url: {type: string}
+
+components:
+  schemas:
+    PlagiarismReport:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, running, completed, failed]}
+        similarity_score: {type: number, format: float}
+        report_url: {type: string}
+        retry_count: {type: integer}

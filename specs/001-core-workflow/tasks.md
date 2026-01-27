@@ -1,0 +1,97 @@
+---
+description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
+---
+
+# Tasks: ScholarFlow Core Workflow
+
+**Input**: Design documents from `/specs/001-core-workflow/`
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+- [ ] T001 优先使用 `pacman` 安装环境依赖，AUR 包切换至用户 `louis` 执行 `paru`，初始化 Next.js 14.2 项目 (`frontend/`)
+- [ ] T002 优先使用 `pacman` 安装 Python 3.11，缺失项使用 `paru` (用户 `louis`) 或 `pip --break-system-packages` 安装，初始化 FastAPI 项目 (`backend/`)
+- [ ] T003 [P] 配置 Linting (ESLint, Ruff) 与 Formatting 工具
+- [ ] **CP01** [存档点] 执行 `git push` 同步 Phase 1 变更至 GitHub
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+- [ ] T004 Setup Supabase project, database schema per `data-model.md`
+- [ ] T005 实现财务操作幂等性约束（唯一性校验与状态锁）
+- [ ] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker 镜像校验)
+- [ ] T007 [P] 初始化审稿人库基础数据
+- [ ] T008 [P] Define core Pydantic v2 models (**含中文注释**)
+- [ ] T009 [P] Define core TypeScript interfaces
+- [ ] T010 开发前端统一 API 封装类与 Supabase Client 实例
+- [ ] T011 实现后端基础异常捕获中间件与结构化日志模块
+- [ ] **CP02** [存档点] 执行 `git push` 同步 Phase 2 变更至 GitHub
+
+---
+
+## Phase 3: User Story 1 - 作者投稿与 AI 辅助解析 (Priority: P1)
+
+- [ ] T012 [P] [US1] Implement PDF extraction (**含中文注释**)
+- [ ] T013 [P] [US1] Implement AI parsing (**含中文注释**)
+- [ ] T014 [US1] Create manuscript upload API endpoint
+- [ ] T015 [P] [US1] 开发投稿页面（Server Components 优先，`slate-900` 配色）
+- [ ] T016 [US1] Implement frontend submission form with AI fallback logic
+- [ ] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
+
+---
+
+## Phase 4: User Story 2 - 编辑质检与 KPI 归属 (Priority: P2)
+
+- [ ] T017 [P] [US2] Create editor dashboard management page
+- [ ] T018 [US2] Implement quality check API and "Return for Revision" logic
+- [ ] T019 [US2] 开发质检对话框与 KPI 归属选择组件
+- [ ] T020 [US2] 开发编辑 KPI 统计看板
+- [ ] **CP04** [存档点] 完成 US2 Issue 后立即 `git push` 存档
+
+---
+
+## Phase 5: User Story 3 - 审稿人免登录预览与评价 (Priority: P3)
+
+- [ ] T021 [P] [US3] 实现安全 Token 生成与验证逻辑 (**含中文注释**)
+- [ ] T022 [US3] Create reviewer landing page (衬线体标题，`slate-900` 风格)
+- [ ] T023 [US3] Implement PDF preview component with signed URL
+- [ ] T024 [US3] Create submit review API
+- [ ] **CP05** [存档点] 完成 US3 Issue 后立即 `git push` 存档
+
+---
+
+## Phase 6: User Story 4 - 财务开票与上线控制 (Priority: P4)
+
+- [ ] T025 [P] [US4] 实现 PDF 账单生成模块 (**含中文注释**)
+- [ ] T026 [US4] Create finance dashboard and confirm payment API
+- [ ] T027 [US4] 实现主编终审管理界面与 API 触发
+- [ ] T028 [US4] 实现最终发布逻辑
+- [ ] **CP06** [存档点] 完成 US4 Issue 后立即 `git push` 存档
+
+---
+
+## Phase 7: User Story 5 - AI 自动推荐审稿人 (Priority: P5)
+
+- [ ] T029 [P] [US5] Implement TF-IDF matching algorithm (**含中文注释**)
+- [ ] T030 [US5] Create recommend API and "Invite" logic
+- [ ] **CP07** [存档点] 完成 US5 Issue 后立即 `git push` 存档
+
+---
+
+## Phase N: Polish & Cross-Cutting Concerns
+
+- [ ] T031 实现前端全局 Error Boundary
+- [ ] T032 全链路 Quickstart 验证
+- [ ] T033 代码清理与文档同步
+- [ ] **CP08** [最终存档] 执行 `git push` 同步全功能变更
+
+---
+
+## Notes
+
+- **即时存档**: 每一个原子化任务或 Phase 结束后，必须执行 `git push`。
+- **Arch 准则**: 安装依赖优先使用 `pacman`/`paru`。
+- **注释规范**: 实现代码必须包含核心逻辑的中文注释。

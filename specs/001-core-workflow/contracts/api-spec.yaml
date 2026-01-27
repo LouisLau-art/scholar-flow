@@ -1,0 +1,29 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow API
+  version: 1.1.0
+paths:
+  /api/v1/manuscripts/upload:
+    post:
+      summary: 上传 PDF 并触发 AI 解析
+      responses:
+        200:
+          description: 返回解析结果或 fallback 标志
+  /api/v1/manuscripts/{id}/status:
+    patch:
+      summary: 更新稿件状态 (退回修改、主编终审、发布)
+  /api/v1/manuscripts/{id}/quality-check:
+    post:
+      summary: 编辑提交质检并绑定 KPI 负责人
+  /api/v1/reviews/invite:
+    post:
+      summary: 编辑点击邀请审稿人，生成 Token 并发送邮件
+  /api/v1/reviews/{token}/preview:
+    get:
+      summary: 审稿人免登录预览 PDF (校验 Token 有效期)
+  /api/v1/finance/confirm:
+    post:
+      summary: 财务手动确认到账
+  /api/v1/manuscripts/recommend:
+    get:
+      summary: 获取 AI 审稿人推荐列表
