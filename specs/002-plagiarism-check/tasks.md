@@ -31,12 +31,12 @@ description: "ScholarFlow 自动查重功能任务列表 (v1.6.0 合宪修订版
 
 ## Phase 3: User Story 1 - 自动触发查重流程 (Priority: P1) 🎯 MVP
 
-- [ ] T007 [US1] 实现查重任务的异步调度逻辑 (BackgroundTasks) (**含中文注释**)
-- [ ] T008 [US1] 在稿件提交 API 中集成查重任务触发逻辑
-- [ ] T009 [US1] 实现查重状态轮询与数据库更新逻辑
-- [ ] T009a [US1] 在异步 Worker 中实现基础限流逻辑 (Rate Limiting) (**含中文注释**)
-- [ ] T010 [US1] 封装前端查重状态查询 API 调用
-- [ ] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
+- [x] T007 [US1] 实现查重任务的异步调度逻辑 (BackgroundTasks) (**含中文注释**)
+- [x] T008 [US1] 在稿件提交 API 中集成查重任务触发逻辑
+- [x] T009 [US1] 实现查重状态轮询与数据库更新逻辑
+- [x] T009a [US1] 在异步 Worker 中实现基础限流逻辑 (Rate Limiting) (**含中文注释**)
+- [x] T010 [US1] 封装前端查重状态查询 API 调用
+- [x] **CP03** [存档点] 完成 US1 Issue 后立即 `git push` 存档
 
 ---
 

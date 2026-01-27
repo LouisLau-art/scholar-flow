@@ -50,4 +50,15 @@ export const ApiClient = {
     if (error) throw error
     return data
   },
+
+  // --- 查重相关 ---
+  async getPlagiarismStatus(manuscriptId: string) {
+    const { data, error } = await supabase
+      .from('plagiarism_reports')
+      .select('*')
+      .eq('manuscript_id', manuscriptId)
+      .single()
+    if (error) throw error
+    return data
+  },
 }
