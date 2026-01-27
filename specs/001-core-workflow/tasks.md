@@ -23,11 +23,11 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 - [x] T004 Setup Supabase project, database schema per `data-model.md`
 - [x] T005 实现财务操作幂等性约束（唯一性校验与状态锁）
 - [x] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker 镜像校验)
-- [ ] T007 [P] 初始化审稿人库基础数据
-- [ ] T008 [P] Define core Pydantic v2 models (**含中文注释**)
-- [ ] T009 [P] Define core TypeScript interfaces
-- [ ] T010 开发前端统一 API 封装类与 Supabase Client 实例
-- [ ] T011 实现后端基础异常捕获中间件与结构化日志模块
+- [x] T007 [P] 初始化审稿人库基础数据
+- [x] T008 [P] Define core Pydantic v2 models (**含中文注释**)
+- [x] T009 [P] Define core TypeScript interfaces
+- [x] T010 开发前端统一 API 封装类与 Supabase Client 实例
+- [x] T011 实现后端基础异常捕获中间件与结构化日志模块
 - [x] **CP02** [存档点] 执行 `git push` 同步 Phase 2 变更至 GitHub
 
 ---
