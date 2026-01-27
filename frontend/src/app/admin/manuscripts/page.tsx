@@ -33,7 +33,9 @@ export default async function AdminManuscriptsPage() {
                   <p className="text-sm text-slate-500 line-clamp-1">{m.abstract}</p>
                   <div className="mt-2 flex gap-3">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      m.status === 'submitted' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                      m.status === 'submitted' ? 'bg-blue-100 text-blue-800' : 
+                      m.status === 'high_similarity' ? 'bg-red-100 text-red-800 border border-red-200 animate-pulse' :
+                      'bg-slate-100 text-slate-800'
                     }`}>
                       {m.status.toUpperCase()}
                     </span>
