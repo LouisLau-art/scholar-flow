@@ -29,8 +29,9 @@ sleep 2
 # 4. 启动前端 (前台运行，以便查看输出)
 echo "⚛️  Starting Frontend (Next.js on :3000)..."
 cd frontend
-# 使用 pnpm dev 启动，绑定所有接口
-pnpm dev -- -H 0.0.0.0 &
+# 使用 HOSTNAME 环境变量指定监听 IP，避免 next dev 参数解析错误
+# 开启 --turbo (Turbopack) 加速编译
+HOSTNAME=0.0.0.0 pnpm dev --turbo &
 FRONTEND_PID=$!
 cd ..
 

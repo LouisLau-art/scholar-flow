@@ -1,19 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { ShieldCheck, Globe, AlertTriangle } from 'lucide-react'
+import { ShieldCheck, Globe } from 'lucide-react'
 
 export default function EICApprovalPage() {
-  /**
-   * 主编 (Editor-in-Chief) 终审管理界面
-   * 遵循章程：视觉锁定深蓝系，大标题衬线体
-   */
   const [pendingItems, setPendingItems] = useState([
     { id: 'm-001', title: 'Advances in Quantum Computing', financeConfirmed: true }
   ])
 
   const handlePublish = (id: string) => {
-    // 调用 ApiClient 进行最终发布 (T028 后端逻辑校验)
     console.log('Publishing manuscript', id)
     setPendingItems(pendingItems.filter(item => item.id !== id))
   }
@@ -52,8 +47,18 @@ export default function EICApprovalPage() {
           ))}
 
           {pendingItems.length === 0 && (
-            <div className="text-center py-20 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400">
-              <p className="text-lg">No manuscripts awaiting final approval.</p>
+            <div className="flex flex-col items-center justify-center py-24 bg-white rounded-xl border border-slate-200 shadow-sm">
+              <div className="rounded-full bg-green-50 p-6 mb-6">
+                <ShieldCheck className="h-16 w-16 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900">All Systems Go!</h2>
+              <p className="mt-2 text-slate-500">No pending manuscripts for final approval.</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="mt-8 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Refresh Dashboard
+              </button>
             </div>
           )}
         </div>
