@@ -31,7 +31,13 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+1. **治理合规 (SD/PG)**: 是否有完整 Spec？是否遵循了阶段门控（0->1->2->3+）？
+2. **交付模型 (TI/MVP)**: 是否按独立可测试的 User Story 拆分？是否 MVP 优先？
+3. **架构与版本**: 是否满足 Next.js 14.2 / Pydantic v2 / Supabase 约束？
+4. **数据流规范**: 是否采用 Server Components 优先且显性逻辑设计？
+5. **容错机制**: 财务操作是否有幂等性方案？是否有优雅降级设计？
+6. **视觉标准**: 是否符合 Frontiers 风格及 Shadcn/Tailwind 配色限制？
+7. **AI 协作**: 任务是否原子化（<5文件）？是否有中文注释计划？
 
 ## Project Structure
 
