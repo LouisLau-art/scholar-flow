@@ -102,19 +102,66 @@ async def confirm_payment(manuscript_id: UUID):
 from app.models.schemas import ManuscriptCreate
 from app.lib.api_client import supabase # 假设我们封装了一个简单的客户端
 
-# === 7. 获取稿件列表 (Admin Dashboard) ===
-@router.get("/")
-async def get_manuscripts():
+# === 8. 公开搜索接口 (User Story 3) ===
+@router.get("/search")
+async def public_search(q: str, mode: str = "articles"):
     """
-    获取所有稿件列表
+    全文检索已发表的文章或期刊
     """
     try:
-        # 查询所有数据，按时间倒序
-        data, count = supabase.table("manuscripts").select("*").order("created_at", desc=True).execute()
-        return {"success": True, "data": data[1]}
+        if mode == "articles":
+            # 基于标题或摘要进行模糊匹配 (ILIKE)
+            data, count = supabase.table("manuscripts")\
+                .select("*, journals(title)")\
+                .eq("status", "published")\
+                .or_(f"title.ilike.%{q}%,abstract.ilike.%{q}%")\
+                .execute()
+            return {"success": True, "results": data[1]}
+        else:
+            data, count = supabase.table("journals")\
+                .select("*")\
+                .ilike("title", f"%{q}%")\
+                .execute()
+            return {"success": True, "results": data[1]}
     except Exception as e:
-        print(f"查询失败: {str(e)}")
-        return {"success": False, "data": []}
+        print(f"搜索异常: {str(e)}")
+        return {"success": False, "results": []}
+
+# === 9. 获取文章详情 (User Story 2) ===
+@router.get("/articles/{id}")
+async def get_article_detail(id: UUID):
+    """
+    获取单篇文章的完整元数据
+    """
+    data, count = supabase.table("manuscripts")\
+        .select("*, journals(*)")\
+        .eq("id", str(id))\
+        .single()\
+        .execute()
+    return {"success": True, "data": data[1]}
+
+# === 10. 获取期刊详情 (User Story 1) ===
+@router.get("/journals/{slug}")
+async def get_journal_detail(slug: str):
+    """
+    获取期刊信息及其旗下文章
+    """
+    # 1. 获取期刊基础信息
+    journal_data = supabase.table("journals").select("*").eq("slug", slug).single().execute()
+    journal = journal_data[1]
+    
+    # 2. 获取该期刊下已发表的文章
+    articles_data = supabase.table("manuscripts")\
+        .select("*")\
+        .eq("journal_id", journal['id'])\
+        .eq("status", "published")\
+        .execute()
+    
+    return {
+        "success": True, 
+        "journal": journal,
+        "articles": articles_data[1]
+    }
     """
     将校对后的稿件信息正式存入数据库
     """

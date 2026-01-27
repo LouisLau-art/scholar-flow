@@ -9,19 +9,36 @@ DROP TABLE IF EXISTS review_reports;
 DROP TABLE IF EXISTS manuscripts;
 
 -- === 2. 重建稿件表 (Manuscripts) ===
--- 注意：移除了 author_id 对 auth.users 的外键约束，方便 Demo 测试
 CREATE TABLE manuscripts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    journal_id UUID, -- 新增：关联期刊
     title TEXT NOT NULL,
     abstract TEXT,
     file_path TEXT,
+    doi TEXT UNIQUE, -- 新增：DOI
     author_id UUID, 
     editor_id UUID,
-    status TEXT DEFAULT 'submitted', -- 默认为已提交，方便测试
+    status TEXT DEFAULT 'submitted',
+    published_at TIMESTAMPTZ, -- 新增：发布时间
     kpi_owner_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- === 2a. 新增期刊表 (Journals) ===
+CREATE TABLE journals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    issn TEXT,
+    impact_factor FLOAT4,
+    cover_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 为 manuscripts 添加对 journals 的外键关联
+ALTER TABLE manuscripts ADD CONSTRAINT fk_manuscript_journal FOREIGN KEY (journal_id) REFERENCES journals(id);
 
 -- === 3. 重建查重报告表 (Plagiarism) ===
 CREATE TABLE plagiarism_reports (
@@ -75,3 +92,14 @@ VALUES ('00000000-0000-0000-0000-000000000001', 'completed', 0.15);
 -- 为测试稿件 2 生成待支付账单
 INSERT INTO invoices (manuscript_id, amount, status)
 VALUES ('00000000-0000-0000-0000-000000000002', 1500.00, 'unpaid');
+
+-- === Seed Journals ===
+
+INSERT INTO journals (id, title, slug, description, impact_factor) 
+VALUES 
+    ('11111111-1111-1111-1111-111111111111', 'Frontiers in Artificial Intelligence', 'ai-ethics', 'Exploring the intersection of AI, ethics, and society.', 8.4),
+    ('22222222-2222-2222-2222-222222222222', 'Journal of Precision Medicine', 'medicine', 'Advanced clinical studies and genomic research.', 12.1);
+
+-- 将之前的测试稿件关联到期刊
+UPDATE manuscripts SET journal_id = '11111111-1111-1111-1111-111111111111', status = 'published', published_at = NOW(), doi = '10.1234/sf.2026.001' 
+WHERE id = '00000000-0000-0000-0000-000000000001';
