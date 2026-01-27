@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import manuscripts, reviews, plagiarism
+from app.api.v1 import manuscripts, reviews, plagiarism, users, stats, public
 from app.core.middleware import ExceptionHandlerMiddleware
 
 app = FastAPI(
@@ -26,6 +26,9 @@ app.add_middleware(ExceptionHandlerMiddleware)
 app.include_router(manuscripts.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(plagiarism.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(stats.router, prefix="/api/v1")
+app.include_router(public.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

@@ -17,11 +17,11 @@ description: "ScholarFlow 系统完整性与 Auth 任务清单"
 
 ## Phase 2: API Expansion & Stats
 
-- [ ] T005 开发 `app/api/v1/users.py`：资料获取与通知
-- [ ] T006 开发 `app/api/v1/stats.py`：三个角色的统计接口
-- [ ] T007 开发 `app/api/v1/public.py`：学科与公告接口
-- [ ] T008 实现稿件流转历史记录逻辑 (T001 之后补齐)
-- [ ] **CP02** [存档点] 后端接口翻倍并推送
+- [x] T005 开发 `app/api/v1/users.py`：资料获取与通知
+- [x] T006 开发 `app/api/v1/stats.py`：三个角色的统计接口
+- [x] T007 开发 `app/api/v1/public.py`：学科与公告接口
+- [x] T008 实现稿件流转历史记录逻辑 (T001 之后补齐)
+- [x] **CP02** [存档点] 后端接口翻倍并推送
 
 ## Phase 3: Dashboard & Blank Pages
 
