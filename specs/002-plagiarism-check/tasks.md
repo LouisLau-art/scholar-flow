@@ -13,9 +13,9 @@ description: "ScholarFlow 自动查重功能任务列表 (v1.6.0 合宪修订版
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 [P] 优先使用 `pacman` 安装 `python-httpx`，AUR 项切换至用户 `louis` 使用 `paru`
-- [ ] T002 在 Supabase Storage 中创建私有 Bucket `plagiarism-reports` 并配置 RLS 策略
-- [ ] **CP01** [存档点] 执行 `git push` 同步 Phase 1 环境配置
+- [x] T001 [P] 优先使用 `pacman` 安装 `python-httpx`，AUR 项切换至用户 `louis` 使用 `paru`
+- [x] T002 在 Supabase Storage 中创建私有 Bucket `plagiarism-reports` 并配置 RLS 策略
+- [x] **CP01** [存档点] 执行 `git push` 同步 Phase 1 环境配置
 
 ---
 
