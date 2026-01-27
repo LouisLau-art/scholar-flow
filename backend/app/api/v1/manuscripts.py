@@ -47,4 +47,9 @@ async def upload_manuscript(background_tasks: BackgroundTasks, file: UploadFile 
             "data": metadata,
             "plagiarism_status": "pending"
         }
-
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传解析失败: {str(e)}")
+    finally:
+        # 清理临时文件 (如果存在)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
