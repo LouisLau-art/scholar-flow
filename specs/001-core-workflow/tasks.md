@@ -11,10 +11,10 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 优先使用 `pacman` 安装环境依赖，AUR 包切换至用户 `louis` 执行 `paru`，初始化 Next.js 14.2 项目 (`frontend/`)
-- [ ] T002 优先使用 `pacman` 安装 Python 3.11，缺失项使用 `paru` (用户 `louis`) 或 `pip --break-system-packages` 安装，初始化 FastAPI 项目 (`backend/`)
-- [ ] T003 [P] 配置 Linting (ESLint, Ruff) 与 Formatting 工具
-- [ ] **CP01** [存档点] 执行 `git push` 同步 Phase 1 变更至 GitHub
+- [x] T001 优先使用 `pacman` 安装环境依赖，AUR 包切换至用户 `louis` 执行 `paru`，初始化 Next.js 14.2 项目 (`frontend/`)
+- [x] T002 优先使用 `pacman` 安装 Python 3.11，缺失项使用 `paru` (用户 `louis`) 或 `pip --break-system-packages` 安装，初始化 FastAPI 项目 (`backend/`)
+- [x] T003 [P] 配置 Linting (ESLint, Ruff) 与 Formatting 工具
+- [x] **CP01** [存档点] 执行 `git push` 同步 Phase 1 变更至 GitHub
 
 ---
 
@@ -22,7 +22,7 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 - [ ] T004 Setup Supabase project, database schema per `data-model.md`
 - [ ] T005 实现财务操作幂等性约束（唯一性校验与状态锁）
-- [ ] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker 镜像校验)
+- [ ] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker镜像校验)
 - [ ] T007 [P] 初始化审稿人库基础数据
 - [ ] T008 [P] Define core Pydantic v2 models (**含中文注释**)
 - [ ] T009 [P] Define core TypeScript interfaces
