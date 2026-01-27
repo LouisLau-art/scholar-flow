@@ -82,16 +82,58 @@ Sync Impact Report
 
 ## 十、 全栈切片与交付定义 (Full-Stack Slice & DoD)
 
-- **拒绝隐形逻辑**: 后端任务完成的标准**必须**包含 API Router 注册，且在 `/docs` (Swagger) 可见。仅有 Service 层逻辑视为未完成。
 
-- **拒绝孤岛页面**: 前端任务完成的标准**必须**包含从主页或导航栏的可达入口。仅有路由页面视为未完成。
 
-- **骨架先行**: 项目启动的 Phase 1 **必须**显式包含 Landing Page (首页) 和 Navigation (导航) 的搭建，确保后续功能有“家”可归。
+- **拒绝隐形逻辑**: 后端任务完成的标准**必须**包含 API Router 注册，且在 `/docs` (Swagger) 可见。
+
+
+
+- **显性路由原则**: API 路由严禁过度依赖嵌套前缀。必须在方法装饰器上定义清晰、完整的路径（如 `/manuscripts/search`），以防测试歧义。
+
+
+
+- **拒绝孤岛页面**: 前端任务完成的标准**必须**包含从主页或导航栏的可达入口。
+
+
+
+- **骨架先行**: 项目启动的 Phase 1 **必须**显式包含 Landing Page 和 Navigation 的搭建。
+
+
+
+
+
+
+
+## 十一、 质量保障与交互标准 (QA & UX Standards)
+
+
+
+- **自动化测试刚性要求**: 任何新功能的交付（DoD）**必须**包含自动化测试用例（后端 Pytest，前端 Vitest）。
+
+
+
+- **原生 SDK 优先**: 在 Supabase 集成中，优先使用原生 `supabase-js` 或 `supabase-py`，严禁使用不稳定的已弃用辅助库。
+
+
+
+- **交互反馈统一**: 全站禁止使用浏览器原生 `alert()`。必须统一使用 **Shadcn/Sonner** 的 Toast 组件进行状态反馈。
+
+
+
+
 
 
 
 ## Governance
 
+
+
 本项目章程是最高准则。
 
-**Version**: 1.8.0 | **Ratified**: 2026-01-27 | **Last Amended**: 2026-01-27
+
+
+**Version**: 1.9.0 | **Ratified**: 2026-01-27 | **Last Amended**: 2026-01-27
+
+
+
+
