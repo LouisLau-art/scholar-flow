@@ -20,15 +20,15 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Setup Supabase project, database schema per `data-model.md`
-- [ ] T005 实现财务操作幂等性约束（唯一性校验与状态锁）
-- [ ] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker镜像校验)
+- [x] T004 Setup Supabase project, database schema per `data-model.md`
+- [x] T005 实现财务操作幂等性约束（唯一性校验与状态锁）
+- [x] T006 Configure Supabase Storage bucket `manuscripts` (及国内 Docker 镜像校验)
 - [ ] T007 [P] 初始化审稿人库基础数据
 - [ ] T008 [P] Define core Pydantic v2 models (**含中文注释**)
 - [ ] T009 [P] Define core TypeScript interfaces
 - [ ] T010 开发前端统一 API 封装类与 Supabase Client 实例
 - [ ] T011 实现后端基础异常捕获中间件与结构化日志模块
-- [ ] **CP02** [存档点] 执行 `git push` 同步 Phase 2 变更至 GitHub
+- [x] **CP02** [存档点] 执行 `git push` 同步 Phase 2 变更至 GitHub
 
 ---
 
@@ -93,5 +93,5 @@ description: "ScholarFlow 核心工作流任务列表 (v1.6.0 合宪修订版)"
 ## Notes
 
 - **即时存档**: 每一个原子化任务或 Phase 结束后，必须执行 `git push`。
-- **Arch 准则**: 安装依赖优先使用 `pacman`/`paru`。
+- **Arch 准则**: 安装优先用 `pacman`；AUR 必须切换至用户 `louis` 使用 `paru`；`pip` 被拒时使用 `--break-system-packages`。
 - **注释规范**: 实现代码必须包含核心逻辑的中文注释。
