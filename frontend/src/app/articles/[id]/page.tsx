@@ -25,6 +25,27 @@ export default function ArticleDetailPage() {
     fetchArticle()
   }, [id])
 
+  async function handleDownload(articleId: string) {
+    try {
+      // 调用下载统计API
+      const res = await fetch(`/api/v1/stats/download/${articleId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (res.ok) {
+        // 打开PDF下载链接
+        window.open(`/api/v1/manuscripts/articles/${articleId}/download`, "_blank");
+      } else {
+        console.error("Failed to record download");
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
@@ -76,7 +97,10 @@ export default function ArticleDetailPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900">Full Text Preview</h2>
-              <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full text-sm font-bold hover:bg-slate-800 transition-all">
+              <button 
+                onClick={() => handleDownload(article.id)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full text-sm font-bold hover:bg-slate-800 transition-all"
+              >
                 <Download className="h-4 w-4" /> Download PDF
               </button>
             </div>
@@ -89,7 +113,7 @@ export default function ArticleDetailPage() {
                 </div>
               </div>
               <iframe 
-                src="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" 
+                src="https://www.w3.org/W3AI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" 
                 className="w-full h-full border-0 relative z-10 opacity-90 group-hover:opacity-100 transition-opacity"
               />
             </div>

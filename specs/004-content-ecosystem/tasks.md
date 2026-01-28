@@ -30,7 +30,7 @@ description: "ScholarFlow 内容生态构建任务列表"
 
 ## Phase 4: Integration & Polish
 
-- [ ] T011 增加“下载文章”记录统计逻辑 (Mock)
-- [ ] T012 [P] 适配学术门户的 SEO 元数据 (Open Graph)
-- [ ] T013 [DoD] 验证从 首页 -> 搜索 -> 文章页 的全路径通畅
+- [x] T011 增加“下载文章”记录统计逻辑 (Mock)
+- [x] T012 [P] 适配学术门户的 SEO 元数据 (Open Graph)
+- [x] T013 [DoD] 验证从 首页 -> 搜索 -> 文章页 的全路径通畅
 - [ ] **CP03** [最终存档] 执行 `git push` 同步变更

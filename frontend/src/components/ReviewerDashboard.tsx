@@ -9,6 +9,7 @@ import { toast } from "sonner"
 
 import { Star, FileText, CheckCircle, Send, X } from "lucide-react"
 import { toast } from "sonner"
+import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -74,9 +75,11 @@ export default function ReviewerDashboard() {
               <Badge className="bg-blue-600">PENDING REVIEW</Badge>
             </CardHeader>
             <CardContent className="flex justify-end gap-3 pt-4 border-t border-slate-50">
-              <Button variant="outline" size="sm" className="rounded-xl">
-                <FileText className="h-4 w-4 mr-2" /> View PDF
-              </Button>
+              <Link href={`/articles/${task.manuscript_id}`}>
+                <Button variant="outline" size="sm" className="rounded-xl">
+                  <FileText className="h-4 w-4 mr-2" /> View PDF
+                </Button>
+              </Link>
               
               <Dialog open={isModalOpen && selectedTask?.id === task.id} onOpenChange={(open) => { setIsModalOpen(open); if(open) setSelectedTask(task); }}>
                 <DialogTrigger asChild>
