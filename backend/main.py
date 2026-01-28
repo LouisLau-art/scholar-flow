@@ -6,7 +6,7 @@ import os
 # 在应用启动前加载环境变量
 load_dotenv()
 
-from app.api.v1 import manuscripts, reviews, plagiarism, users, stats, public
+from app.api.v1 import manuscripts, reviews, plagiarism, users, stats, public, editor
 from app.core.middleware import ExceptionHandlerMiddleware
 
 app = FastAPI(
@@ -35,6 +35,7 @@ app.include_router(plagiarism.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(stats.router, prefix="/api/v1")
 app.include_router(public.router, prefix="/api/v1")
+app.include_router(editor.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

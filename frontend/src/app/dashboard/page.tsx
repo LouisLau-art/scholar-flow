@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import SiteHeader from '@/components/layout/SiteHeader'
-import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard } from 'lucide-react'
+import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReviewerDashboard from "@/components/ReviewerDashboard"
+import EditorDashboard from "@/components/EditorDashboard"
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null)
@@ -36,7 +37,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <SiteHeader />
-      
+
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12 sm:px-6 lg:px-8">
         <Tabs defaultValue="author" className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
@@ -44,13 +45,16 @@ export default function DashboardPage() {
               <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Dashboard</h1>
               <p className="mt-1 text-slate-500 font-medium">Manage your roles and track academic progress.</p>
             </div>
-            
+
             <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
               <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                 <LayoutDashboard className="h-4 w-4" /> Author
               </TabsTrigger>
               <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                 <Users className="h-4 w-4" /> Reviewer
+              </TabsTrigger>
+              <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                <Shield className="h-4 w-4" /> Editor
               </TabsTrigger>
             </TabsList>
           </div>
@@ -100,6 +104,10 @@ export default function DashboardPage() {
 
           <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <ReviewerDashboard />
+          </TabsContent>
+
+          <TabsContent value="editor" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <EditorDashboard />
           </TabsContent>
         </Tabs>
       </main>
