@@ -27,7 +27,6 @@
 2. **Given** 一个需要身份验证的API端点，**When** 发送请求时使用过期的JWT令牌，**Then** 系统返回401 Unauthorized错误
 3. **Given** 一个需要身份验证的API端点，**When** 发送请求时使用无效的JWT令牌，**Then** 系统返回401 Unauthorized错误
 4. **Given** 一个需要身份验证的API端点，**When** 发送请求时使用其他用户的JWT令牌访问他人数据，**Then** 系统返回403 Forbidden错误
-5. **Given** 一个需要身份验证的API端点，**When** 发送请求时使用其他用户的JWT令牌访问他人数据，**Then** 系统返回403 Forbidden错误
 
 ---
 
