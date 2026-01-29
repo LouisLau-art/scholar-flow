@@ -21,7 +21,7 @@ async def test_title_max_length_exceeded(client: AsyncClient, auth_token: str):
             "/api/v1/manuscripts",
             json={
                 "title": "T" * 501,
-                "abstract": "Valid abstract",
+                "abstract": "This is a sufficiently long abstract for validation rules.",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {auth_token}"}
@@ -34,8 +34,8 @@ async def test_title_min_length_boundary(client: AsyncClient, auth_token: str):
     """标题最小长度应允许通过"""
     mock_data = [{
         "id": "11111111-1111-1111-1111-111111111111",
-        "title": "T",
-        "abstract": "Valid abstract",
+        "title": "Title",
+        "abstract": "This is a sufficiently long abstract for validation rules.",
         "author_id": "00000000-0000-0000-0000-000000000000",
         "status": "submitted"
     }]
@@ -45,8 +45,8 @@ async def test_title_min_length_boundary(client: AsyncClient, auth_token: str):
         response = await client.post(
             "/api/v1/manuscripts",
             json={
-                "title": "T",
-                "abstract": "Valid abstract",
+                "title": "Title",
+                "abstract": "This is a sufficiently long abstract for validation rules.",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {auth_token}"}

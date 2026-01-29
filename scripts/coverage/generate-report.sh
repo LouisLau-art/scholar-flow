@@ -14,7 +14,7 @@ echo "📦 安装测试依赖..."
 pip install -r requirements.txt --break-system-packages 2>/dev/null || pip install -r requirements.txt
 
 echo "🧪 运行后端测试并生成覆盖率报告..."
-pytest --cov=src --cov-report=html --cov-report=xml --cov-report=term-missing
+pytest --cov=app --cov-report=html --cov-report=xml --cov-report=term-missing
 
 echo "📊 后端覆盖率报告已生成: backend/htmlcov/index.html"
 

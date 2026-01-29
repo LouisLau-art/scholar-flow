@@ -6,6 +6,21 @@ from datetime import datetime
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
+def _extract_supabase_data(response):
+    """
+    兼容 supabase-py / postgrest 在不同版本下的 execute() 返回值形态。
+    - 新版: response.data
+    - 旧/自定义 mock: (error, data)
+    """
+    if response is None:
+        return None
+    data = getattr(response, "data", None)
+    if data is not None:
+        return data
+    if isinstance(response, tuple) and len(response) == 2:
+        return response[1]
+    return None
+
 @router.get("/pipeline")
 async def get_editor_pipeline(current_user: dict = Depends(get_current_user)):
     """
@@ -14,16 +29,40 @@ async def get_editor_pipeline(current_user: dict = Depends(get_current_user)):
     """
     try:
         # 待质检 (submitted)
-        pending_quality = supabase.table("manuscripts").select("*").eq("status", "submitted").execute()[1]
+        pending_quality_resp = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("status", "submitted")
+            .execute()
+        )
+        pending_quality = _extract_supabase_data(pending_quality_resp) or []
 
         # 评审中 (under_review)
-        under_review = supabase.table("manuscripts").select("*").eq("status", "under_review").execute()[1]
+        under_review_resp = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("status", "under_review")
+            .execute()
+        )
+        under_review = _extract_supabase_data(under_review_resp) or []
 
         # 待录用 (pending_decision)
-        pending_decision = supabase.table("manuscripts").select("*").eq("status", "pending_decision").execute()[1]
+        pending_decision_resp = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("status", "pending_decision")
+            .execute()
+        )
+        pending_decision = _extract_supabase_data(pending_decision_resp) or []
 
         # 已发布 (published)
-        published = supabase.table("manuscripts").select("*").eq("status", "published").execute()[1]
+        published_resp = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("status", "published")
+            .execute()
+        )
+        published = _extract_supabase_data(published_resp) or []
 
         return {
             "success": True,
@@ -46,7 +85,13 @@ async def get_available_reviewers(current_user: dict = Depends(get_current_user)
     """
     try:
         # 从users表获取角色为reviewer的用户
-        reviewers = supabase.table("users").select("*").eq("role", "reviewer").execute()[1]
+        reviewers_resp = (
+            supabase.table("users")
+            .select("*")
+            .eq("role", "reviewer")
+            .execute()
+        )
+        reviewers = _extract_supabase_data(reviewers_resp) or []
 
         # 格式化返回数据，包含必要信息
         formatted_reviewers = []

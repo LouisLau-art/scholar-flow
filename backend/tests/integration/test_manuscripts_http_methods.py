@@ -32,8 +32,8 @@ async def test_manuscripts_collection_methods(client: AsyncClient, auth_token: s
         post_resp = await client.post(
             "/api/v1/manuscripts",
             json={
-                "title": "Test",
-                "abstract": "Test",
+                "title": "Test1",
+                "abstract": "This is a sufficiently long abstract for validation rules.",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers=headers,

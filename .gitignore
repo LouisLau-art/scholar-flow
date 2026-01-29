@@ -14,7 +14,9 @@ venv/
 *.egg-info/
 
 # Test coverage
-coverage/
+/coverage/
+/backend/coverage/
+/frontend/coverage/
 htmlcov/
 *.coverage
 *.xml

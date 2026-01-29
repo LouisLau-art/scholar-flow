@@ -63,7 +63,9 @@ async def test_create_manuscript_success(client: AsyncClient):
     mock_data = {
         "id": manuscript_id,
         "title": "Test Manuscript",
-        "abstract": "Test abstract content",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "dataset_url": "https://example.com/dataset",
+        "source_code_url": "https://github.com/example/repo",
         "author_id": "00000000-0000-0000-0000-000000000000",
         "status": "submitted",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
@@ -80,7 +82,9 @@ async def test_create_manuscript_success(client: AsyncClient):
             "/api/v1/manuscripts",
             json={
                 "title": "Test Manuscript",
-                "abstract": "Test abstract content",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "dataset_url": "https://example.com/dataset",
+                "source_code_url": "https://github.com/example/repo",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {mock_token}"}
@@ -90,6 +94,12 @@ async def test_create_manuscript_success(client: AsyncClient):
         assert result["success"] is True
         assert result["data"]["title"] == "Test Manuscript"
         assert result["data"]["status"] == "submitted"
+        assert result["data"]["dataset_url"] == "https://example.com/dataset"
+        assert result["data"]["source_code_url"] == "https://github.com/example/repo"
+
+        insert_payload = mock.insert.call_args[0][0]
+        assert insert_payload["dataset_url"] == "https://example.com/dataset"
+        assert insert_payload["source_code_url"] == "https://github.com/example/repo"
 
 @pytest.mark.asyncio
 async def test_create_manuscript_invalid_data(client: AsyncClient):
@@ -123,7 +133,7 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
     mock_data = {
         "id": manuscript_id,
         "title": "Auth Bound Manuscript",
-        "abstract": "Test abstract content",
+        "abstract": "This is a sufficiently long abstract content for validation.",
         "author_id": token_user_id,
         "status": "submitted",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
@@ -140,7 +150,7 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
             "/api/v1/manuscripts",
             json={
                 "title": "Auth Bound Manuscript",
-                "abstract": "Test abstract content",
+                "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": provided_author_id
             },
             headers={"Authorization": f"Bearer {mock_token}"}
@@ -194,10 +204,43 @@ async def test_route_path_matching(client: AsyncClient):
         post_response = await client.post(
             "/api/v1/manuscripts",
             json={
-                "title": "Test",
-                "abstract": "Test",
+                "title": "Valid Title",
+                "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
         assert post_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_non_pdf(client: AsyncClient):
+    """验证上传接口拒绝非 PDF 文件"""
+    files = {"file": ("note.txt", b"hello", "text/plain")}
+    response = await client.post("/api/v1/manuscripts/upload", files=files)
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_quality_check_endpoint_calls_service(client: AsyncClient):
+    """验证质检接口调用 service 并返回结果"""
+    from uuid import uuid4
+
+    manuscript_id = uuid4()
+    expected = {"manuscript_id": str(manuscript_id), "passed": True}
+
+    async def fake_quality_check(_manuscript_id, passed, _kpi_owner_id):
+        return {"manuscript_id": str(_manuscript_id), "passed": passed}
+
+    with patch("app.api.v1.manuscripts.process_quality_check", fake_quality_check):
+        response = await client.post(
+            f"/api/v1/manuscripts/{manuscript_id}/quality-check",
+            json={
+                "passed": True,
+                "kpi_owner_id": "00000000-0000-0000-0000-000000000000",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["data"] == expected

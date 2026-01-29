@@ -28,7 +28,7 @@ fi
 
 # 运行测试
 echo "🧪 执行 pytest..."
-pytest -v --tb=short
+pytest -v --tb=short --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 
 cd ..
 

@@ -35,7 +35,7 @@ async def test_abstract_min_length_boundary(client: AsyncClient, auth_token: str
     mock_data = [{
         "id": "22222222-2222-2222-2222-222222222222",
         "title": "Valid title",
-        "abstract": "A",
+        "abstract": "This is a sufficiently long abstract for validation rules.",
         "author_id": "00000000-0000-0000-0000-000000000000",
         "status": "submitted"
     }]
@@ -46,7 +46,7 @@ async def test_abstract_min_length_boundary(client: AsyncClient, auth_token: str
             "/api/v1/manuscripts",
             json={
                 "title": "Valid title",
-                "abstract": "A",
+                "abstract": "This is a sufficiently long abstract for validation rules.",
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {auth_token}"}

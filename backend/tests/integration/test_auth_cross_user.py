@@ -19,7 +19,7 @@ async def test_cross_user_author_id_ignored(client: AsyncClient, auth_token: str
     mock_data = [{
         "id": "22222222-2222-2222-2222-222222222222",
         "title": "Auth Bound Manuscript",
-        "abstract": "Auth bound",
+        "abstract": "This is a sufficiently long abstract for validation rules.",
         "author_id": token_user_id,
         "status": "submitted"
     }]
@@ -31,7 +31,7 @@ async def test_cross_user_author_id_ignored(client: AsyncClient, auth_token: str
             "/api/v1/manuscripts",
             json={
                 "title": "Auth Bound Manuscript",
-                "abstract": "Auth bound",
+                "abstract": "This is a sufficiently long abstract for validation rules.",
                 "author_id": provided_author_id
             },
             headers={"Authorization": f"Bearer {auth_token}"}

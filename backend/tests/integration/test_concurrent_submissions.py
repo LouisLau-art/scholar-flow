@@ -38,7 +38,7 @@ async def test_concurrent_manuscript_submissions(client: AsyncClient, auth_token
                 "/api/v1/manuscripts",
                 json={
                     "title": f"Paper {i}",
-                    "abstract": "Concurrent test",
+                    "abstract": "This is a sufficiently long abstract for concurrent submission testing.",
                     "author_id": "00000000-0000-0000-0000-000000000000",
                 },
                 headers=headers,

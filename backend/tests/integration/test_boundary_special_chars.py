@@ -25,7 +25,7 @@ async def test_create_manuscript_with_special_chars(client: AsyncClient, auth_to
     mock_data = [{
         "id": "special-1",
         "title": "AI & ML: 研究@2026 #1",
-        "abstract": "包含特殊符号 !@#$%^&*()_+ 以及中文标点。",
+        "abstract": "包含特殊符号 !@#$%^&*()_+ 以及中文标点。并且这段摘要足够长以通过校验。",
         "author_id": "00000000-0000-0000-0000-000000000000",
         "status": "submitted",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
@@ -39,7 +39,7 @@ async def test_create_manuscript_with_special_chars(client: AsyncClient, auth_to
             "/api/v1/manuscripts",
             json={
                 "title": "AI & ML: 研究@2026 #1",
-                "abstract": "包含特殊符号 !@#$%^&*()_+ 以及中文标点。",
+                "abstract": "包含特殊符号 !@#$%^&*()_+ 以及中文标点。并且这段摘要足够长以通过校验。",
                 "author_id": "00000000-0000-0000-0000-000000000000",
             },
             headers={"Authorization": f"Bearer {auth_token}"},
