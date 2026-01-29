@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException, Body
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException, Body, Depends
 from app.core.pdf_processor import extract_text_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -7,6 +7,7 @@ from app.services.publishing_service import publish_manuscript
 from app.core.recommender import recommend_reviewers
 from app.models.schemas import ManuscriptCreate
 from app.lib.api_client import supabase
+from app.core.auth_utils import get_current_user
 from uuid import uuid4, UUID
 from typing import Dict, Any, List
 import shutil
@@ -75,6 +76,40 @@ async def public_search(q: str, mode: str = "articles"):
 async def get_article_detail(id: UUID):
     data, _ = supabase.table("manuscripts").select("*, journals(*)").eq("id", str(id)).single().execute()
     return {"success": True, "data": data[1]}
+
+@router.post("/manuscripts")
+async def create_manuscript(
+    manuscript: ManuscriptCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """创建新稿件（需要登录）"""
+    try:
+        # 生成新的稿件 ID
+        manuscript_id = uuid4()
+        # 使用当前登录用户的 ID，而不是传入的 author_id
+        data = {
+            "id": str(manuscript_id),
+            "title": manuscript.title,
+            "abstract": manuscript.abstract,
+            "file_path": None,
+            "author_id": current_user["id"],  # 使用真实的用户 ID
+            "status": "submitted",
+            "kpi_owner_id": None,
+            "created_at": "now()",
+            "updated_at": "now()"
+        }
+
+        # 插入到数据库
+        response = supabase.table("manuscripts").insert(data).execute()
+
+        if response.data:
+            return {"success": True, "data": response.data[0]}
+        else:
+            return {"success": False, "message": "Failed to create manuscript"}
+
+    except Exception as e:
+        print(f"创建稿件失败: {str(e)}")
+        return {"success": False, "message": str(e)}
 
 @router.get("/manuscripts/journals/{slug}")
 async def get_journal_detail(slug: str):

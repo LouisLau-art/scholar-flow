@@ -2,13 +2,14 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 
 # === 核心业务实体模型 (Pydantic v2) ===
 
 class ManuscriptBase(BaseModel):
     """稿件基础模型"""
-    title: str = Field(..., description="稿件标题")
-    abstract: str = Field(..., description="稿件摘要")
+    title: str = Field(..., min_length=1, max_length=500, description="稿件标题")
+    abstract: str = Field(..., min_length=1, max_length=5000, description="稿件摘要")
     file_path: Optional[str] = Field(None, description="Supabase Storage 路径")
 
 class ManuscriptCreate(ManuscriptBase):
@@ -23,8 +24,7 @@ class Manuscript(ManuscriptBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ReviewReport(BaseModel):
     """审稿报告模型"""

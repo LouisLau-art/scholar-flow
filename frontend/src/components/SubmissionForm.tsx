@@ -1,15 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Upload, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from "sonner"
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 
 export default function SubmissionForm() {
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [metadata, setMetadata] = useState({ title: '', abstract: '', authors: [] as string[] })
   const [file, setFile] = useState<File | null>(null)
+  const [user, setUser] = useState<any>(null)
+
+  // 检查用户登录状态
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        setUser(session.user)
+      } else {
+        toast.error("Please log in to submit a manuscript")
+        // 重定向到登录页面或显示登录提示
+      }
+    }
+    checkUser()
+
+    // 监听认证状态变化
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -45,18 +68,34 @@ export default function SubmissionForm() {
 
   const handleFinalize = async () => {
     if (!metadata.title) return
+
+    // 检查用户是否登录
+    if (!user) {
+      toast.error("Please log in to submit a manuscript")
+      return
+    }
+
     setIsSubmitting(true)
     const toastId = toast.loading("Saving manuscript to database...")
 
     try {
+      // 获取用户的 JWT token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error("No authentication token available")
+      }
+
       // 真实调用后端保存接口
-      const response = await fetch('/api/v1/manuscripts/', {
+      const response = await fetch('/api/v1/manuscripts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`  // 添加 JWT token
+        },
         body: JSON.stringify({
           title: metadata.title,
           abstract: metadata.abstract,
-          author_id: "00000000-0000-0000-0000-000000000000" // 模拟一个固定作者ID
+          author_id: user.id  // 使用真实的用户 ID
         }),
       })
       const result = await response.json()
@@ -65,7 +104,7 @@ export default function SubmissionForm() {
         toast.success("Manuscript submitted successfully!", { id: toastId })
         window.location.href = '/'
       } else {
-        throw new Error("Persistence failed")
+        throw new Error(result.message || "Persistence failed")
       }
     } catch (error) {
       console.error('Submission failed:', error)
@@ -126,13 +165,26 @@ export default function SubmissionForm() {
         </div>
       </div>
 
-      <button
-        onClick={handleFinalize}
-        disabled={!metadata.title || isUploading || isSubmitting}
-        className="w-full rounded-md bg-slate-900 py-3 text-white font-semibold shadow-md hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-      >
-        {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
-      </button>
+      <div className="space-y-3">
+        {!user && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800 text-sm">
+            ⚠️ Please log in to submit a manuscript.
+            <a href="/login" className="ml-1 font-semibold underline">Login here</a>
+          </div>
+        )}
+        <button
+          onClick={handleFinalize}
+          disabled={!metadata.title || isUploading || isSubmitting || !user}
+          className="w-full rounded-md bg-slate-900 py-3 text-white font-semibold shadow-md hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
+        </button>
+        {user && (
+          <p className="text-xs text-slate-500 text-center">
+            Logged in as: {user.email}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

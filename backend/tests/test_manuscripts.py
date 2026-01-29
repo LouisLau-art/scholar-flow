@@ -1,6 +1,9 @@
 import pytest
 from httpx import AsyncClient
 from unittest.mock import patch, MagicMock
+import uuid
+import os
+from jose import jwt
 
 # === 稿件业务核心测试 (真实行为模拟版) ===
 
@@ -13,12 +16,24 @@ def get_full_mock(data_to_return):
     mock.eq.return_value = mock
     mock.or_.return_value = mock
     mock.single.return_value = mock
-    
+    mock.insert.return_value = mock
+    mock.update.return_value = mock
+
     # 模拟 execute() 返回一个带 data 属性的对象
     mock_response = MagicMock()
     mock_response.data = data_to_return
     mock.execute.return_value = mock_response
     return mock
+
+def generate_test_token(user_id: str = "00000000-0000-0000-0000-000000000000"):
+    """生成测试用的 JWT token"""
+    secret = os.environ.get("SUPABASE_JWT_SECRET", "mock-secret-replace-later")
+    payload = {
+        "sub": user_id,
+        "email": "test@example.com",
+        "aud": "authenticated"
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
 
 @pytest.mark.asyncio
 async def test_get_manuscripts_empty(client: AsyncClient):
@@ -40,3 +55,107 @@ async def test_search_manuscripts(client: AsyncClient):
         assert response.status_code == 200
         assert "results" in response.json()
         assert len(response.json()["results"]) > 0
+
+@pytest.mark.asyncio
+async def test_create_manuscript_success(client: AsyncClient):
+    """验证创建稿件接口成功"""
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Test Manuscript",
+        "abstract": "Test abstract content",
+        "author_id": "00000000-0000-0000-0000-000000000000",
+        "status": "submitted",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00"
+    }
+    mock = get_full_mock([mock_data])
+
+    # Generate valid JWT token
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Test Manuscript",
+                "abstract": "Test abstract content",
+                "author_id": "00000000-0000-0000-0000-000000000000"
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert result["success"] is True
+        assert result["data"]["title"] == "Test Manuscript"
+        assert result["data"]["status"] == "submitted"
+
+@pytest.mark.asyncio
+async def test_create_manuscript_invalid_data(client: AsyncClient):
+    """验证创建稿件接口的参数验证"""
+    mock = get_full_mock([])
+
+    # Generate valid JWT token
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        # 测试缺少必填字段
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "",  # 空标题
+                "abstract": "",
+                "author_id": "00000000-0000-0000-0000-000000000000"
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+        # FastAPI 应该返回 422 验证错误
+        assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_get_manuscripts_list(client: AsyncClient):
+    """验证获取稿件列表接口"""
+    mock_data = [
+        {"id": str(uuid.uuid4()), "title": "Paper 1", "status": "submitted"},
+        {"id": str(uuid.uuid4()), "title": "Paper 2", "status": "under_review"}
+    ]
+    mock = get_full_mock(mock_data)
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.get("/api/v1/manuscripts")
+        assert response.status_code == 200
+        result = response.json()
+        assert result["success"] is True
+        assert len(result["data"]) == 2
+
+@pytest.mark.asyncio
+async def test_route_path_matching(client: AsyncClient):
+    """验证路由路径匹配（GET 和 POST 都能正常工作）"""
+    mock = get_full_mock([])
+
+    # Generate valid JWT token
+    mock_token = generate_test_token()
+
+    # 测试 GET 路由
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        get_response = await client.get("/api/v1/manuscripts")
+        assert get_response.status_code == 200
+
+    # 测试 POST 路由（使用相同的路径）
+    mock_data = [{"id": str(uuid.uuid4()), "title": "Test"}]
+    mock = get_full_mock(mock_data)
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        post_response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Test",
+                "abstract": "Test",
+                "author_id": "00000000-0000-0000-0000-000000000000"
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+        assert post_response.status_code == 200
