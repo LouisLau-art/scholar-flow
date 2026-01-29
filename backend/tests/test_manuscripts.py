@@ -115,6 +115,48 @@ async def test_create_manuscript_invalid_data(client: AsyncClient):
         assert response.status_code == 422
 
 @pytest.mark.asyncio
+async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClient):
+    """验证创建稿件时强制使用当前用户身份"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    provided_author_id = "22222222-2222-2222-2222-222222222222"
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Auth Bound Manuscript",
+        "abstract": "Test abstract content",
+        "author_id": token_user_id,
+        "status": "submitted",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00"
+    }
+    mock = get_full_mock([mock_data])
+
+    # Generate valid JWT token for token_user_id
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Auth Bound Manuscript",
+                "abstract": "Test abstract content",
+                "author_id": provided_author_id
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert result["success"] is True
+        assert result["data"]["author_id"] == token_user_id
+        assert result["data"]["author_id"] != provided_author_id
+
+        # 验证插入数据使用了 token 用户 ID
+        insert_payload = mock.insert.call_args[0][0]
+        assert insert_payload["author_id"] == token_user_id
+        assert insert_payload["author_id"] != provided_author_id
+
+@pytest.mark.asyncio
 async def test_get_manuscripts_list(client: AsyncClient):
     """验证获取稿件列表接口"""
     mock_data = [
