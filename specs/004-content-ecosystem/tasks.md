@@ -12,7 +12,7 @@ description: "ScholarFlow 内容生态构建任务列表"
 - [x] T001 创建 `journals` 数据库表并关联 `manuscripts` (SETUP_DATABASE.sql 更新)
 - [x] T002 开发后端 `GET /api/v1/journals` 接口
 - [x] T003 开发后端 `GET /api/v1/articles/{id}` 接口
-- [x] T004 实现基于 PostgreSQL 的全文检索接口 `GET /api/v1/search`
+- [x] T004 实现全文检索接口 `GET /api/v1/manuscripts/search`
 - [x] **CP01** [存档点] 完成后端数据层并推送
 
 ## Phase 2: Article Reading Experience (The Public View)

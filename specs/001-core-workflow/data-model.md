@@ -9,6 +9,8 @@
 | title | text | |
 | abstract | text | |
 | file_path | text | Supabase Storage 路径 |
+| dataset_url | text | 外部数据集链接 (可选) |
+| source_code_url | text | 代码仓库链接 (可选) |
 | author_id | uuid (FK) | 关联 Users.id |
 | editor_id | uuid (FK) | 关联 Users.id |
 | status | text | 枚举: `draft`, `submitted`, `returned_for_revision`, `under_review`, `approved`, `pending_payment`, `published`, `rejected` |

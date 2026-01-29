@@ -30,3 +30,7 @@ htmlcov/
 *.swp
 .vscode/
 .idea/
+
+# Local scratch files (do not commit)
+/Text File.txt
+/apple-touch-icon.png

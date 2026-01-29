@@ -25,9 +25,11 @@
 ### US3: 全局内容检索 (Search Implementation)
 - **As a** 用户, **I want** 在首页搜索框输入关键词, **So that** 系统能从已发表的文章中返回匹配结果。
 - **Requirements**:
-  - 真正的后端全文检索（基于 PostgreSQL ILIKE 或 Supabase Search）。
+  - 通过后端接口 `GET /api/v1/manuscripts/search?q=...&mode=articles|journals` 提供检索结果。
+  - `mode=articles`: 仅返回状态为 `published` 的文章（公开检索）。
+  - `mode=journals`: 从 `journals` 表按标题模糊检索期刊。
 
 ## Success Criteria
 - [ ] 每个发表的稿件都有一个唯一的公开 URL（如 `/articles/{id}`）。
 - [ ] PDF 预览组件加载速度 < 2秒。
-- [ ] 搜索结果页能展示文章摘要片段和匹配高亮。
+- [ ] 搜索结果页能展示标题/摘要片段；无结果时给出明确提示（避免“空白页”误判为故障）。
