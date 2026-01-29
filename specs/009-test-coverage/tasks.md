@@ -224,8 +224,8 @@ description: "Task list for test coverage feature implementation"
 - [X] T094 [P] [US3] Add uncovered file identification logic (scripts/identify-uncovered.sh)
 
 **Test Implementation** (Principle XII):
-- [ ] T095 [P] [US3] Implement coverage report API endpoint (backend/src/api/v1/coverage.py)
-- [ ] T096 [P] [US3] Implement coverage threshold validation (backend/src/services/coverage_service.py)
+- [X] T095 [P] [US3] Implement coverage report API endpoint (backend/src/api/v1/coverage.py)
+- [X] T096 [P] [US3] Implement coverage threshold validation (backend/src/services/coverage_service.py)
 - [ ] T097 [P] [US3] Add coverage dashboard UI (frontend/src/components/CoverageDashboard.tsx)
 
 **Checkpoint**: User Story 3 coverage reports and implementation complete

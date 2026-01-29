@@ -78,7 +78,33 @@ def get_coverage_summary() -> dict:
     elif frontend_final.exists():
         frontend = _parse_frontend_coverage(frontend_final)
 
+    # 中文注释: 按规范校验阈值（后端 80%，前端 70%）
+    backend_ok = None
+    if backend:
+        backend_ok = backend["line_rate"] >= 80 and backend["branch_rate"] >= 80
+
+    frontend_ok = None
+    if frontend:
+        frontend_ok = (
+            frontend["statement_rate"] >= 70
+            and frontend["function_rate"] >= 70
+            and frontend["branch_rate"] >= 70
+        )
+
+    overall_ok = None
+    if backend_ok is not None or frontend_ok is not None:
+        overall_ok = True
+        if backend_ok is False:
+            overall_ok = False
+        if frontend_ok is False:
+            overall_ok = False
+
     return {
         "backend": backend,
         "frontend": frontend,
+        "thresholds": {
+            "backend_ok": backend_ok,
+            "frontend_ok": frontend_ok,
+            "overall_ok": overall_ok,
+        },
     }
