@@ -8,6 +8,21 @@ const nextConfig = {
       },
     ]
   },
+  async redirects() {
+    // 处理浏览器自动探测的图标请求，避免开发环境出现 500/404 噪音。
+    return [
+      {
+        source: '/favicon.ico',
+        destination: '/favicon.svg',
+        permanent: false,
+      },
+      {
+        source: '/apple-touch-icon.png',
+        destination: '/favicon.svg',
+        permanent: false,
+      },
+    ]
+  },
 }
 
 export default nextConfig

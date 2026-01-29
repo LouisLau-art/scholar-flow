@@ -7,15 +7,20 @@ import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReviewerDashboard from "@/components/ReviewerDashboard"
 import EditorDashboard from "@/components/EditorDashboard"
+import { authService } from '@/services/auth'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null)
+  const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const res = await fetch('/api/v1/stats/author')
+        const token = await authService.getAccessToken()
+        const res = await fetch('/api/v1/stats/author', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
         const result = await res.json()
         if (result.success) setStats(result.data)
       } catch (err) {
@@ -24,7 +29,20 @@ export default function DashboardPage() {
         setIsLoading(false)
       }
     }
+    async function fetchSubmissions() {
+      try {
+        const token = await authService.getAccessToken()
+        const res = await fetch('/api/v1/manuscripts/mine', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
+        const result = await res.json()
+        if (result.success) setSubmissions(result.data || [])
+      } catch (err) {
+        console.error('Failed to load submissions:', err)
+      }
+    }
     fetchStats()
+    fetchSubmissions()
   }, [])
 
   const statCards = [
@@ -78,24 +96,34 @@ export default function DashboardPage() {
 
                 <section>
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-slate-900">Recent Activity</h2>
+                    <h2 className="text-xl font-bold text-slate-900">My Submissions</h2>
                     <Link href="/submit" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
                       <Plus className="h-4 w-4" /> New Submission
                     </Link>
                   </div>
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="divide-y divide-slate-100">
-                      <div className="p-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer group transition-all">
-                        <div className="flex items-center gap-4">
-                          <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
-                          <div>
-                            <p className="font-bold text-slate-900">Deep Learning in Academic Workflows</p>
-                            <p className="text-sm text-slate-500 font-medium">Submitted to Frontiers in AI • Jan 27, 2026</p>
+                    {submissions.length === 0 ? (
+                      <div className="p-8 text-slate-500 text-sm">No submissions yet.</div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {submissions.map((item) => (
+                          <div key={item.id} className="p-6 flex items-center justify-between hover:bg-slate-50 group transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
+                              <div>
+                                <p className="font-bold text-slate-900">{item.title}</p>
+                                <p className="text-sm text-slate-500 font-medium">
+                                  Status: {item.status || 'submitted'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
+                                </p>
+                              </div>
+                            </div>
+                            <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                              <ArrowRight className="h-5 w-5" />
+                            </Link>
                           </div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-slate-300 group-hover:text-blue-600 transition-all" />
+                        ))}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </section>
               </div>

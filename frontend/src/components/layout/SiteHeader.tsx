@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Search, Menu, X, ChevronDown, User, Globe } from 'lucide-react'
+import { authService } from '@/services/auth'
 
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
+  const [user, setUser] = useState<{ email?: string } | null>(null)
 
   const navLinks = [
     { name: 'Journals', href: '#', hasMega: true },
@@ -14,6 +16,32 @@ export default function SiteHeader() {
     { name: 'Publish', href: '/submit' },
     { name: 'About', href: '/about' },
   ]
+
+  useEffect(() => {
+    let isMounted = true
+    // 登录态同步（用于 header 显示）
+    const loadSession = async () => {
+      const session = await authService.getSession()
+      if (isMounted) {
+        setUser(session?.user ? { email: session.user.email ?? '' } : null)
+      }
+    }
+    loadSession()
+
+    const { data: { subscription } } = authService.onAuthStateChange((session) => {
+      setUser(session?.user ? { email: session.user.email ?? '' } : null)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const handleSignOut = async () => {
+    await authService.signOut()
+    setUser(null)
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-900 text-white shadow-xl">
@@ -58,10 +86,31 @@ export default function SiteHeader() {
               <Search className="h-5 w-5" />
             </button>
             <div className="h-6 w-px bg-slate-800 hidden sm:block" />
-            
-            <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white">
-              <User className="h-4 w-4" /> Sign In
-            </Link>
+
+            {user ? (
+              <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-slate-200">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-700 text-xs font-bold">
+                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                  </span>
+                  <span className="max-w-[160px] truncate text-slate-200">{user.email}</span>
+                </div>
+                <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">
+                  Dashboard
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white">
+                <User className="h-4 w-4" /> Sign In
+              </Link>
+            )}
             
             <Link 
               href="/submit" 
@@ -138,7 +187,20 @@ export default function SiteHeader() {
             </Link>
           ))}
           <div className="pt-8 border-t border-slate-800 space-y-4">
-            <Link href="/login" className="block text-slate-400">Sign In</Link>
+            {user ? (
+              <>
+                <Link href="/dashboard" className="block text-slate-400">Dashboard</Link>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="block text-left text-slate-400"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <Link href="/login" className="block text-slate-400">Sign In</Link>
+            )}
             <Link href="/submit" className="block text-blue-400 font-bold text-xl">Submit your manuscript</Link>
           </div>
         </div>

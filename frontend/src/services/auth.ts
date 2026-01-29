@@ -22,6 +22,10 @@ export const authService = {
     const session = await authService.getSession()
     return session?.access_token ?? null
   },
+  async signOut(): Promise<void> {
+    await supabase.auth.signOut()
+    cacheToken(null)
+  },
   onAuthStateChange(handler: (session: Session | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
       cacheToken(session?.access_token)

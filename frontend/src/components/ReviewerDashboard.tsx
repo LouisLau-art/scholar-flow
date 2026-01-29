@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { authService } from "@/services/auth"
 
 export default function ReviewerDashboard() {
   const [tasks, setTasks] = useState([])
@@ -14,11 +15,21 @@ export default function ReviewerDashboard() {
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch("/api/v1/reviews/my-tasks?user_id=88888888-8888-8888-8888-888888888888")
+      const session = await authService.getSession()
+      const userId = session?.user?.id
+      if (!userId) {
+        setTasks([])
+        toast.error("Please sign in to view reviewer tasks.")
+        return
+      }
+      const token = await authService.getAccessToken()
+      const res = await fetch(`/api/v1/reviews/my-tasks?user_id=${encodeURIComponent(userId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       const data = await res.json()
       setTasks(data.data || [])
     } catch (e) {
-      toast.error("加载任务失败")
+      toast.error("Failed to load tasks.")
     } finally {
       setLoading(false)
     }
@@ -29,11 +40,15 @@ export default function ReviewerDashboard() {
   }, [])
 
   const handleSubmitReview = async () => {
-    const toastId = toast.loading("提交评审意见中...")
+    const toastId = toast.loading("Submitting review...")
     try {
+      const token = await authService.getAccessToken()
       const res = await fetch("/api/v1/reviews/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           assignment_id: selectedTask.id,
           scores: { novelty: reviewData.novelty, rigor: reviewData.rigor, language: reviewData.language },
@@ -42,12 +57,12 @@ export default function ReviewerDashboard() {
       })
       const result = await res.json()
       if (result.success) {
-        toast.success("评审已提交，感谢您的贡献！", { id: toastId })
+        toast.success("Review submitted. Thank you!", { id: toastId })
         setIsModalOpen(false)
         fetchTasks()
       }
     } catch (e) {
-      toast.error("提交失败，请重试", { id: toastId })
+      toast.error("Submit failed. Please try again.", { id: toastId })
     }
   }
 

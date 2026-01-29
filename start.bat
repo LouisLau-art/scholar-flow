@@ -17,11 +17,11 @@ if exist backend\.env (
 
 :: 2. 启动后端
 echo 🐍 Starting Backend (FastAPI on :8000)...
-start "ScholarFlow Backend" cmd /k "cd backend && call .venv\Scripts\activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+start "ScholarFlow Backend" cmd /k "cd backend && call .venv\Scripts\activate && uvicorn main:app --host 0.0.0.0 --port 8000"
 
 :: 3. 启动前端
 echo ⚛️  Starting Frontend (Next.js on :3000)...
-start "ScholarFlow Frontend" cmd /k "cd frontend && pnpm dev"
+start "ScholarFlow Frontend" cmd /k "cd frontend && set NODE_OPTIONS=--dns-result-order=ipv4first && pnpm dev"
 
 echo ✅ ScholarFlow launched in new windows!
 echo 👉 Frontend: http://localhost:3000

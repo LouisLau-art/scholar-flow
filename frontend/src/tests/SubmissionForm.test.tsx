@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
+const storageUploadMock = vi.fn()
+
 // Mock auth service
 vi.mock('@/services/auth', () => ({
   authService: {
@@ -10,6 +12,17 @@ vi.mock('@/services/auth', () => ({
       data: { subscription: { unsubscribe: vi.fn() } }
     }))
   }
+}))
+
+// Mock supabase client (only what SubmissionForm uses)
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    storage: {
+      from: () => ({
+        upload: storageUploadMock,
+      }),
+    },
+  },
 }))
 
 // Mock toast
@@ -64,6 +77,10 @@ describe('SubmissionForm Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(authService.getSession as any).mockResolvedValue(null)
+    storageUploadMock.mockResolvedValue({ error: null })
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'test-uuid',
+    } as any)
   })
 
   afterEach(() => {
@@ -114,6 +131,9 @@ describe('SubmissionForm Component', () => {
   })
 
   it('handles file upload success and populates metadata', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+    })
     const fetchMock = vi.fn().mockResolvedValue({
       json: () =>
         Promise.resolve({
@@ -124,6 +144,10 @@ describe('SubmissionForm Component', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toHaveTextContent('user@example.com')
+    })
 
     const input = screen.getByTestId('submission-file') as HTMLInputElement
     const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
@@ -139,12 +163,19 @@ describe('SubmissionForm Component', () => {
   })
 
   it('handles file upload failure gracefully', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+    })
     const fetchMock = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ success: false, message: 'bad' }),
     })
     vi.stubGlobal('fetch', fetchMock)
 
     render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toHaveTextContent('user@example.com')
+    })
 
     const input = screen.getByTestId('submission-file') as HTMLInputElement
     const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
@@ -153,7 +184,7 @@ describe('SubmissionForm Component', () => {
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        'AI parsing failed. Please fill manually.',
+        'bad',
         expect.any(Object)
       )
     })
@@ -165,8 +196,23 @@ describe('SubmissionForm Component', () => {
       access_token: 'token',
     })
     ;(authService.getAccessToken as any).mockResolvedValue('token')
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ success: true }),
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          json: async () => ({
+            success: true,
+            data: {
+              title: 'Parsed Title',
+              abstract: 'A'.repeat(40),
+              authors: [],
+            },
+          }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { json: async () => ({ success: true }) } as any
+      }
+      return { json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
     Object.defineProperty(window, 'location', {
@@ -176,12 +222,20 @@ describe('SubmissionForm Component', () => {
 
     render(<SubmissionForm />)
 
-    fireEvent.change(screen.getByTestId('submission-title'), {
-      target: { value: 'Title' },
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const input = screen.getByTestId('submission-file') as HTMLInputElement
+    const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+      expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
     })
 
     fireEvent.click(screen.getByTestId('submission-finalize'))
@@ -205,19 +259,42 @@ describe('SubmissionForm Component', () => {
       access_token: 'token',
     })
     ;(authService.getAccessToken as any).mockResolvedValue('token')
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ success: false, message: 'nope' }),
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          json: async () => ({
+            success: true,
+            data: {
+              title: 'Parsed Title',
+              abstract: 'A'.repeat(40),
+              authors: [],
+            },
+          }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { json: async () => ({ success: false, message: 'nope' }) } as any
+      }
+      return { json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
 
     render(<SubmissionForm />)
 
-    fireEvent.change(screen.getByTestId('submission-title'), {
-      target: { value: 'Title' },
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const input = screen.getByTestId('submission-file') as HTMLInputElement
+    const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+      expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
     })
 
     fireEvent.click(screen.getByTestId('submission-finalize'))
@@ -227,6 +304,23 @@ describe('SubmissionForm Component', () => {
         'Failed to save. Check database connection.',
         expect.any(Object)
       )
+    })
+  })
+
+  it('shows URL validation errors for dataset and source inputs', async () => {
+    render(<SubmissionForm />)
+
+    const datasetInput = screen.getByTestId('submission-dataset-url')
+    const sourceInput = screen.getByTestId('submission-source-url')
+
+    fireEvent.change(datasetInput, { target: { value: 'ftp://invalid' } })
+    fireEvent.blur(datasetInput)
+    fireEvent.change(sourceInput, { target: { value: 'invalid' } })
+    fireEvent.blur(sourceInput)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-dataset-url-error')).toBeInTheDocument()
+      expect(screen.getByTestId('submission-source-url-error')).toBeInTheDocument()
     })
   })
 })

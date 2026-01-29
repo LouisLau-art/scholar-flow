@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from app.lib.api_client import supabase
 from uuid import UUID
 from typing import List, Dict, Any
+from postgrest.exceptions import APIError
 
 router = APIRouter(tags=["Reviews"])
 
@@ -40,12 +41,21 @@ async def get_my_review_tasks(user_id: UUID):
     """
     审稿人获取自己名下的任务
     """
-    res = supabase.table("review_assignments")\
-        .select("*, manuscripts(title, abstract)")\
-        .eq("reviewer_id", str(user_id))\
-        .eq("status", "pending")\
-        .execute()
-    return {"success": True, "data": res.data}
+    try:
+        res = (
+            supabase.table("review_assignments")
+            .select("*, manuscripts(title, abstract)")
+            .eq("reviewer_id", str(user_id))
+            .eq("status", "pending")
+            .execute()
+        )
+        return {"success": True, "data": res.data}
+    except APIError as e:
+        # 中文注释:
+        # 1) 云端 Supabase 可能还没创建 review_assignments 表（schema cache 里会 404/PGRST205）。
+        # 2) Reviewer Tab 属于“可选能力”，不要因为缺表把整个 Dashboard 打崩，降级为空列表。
+        print(f"Review tasks query failed (fallback to empty): {e}")
+        return {"success": True, "data": [], "message": "review_assignments table not found"}
 
 # === 3. 提交多维度评价 (Submission) ===
 @router.post("/reviews/submit")
@@ -57,11 +67,16 @@ async def submit_review(
     """
     提交结构化评审意见
     """
-    # 逻辑: 更新状态并存储分数
-    res = supabase.table("review_assignments").update({
-        "status": "completed",
-        "scores": scores,
-        "comments": comments
-    }).eq("id", str(assignment_id)).execute()
-    
-    return {"success": True, "data": res.data[0] if res.data else {}}
+    try:
+        # 逻辑: 更新状态并存储分数
+        res = supabase.table("review_assignments").update({
+            "status": "completed",
+            "scores": scores,
+            "comments": comments
+        }).eq("id", str(assignment_id)).execute()
+
+        return {"success": True, "data": res.data[0] if res.data else {}}
+    except APIError as e:
+        # 缺表时，给出可读提示，避免 500
+        print(f"Review submit failed: {e}")
+        return {"success": False, "message": "review_assignments table not found"}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { FileText, Users, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react'
+import { authService } from '@/services/auth'
 
 export default function EditorPipeline() {
   const [pipelineData, setPipelineData] = useState<any>(null)
@@ -10,7 +11,10 @@ export default function EditorPipeline() {
   useEffect(() => {
     async function fetchPipelineData() {
       try {
-        const response = await fetch('/api/v1/editor/pipeline')
+        const token = await authService.getAccessToken()
+        const response = await fetch('/api/v1/editor/pipeline', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
         const data = await response.json()
         if (data.success) {
           setPipelineData(data.data)

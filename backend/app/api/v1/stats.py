@@ -11,30 +11,87 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
     """
     作者视角统计：投稿、发表、待修改
     """
-    # 模拟从数据库聚合
-    return {
-        "success": True,
-        "data": {
-            "total_submissions": 5,
-            "published": 2,
-            "under_review": 2,
-            "revision_required": 1
+    try:
+        # 中文注释: 真实统计以数据库为准（按当前登录作者过滤）
+        rows = (
+            supabase.table("manuscripts")
+            .select("status")
+            .eq("author_id", current_user["id"])
+            .execute()
+            .data
+        ) or []
+        total = len(rows)
+        published = sum(1 for r in rows if r.get("status") == "published")
+        under_review = sum(1 for r in rows if r.get("status") == "under_review")
+        revision_required = sum(1 for r in rows if r.get("status") == "revision_required")
+
+        return {
+            "success": True,
+            "data": {
+                "total_submissions": total,
+                "published": published,
+                "under_review": under_review,
+                "revision_required": revision_required
+            }
         }
-    }
+    except Exception as e:
+        print(f"Author stats query failed: {e}")
+        return {
+            "success": True,
+            "data": {
+                "total_submissions": 0,
+                "published": 0,
+                "under_review": 0,
+                "revision_required": 0
+            }
+        }
 
 @router.get("/editor")
 async def get_editor_stats(current_user: dict = Depends(get_current_user)):
     """
     编辑视角统计：待分配、逾期
     """
-    return {
-        "success": True,
-        "data": {
-            "pending_assignment": 12,
-            "active_review_cycles": 45,
-            "overdue_reviews": 3
+    try:
+        pending_assignment = (
+            supabase.table("manuscripts")
+            .select("id")
+            .eq("status", "submitted")
+            .execute()
+            .data
+        )
+        active_review_cycles = (
+            supabase.table("manuscripts")
+            .select("id")
+            .eq("status", "under_review")
+            .execute()
+            .data
+        )
+        overdue_reviews = (
+            supabase.table("manuscripts")
+            .select("id")
+            .eq("status", "pending_decision")
+            .execute()
+            .data
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "pending_assignment": len(pending_assignment or []),
+                "active_review_cycles": len(active_review_cycles or []),
+                "overdue_reviews": len(overdue_reviews or [])
+            }
         }
-    }
+    except Exception as e:
+        print(f"Editor stats query failed: {e}")
+        return {
+            "success": True,
+            "data": {
+                "pending_assignment": 0,
+                "active_review_cycles": 0,
+                "overdue_reviews": 0
+            }
+        }
 
 @router.get("/system")
 async def get_public_system_stats():

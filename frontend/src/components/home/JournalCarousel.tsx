@@ -4,14 +4,8 @@ import React, { useCallback } from 'react'
 import useEmblaCarousel from 'embla-carousel-react'
 import Autoplay from 'embla-carousel-autoplay'
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react'
-
-const journals = [
-  { id: 1, title: 'Frontiers in Artificial Intelligence', slug: 'ai-ethics', category: 'Technology', impact: '8.4', color: 'bg-blue-600' },
-  { id: 2, title: 'Journal of Precision Medicine', slug: 'medicine', category: 'Medical', impact: '12.1', color: 'bg-emerald-600' },
-  { id: 3, title: 'Nature Communications (Arch)', slug: 'general-science', category: 'General Science', impact: '17.2', color: 'bg-slate-800' },
-  { id: 4, title: 'Quantum Information Systems', slug: 'physics', category: 'Physics', impact: '9.8', color: 'bg-purple-600' },
-  { id: 5, title: 'Global Economics & Policy', slug: 'economics', category: 'Social Science', impact: '6.5', color: 'bg-amber-600' },
-]
+import Link from 'next/link'
+import { demoJournals } from '@/lib/demo-journals'
 
 export default function JournalCarousel() {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start' }, [Autoplay({ delay: 4000 })])
@@ -39,9 +33,9 @@ export default function JournalCarousel() {
 
         <div className="overflow-hidden" ref={emblaRef}>
           <div className="flex gap-6">
-            {journals.map((j) => (
+            {demoJournals.map((j) => (
               <div key={j.id} className="flex-[0_0_85%] sm:flex-[0_0_45%] lg:flex-[0_0_30%] min-w-0">
-                <div className="group bg-white h-full p-8 rounded-3xl shadow-sm ring-1 ring-slate-200 hover:shadow-xl hover:ring-blue-500/30 transition-all duration-300">
+                <div className="group h-full p-8 rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-sm hover:shadow-md hover:border-blue-200 transition-shadow duration-300">
                   <div className={`${j.color} w-16 h-1 w-full rounded-full mb-6 group-hover:scale-x-110 transition-transform`} />
                   <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-widest mb-4">
                     <Star className="h-3 w-3 fill-current" /> {j.category}
@@ -67,5 +61,3 @@ export default function JournalCarousel() {
     </section>
   )
 }
-
-import Link from 'next/link'
