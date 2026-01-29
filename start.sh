@@ -5,7 +5,11 @@
 
 echo "🚀 Starting ScholarFlow..."
 
-# 1. 加载后端环境变量 (如果存在)
+# 1. 加载环境变量 (优先根目录 .env，其次 backend/.env)
+if [ -f .env ]; then
+    echo "📄 Loading root environment variables..."
+    export $(grep -v '^#' .env | xargs)
+fi
 if [ -f backend/.env ]; then
     echo "📄 Loading backend environment variables..."
     export $(grep -v '^#' backend/.env | xargs)
