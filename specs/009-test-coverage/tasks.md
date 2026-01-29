@@ -179,7 +179,7 @@ description: "Task list for test coverage feature implementation"
 
 **Security & Authentication Implementation** (Principle XIII):
 - [X] T075 [P] [US2] Ensure frontend properly handles JWT token storage (frontend/src/services/auth.ts)
-- [ ] T076 [P] [US2] Add login prompt UI for unauthenticated users (frontend/src/components/LoginPrompt.tsx)
+- [X] T076 [P] [US2] Add login prompt UI for unauthenticated users (frontend/src/components/LoginPrompt.tsx)
 - [X] T077 [P] [US2] Add session persistence logic (frontend/src/services/auth.ts)
 
 **API Development Implementation** (Principle XIV):

@@ -5,6 +5,7 @@ import { Upload, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from "sonner"
 import Link from 'next/link'
 import { authService } from '@/services/auth'
+import LoginPrompt from '@/components/LoginPrompt'
 
 export default function SubmissionForm() {
   const [isUploading, setIsUploading] = useState(false)
@@ -169,15 +170,7 @@ export default function SubmissionForm() {
       </div>
 
       <div className="space-y-3">
-        {!user && (
-          <div
-            className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800 text-sm"
-            data-testid="submission-login-prompt"
-          >
-            ⚠️ Please log in to submit a manuscript.
-            <a href="/login" className="ml-1 font-semibold underline">Login here</a>
-          </div>
-        )}
+        {!user && <LoginPrompt />}
         <button
           onClick={handleFinalize}
           disabled={!metadata.title || isUploading || isSubmitting || !user}
