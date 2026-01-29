@@ -4,18 +4,31 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function ArticleDetailPage() {
   const { id } = useParams()
   const [article, setArticle] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [citeCopied, setCiteCopied] = useState(false)
 
   useEffect(() => {
     async function fetchArticle() {
       try {
         const res = await fetch(`/api/v1/manuscripts/articles/${id}`)
         const result = await res.json()
-        if (result.success) setArticle(result.data)
+        if (result.success) {
+          setArticle(result.data)
+          if (result.data?.file_path) {
+            const { data, error } = await supabase.storage
+              .from('manuscripts')
+              .createSignedUrl(result.data.file_path, 60 * 5)
+            if (!error) {
+              setPreviewUrl(data?.signedUrl ?? null)
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to load article:', err)
       } finally {
@@ -27,6 +40,10 @@ export default function ArticleDetailPage() {
 
   async function handleDownload(articleId: string) {
     try {
+      if (!article?.file_path) {
+        console.error("No file attached to this article")
+        return
+      }
       // 调用下载统计API
       const res = await fetch(`/api/v1/stats/download/${articleId}`, {
         method: "POST",
@@ -35,14 +52,32 @@ export default function ArticleDetailPage() {
         },
       });
       
-      if (res.ok) {
-        // 打开PDF下载链接
-        window.open(`/api/v1/manuscripts/articles/${articleId}/download`, "_blank");
-      } else {
+      if (!res.ok) {
         console.error("Failed to record download");
       }
+
+      const { data, error } = await supabase.storage
+        .from('manuscripts')
+        .createSignedUrl(article.file_path, 60 * 5)
+      if (error || !data?.signedUrl) {
+        console.error("Failed to create download URL");
+        return
+      }
+      window.open(data.signedUrl, "_blank");
     } catch (error) {
       console.error("Download error:", error);
+    }
+  }
+
+  async function handleCopyCitation() {
+    if (!article) return
+    const citation = `${article.title}. ${article.journals?.title || 'Unassigned Journal'}. ${article.published_at ? new Date(article.published_at).getFullYear() : 'Pending'}. DOI: ${article.doi || 'Pending'}.`
+    try {
+      await navigator.clipboard.writeText(citation)
+      setCiteCopied(true)
+      setTimeout(() => setCiteCopied(false), 2000)
+    } catch (error) {
+      console.error("Failed to copy citation", error)
     }
   }
 
@@ -59,6 +94,12 @@ export default function ArticleDetailPage() {
 
   if (!article) return <div>Article not found.</div>
 
+  const hasFile = Boolean(article?.file_path)
+  const datasetUrl = article?.dataset_url
+  const sourceCodeUrl = article?.source_code_url
+  const datasetReady = Boolean(datasetUrl)
+  const sourceCodeReady = Boolean(sourceCodeUrl)
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <SiteHeader />
@@ -70,9 +111,13 @@ export default function ArticleDetailPage() {
           {/* Header Area */}
           <header className="space-y-6">
             <nav className="flex items-center gap-2 text-sm font-bold text-blue-600 uppercase tracking-widest">
-              <Link href={`/journals/${article.journals?.slug}`} className="hover:underline">
-                {article.journals?.title}
-              </Link>
+              {article.journals?.slug ? (
+                <Link href={`/journals/${article.journals.slug}`} className="hover:underline">
+                  {article.journals.title}
+                </Link>
+              ) : (
+                <span className="text-slate-400">Unassigned Journal</span>
+              )}
               <span className="text-slate-300">/</span>
               <span className="text-slate-400">Article</span>
             </nav>
@@ -80,7 +125,10 @@ export default function ArticleDetailPage() {
               {article.title}
             </h1>
             <div className="flex flex-wrap gap-4 text-slate-600 font-medium">
-              <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Published: {new Date(article.published_at).toLocaleDateString()}</span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4" />
+                Published: {article.published_at ? new Date(article.published_at).toLocaleDateString() : 'Pending'}
+              </span>
               <span className="flex items-center gap-1.5"><Hash className="h-4 w-4" /> DOI: {article.doi || 'Pending'}</span>
             </div>
           </header>
@@ -97,25 +145,31 @@ export default function ArticleDetailPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900">Full Text Preview</h2>
-              <button 
+              <button
                 onClick={() => handleDownload(article.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full text-sm font-bold hover:bg-slate-800 transition-all"
+                disabled={!hasFile}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full text-sm font-bold hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="h-4 w-4" /> Download PDF
               </button>
             </div>
-            <div className="aspect-[3/4] w-full bg-slate-200 rounded-3xl overflow-hidden border-4 border-white shadow-2xl relative group">
-              {/* 这里使用 Iframe 模拟 PDF 预览，实际接入 Supabase 签名链接 */}
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
-                <div className="text-center">
-                  <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-400 font-medium">Secure PDF Viewer Loading...</p>
+            <div className="aspect-[3/4] w-full bg-slate-200 rounded-3xl overflow-hidden border-4 border-white shadow-2xl relative">
+              {previewUrl ? (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full border-0"
+                  title="PDF Preview"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+                  <div className="text-center">
+                    <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                    <p className="text-slate-400 font-medium">
+                      {hasFile ? "Preview not available. Use Download PDF." : "No PDF uploaded for this article."}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <iframe 
-                src="https://www.w3.org/W3AI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" 
-                className="w-full h-full border-0 relative z-10 opacity-90 group-hover:opacity-100 transition-opacity"
-              />
+              )}
             </div>
           </section>
         </div>
@@ -135,8 +189,11 @@ export default function ArticleDetailPage() {
                 <div className="text-xs text-slate-400 font-bold uppercase">Downloads</div>
               </div>
             </div>
-            <button className="w-full mt-8 py-3 border border-slate-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all">
-              <Quote className="h-4 w-4" /> Cite this Article
+            <button
+              onClick={handleCopyCitation}
+              className="w-full mt-8 py-3 border border-slate-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all"
+            >
+              <Quote className="h-4 w-4" /> {citeCopied ? 'Citation Copied' : 'Cite this Article'}
             </button>
           </div>
 
@@ -144,18 +201,46 @@ export default function ArticleDetailPage() {
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 px-2">Related Resources</h3>
             <div className="space-y-2">
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-blue-500 cursor-pointer transition-all group">
-                <div className="text-xs font-bold text-blue-600 mb-1">DATASET</div>
-                <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600 flex items-center justify-between">
-                  Open Research Data <ExternalLink className="h-3 w-3" />
+              {datasetReady ? (
+                <a
+                  href={datasetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full p-4 bg-white rounded-2xl border border-slate-200 transition-all group hover:border-blue-200"
+                >
+                  <div className="text-xs font-bold text-blue-600 mb-1">DATASET</div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600 flex items-center justify-between">
+                    Open Research Data <ExternalLink className="h-3 w-3" />
+                  </div>
+                </a>
+              ) : (
+                <div className="p-4 bg-white rounded-2xl border border-slate-200 opacity-60 cursor-not-allowed transition-all group">
+                  <div className="text-xs font-bold text-blue-600 mb-1">DATASET</div>
+                  <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                    Open Research Data <ExternalLink className="h-3 w-3" />
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-blue-500 cursor-pointer transition-all group">
-                <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
-                <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600 flex items-center justify-between">
-                  Algorithm Implementation <ExternalLink className="h-3 w-3" />
+              )}
+              {sourceCodeReady ? (
+                <a
+                  href={sourceCodeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full p-4 bg-white rounded-2xl border border-slate-200 transition-all group hover:border-emerald-200"
+                >
+                  <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 flex items-center justify-between">
+                    Algorithm Implementation <ExternalLink className="h-3 w-3" />
+                  </div>
+                </a>
+              ) : (
+                <div className="p-4 bg-white rounded-2xl border border-slate-200 opacity-60 cursor-not-allowed transition-all group">
+                  <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
+                  <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                    Algorithm Implementation <ExternalLink className="h-3 w-3" />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </aside>

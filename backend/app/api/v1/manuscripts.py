@@ -58,6 +58,23 @@ async def get_manuscripts():
         print(f"查询失败: {str(e)}")
         return {"success": False, "data": []}
 
+@router.get("/manuscripts/mine")
+async def get_my_manuscripts(current_user: dict = Depends(get_current_user)):
+    """作者视角：仅返回当前用户的稿件列表"""
+    try:
+        # 中文注释: 作者列表仅展示自己投稿，避免越权查看
+        response = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("author_id", current_user["id"])
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return {"success": True, "data": response.data}
+    except Exception as e:
+        print(f"作者稿件查询失败: {str(e)}")
+        return {"success": False, "data": []}
+
 @router.get("/manuscripts/search")
 async def public_search(q: str, mode: str = "articles"):
     """公开检索"""
@@ -74,8 +91,36 @@ async def public_search(q: str, mode: str = "articles"):
 # === 4. 详情查询 ===
 @router.get("/manuscripts/articles/{id}")
 async def get_article_detail(id: UUID):
-    data, _ = supabase.table("manuscripts").select("*, journals(*)").eq("id", str(id)).single().execute()
-    return {"success": True, "data": data[1]}
+    try:
+        manuscript_response = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("id", str(id))
+            .single()
+            .execute()
+        )
+        manuscript = manuscript_response.data
+        if not manuscript:
+            raise HTTPException(status_code=404, detail="Article not found")
+        # 中文注释: 兼容未建立 journals 外键关系的环境，按需补充期刊信息
+        journal_id = manuscript.get("journal_id")
+        if journal_id:
+            journal_response = (
+                supabase.table("journals")
+                .select("*")
+                .eq("id", journal_id)
+                .single()
+                .execute()
+            )
+            manuscript["journals"] = journal_response.data
+        else:
+            manuscript["journals"] = None
+        return {"success": True, "data": manuscript}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"文章详情查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch article detail")
 
 @router.post("/manuscripts")
 async def create_manuscript(
@@ -91,7 +136,9 @@ async def create_manuscript(
             "id": str(manuscript_id),
             "title": manuscript.title,
             "abstract": manuscript.abstract,
-            "file_path": None,
+            "file_path": manuscript.file_path,
+            "dataset_url": manuscript.dataset_url,
+            "source_code_url": manuscript.source_code_url,
             "author_id": current_user["id"],  # 使用真实的用户 ID
             "status": "submitted",
             "kpi_owner_id": None,
@@ -113,6 +160,21 @@ async def create_manuscript(
 
 @router.get("/manuscripts/journals/{slug}")
 async def get_journal_detail(slug: str):
-    journal = supabase.table("journals").select("*").eq("slug", slug).single().execute()[1]
-    articles = supabase.table("manuscripts").select("*").eq("journal_id", journal['id']).eq("status", "published").execute()[1]
-    return {"success": True, "journal": journal, "articles": articles}
+    try:
+        journal_response = supabase.table("journals").select("*").eq("slug", slug).single().execute()
+        journal = journal_response.data
+        if not journal:
+            raise HTTPException(status_code=404, detail="Journal not found")
+        articles_response = (
+            supabase.table("manuscripts")
+            .select("*")
+            .eq("journal_id", journal["id"])
+            .eq("status", "published")
+            .execute()
+        )
+        return {"success": True, "journal": journal, "articles": articles_response.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"期刊详情查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch journal detail")
