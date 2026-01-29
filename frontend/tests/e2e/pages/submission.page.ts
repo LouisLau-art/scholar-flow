@@ -8,7 +8,8 @@ export class SubmissionPage {
   }
 
   async uploadPdf(buffer: Buffer) {
-    await this.page.getByTestId('submission-file').setInputFiles({
+    await this.page.waitForSelector('[data-testid="submission-file"]', { state: 'attached' })
+    await this.page.setInputFiles('[data-testid="submission-file"]', {
       name: 'manuscript.pdf',
       mimeType: 'application/pdf',
       buffer,

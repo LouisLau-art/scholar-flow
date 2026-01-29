@@ -14,7 +14,9 @@ export class EditorPage {
   }
 
   async assignReviewer(reviewerId: string) {
-    await this.page.getByTestId(`reviewer-item-${reviewerId}`).click()
+    const reviewer = this.page.getByTestId(`reviewer-item-${reviewerId}`)
+    await reviewer.scrollIntoViewIfNeeded()
+    await reviewer.click({ force: true })
     await this.page.getByTestId('reviewer-assign').click()
   }
 }
