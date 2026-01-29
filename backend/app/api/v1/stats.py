@@ -74,6 +74,8 @@ async def record_download(article_id: str):
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[Download Stats Error] Failed to record download for article {article_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to record download")

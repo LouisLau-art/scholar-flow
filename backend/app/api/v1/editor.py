@@ -117,6 +117,8 @@ async def submit_final_decision(
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Decision submission failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit decision")

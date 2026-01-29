@@ -1,0 +1,236 @@
+from types import SimpleNamespace
+from uuid import UUID
+
+import pytest
+from fastapi import BackgroundTasks, HTTPException
+
+from app.api.v1 import editor as editor_api
+from app.api.v1 import plagiarism as plagiarism_api
+from app.api.v1 import stats as stats_api
+from app.models.plagiarism import PlagiarismRetryRequest
+
+
+@pytest.mark.asyncio
+async def test_stats_endpoints(client, auth_token):
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    author_resp = await client.get("/api/v1/stats/author", headers=headers)
+    editor_resp = await client.get("/api/v1/stats/editor", headers=headers)
+    system_resp = await client.get("/api/v1/stats/system")
+
+    assert author_resp.status_code == 200
+    assert editor_resp.status_code == 200
+    assert system_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_record_download_invalid_id():
+    with pytest.raises(HTTPException) as exc:
+        await stats_api.record_download("")
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_record_download_exception(monkeypatch):
+    class Boom:
+        @staticmethod
+        def now():
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(stats_api, "datetime", Boom)
+
+    with pytest.raises(HTTPException) as exc:
+        await stats_api.record_download("article-1")
+
+    assert exc.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_plagiarism_download_url():
+    report_id = UUID(int=1)
+
+    result = await plagiarism_api.get_report_download_url(report_id)
+
+    assert str(report_id) in result["download_url"]
+
+
+@pytest.mark.asyncio
+async def test_retry_plagiarism_check_adds_task():
+    request = PlagiarismRetryRequest(manuscript_id=UUID(int=2))
+    tasks = BackgroundTasks()
+
+    result = await plagiarism_api.retry_plagiarism_check(request, tasks)
+
+    assert result["success"] is True
+    assert len(tasks.tasks) == 1
+
+
+class _FakeSupabase:
+    def __init__(self, pipeline_data, reviewers_data, decision_data, raise_on_update=False):
+        self.pipeline_data = pipeline_data
+        self.reviewers_data = reviewers_data
+        self.decision_data = decision_data
+        self.raise_on_update = raise_on_update
+
+    def table(self, name):
+        return _FakeQuery(self, name)
+
+
+class _FakeQuery:
+    def __init__(self, parent, name):
+        self.parent = parent
+        self.name = name
+        self._status = None
+        self._update_payload = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def update(self, payload):
+        self._update_payload = payload
+        return self
+
+    def eq(self, key, value):
+        if key == "status":
+            self._status = value
+        return self
+
+    def execute(self):
+        if self.name == "users":
+            return (None, self.parent.reviewers_data)
+        if self.name == "manuscripts" and self._update_payload is not None:
+            if self.parent.raise_on_update:
+                raise RuntimeError("boom")
+            return SimpleNamespace(data=self.parent.decision_data)
+        if self.name == "manuscripts" and self._status:
+            return (None, self.parent.pipeline_data.get(self._status, []))
+        return (None, [])
+
+
+@pytest.mark.asyncio
+async def test_editor_pipeline_with_stubbed_supabase(monkeypatch):
+    pipeline_data = {
+        "submitted": [{"id": "1"}],
+        "under_review": [{"id": "2"}],
+        "pending_decision": [{"id": "3"}],
+        "published": [{"id": "4"}],
+    }
+    fake = _FakeSupabase(pipeline_data, reviewers_data=[], decision_data=[])
+
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    result = await editor_api.get_editor_pipeline(current_user={"id": "user"})
+
+    assert result["data"]["pending_quality"][0]["id"] == "1"
+    assert result["data"]["published"][0]["id"] == "4"
+
+
+@pytest.mark.asyncio
+async def test_editor_available_reviewers_with_defaults(monkeypatch):
+    reviewers = [
+        {"id": "1", "name": "Alice", "email": "a@example.com"},
+        {"id": "2", "name": "Bob", "email": "b@example.com", "affiliation": "Uni"},
+    ]
+    fake = _FakeSupabase(pipeline_data={}, reviewers_data=reviewers, decision_data=[])
+
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    result = await editor_api.get_available_reviewers(current_user={"id": "user"})
+
+    assert result["data"][0]["affiliation"] == "Unknown"
+    assert result["data"][0]["review_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_accept(monkeypatch):
+    fake = _FakeSupabase(
+        pipeline_data={}, reviewers_data=[], decision_data=[{"id": "1"}]
+    )
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    result = await editor_api.submit_final_decision(
+        current_user={"id": "user"},
+        manuscript_id="1",
+        decision="accept",
+        comment="",
+    )
+
+    assert result["data"]["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_reject(monkeypatch):
+    fake = _FakeSupabase(
+        pipeline_data={}, reviewers_data=[], decision_data=[{"id": "1"}]
+    )
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    result = await editor_api.submit_final_decision(
+        current_user={"id": "user"},
+        manuscript_id="1",
+        decision="reject",
+        comment="needs work",
+    )
+
+    assert result["data"]["status"] == "revision_required"
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_invalid():
+    with pytest.raises(HTTPException) as exc:
+        await editor_api.submit_final_decision(
+            current_user={"id": "user"},
+            manuscript_id="1",
+            decision="maybe",
+            comment="",
+        )
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_not_found(monkeypatch):
+    fake = _FakeSupabase(pipeline_data={}, reviewers_data=[], decision_data=[])
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    with pytest.raises(HTTPException) as exc:
+        await editor_api.submit_final_decision(
+            current_user={"id": "user"},
+            manuscript_id="missing",
+            decision="accept",
+            comment="",
+        )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_exception(monkeypatch):
+    fake = _FakeSupabase(
+        pipeline_data={}, reviewers_data=[], decision_data=[], raise_on_update=True
+    )
+    monkeypatch.setattr(editor_api, "supabase", fake)
+
+    with pytest.raises(HTTPException) as exc:
+        await editor_api.submit_final_decision(
+            current_user={"id": "user"},
+            manuscript_id="1",
+            decision="accept",
+            comment="",
+        )
+
+    assert exc.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_editor_test_endpoints():
+    pipeline = await editor_api.get_editor_pipeline_test()
+    reviewers = await editor_api.get_available_reviewers_test()
+    decision = await editor_api.submit_final_decision_test(
+        manuscript_id="1", decision="accept", comment=""
+    )
+
+    assert pipeline["success"] is True
+    assert reviewers["success"] is True
+    assert decision["data"]["status"] == "published"
