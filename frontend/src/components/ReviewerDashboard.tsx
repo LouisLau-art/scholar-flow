@@ -4,14 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Star, FileText, CheckCircle } from "lucide-react"
-import { toast } from "sonner"
-
-import { Star, FileText, CheckCircle, Send, X } from "lucide-react"
+import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 
 export default function ReviewerDashboard() {
