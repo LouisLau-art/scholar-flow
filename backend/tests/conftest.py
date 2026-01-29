@@ -5,9 +5,13 @@ import os
 import jwt
 from datetime import datetime, timedelta
 from httpx import AsyncClient, ASGITransport
-from main import app
 from typing import AsyncGenerator
 from supabase import create_client
+
+# Import app from the correct location
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from main import app
 
 # === 全局测试配置 ===
 # 中文注释:
