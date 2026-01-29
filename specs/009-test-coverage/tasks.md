@@ -31,16 +31,16 @@ description: "Task list for test coverage feature implementation"
 
 **Purpose**: Project initialization and test framework setup
 
-- [ ] T001 Create test directory structure (backend/tests/, frontend/tests/)
-- [ ] T002 [P] Install pytest and pytest-cov for backend testing
-- [ ] T003 [P] Install Playwright for frontend E2E testing
-- [ ] T004 [P] Install Vitest for frontend unit testing
-- [ ] T005 [P] Create pytest configuration (backend/pytest.ini)
-- [ ] T006 [P] Create pytest coverage configuration (backend/.coveragerc)
-- [ ] T007 [P] Create Playwright configuration (frontend/playwright.config.ts)
-- [ ] T008 [P] Create Vitest configuration (frontend/vitest.config.ts)
-- [ ] T009 [P] Create test helper utilities (backend/tests/conftest.py)
-- [ ] T010 [P] Create test data factories (backend/tests/fixtures.py)
+- [X] T001 Create test directory structure (backend/tests/, frontend/tests/)
+- [X] T002 [P] Install pytest and pytest-cov for backend testing
+- [X] T003 [P] Install Playwright for frontend E2E testing
+- [X] T004 [P] Install Vitest for frontend unit testing
+- [X] T005 [P] Create pytest configuration (backend/pytest.ini)
+- [X] T006 [P] Create pytest coverage configuration (backend/.coveragerc)
+- [X] T007 [P] Create Playwright configuration (frontend/playwright.config.ts)
+- [X] T008 [P] Create Vitest configuration (frontend/vitest.config.ts)
+- [X] T009 [P] Create test helper utilities (backend/tests/conftest.py)
+- [X] T010 [P] Create test data factories (backend/tests/fixtures.py)
 
 **Checkpoint**: Test framework ready - can start writing tests
 
@@ -52,15 +52,15 @@ description: "Task list for test coverage feature implementation"
 
 **⚠️ CRITICAL**: No user story test implementation can begin until this phase is complete
 
-- [ ] T011 Implement JWT token generation for tests (backend/tests/conftest.py)
-- [ ] T012 [P] Implement database connection fixture with cleanup (backend/tests/conftest.py)
-- [ ] T013 [P] Create test data cleanup strategy (backend/tests/conftest.py)
-- [ ] T014 [P] Install PyJWT library for token generation (backend/requirements.txt)
-- [ ] T015 [P] Create test environment variables template (.env.test.example)
-- [ ] T016 [P] Install httpx for API testing (backend/requirements.txt)
-- [ ] T017 [P] Create test utilities for API client (backend/tests/utils/api_client.py)
-- [ ] T018 [P] Install Playwright browsers (npx playwright install)
-- [ ] T019 [P] Create test data cleanup script (scripts/cleanup-test-data.sh)
+- [X] T011 Implement JWT token generation for tests (backend/tests/conftest.py)
+- [X] T012 [P] Implement database connection fixture with cleanup (backend/tests/conftest.py)
+- [X] T013 [P] Create test data cleanup strategy (backend/tests/conftest.py)
+- [X] T014 [P] Install PyJWT library for token generation (backend/requirements.txt)
+- [X] T015 [P] Create test environment variables template (.env.test.example)
+- [X] T016 [P] Install httpx for API testing (backend/requirements.txt)
+- [X] T017 [P] Create test utilities for API client (backend/tests/utils/api_client.py)
+- [X] T018 [P] Install Playwright browsers (npx playwright install)
+- [X] T019 [P] Create test data cleanup script (scripts/cleanup-test-data.sh)
 
 **Checkpoint**: Foundation ready - user story test implementation can now begin
 
