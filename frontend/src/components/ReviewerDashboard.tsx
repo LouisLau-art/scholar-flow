@@ -1,14 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
 
 export default function ReviewerDashboard() {
   const [tasks, setTasks] = useState([])
@@ -62,34 +57,41 @@ export default function ReviewerDashboard() {
       
       <div className="grid gap-4">
         {tasks.map((task) => (
-          <Card key={task.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div key={task.id} className="rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow">
+            <div className="flex flex-row items-start justify-between space-y-0 p-6">
               <div className="space-y-1">
-                <CardTitle className="text-xl font-serif">{task.manuscripts?.title}</CardTitle>
-                <CardDescription className="line-clamp-2 italic">{task.manuscripts?.abstract}</CardDescription>
+                <h3 className="text-xl font-serif font-semibold">{task.manuscripts?.title}</h3>
+                <p className="line-clamp-2 italic text-sm text-slate-500">{task.manuscripts?.abstract}</p>
               </div>
-              <Badge className="bg-blue-600">PENDING REVIEW</Badge>
-            </CardHeader>
-            <CardContent className="flex justify-end gap-3 pt-4 border-t border-slate-50">
+              <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">PENDING REVIEW</span>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-50 p-6">
               <Link href={`/articles/${task.manuscript_id}`}>
-                <Button variant="outline" size="sm" className="rounded-xl">
+                <button className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                   <FileText className="h-4 w-4 mr-2" /> View PDF
-                </Button>
+                </button>
               </Link>
               
-              <Dialog open={isModalOpen && selectedTask?.id === task.id} onOpenChange={(open) => { setIsModalOpen(open); if(open) setSelectedTask(task); }}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="bg-slate-900 rounded-xl px-6">
-                    <Star className="h-4 w-4 mr-2" /> Start Review
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px] rounded-3xl">
-                  <DialogHeader>
-                    <DialogTitle className="font-serif text-2xl">Structured Peer Review</DialogTitle>
-                    <DialogDescription>Submit your professional assessment for "{task.manuscripts?.title}"</DialogDescription>
-                  </DialogHeader>
-                  
-                  <div className="py-6 space-y-8">
+              <button
+                onClick={() => { setIsModalOpen(true); setSelectedTask(task); }}
+                className="bg-slate-900 rounded-xl px-6 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                <Star className="h-4 w-4 mr-2" /> Start Review
+              </button>
+            </div>
+
+            {isModalOpen && selectedTask?.id === task.id && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50" onClick={() => setIsModalOpen(false)} />
+                <div className="relative w-full max-w-[600px] rounded-3xl bg-white p-8 shadow-2xl">
+                  <div className="mb-6">
+                    <h4 className="font-serif text-2xl">Structured Peer Review</h4>
+                    <p className="text-sm text-slate-500">
+                      Submit your professional assessment for "{task.manuscripts?.title}"
+                    </p>
+                  </div>
+
+                  <div className="py-2 space-y-8">
                     {/* Novelty Score */}
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
@@ -110,20 +112,33 @@ export default function ReviewerDashboard() {
 
                     <div className="space-y-3">
                       <span className="font-bold text-slate-700">Review Comments</span>
-                      <Textarea placeholder="Provide detailed feedback for the authors..." className="min-h-[150px] rounded-2xl border-slate-200 focus:ring-blue-500" value={reviewData.comments} onChange={(e) => setReviewReviewData({...reviewData, comments: e.target.value})} />
+                      <textarea
+                        placeholder="Provide detailed feedback for the authors..."
+                        className="min-h-[150px] w-full rounded-2xl border border-slate-200 p-3 focus:ring-2 focus:ring-blue-500"
+                        value={reviewData.comments}
+                        onChange={(e) => setReviewReviewData({...reviewData, comments: e.target.value})}
+                      />
                     </div>
                   </div>
 
-                  <DialogFooter>
-                    <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="rounded-xl">Cancel</Button>
-                    <Button onClick={handleSubmitReview} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 font-bold">
+                  <div className="mt-8 flex justify-end gap-3">
+                    <button
+                      onClick={() => setIsModalOpen(false)}
+                      className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSubmitReview}
+                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 py-2 text-sm font-bold"
+                    >
                       Submit Decision <Send className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
-          </Card>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>
