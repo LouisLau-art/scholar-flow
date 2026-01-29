@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import config from '../../vitest.config'
+import fs from 'fs'
+import path from 'path'
+
+const configPath = path.resolve(__dirname, '../../vitest.config.ts')
 
 describe('coverage config', () => {
   it('enforces 70% thresholds', () => {
-    const thresholds = config.test?.coverage?.thresholds
-    expect(thresholds?.lines).toBeGreaterThanOrEqual(70)
-    expect(thresholds?.branches).toBeGreaterThanOrEqual(70)
-    expect(thresholds?.functions).toBeGreaterThanOrEqual(70)
-    expect(thresholds?.statements).toBeGreaterThanOrEqual(70)
+    const configText = fs.readFileSync(configPath, 'utf8')
+    expect(configText).toMatch(/lines:\s*70/)
+    expect(configText).toMatch(/branches:\s*70/)
+    expect(configText).toMatch(/functions:\s*70/)
+    expect(configText).toMatch(/statements:\s*70/)
   })
 
   it('exports html/json reporters', () => {
-    const reporters = config.test?.coverage?.reporter ?? []
-    expect(reporters).toEqual(expect.arrayContaining(['html', 'json']))
+    const configText = fs.readFileSync(configPath, 'utf8')
+    expect(configText).toMatch(/reporter:\s*\['text',\s*'json',\s*'html'\]/)
   })
 })

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 // Mock Supabase
 vi.mock('@/lib/supabase', () => ({
@@ -51,6 +51,8 @@ vi.mock('lucide-react', () => ({
 
 // Import after mocking
 import SubmissionForm from '@/components/SubmissionForm'
+import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
 
 describe('SubmissionForm Component', () => {
   /**
@@ -62,6 +64,11 @@ describe('SubmissionForm Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(supabase.auth.getSession as any).mockResolvedValue({ data: { session: null } })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('disables submit button if title is empty', () => {
@@ -82,6 +89,141 @@ describe('SubmissionForm Component', () => {
       // Button is disabled because user is not logged in
       // This is expected behavior - the test verifies the component works
       expect(submitBtn).toBeTruthy()
+    })
+  })
+
+  it('shows login prompt when user is not authenticated', async () => {
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-login-prompt')).toBeInTheDocument()
+    })
+
+    expect(toast.error).toHaveBeenCalledWith('Please log in to submit a manuscript')
+  })
+
+  it('renders user info when authenticated', async () => {
+    ;(supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: { user: { id: 'u1', email: 'user@example.com' } } },
+    })
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toHaveTextContent('user@example.com')
+    })
+  })
+
+  it('handles file upload success and populates metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { title: 'Parsed Title', abstract: 'Parsed Abstract', authors: [] },
+        }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    const input = screen.getByTestId('submission-file') as HTMLInputElement
+    const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Parsed Abstract')).toBeInTheDocument()
+    })
+
+    expect(toast.success).toHaveBeenCalled()
+  })
+
+  it('handles file upload failure gracefully', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: false, message: 'bad' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    const input = screen.getByTestId('submission-file') as HTMLInputElement
+    const file = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'AI parsing failed. Please fill manually.',
+        expect.any(Object)
+      )
+    })
+  })
+
+  it('submits manuscript when authenticated', async () => {
+    ;(supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: { user: { id: 'u1', email: 'user@example.com' }, access_token: 'token' } },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true,
+    })
+
+    render(<SubmissionForm />)
+
+    fireEvent.change(screen.getByTestId('submission-title'), {
+      target: { value: 'Title' },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/manuscripts',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer token',
+          }),
+        })
+      )
+    })
+  })
+
+  it('shows error when submission fails', async () => {
+    ;(supabase.auth.getSession as any).mockResolvedValue({
+      data: { session: { user: { id: 'u1', email: 'user@example.com' }, access_token: 'token' } },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: false, message: 'nope' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    fireEvent.change(screen.getByTestId('submission-title'), {
+      target: { value: 'Title' },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to save. Check database connection.',
+        expect.any(Object)
+      )
     })
   })
 })
