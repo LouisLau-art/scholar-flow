@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2026-01-29
 
 ## Active Technologies
+- PostgreSQL (Supabase) (009-test-coverage)
 
 - Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x (009-test-coverage)
 
@@ -83,6 +84,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
 - **E2E Tests**: 5+ critical user flows
 
 ## Recent Changes
+- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 

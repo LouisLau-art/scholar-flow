@@ -8,6 +8,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-29
 - **Database & Auth**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x
 - **Testing**: pytest, pytest-cov, Playwright, Vitest
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching)
+- PostgreSQL (Supabase) (009-test-coverage)
 
 ## Project Structure
 
@@ -184,13 +185,8 @@ Unit Tests - Test individual functions/components
 
 ## Recent Changes
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
+- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 - 008-editor-command-center: Editor command center with pipeline view, reviewer assignment, and decision panel
-- 007-reviewer-workspace: Reviewer workspace functionality
-- 006-quality-assurance-suite: Full test coverage with unified `run_tests.sh`.
-- 005-system-integrity-and-auth: Native Auth integration and blank page elimination.
-- 004-content-ecosystem: Public portal and PDF reader打通.
 
 <!-- MANUAL ADDITIONS START -->
-- Environment: Arch Linux (pacman/paru priority).
-- Savepoints: Push to GitHub after every atomic task (v2.0.0 Constitution).
 <!-- MANUAL ADDITIONS END -->

@@ -43,3 +43,10 @@
 ## Agent-Specific Notes
 - Follow `.specify/memory/constitution.md` and `specs/*/tasks.md`.
 - After each atomic task, push to GitHub to create a savepoint.
+
+## Active Technologies
+- Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x (009-test-coverage)
+- PostgreSQL (Supabase) (009-test-coverage)
+
+## Recent Changes
+- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
