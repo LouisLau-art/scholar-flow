@@ -178,9 +178,9 @@ description: "Task list for test coverage feature implementation"
 - [ ] T074 [P] [US2] Add data-testid attributes to login components (frontend/src/components/LoginForm.tsx)
 
 **Security & Authentication Implementation** (Principle XIII):
-- [ ] T075 [P] [US2] Ensure frontend properly handles JWT token storage (frontend/src/services/auth.ts)
+- [X] T075 [P] [US2] Ensure frontend properly handles JWT token storage (frontend/src/services/auth.ts)
 - [ ] T076 [P] [US2] Add login prompt UI for unauthenticated users (frontend/src/components/LoginPrompt.tsx)
-- [ ] T077 [P] [US2] Add session persistence logic (frontend/src/services/auth.ts)
+- [X] T077 [P] [US2] Add session persistence logic (frontend/src/services/auth.ts)
 
 **API Development Implementation** (Principle XIV):
 - [ ] T078 [P] [US2] Add error message display component (frontend/src/components/ErrorMessage.tsx)

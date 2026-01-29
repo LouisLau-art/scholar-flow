@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Upload, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from "sonner"
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { authService } from '@/services/auth'
 
 export default function SubmissionForm() {
   const [isUploading, setIsUploading] = useState(false)
@@ -16,7 +16,7 @@ export default function SubmissionForm() {
   // 检查用户登录状态
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const session = await authService.getSession()
       if (session?.user) {
         setUser(session.user)
       } else {
@@ -27,7 +27,7 @@ export default function SubmissionForm() {
     checkUser()
 
     // 监听认证状态变化
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((session) => {
       setUser(session?.user || null)
     })
 
@@ -80,8 +80,8 @@ export default function SubmissionForm() {
 
     try {
       // 获取用户的 JWT token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+      const accessToken = await authService.getAccessToken()
+      if (!accessToken) {
         throw new Error("No authentication token available")
       }
 
@@ -90,7 +90,7 @@ export default function SubmissionForm() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`  // 添加 JWT token
+            'Authorization': `Bearer ${accessToken}`  // 添加 JWT token
         },
         body: JSON.stringify({
           title: metadata.title,

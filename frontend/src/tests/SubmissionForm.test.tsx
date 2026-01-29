@@ -1,15 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-// Mock Supabase
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() => Promise.resolve({ data: { session: null } })),
-      onAuthStateChange: vi.fn(() => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      }))
-    }
+// Mock auth service
+vi.mock('@/services/auth', () => ({
+  authService: {
+    getSession: vi.fn(() => Promise.resolve(null)),
+    getAccessToken: vi.fn(() => Promise.resolve(null)),
+    onAuthStateChange: vi.fn(() => ({
+      data: { subscription: { unsubscribe: vi.fn() } }
+    }))
   }
 }))
 
@@ -51,7 +50,7 @@ vi.mock('lucide-react', () => ({
 
 // Import after mocking
 import SubmissionForm from '@/components/SubmissionForm'
-import { supabase } from '@/lib/supabase'
+import { authService } from '@/services/auth'
 import { toast } from 'sonner'
 
 describe('SubmissionForm Component', () => {
@@ -64,7 +63,7 @@ describe('SubmissionForm Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(supabase.auth.getSession as any).mockResolvedValue({ data: { session: null } })
+    ;(authService.getSession as any).mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -103,8 +102,8 @@ describe('SubmissionForm Component', () => {
   })
 
   it('renders user info when authenticated', async () => {
-    ;(supabase.auth.getSession as any).mockResolvedValue({
-      data: { session: { user: { id: 'u1', email: 'user@example.com' } } },
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
     })
 
     render(<SubmissionForm />)
@@ -161,9 +160,11 @@ describe('SubmissionForm Component', () => {
   })
 
   it('submits manuscript when authenticated', async () => {
-    ;(supabase.auth.getSession as any).mockResolvedValue({
-      data: { session: { user: { id: 'u1', email: 'user@example.com' }, access_token: 'token' } },
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
     })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
     const fetchMock = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ success: true }),
     })
@@ -199,9 +200,11 @@ describe('SubmissionForm Component', () => {
   })
 
   it('shows error when submission fails', async () => {
-    ;(supabase.auth.getSession as any).mockResolvedValue({
-      data: { session: { user: { id: 'u1', email: 'user@example.com' }, access_token: 'token' } },
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
     })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
     const fetchMock = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ success: false, message: 'nope' }),
     })
