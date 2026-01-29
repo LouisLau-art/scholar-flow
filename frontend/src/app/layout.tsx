@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { Toaster } from "@/components/ui/sonner"
+import Toast from '@/components/Toast'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -87,7 +87,7 @@ export default function RootLayout({
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
-        <Toaster />
+        <Toast />
       </body>
     </html>
   )

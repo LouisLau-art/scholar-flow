@@ -184,7 +184,7 @@ description: "Task list for test coverage feature implementation"
 
 **API Development Implementation** (Principle XIV):
 - [X] T078 [P] [US2] Add error message display component (frontend/src/components/ErrorMessage.tsx)
-- [ ] T079 [P] [US2] Add toast notification for success/error feedback (frontend/src/components/Toast.tsx)
+- [X] T079 [P] [US2] Add toast notification for success/error feedback (frontend/src/components/Toast.tsx)
 
 **Checkpoint**: User Story 2 E2E tests and implementation complete
 
