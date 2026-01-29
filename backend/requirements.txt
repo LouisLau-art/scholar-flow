@@ -9,3 +9,7 @@ pdfplumber
 weasyprint
 openai
 supabase>=2.0.0
+pytest>=8.0.0
+pytest-cov>=5.0.0
+pytest-asyncio
+PyJWT>=2.8.0
