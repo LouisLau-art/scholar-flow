@@ -330,7 +330,7 @@ With multiple developers:
 2. Once Foundational is done:
    - Developer A: User Story 1 (Backend tests)
    - Developer B: User Story 2 (E2E tests)
-   - Developer B: User Story 3 (Coverage reports)
+   - Developer C: User Story 3 (Coverage reports)
 3. Stories complete and integrate independently
 
 ---

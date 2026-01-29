@@ -14,7 +14,7 @@
 **Technical Approach**:
 - 后端：使用pytest增加错误处理、边界条件、并发请求测试
 - 前端：使用Playwright添加端到端测试
-- 覆盖率：使用coverage.py和jest-coverage生成报告
+- 覆盖率：使用coverage.py和Vitest coverage生成报告
 
 ## Technical Context
 
