@@ -27,9 +27,9 @@ export default function EditorDashboard() {
 
         <Tabs defaultValue="pipeline" className="space-y-6">
           <TabsList className="bg-white border border-slate-200 p-1 rounded-lg">
-            <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-            <TabsTrigger value="reviewers">Reviewers</TabsTrigger>
-            <TabsTrigger value="decisions">Decisions</TabsTrigger>
+            <TabsTrigger value="pipeline" data-testid="editor-tab-pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="reviewers" data-testid="editor-tab-reviewers">Reviewers</TabsTrigger>
+            <TabsTrigger value="decisions" data-testid="editor-tab-decisions">Decisions</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline" className="space-y-6">
@@ -48,6 +48,7 @@ export default function EditorDashboard() {
                   setIsAssignModalOpen(true)
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                data-testid="editor-open-assign"
               >
                 Open Assign Modal (Demo)
               </button>

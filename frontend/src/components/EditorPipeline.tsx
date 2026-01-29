@@ -35,7 +35,7 @@ export default function EditorPipeline() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="editor-pipeline">
       <h2 className="text-2xl font-bold text-slate-900">Manuscript Pipeline</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -97,7 +97,7 @@ export default function EditorPipeline() {
       </div>
 
       {/* 详细列表 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-6" data-testid="editor-pipeline-list">
         <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h3>
         <div className="space-y-4">
           {(pipelineData?.pending_quality || []).slice(0, 3).map((manuscript: any) => (

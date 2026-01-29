@@ -68,7 +68,7 @@ export default function ReviewerAssignModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="reviewer-modal">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
@@ -98,6 +98,7 @@ export default function ReviewerAssignModal({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                data-testid="reviewer-search"
               />
             </div>
           </div>
@@ -118,6 +119,7 @@ export default function ReviewerAssignModal({
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                   onClick={() => setSelectedReviewer(reviewer.id)}
+                  data-testid={`reviewer-item-${reviewer.id}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -173,6 +175,7 @@ export default function ReviewerAssignModal({
             onClick={handleAssign}
             disabled={!selectedReviewer}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+            data-testid="reviewer-assign"
           >
             Assign Reviewer
           </button>

@@ -132,6 +132,7 @@ export default function SubmissionForm() {
           onChange={handleFileUpload}
           className="absolute inset-0 cursor-pointer opacity-0"
           disabled={isUploading}
+          data-testid="submission-file"
         />
         <Upload className={`mb-4 h-12 w-12 ${file ? 'text-blue-500' : 'text-slate-400'}`} />
         <p className="text-lg font-medium text-slate-700">
@@ -150,6 +151,7 @@ export default function SubmissionForm() {
             onChange={(e) => setMetadata(prev => ({ ...prev, title: e.target.value }))}
             className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             placeholder="Parsed title will appear here..."
+            data-testid="submission-title"
           />
         </div>
 
@@ -161,13 +163,17 @@ export default function SubmissionForm() {
             onChange={(e) => setMetadata(prev => ({ ...prev, abstract: e.target.value }))}
             className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             placeholder="Parsed abstract will appear here..."
+            data-testid="submission-abstract"
           />
         </div>
       </div>
 
       <div className="space-y-3">
         {!user && (
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800 text-sm">
+          <div
+            className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800 text-sm"
+            data-testid="submission-login-prompt"
+          >
             ⚠️ Please log in to submit a manuscript.
             <a href="/login" className="ml-1 font-semibold underline">Login here</a>
           </div>
@@ -176,11 +182,12 @@ export default function SubmissionForm() {
           onClick={handleFinalize}
           disabled={!metadata.title || isUploading || isSubmitting || !user}
           className="w-full rounded-md bg-slate-900 py-3 text-white font-semibold shadow-md hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          data-testid="submission-finalize"
         >
           {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
         </button>
         {user && (
-          <p className="text-xs text-slate-500 text-center">
+          <p className="text-xs text-slate-500 text-center" data-testid="submission-user">
             Logged in as: {user.email}
           </p>
         )}
