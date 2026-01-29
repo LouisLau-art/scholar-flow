@@ -1,5 +1,5 @@
 [run]
-source = src
+source = app
 branch = True
 omit =
     */tests/*
@@ -12,6 +12,7 @@ omit =
 precision = 2
 show_missing = True
 skip_covered = False
+fail_under = 80
 exclude_lines =
     pragma: no cover
     def __repr__
