@@ -169,13 +169,13 @@ description: "Task list for test coverage feature implementation"
 ### Implementation for User Story 2
 
 **Frontend E2E Implementation** (Principle XII):
-- [ ] T068 [P] [US2] Implement login page interactions in Page Object (frontend/tests/e2e/pages/login.page.ts)
-- [ ] T069 [P] [US2] Implement submission page interactions in Page Object (frontend/tests/e2e/pages/submission.page.ts)
-- [ ] T070 [P] [US2] Implement dashboard page interactions in Page Object (frontend/tests/e2e/pages/dashboard.page.ts)
-- [ ] T071 [P] [US2] Implement editor page interactions in Page Object (frontend/tests/e2e/pages/editor.page.ts)
-- [ ] T072 [P] [US2] Add data-testid attributes to frontend components for E2E testing (frontend/src/components/SubmissionForm.tsx)
-- [ ] T073 [P] [US2] Add data-testid attributes to editor dashboard components (frontend/src/components/EditorDashboard.tsx)
-- [ ] T074 [P] [US2] Add data-testid attributes to login components (frontend/src/components/LoginForm.tsx)
+- [X] T068 [P] [US2] Implement login page interactions in Page Object (frontend/tests/e2e/pages/login.page.ts)
+- [X] T069 [P] [US2] Implement submission page interactions in Page Object (frontend/tests/e2e/pages/submission.page.ts)
+- [X] T070 [P] [US2] Implement dashboard page interactions in Page Object (frontend/tests/e2e/pages/dashboard.page.ts)
+- [X] T071 [P] [US2] Implement editor page interactions in Page Object (frontend/tests/e2e/pages/editor.page.ts)
+- [X] T072 [P] [US2] Add data-testid attributes to frontend components for E2E testing (frontend/src/components/SubmissionForm.tsx)
+- [X] T073 [P] [US2] Add data-testid attributes to editor dashboard components (frontend/src/components/EditorDashboard.tsx)
+- [X] T074 [P] [US2] Add data-testid attributes to login components (frontend/src/app/login/page.tsx)
 
 **Security & Authentication Implementation** (Principle XIII):
 - [X] T075 [P] [US2] Ensure frontend properly handles JWT token storage (frontend/src/services/auth.ts)
