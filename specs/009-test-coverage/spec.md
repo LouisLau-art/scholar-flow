@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "完善测试覆盖：增加更多测试场景（错误处理、边界条件、并发请求），添加前端E2E测试（使用Playwright或Cypress），生成测试覆盖率报告"
 
+## Clarifications
+
+### Session 2026-01-29
+
+- Q: Which E2E testing framework should be used for frontend testing? → A: Playwright (recommended for TypeScript/Next.js projects, better cross-browser support)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - 增加后端测试场景 (Priority: P1)
@@ -39,6 +45,7 @@
 2. **Given** 用户已登录，**When** 上传PDF文件并点击提交，**Then** 系统成功创建稿件并显示成功消息
 3. **Given** 用户已登录，**When** 尝试提交空表单，**Then** 系统显示表单验证错误
 4. **Given** 作者已提交稿件，**When** 编辑登录并访问编辑仪表板，**Then** 系统显示待处理稿件列表
+5. **Given** 编辑已登录，**When** 在编辑仪表板中分配审稿人，**Then** 系统更新稿件状态并显示成功提示
 
 ---
 
@@ -76,7 +83,7 @@
 - **FR-003**: 系统 MUST 测试所有输入验证规则（必填字段、长度限制、格式约束）
 - **FR-004**: 系统 MUST 测试错误情况，不仅仅是happy path
 - **FR-005**: 系统 MUST 使用真实的数据库连接进行集成测试（而非仅Mock）
-- **FR-006**: 系统 MUST 为前端关键用户流程添加端到端测试
+- **FR-006**: 系统 MUST 为前端关键用户流程添加端到端测试（使用 Playwright）
 - **FR-007**: 系统 MUST 生成测试覆盖率报告，显示代码覆盖百分比
 - **FR-008**: 系统 MUST 识别并报告未覆盖的代码路径
 - **FR-009**: 系统 MUST 测试并发请求场景，确保数据一致性
@@ -116,6 +123,7 @@
 - **Test Suite**: 集合的测试用例，包括单元测试、集成测试和E2E测试
 - **Test Case**: 单个测试场景，包含前置条件、操作步骤和预期结果
 - **Coverage Report**: 显示代码覆盖率的报告，包括行覆盖率、分支覆盖率和函数覆盖率
+- **E2E Test Framework**: Playwright（用于前端端到端测试，支持多浏览器）
 
 ## Success Criteria *(mandatory)*
 
