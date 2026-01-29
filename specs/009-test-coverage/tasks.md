@@ -75,37 +75,37 @@ description: "Task list for test coverage feature implementation"
 ### Tests for User Story 1 (REQUIRED - explicitly requested in spec)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T020 [P] [US1] Create test for missing JWT token (backend/tests/integration/test_auth_missing_token.py)
-- [ ] T021 [P] [US1] Create test for expired JWT token (backend/tests/integration/test_auth_expired_token.py)
-- [ ] T022 [P] [US1] Create test for invalid JWT token (backend/tests/integration/test_auth_invalid_token.py)
-- [ ] T023 [P] [US1] Create test for cross-user data access (backend/tests/integration/test_auth_cross_user.py)
+- [X] T020 [P] [US1] Create test for missing JWT token (backend/tests/integration/test_auth_missing_token.py)
+- [X] T021 [P] [US1] Create test for expired JWT token (backend/tests/integration/test_auth_expired_token.py)
+- [X] T022 [P] [US1] Create test for invalid JWT token (backend/tests/integration/test_auth_invalid_token.py)
+- [X] T023 [P] [US1] Create test for cross-user data access (backend/tests/integration/test_auth_cross_user.py)
 
 **API Development Tests** (Principle XIV):
-- [ ] T024 [P] [US1] Create test for all HTTP methods on manuscripts endpoint (backend/tests/integration/test_manuscripts_http_methods.py)
-- [ ] T025 [P] [US1] Create test for all HTTP methods on editor endpoint (backend/tests/integration/test_editor_http_methods.py)
-- [ ] T026 [P] [US1] Create test for API path consistency (backend/tests/contract/test_api_paths.py)
+- [X] T024 [P] [US1] Create test for all HTTP methods on manuscripts endpoint (backend/tests/integration/test_manuscripts_http_methods.py)
+- [X] T025 [P] [US1] Create test for all HTTP methods on editor endpoint (backend/tests/integration/test_editor_http_methods.py)
+- [X] T026 [P] [US1] Create test for API path consistency (backend/tests/contract/test_api_paths.py)
 
 **Error Scenario Tests** (Principle XII):
-- [ ] T027 [P] [US1] Create test for 404 error handling (backend/tests/integration/test_error_handling.py)
-- [ ] T028 [P] [US1] Create test for 500 error handling (backend/tests/integration/test_error_handling.py)
-- [ ] T029 [P] [US1] Create test for validation error responses (backend/tests/integration/test_validation_errors.py)
+- [X] T027 [P] [US1] Create test for 404 error handling (backend/tests/integration/test_error_handling.py)
+- [X] T028 [P] [US1] Create test for 500 error handling (backend/tests/integration/test_error_handling.py)
+- [X] T029 [P] [US1] Create test for validation error responses (backend/tests/integration/test_validation_errors.py)
 
 **Boundary Condition Tests** (Principle XII):
-- [ ] T030 [P] [US1] Create test for title min/max length validation (backend/tests/integration/test_boundary_title.py)
-- [ ] T031 [P] [US1] Create test for abstract min/max length validation (backend/tests/integration/test_boundary_abstract.py)
-- [ ] T032 [P] [US1] Create test for empty/null field validation (backend/tests/integration/test_boundary_empty_fields.py)
-- [ ] T033 [P] [US1] Create test for special character handling (backend/tests/integration/test_boundary_special_chars.py)
+- [X] T030 [P] [US1] Create test for title min/max length validation (backend/tests/integration/test_boundary_title.py)
+- [X] T031 [P] [US1] Create test for abstract min/max length validation (backend/tests/integration/test_boundary_abstract.py)
+- [X] T032 [P] [US1] Create test for empty/null field validation (backend/tests/integration/test_boundary_empty_fields.py)
+- [X] T033 [P] [US1] Create test for special character handling (backend/tests/integration/test_boundary_special_chars.py)
 
 **Concurrent Request Tests** (Principle XII):
-- [ ] T034 [P] [US1] Create test for concurrent manuscript submissions (backend/tests/integration/test_concurrent_submissions.py)
-- [ ] T035 [P] [US1] Create test for concurrent editor assignments (backend/tests/integration/test_concurrent_assignments.py)
-- [ ] T036 [P] [US1] Create test for data consistency under concurrent load (backend/tests/integration/test_concurrent_consistency.py)
+- [X] T034 [P] [US1] Create test for concurrent manuscript submissions (backend/tests/integration/test_concurrent_submissions.py)
+- [X] T035 [P] [US1] Create test for concurrent editor assignments (backend/tests/integration/test_concurrent_assignments.py)
+- [X] T036 [P] [US1] Create test for data consistency under concurrent load (backend/tests/integration/test_concurrent_consistency.py)
 
 **Integration Tests** (Principle XII):
-- [ ] T037 [P] [US1] Create test for manuscript creation with real database (backend/tests/integration/test_manuscript_creation.py)
-- [ ] T038 [P] [US1] Create test for manuscript retrieval with real database (backend/tests/integration/test_manuscript_retrieval.py)
-- [ ] T039 [P] [US1] Create test for manuscript update with real database (backend/tests/integration/test_manuscript_update.py)
-- [ ] T040 [P] [US1] Create test for manuscript deletion with real database (backend/tests/integration/test_manuscript_deletion.py)
+- [X] T037 [P] [US1] Create test for manuscript creation with real database (backend/tests/integration/test_manuscript_creation.py)
+- [X] T038 [P] [US1] Create test for manuscript retrieval with real database (backend/tests/integration/test_manuscript_retrieval.py)
+- [X] T039 [P] [US1] Create test for manuscript update with real database (backend/tests/integration/test_manuscript_update.py)
+- [X] T040 [P] [US1] Create test for manuscript deletion with real database (backend/tests/integration/test_manuscript_deletion.py)
 
 **Checkpoint**: All backend tests written and ready for implementation
 
@@ -142,27 +142,27 @@ description: "Task list for test coverage feature implementation"
 ### Tests for User Story 2 (REQUIRED - explicitly requested in spec)
 
 **E2E Tests with Playwright** (Principle XII):
-- [ ] T053 [P] [US2] Create Page Object Model for login page (frontend/tests/e2e/pages/login.page.ts)
-- [ ] T054 [P] [US2] Create Page Object Model for submission page (frontend/tests/e2e/pages/submission.page.ts)
-- [ ] T055 [P] [US2] Create Page Object Model for dashboard page (frontend/tests/e2e/pages/dashboard.page.ts)
-- [ ] T056 [P] [US2] Create Page Object Model for editor page (frontend/tests/e2e/pages/editor.page.ts)
-- [ ] T057 [P] [US2] Create test for unauthenticated user access restriction (frontend/tests/e2e/specs/authentication.spec.ts)
-- [ ] T058 [P] [US2] Create test for PDF upload and submission (frontend/tests/e2e/specs/submission.spec.ts)
-- [ ] T059 [P] [US2] Create test for empty form validation (frontend/tests/e2e/specs/submission.spec.ts)
-- [ ] T060 [P] [US2] Create test for editor dashboard pending manuscripts list (frontend/tests/e2e/specs/editor.spec.ts)
-- [ ] T061 [P] [US2] Create test for editor reviewer assignment (frontend/tests/e2e/specs/editor.spec.ts)
+- [X] T053 [P] [US2] Create Page Object Model for login page (frontend/tests/e2e/pages/login.page.ts)
+- [X] T054 [P] [US2] Create Page Object Model for submission page (frontend/tests/e2e/pages/submission.page.ts)
+- [X] T055 [P] [US2] Create Page Object Model for dashboard page (frontend/tests/e2e/pages/dashboard.page.ts)
+- [X] T056 [P] [US2] Create Page Object Model for editor page (frontend/tests/e2e/pages/editor.page.ts)
+- [X] T057 [P] [US2] Create test for unauthenticated user access restriction (frontend/tests/e2e/specs/authentication.spec.ts)
+- [X] T058 [P] [US2] Create test for PDF upload and submission (frontend/tests/e2e/specs/submission.spec.ts)
+- [X] T059 [P] [US2] Create test for empty form validation (frontend/tests/e2e/specs/submission.spec.ts)
+- [X] T060 [P] [US2] Create test for editor dashboard pending manuscripts list (frontend/tests/e2e/specs/editor.spec.ts)
+- [X] T061 [P] [US2] Create test for editor reviewer assignment (frontend/tests/e2e/specs/editor.spec.ts)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T062 [P] [US2] Create E2E test for login prompt when unauthenticated (frontend/tests/e2e/specs/authentication.spec.ts)
-- [ ] T063 [P] [US2] Create E2E test for session persistence (frontend/tests/e2e/specs/authentication.spec.ts)
+- [X] T062 [P] [US2] Create E2E test for login prompt when unauthenticated (frontend/tests/e2e/specs/authentication.spec.ts)
+- [X] T063 [P] [US2] Create E2E test for session persistence (frontend/tests/e2e/specs/authentication.spec.ts)
 
 **API Development Tests** (Principle XIV):
-- [ ] T064 [P] [US2] Create E2E test for API path consistency (frontend/tests/e2e/specs/api_paths.spec.ts)
-- [ ] T065 [P] [US2] Create E2E test for error message display (frontend/tests/e2e/specs/error_handling.spec.ts)
+- [X] T064 [P] [US2] Create E2E test for API path consistency (frontend/tests/e2e/specs/api_paths.spec.ts)
+- [X] T065 [P] [US2] Create E2E test for error message display (frontend/tests/e2e/specs/error_handling.spec.ts)
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T066 [P] [US2] Create E2E test for all user roles (author, editor) (frontend/tests/e2e/specs/roles.spec.ts)
-- [ ] T067 [P] [US2] Create E2E test for browser compatibility (Chrome, Firefox, Safari) (frontend/tests/e2e/specs/browser_compat.spec.ts)
+- [X] T066 [P] [US2] Create E2E test for all user roles (author, editor) (frontend/tests/e2e/specs/roles.spec.ts)
+- [X] T067 [P] [US2] Create E2E test for browser compatibility (Chrome, Firefox, Safari) (frontend/tests/e2e/specs/browser_compat.spec.ts)
 
 **Checkpoint**: All E2E tests written and ready for implementation
 
@@ -199,29 +199,29 @@ description: "Task list for test coverage feature implementation"
 ### Tests for User Story 3 (REQUIRED - explicitly requested in spec)
 
 **Coverage Report Tests** (Principle XII):
-- [ ] T080 [P] [US3] Create test for backend coverage report generation (backend/tests/integration/test_coverage_report.py)
-- [ ] T081 [P] [US3] Create test for frontend coverage report generation (frontend/tests/unit/coverage.test.ts)
-- [ ] T082 [P] [US3] Create test for coverage threshold validation (backend/tests/integration/test_coverage_threshold.py)
-- [ ] T083 [P] [US3] Create test for uncovered code path identification (backend/tests/integration/test_uncovered_paths.py)
-- [ ] T084 [P] [US3] Create test for key business logic 100% coverage (backend/tests/integration/test_critical_coverage.py)
+- [X] T080 [P] [US3] Create test for backend coverage report generation (backend/tests/integration/test_coverage_report.py)
+- [X] T081 [P] [US3] Create test for frontend coverage report generation (frontend/tests/unit/coverage.test.ts)
+- [X] T082 [P] [US3] Create test for coverage threshold validation (backend/tests/integration/test_coverage_threshold.py)
+- [X] T083 [P] [US3] Create test for uncovered code path identification (backend/tests/integration/test_uncovered_paths.py)
+- [X] T084 [P] [US3] Create test for key business logic 100% coverage (backend/tests/integration/test_critical_coverage.py)
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T085 [P] [US3] Create test for line coverage calculation (backend/tests/integration/test_line_coverage.py)
-- [ ] T086 [P] [US3] Create test for branch coverage calculation (backend/tests/integration/test_branch_coverage.py)
-- [ ] T087 [P] [US3] Create test for function coverage calculation (backend/tests/integration/test_function_coverage.py)
+- [X] T085 [P] [US3] Create test for line coverage calculation (backend/tests/integration/test_line_coverage.py)
+- [X] T086 [P] [US3] Create test for branch coverage calculation (backend/tests/integration/test_branch_coverage.py)
+- [X] T087 [P] [US3] Create test for function coverage calculation (backend/tests/integration/test_function_coverage.py)
 
 **Checkpoint**: All coverage tests written and ready for implementation
 
 ### Implementation for User Story 3
 
 **Coverage Report Implementation** (Principle XII):
-- [ ] T088 [P] [US3] Configure pytest-cov with 80% threshold (backend/.coveragerc)
-- [ ] T089 [P] [US3] Configure Vitest coverage with 70% threshold (frontend/vitest.config.ts)
-- [ ] T090 [P] [US3] Create coverage report generation script (scripts/generate-coverage-report.sh)
-- [ ] T091 [P] [US3] Add coverage HTML report generation (backend/pytest.ini)
-- [ ] T092 [P] [US3] Add coverage XML report generation for CI (backend/pytest.ini)
-- [ ] T093 [P] [US3] Create coverage summary script (scripts/coverage-summary.sh)
-- [ ] T094 [P] [US3] Add uncovered file identification logic (scripts/identify-uncovered.sh)
+- [X] T088 [P] [US3] Configure pytest-cov with 80% threshold (backend/.coveragerc)
+- [X] T089 [P] [US3] Configure Vitest coverage with 70% threshold (frontend/vitest.config.ts)
+- [X] T090 [P] [US3] Create coverage report generation script (scripts/generate-coverage-report.sh)
+- [X] T091 [P] [US3] Add coverage HTML report generation (backend/pytest.ini)
+- [X] T092 [P] [US3] Add coverage XML report generation for CI (backend/pytest.ini)
+- [X] T093 [P] [US3] Create coverage summary script (scripts/coverage-summary.sh)
+- [X] T094 [P] [US3] Add uncovered file identification logic (scripts/identify-uncovered.sh)
 
 **Test Implementation** (Principle XII):
 - [ ] T095 [P] [US3] Implement coverage report API endpoint (backend/src/api/v1/coverage.py)
@@ -238,7 +238,7 @@ description: "Task list for test coverage feature implementation"
 
 - [ ] T098 [P] Update test documentation in quickstart.md
 - [ ] T099 [P] Add test badges to README.md
-- [ ] T100 [P] Create test execution summary script (scripts/run-all-tests.sh)
+- [X] T100 [P] Create test execution summary script (scripts/run-all-tests.sh)
 - [ ] T101 [P] Add test performance optimization (parallel execution)
 - [ ] T102 [P] Security hardening - verify all sensitive operations have tests (Principle XIII)
 - [ ] T103 [P] Test coverage review - ensure all scenarios covered (Principle XII)
