@@ -5,6 +5,7 @@ Sync Impact Report
   - 新增原则 XII: 测试策略与覆盖标准 (基于 008-editor-command-center 项目经验教训)
   - 新增原则 XIII: 安全与认证原则 (身份验证、JWT、RBAC)
   - 新增原则 XIV: API 开发规范 (路径一致性、错误处理、验证)
+  - 新增原则 XV: 用户体验与功能完整性
   - 细化原则 XI: 质量保障与交互标准 (补充测试金字塔、Mock vs 真实测试)
 - Added sections:
   - 十二、 测试策略与覆盖标准
@@ -13,13 +14,13 @@ Sync Impact Report
   - 十五、 用户体验与功能完整性
 - Removed sections: N/A
 - Templates requiring updates:
-  - ⚠ pending: .specify/templates/spec-template.md (需添加测试覆盖要求)
-  - ⚠ pending: .specify/templates/tasks-template.md (需添加安全测试任务类型)
-  - ⚠ pending: .specify/templates/plan-template.md (需添加架构审查清单)
+  - ✅ updated: .specify/templates/spec-template.md (已添加测试覆盖要求)
+  - ✅ updated: .specify/templates/tasks-template.md (已添加安全测试任务类型)
+  - ✅ updated: .specify/templates/plan-template.md (已添加架构审查清单)
 - Follow-up TODOs:
-  - TODO(RATIFICATION_DATE): 确认 2.0.0 版本的批准日期
   - TODO(API_CONTRACTS): 为所有现有 API 添加 OpenAPI 规范
   - TODO(TEST_COVERAGE): 确保所有功能都有完整的测试覆盖
+  - TODO(PROJECT_README): 考虑创建项目根 README.md 提供项目概览
 -->
 
 # ScholarFlow Constitution

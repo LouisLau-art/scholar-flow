@@ -1,12 +1,12 @@
 # scholar-flow Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-27
+Auto-generated from all feature plans. Last updated: 2026-01-29
 
 ## Active Technologies
-- **Frontend**: TypeScript, Next.js 14.2 (App Router), Tailwind CSS 3.4, Shadcn UI
-- **Backend**: Python 3.11+, FastAPI 0.115+, Pydantic v2, httpx
-- **Database & Auth**: Supabase (PostgreSQL), Supabase Auth
-- **Storage**: Supabase Storage (`manuscripts`, `plagiarism-reports` buckets)
+- **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI
+- **Backend**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx
+- **Database & Auth**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x
+- **Testing**: pytest, pytest-cov, Playwright, Vitest
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching)
 
 ## Project Structure
@@ -14,27 +14,41 @@ Auto-generated from all feature plans. Last updated: 2026-01-27
 ```text
 backend/
 ├── app/
-│   ├── api/v1/          # FastAPI Routes (Manuscripts, Reviews, Plagiarism)
+│   ├── api/v1/          # FastAPI Routes (Manuscripts, Reviews, Plagiarism, Editor)
 │   ├── core/            # Business Logic & Workers (AI Engine, PDF Processor, Workers)
 │   ├── models/          # Pydantic v2 Schemas
 │   └── services/        # Third-party Integrations (Crossref Client, Editorial)
 ├── scripts/             # Verification & Utility Scripts
-└── tests/               # Pytest Suite
+└── tests/               # Pytest Suite (unit, integration, contract)
 
 frontend/
 ├── src/
-│   ├── app/             # Next.js App Router (submit, admin, finance, review)
-│   ├── components/      # UI Components (SubmissionForm, PlagiarismActions, etc.)
+│   ├── app/             # Next.js App Router (submit, admin, finance, review, editor)
+│   ├── components/      # UI Components (SubmissionForm, PlagiarismActions, EditorDashboard, etc.)
 │   ├── lib/             # API Client & Supabase Config
 │   └── types/           # TypeScript Interfaces
-└── tests/               # Vitest/Playwright
+└── tests/               # Vitest (unit) + Playwright (e2e)
 ```
 
 ## Commands
-- **Backend**: `uvicorn main:app --reload`
-- **Frontend**: `pnpm dev`
-- **Linting**: `ruff check .` (Backend), `pnpm lint` (Frontend)
-- **Database**: `supabase migration new [name]`
+
+### Backend
+- **Run**: `uvicorn main:app --reload`
+- **Tests**: `pytest` (all tests), `pytest --cov=src --cov-report=html` (with coverage)
+- **Linting**: `ruff check .`
+
+### Frontend
+- **Run**: `pnpm dev`
+- **Tests**: `npm run test` (Vitest unit tests), `npm run test:coverage` (with coverage)
+- **E2E Tests**: `npm run test:e2e` (Playwright), `npm run test:e2e:ui` (with UI)
+- **Linting**: `pnpm lint`
+
+### Combined
+- **All Tests**: `./scripts/run-all-tests.sh`
+- **Coverage Report**: `./scripts/generate-coverage-report.sh`
+
+### Database
+- **Migration**: `supabase migration new [name]`
 
 ## Code Style
 - **Naming**: camelCase for Frontend, snake_case for Backend.
@@ -42,6 +56,7 @@ frontend/
 - **Architecture**: Server Components first, unified API client encapsulation.
 - **Strict QA**: **100% test pass rate** required for all feature deliveries.
 - **Native Only**: Use native Supabase SDKs; explicit full-path routing only.
+- **Type Safety**: TypeScript (frontend) and Python type hints (backend) required.
 
 ## 🛡️ Security & Authentication Principles
 - **Authentication First**: All sensitive operations MUST require authentication. Never allow unauthenticated access to user-specific data.
@@ -168,11 +183,14 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 ## Recent Changes
+- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
+- 008-editor-command-center: Editor command center with pipeline view, reviewer assignment, and decision panel
+- 007-reviewer-workspace: Reviewer workspace functionality
 - 006-quality-assurance-suite: Full test coverage with unified `run_tests.sh`.
 - 005-system-integrity-and-auth: Native Auth integration and blank page elimination.
 - 004-content-ecosystem: Public portal and PDF reader打通.
 
 <!-- MANUAL ADDITIONS START -->
 - Environment: Arch Linux (pacman/paru priority).
-- Savepoints: Push to GitHub after every atomic task (v1.6.0 Constitution).
+- Savepoints: Push to GitHub after every atomic task (v2.0.0 Constitution).
 <!-- MANUAL ADDITIONS END -->
