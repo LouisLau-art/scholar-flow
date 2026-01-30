@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-30
 - **Testing**: pytest, pytest-cov, Playwright, Vitest
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching)
 - PostgreSQL (Supabase) (009-test-coverage)
+- Python 3.14+ (Backend), TypeScript 5.x (Frontend) (011-notification-center)
+- Supabase (`notifications` table, `review_assignments` extension) (011-notification-center)
 
 ## Project Structure
 
@@ -186,9 +188,9 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 ## Recent Changes
+- 011-notification-center: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend)
 - 011-notification-center: Added notifications table + RLS, email templates (SMTP/Jinja2), internal cron chase endpoint, in-app Bell UI with Supabase Realtime
 - 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
