@@ -8,6 +8,8 @@ import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import DecisionPanel from '@/components/DecisionPanel'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
+import Link from 'next/link'
+import { BarChart3 } from 'lucide-react'
 
 export default function EditorDashboard() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
@@ -62,11 +64,20 @@ export default function EditorDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-serif font-bold text-slate-900">Editor Command Center</h1>
-          <p className="text-slate-600 mt-2">
-            Manage manuscript pipeline, assign reviewers, and make final decisions
-          </p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-serif font-bold text-slate-900">Editor Command Center</h1>
+            <p className="text-slate-600 mt-2">
+              Manage manuscript pipeline, assign reviewers, and make final decisions
+            </p>
+          </div>
+          <Link
+            href="/editor/analytics"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Analytics Dashboard
+          </Link>
         </div>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-6">
