@@ -19,6 +19,7 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/user/notifications"),
     ("GET", "/api/v1/notifications"),
     ("PATCH", "/api/v1/notifications/{id}/read"),
+    ("POST", "/api/v1/matchmaking/analyze"),
     ("POST", "/api/v1/internal/cron/chase-reviews"),
     ("GET", "/api/v1/plagiarism/report/{report_id}/download"),
     ("POST", "/api/v1/plagiarism/retry"),
