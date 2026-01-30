@@ -10,6 +10,7 @@ def _mock_supabase_with_data(data=None):
     mock.eq.return_value = mock
     resp = MagicMock()
     resp.data = data or []
+    resp.error = None
     mock.execute.return_value = resp
     return mock
 
@@ -41,4 +42,3 @@ async def test_my_tasks_ok_for_self(client: AsyncClient, auth_token: str, monkey
         )
         assert resp.status_code == 200
         assert resp.json().get("success") is True
-

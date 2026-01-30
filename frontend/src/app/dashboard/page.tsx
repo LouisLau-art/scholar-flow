@@ -13,7 +13,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [roles, setRoles] = useState<string[]>([])
+  const [roles, setRoles] = useState<string[] | null>(null)
+  const [rolesLoading, setRolesLoading] = useState(true)
 
   useEffect(() => {
     async function fetchStats() {
@@ -53,6 +54,8 @@ export default function DashboardPage() {
         if (result.success) setRoles(result.data?.roles || [])
       } catch (err) {
         console.error('Failed to load profile:', err)
+      } finally {
+        setRolesLoading(false)
       }
     }
     fetchStats()
@@ -67,10 +70,9 @@ export default function DashboardPage() {
     { label: 'Revision Required', value: stats?.revision_required, icon: AlertCircle, color: 'text-rose-600' },
   ]
 
-  const canSeeReviewer = roles.includes('reviewer') || roles.includes('admin')
-  const canSeeEditor = roles.includes('editor') || roles.includes('admin')
-  const roleLabel =
-    roles.length > 0 ? roles.join(', ') : 'author'
+  const canSeeReviewer = Boolean(roles?.includes('reviewer') || roles?.includes('admin'))
+  const canSeeEditor = Boolean(roles?.includes('editor') || roles?.includes('admin'))
+  const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -85,21 +87,27 @@ export default function DashboardPage() {
               <p className="mt-2 text-xs font-mono text-slate-400">roles: {roleLabel}</p>
             </div>
 
-            <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
-              <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                <LayoutDashboard className="h-4 w-4" /> Author
-              </TabsTrigger>
-              {canSeeReviewer && (
-                <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                  <Users className="h-4 w-4" /> Reviewer
+            {rolesLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-400">
+                Loading roles...
+              </div>
+            ) : (
+              <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
+                <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <LayoutDashboard className="h-4 w-4" /> Author
                 </TabsTrigger>
-              )}
-              {canSeeEditor && (
-                <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                  <Shield className="h-4 w-4" /> Editor
-                </TabsTrigger>
-              )}
-            </TabsList>
+                {canSeeReviewer && (
+                  <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Users className="h-4 w-4" /> Reviewer
+                  </TabsTrigger>
+                )}
+                {canSeeEditor && (
+                  <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Shield className="h-4 w-4" /> Editor
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            )}
           </div>
 
           <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">

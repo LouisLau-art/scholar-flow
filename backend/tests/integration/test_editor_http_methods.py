@@ -15,6 +15,7 @@ def _mock_supabase_with_data(data=None):
     # editor.py 中既有 tuple 返回也有 response.data 访问，统一提供 data 属性
     response = MagicMock()
     response.data = data or []
+    response.error = None
     mock.execute.return_value = response
     return mock
 

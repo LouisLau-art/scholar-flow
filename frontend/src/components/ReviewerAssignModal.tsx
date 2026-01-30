@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { X, Search, Users, Check } from 'lucide-react'
+import { authService } from '@/services/auth'
+import { toast } from 'sonner'
 
 interface Reviewer {
   id: string
@@ -15,7 +17,7 @@ interface Reviewer {
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
-  onAssign: (reviewerId: string) => void
+  onAssign: (reviewerIds: string[]) => void
   manuscriptId?: string
 }
 
@@ -27,11 +29,13 @@ export default function ReviewerAssignModal({
 }: ReviewerAssignModalProps) {
   const [reviewers, setReviewers] = useState<Reviewer[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedReviewer, setSelectedReviewer] = useState<string | null>(null)
+  const [selectedReviewers, setSelectedReviewers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
+      setSearchTerm('')
+      setSelectedReviewers([])
       fetchReviewers()
     }
   }, [isOpen])
@@ -39,13 +43,24 @@ export default function ReviewerAssignModal({
   async function fetchReviewers() {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/v1/editor/available-reviewers')
+      const token = await authService.getAccessToken()
+      const response = await fetch('/api/v1/editor/available-reviewers', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`)
+      }
       const data = await response.json()
       if (data.success) {
         setReviewers(data.data)
+      } else {
+        setReviewers([])
+        toast.error(data?.detail || data?.message || 'Failed to load reviewers.')
       }
     } catch (error) {
       console.error('Failed to fetch reviewers:', error)
+      setReviewers([])
+      toast.error('Failed to load reviewers.')
     } finally {
       setIsLoading(false)
     }
@@ -58,11 +73,19 @@ export default function ReviewerAssignModal({
   )
 
   const handleAssign = () => {
-    if (selectedReviewer) {
-      onAssign(selectedReviewer)
+    if (selectedReviewers.length > 0) {
+      onAssign(selectedReviewers)
       onClose()
-      setSelectedReviewer(null)
+      setSelectedReviewers([])
     }
+  }
+
+  const toggleReviewer = (reviewerId: string) => {
+    setSelectedReviewers((prev) =>
+      prev.includes(reviewerId)
+        ? prev.filter((id) => id !== reviewerId)
+        : [...prev, reviewerId]
+    )
   }
 
   if (!isOpen) return null
@@ -109,58 +132,64 @@ export default function ReviewerAssignModal({
               <span className="ml-2 text-slate-600">Loading reviewers...</span>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredReviewers.map(reviewer => (
-                <div
-                  key={reviewer.id}
-                  className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                    selectedReviewer === reviewer.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                  onClick={() => setSelectedReviewer(reviewer.id)}
-                  data-testid={`reviewer-item-${reviewer.id}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium text-slate-900">
-                        {reviewer.name}
-                      </div>
-                      <div className="text-sm text-slate-500 mt-1">
-                        {reviewer.affiliation}
-                      </div>
-                      {reviewer.expertise.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {reviewer.expertise.slice(0, 3).map(exp => (
-                            <span
-                              key={exp}
-                              className="px-2 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded"
-                            >
-                              {exp}
-                            </span>
-                          ))}
-                          {reviewer.expertise.length > 3 && (
-                            <span className="text-xs text-slate-400">+{reviewer.expertise.length - 3}</span>
-                          )}
+            <>
+              <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+                <span>Select 2-3 reviewers for this manuscript.</span>
+                <span>{selectedReviewers.length} selected</span>
+              </div>
+              <div className="space-y-3">
+                {filteredReviewers.map(reviewer => (
+                  <div
+                    key={reviewer.id}
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                      selectedReviewers.includes(reviewer.id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                    onClick={() => toggleReviewer(reviewer.id)}
+                    data-testid={`reviewer-item-${reviewer.id}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-900">
+                          {reviewer.name}
                         </div>
+                        <div className="text-sm text-slate-500 mt-1">
+                          {reviewer.affiliation}
+                        </div>
+                        {reviewer.expertise.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {reviewer.expertise.slice(0, 3).map(exp => (
+                              <span
+                                key={exp}
+                                className="px-2 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded"
+                              >
+                                {exp}
+                              </span>
+                            ))}
+                            {reviewer.expertise.length > 3 && (
+                              <span className="text-xs text-slate-400">+{reviewer.expertise.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {selectedReviewers.includes(reviewer.id) && (
+                        <Check className="h-5 w-5 text-blue-600" />
                       )}
                     </div>
-                    {selectedReviewer === reviewer.id && (
-                      <Check className="h-5 w-5 text-blue-600" />
-                    )}
+                    <div className="flex items-center gap-2 mt-3 text-xs text-slate-400">
+                      <span>Reviews: {reviewer.review_count}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-3 text-xs text-slate-400">
-                    <span>Reviews: {reviewer.review_count}</span>
-                  </div>
-                </div>
-              ))}
+                ))}
 
-              {filteredReviewers.length === 0 && (
-                <div className="text-center py-8 text-slate-500">
-                  No reviewers found matching "{searchTerm}"
-                </div>
-              )}
-            </div>
+                {filteredReviewers.length === 0 && (
+                  <div className="text-center py-8 text-slate-500">
+                    No reviewers found matching "{searchTerm}"
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
@@ -173,11 +202,11 @@ export default function ReviewerAssignModal({
           </button>
           <button
             onClick={handleAssign}
-            disabled={!selectedReviewer}
+            disabled={selectedReviewers.length === 0}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
             data-testid="reviewer-assign"
           >
-            Assign Reviewer
+            Assign {selectedReviewers.length || ''} Reviewer{selectedReviewers.length === 1 ? '' : 's'}
           </button>
         </div>
       </div>

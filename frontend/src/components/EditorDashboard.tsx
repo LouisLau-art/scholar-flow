@@ -2,17 +2,61 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import EditorPipeline from '@/components/EditorPipeline'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import DecisionPanel from '@/components/DecisionPanel'
+import { toast } from 'sonner'
+import { authService } from '@/services/auth'
 
 export default function EditorDashboard() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | undefined>()
+  const [selectedManuscriptTitle, setSelectedManuscriptTitle] = useState<string | undefined>()
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'reviewers' | 'decisions'>('pipeline')
+  const [pipelineRefresh, setPipelineRefresh] = useState(0)
 
-  const handleAssignReviewer = (reviewerId: string) => {
-    console.log('Assigning reviewer', reviewerId, 'to manuscript', selectedManuscriptId)
-    // TODO: Call API to assign reviewer
+  const handleAssignReviewer = async (reviewerIds: string[]) => {
+    if (!selectedManuscriptId) {
+      toast.error('Please select a manuscript first.')
+      return
+    }
+    const toastId = toast.loading(`Assigning ${reviewerIds.length} reviewer${reviewerIds.length === 1 ? '' : 's'}...`)
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.', { id: toastId })
+        return
+      }
+      let failures = 0
+      for (const reviewerId of reviewerIds) {
+        const response = await fetch('/api/v1/reviews/assign', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            manuscript_id: selectedManuscriptId,
+            reviewer_id: reviewerId,
+          }),
+        })
+        const data = await response.json()
+        if (!data?.success) {
+          failures += 1
+        }
+      }
+      if (failures === 0) {
+        toast.success('Reviewer assignment complete.', { id: toastId })
+      } else {
+        toast.error(`Assigned with ${failures} failure(s).`, { id: toastId })
+      }
+      setIsAssignModalOpen(false)
+      setActiveTab('pipeline')
+      setPipelineRefresh((prev) => prev + 1)
+    } catch (error) {
+      toast.error('Assign failed. Please try again.', { id: toastId })
+    }
   }
 
   return (
@@ -25,15 +69,28 @@ export default function EditorDashboard() {
           </p>
         </div>
 
-        <Tabs defaultValue="pipeline" className="space-y-6">
-          <TabsList className="bg-white border border-slate-200 p-1 rounded-lg">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-6">
+          <TabsList className="border border-border bg-background p-1">
             <TabsTrigger value="pipeline" data-testid="editor-tab-pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="reviewers" data-testid="editor-tab-reviewers">Reviewers</TabsTrigger>
             <TabsTrigger value="decisions" data-testid="editor-tab-decisions">Decisions</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline" className="space-y-6">
-            <EditorPipeline />
+            <EditorPipeline
+              onAssign={(manuscript) => {
+                setSelectedManuscriptId(manuscript.id)
+                setSelectedManuscriptTitle(manuscript.title)
+                setIsAssignModalOpen(true)
+                setActiveTab('reviewers')
+              }}
+              onDecide={(manuscript) => {
+                setSelectedManuscriptId(manuscript.id)
+                setSelectedManuscriptTitle(manuscript.title)
+                setActiveTab('decisions')
+              }}
+              refreshKey={pipelineRefresh}
+            />
           </TabsContent>
 
           <TabsContent value="reviewers" className="space-y-6">
@@ -42,43 +99,40 @@ export default function EditorDashboard() {
               <p className="text-slate-600 mb-6">
                 Browse and manage your pool of expert reviewers. Click on a reviewer to view details or assign them to manuscripts.
               </p>
-              <button
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 mb-6">
+                {selectedManuscriptId ? (
+                  <>Selected manuscript: <span className="font-semibold text-slate-900">{selectedManuscriptTitle}</span></>
+                ) : (
+                  <>No manuscript selected. Go to the <span className="font-semibold text-slate-900">Pipeline</span> tab and click “Assign Reviewers”.</>
+                )}
+              </div>
+              <Button
                 onClick={() => {
-                  setSelectedManuscriptId('test-manuscript-id')
                   setIsAssignModalOpen(true)
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={!selectedManuscriptId}
                 data-testid="editor-open-assign"
               >
-                Open Assign Modal (Demo)
-              </button>
+                Assign Reviewers
+              </Button>
             </div>
           </TabsContent>
 
           <TabsContent value="decisions" className="space-y-6">
-            <DecisionPanel
-              manuscriptId="test-manuscript-id"
-              reviewerScores={[
-                {
-                  reviewer_id: 'reviewer-1',
-                  name: 'Dr. Jane Smith',
-                  overall_score: 8.5,
-                  technical_score: 9,
-                  clarity_score: 8,
-                  originality_score: 8,
-                  comments: 'Excellent methodology and clear presentation'
-                },
-                {
-                  reviewer_id: 'reviewer-2',
-                  name: 'Prof. John Doe',
-                  overall_score: 7.5,
-                  technical_score: 8,
-                  clarity_score: 7,
-                  originality_score: 8,
-                  comments: 'Good research but needs more discussion'
-                }
-              ]}
-            />
+            {selectedManuscriptId ? (
+              <DecisionPanel
+                manuscriptId={selectedManuscriptId}
+                reviewerScores={[]}
+                onSubmitted={() => {
+                  setPipelineRefresh((prev) => prev + 1)
+                  setActiveTab('pipeline')
+                }}
+              />
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 p-8 text-slate-600">
+                No manuscript selected. Go to the <span className="font-semibold text-slate-900">Pipeline</span> tab and click “Make Decision”.
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 

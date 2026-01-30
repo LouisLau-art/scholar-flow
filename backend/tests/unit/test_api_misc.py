@@ -91,13 +91,16 @@ class _FakeQuery:
         self._update_payload = payload
         return self
 
+    def contains(self, *_args, **_kwargs):
+        return self
+
     def eq(self, key, value):
         if key == "status":
             self._status = value
         return self
 
     def execute(self):
-        if self.name == "users":
+        if self.name == "user_profiles":
             return (None, self.parent.reviewers_data)
         if self.name == "manuscripts" and self._update_payload is not None:
             if self.parent.raise_on_update:
@@ -129,8 +132,8 @@ async def test_editor_pipeline_with_stubbed_supabase(monkeypatch):
 @pytest.mark.asyncio
 async def test_editor_available_reviewers_with_defaults(monkeypatch):
     reviewers = [
-        {"id": "1", "name": "Alice", "email": "a@example.com"},
-        {"id": "2", "name": "Bob", "email": "b@example.com", "affiliation": "Uni"},
+        {"id": "1", "email": "a@example.com", "roles": ["reviewer"]},
+        {"id": "2", "email": "b@example.com", "roles": ["reviewer"]},
     ]
     fake = _FakeSupabase(pipeline_data={}, reviewers_data=reviewers, decision_data=[])
 
@@ -138,7 +141,7 @@ async def test_editor_available_reviewers_with_defaults(monkeypatch):
 
     result = await editor_api.get_available_reviewers(current_user={"id": "user"})
 
-    assert result["data"][0]["affiliation"] == "Unknown"
+    assert result["data"][0]["affiliation"] == "Independent Researcher"
     assert result["data"][0]["review_count"] == 0
 
 
@@ -234,3 +237,91 @@ async def test_editor_test_endpoints():
     assert pipeline["success"] is True
     assert reviewers["success"] is True
     assert decision["data"]["status"] == "published"
+
+
+def test_extract_supabase_error_none():
+    response = SimpleNamespace(error=None)
+    assert editor_api._extract_supabase_error(response) is None
+
+
+def test_extract_supabase_error_tuple():
+    response = ("boom", [])
+    assert editor_api._extract_supabase_error(response) == "boom"
+
+
+def test_is_missing_column_error():
+    assert editor_api._is_missing_column_error('column "published_at" does not exist') is True
+    assert editor_api._is_missing_column_error("some other error") is False
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_fallback_on_missing_column(monkeypatch):
+    class _FallbackQuery:
+        def __init__(self, parent):
+            self.parent = parent
+
+        def update(self, _payload):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            self.parent.calls += 1
+            if self.parent.calls == 1:
+                raise RuntimeError('column "published_at" does not exist')
+            return SimpleNamespace(data=[{"id": "1"}])
+
+    class _FallbackSupabase:
+        def __init__(self):
+            self.calls = 0
+
+        def table(self, _name):
+            return _FallbackQuery(self)
+
+    monkeypatch.setattr(editor_api, "supabase", _FallbackSupabase())
+
+    result = await editor_api.submit_final_decision(
+        current_user={"id": "user"},
+        manuscript_id="1",
+        decision="accept",
+        comment="",
+    )
+
+    assert result["data"]["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_editor_publish_fallback_on_missing_column(monkeypatch):
+    class _FallbackQuery:
+        def __init__(self, parent):
+            self.parent = parent
+
+        def update(self, _payload):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            self.parent.calls += 1
+            if self.parent.calls == 1:
+                raise RuntimeError('column "published_at" does not exist')
+            return SimpleNamespace(data=[{"id": "1", "status": "published"}])
+
+    class _FallbackSupabase:
+        def __init__(self):
+            self.calls = 0
+
+        def table(self, _name):
+            return _FallbackQuery(self)
+
+    monkeypatch.setattr(editor_api, "supabase", _FallbackSupabase())
+
+    result = await editor_api.publish_manuscript_dev(
+        current_user={"id": "user"},
+        _profile={"roles": ["editor"]},
+        manuscript_id="1",
+    )
+
+    assert result["data"]["status"] == "published"

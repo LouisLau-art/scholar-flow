@@ -16,6 +16,7 @@ def _mock_supabase_with_data(data=None):
     mock.update.return_value = mock
     response = MagicMock()
     response.data = data or []
+    response.error = None
     mock.execute.return_value = response
     return mock
 

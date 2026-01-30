@@ -34,6 +34,10 @@ async def assign_reviewer(
             "reviewer_id": str(reviewer_id),
             "status": "pending"
         }).execute()
+        # 更新稿件状态为评审中
+        supabase.table("manuscripts").update({
+            "status": "under_review"
+        }).eq("id", str(manuscript_id)).execute()
         return {"success": True, "data": res.data[0]}
     except Exception as e:
         # 如果表还没建，我们返回模拟成功以不阻塞开发
@@ -54,7 +58,7 @@ async def get_my_review_tasks(
     try:
         res = (
             supabase.table("review_assignments")
-            .select("*, manuscripts(title, abstract)")
+            .select("*, manuscripts(title, abstract, file_path)")
             .eq("reviewer_id", str(user_id))
             .eq("status", "pending")
             .execute()
@@ -79,11 +83,39 @@ async def submit_review(
     """
     try:
         # 逻辑: 更新状态并存储分数
+        assignment_res = (
+            supabase.table("review_assignments")
+            .select("manuscript_id")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        manuscript_id = None
+        assignment_data = getattr(assignment_res, "data", None)
+        if isinstance(assignment_data, list):
+            assignment_data = assignment_data[0] if assignment_data else None
+        if assignment_data:
+            manuscript_id = assignment_data.get("manuscript_id")
+
         res = supabase.table("review_assignments").update({
             "status": "completed",
             "scores": scores,
             "comments": comments
         }).eq("id", str(assignment_id)).execute()
+
+        # 若全部评审完成，推动稿件进入待终审状态
+        if manuscript_id:
+            pending = (
+                supabase.table("review_assignments")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .eq("status", "pending")
+                .execute()
+            )
+            if not (pending.data or []):
+                supabase.table("manuscripts").update({
+                    "status": "pending_decision"
+                }).eq("id", str(manuscript_id)).execute()
 
         return {"success": True, "data": res.data[0] if res.data else {}}
     except APIError as e:

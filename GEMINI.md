@@ -1,6 +1,6 @@
 # scholar-flow Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-29
+Auto-generated from all feature plans. Last updated: 2026-01-30
 
 ## Active Technologies
 - **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI
@@ -184,9 +184,9 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 ## Recent Changes
+- 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
-- 008-editor-command-center: Editor command center with pipeline view, reviewer assignment, and decision panel
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
