@@ -69,3 +69,47 @@ def get_admin_api_key() -> Optional[str]:
     raw = os.environ.get("ADMIN_API_KEY")
     return raw.strip() if raw else None
 
+
+@dataclass(frozen=True)
+class MatchmakingConfig:
+    """
+    本地审稿人匹配（Feature 012）配置
+
+    中文注释:
+    1) 模型推理严格在本地执行（不走 OpenAI/Claude）。
+    2) 阈值/TopK/冷启动门槛必须可配置，避免硬编码。
+    """
+
+    model_name: str
+    threshold: float
+    top_k: int
+    min_reviewers: int
+
+    @staticmethod
+    def from_env() -> "MatchmakingConfig":
+        model_name = (os.environ.get("MATCHMAKING_MODEL_NAME") or "sentence-transformers/all-MiniLM-L6-v2").strip()
+
+        threshold_raw = (os.environ.get("MATCHMAKING_THRESHOLD") or "0.70").strip()
+        try:
+            threshold = float(threshold_raw)
+        except ValueError:
+            threshold = 0.70
+
+        top_k_raw = (os.environ.get("MATCHMAKING_TOP_K") or "5").strip()
+        try:
+            top_k = int(top_k_raw)
+        except ValueError:
+            top_k = 5
+
+        min_reviewers_raw = (os.environ.get("MATCHMAKING_MIN_REVIEWERS") or "5").strip()
+        try:
+            min_reviewers = int(min_reviewers_raw)
+        except ValueError:
+            min_reviewers = 5
+
+        return MatchmakingConfig(
+            model_name=model_name,
+            threshold=threshold,
+            top_k=top_k,
+            min_reviewers=min_reviewers,
+        )
