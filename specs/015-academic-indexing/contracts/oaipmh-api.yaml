@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: OAI-PMH API
+  description: OAI-PMH v2.0 元数据收割接口
+  version: 2.0.0
+
+servers:
+  - url: /api
+    description: OAI-PMH endpoint
+
+paths:
+  /oai-pmh:
+    get:
+      summary: OAI-PMH 请求处理
+      description: 处理 OAI-PMH v2.0 协议请求
+      operationId: handleOAIPMH
+      tags:
+        - OAI-PMH
+      parameters:
+        - name: verb
+          in: query
+          required: true
+          description: OAI-PMH 动词
+          schema:
+            type: string
+            enum:
+              - Identify
+              - ListMetadataFormats
+              - ListSets
+              - ListIdentifiers
+              - ListRecords
+              - GetRecord
+        - name: identifier
+          in: query
+          description: 记录标识符 (GetRecord/ListMetadataFormats)
+          schema:
+            type: string
+            example: "oai:scholarflow:article:123"
+        - name: metadataPrefix
+          in: query
+          description: 元数据格式前缀 (GetRecord/ListRecords/ListIdentifiers)
+          schema:
+            type: string
+            enum: [oai_dc]
+            default: oai_dc
+        - name: from
+          in: query
+          description: 起始日期 (ListRecords/ListIdentifiers)
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+        - name: until
+          in: query
+          description: 结束日期 (ListRecords/ListIdentifiers)
+          schema:
+            type: string
+            format: date
+            example: "2026-12-31"
+        - name: set
+          in: query
+          description: 集合标识 (ListRecords/ListIdentifiers)
+          schema:
+            type: string
+        - name: resumptionToken
+          in: query
+          description: 分页令牌 (ListRecords/ListIdentifiers/ListSets)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OAI-PMH XML 响应
+          content:
+            text/xml:
+              schema:
+                type: string
+                example: |
+                  <?xml version="1.0" encoding="UTF-8"?>
+                  <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">
+                    <responseDate>2026-01-30T12:00:00Z</responseDate>
+                    <request verb="Identify">https://example.com/api/oai-pmh</request>
+                    <Identify>
+                      <repositoryName>Scholar Flow</repositoryName>
+                      <baseURL>https://example.com/api/oai-pmh</baseURL>
+                      <protocolVersion>2.0</protocolVersion>
+                      <adminEmail>admin@example.com</adminEmail>
+                      <earliestDatestamp>2026-01-01</earliestDatestamp>
+                      <deletedRecord>no</deletedRecord>
+                      <granularity>YYYY-MM-DD</granularity>
+                    </Identify>
+                  </OAI-PMH>
+        '429':
+          description: 速率限制 (60 请求/分钟/IP)
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                description: 等待秒数
+
+    post:
+      summary: OAI-PMH POST 请求
+      description: 支持 POST 方式提交 OAI-PMH 请求
+      operationId: handleOAIPMHPost
+      tags:
+        - OAI-PMH
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                verb:
+                  type: string
+                identifier:
+                  type: string
+                metadataPrefix:
+                  type: string
+                from:
+                  type: string
+                until:
+                  type: string
+                set:
+                  type: string
+                resumptionToken:
+                  type: string
+      responses:
+        '200':
+          description: OAI-PMH XML 响应
+          content:
+            text/xml:
+              schema:
+                type: string
+
+# OAI-PMH Error Codes Reference
+# - badVerb: 无效动词
+# - badArgument: 参数错误
+# - cannotDisseminateFormat: 不支持的格式
+# - idDoesNotExist: 标识符不存在
+# - noRecordsMatch: 无匹配记录
+# - badResumptionToken: Token 无效
+# - noSetHierarchy: 不支持集合
+
+# Dublin Core Elements (oai_dc)
+# - dc:title: 标题
+# - dc:creator: 作者
+# - dc:subject: 关键词
+# - dc:description: 摘要
+# - dc:publisher: 出版者
+# - dc:date: 日期
+# - dc:type: 类型 (Article)
+# - dc:identifier: DOI/URL
+# - dc:language: 语言

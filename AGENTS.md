@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-30
 - **Testing**: pytest, pytest-cov, Playwright, Vitest
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching)
 - PostgreSQL (Supabase) (009-test-coverage)
+- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI 0.115+, Pydantic v2, httpx, lxml (Backend); Next.js 14.2, React 18.x (Frontend) (015-academic-indexing)
+- PostgreSQL (Supabase) - 新增 `doi_registrations` 和 `doi_tasks` 表 (015-academic-indexing)
 
 ## Project Structure
 
@@ -186,8 +188,8 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 ## Recent Changes
+- 015-academic-indexing: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI 0.115+, Pydantic v2, httpx, lxml (Backend); Next.js 14.2, React 18.x (Frontend)
 - 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 <!-- MANUAL ADDITIONS START -->
