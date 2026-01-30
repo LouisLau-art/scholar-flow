@@ -6,8 +6,10 @@ from app.services.editorial_service import process_quality_check
 from app.services.publishing_service import publish_manuscript
 from app.core.recommender import recommend_reviewers
 from app.models.schemas import ManuscriptCreate
-from app.lib.api_client import supabase
+from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
+from app.core.mail import EmailService
+from app.services.notification_service import NotificationService
 from uuid import uuid4, UUID
 from typing import Dict, Any, List
 import shutil
@@ -125,6 +127,7 @@ async def get_article_detail(id: UUID):
 @router.post("/manuscripts")
 async def create_manuscript(
     manuscript: ManuscriptCreate,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
     """创建新稿件（需要登录）"""
@@ -150,7 +153,65 @@ async def create_manuscript(
         response = supabase.table("manuscripts").insert(data).execute()
 
         if response.data:
-            return {"success": True, "data": response.data[0]}
+            created = response.data[0]
+
+            # === 通知中心 (Feature 011) ===
+            # 中文注释:
+            # 1) 投稿成功：作者收到站内信 + 邮件（异步）。
+            # 2) 新投稿提醒：所有 editor/admin 账号收到站内信（邮件可在后续扩展）。
+            notification_service = NotificationService()
+            notification_service.create_notification(
+                user_id=current_user["id"],
+                manuscript_id=str(manuscript_id),
+                type="submission",
+                title="Submission Received",
+                content=f"Your manuscript '{manuscript.title}' has been successfully submitted.",
+            )
+
+            # 尝试通知编辑（若 user_profiles 存在）
+            try:
+                editors_res = (
+                    supabase_admin.table("user_profiles")
+                    .select("id, roles")
+                    .or_("roles.cs.{editor},roles.cs.{admin}")
+                    .execute()
+                )
+                editors = getattr(editors_res, "data", None) or []
+                for editor_profile in editors:
+                    editor_id = editor_profile.get("id")
+                    if not editor_id:
+                        continue
+                    notification_service.create_notification(
+                        user_id=str(editor_id),
+                        manuscript_id=str(manuscript_id),
+                        type="system",
+                        title="New Submission",
+                        content=f"A new manuscript '{manuscript.title}' is awaiting editorial action.",
+                    )
+            except Exception as e:
+                print(f"[Notifications] 查询编辑列表失败（降级忽略）: {e}")
+
+            # 异步发送邮件（失败不影响主流程）
+            try:
+                author_email = current_user.get("email")
+                if author_email:
+                    email_service = EmailService()
+                    background_tasks.add_task(
+                        email_service.send_template_email,
+                        to_email=author_email,
+                        subject="Submission Received",
+                        template_name="submission_ack.html",
+                        context={
+                            "subject": "Submission Received",
+                            "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                            "manuscript_title": manuscript.title,
+                            "manuscript_id": str(manuscript_id),
+                        },
+                    )
+            except Exception as e:
+                print(f"[SMTP] 异步发送任务创建失败（降级忽略）: {e}")
+
+            return {"success": True, "data": created}
         else:
             return {"success": False, "message": "Failed to create manuscript"}
 

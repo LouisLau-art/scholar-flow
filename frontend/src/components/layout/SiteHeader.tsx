@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Search, Menu, X, ChevronDown, User, Globe } from 'lucide-react'
 import { authService } from '@/services/auth'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
 
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -86,6 +87,8 @@ export default function SiteHeader() {
               <Search className="h-5 w-5" />
             </button>
             <div className="h-6 w-px bg-slate-800 hidden sm:block" />
+
+            <NotificationBell isAuthenticated={!!user} />
 
             {user ? (
               <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-slate-200">

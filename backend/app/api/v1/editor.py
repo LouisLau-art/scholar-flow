@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Body, Depends
-from app.lib.api_client import supabase
+from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks
+from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from uuid import UUID
 from datetime import datetime
+from app.core.mail import EmailService
+from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -220,6 +222,7 @@ async def get_available_reviewers(
 
 @router.post("/decision")
 async def submit_final_decision(
+    background_tasks: BackgroundTasks = None,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: str = Body(..., embed=True),
@@ -271,6 +274,66 @@ async def submit_final_decision(
         data = _extract_supabase_data(response) or []
         if len(data) == 0:
             raise HTTPException(status_code=404, detail="Manuscript not found")
+
+        # === 通知中心 (Feature 011) ===
+        # 中文注释:
+        # 1) 稿件决策变更属于核心状态变化：作者必须同时收到站内信 + 邮件（异步）。
+        try:
+            ms_res = (
+                supabase.table("manuscripts")
+                .select("author_id, title")
+                .eq("id", manuscript_id)
+                .single()
+                .execute()
+            )
+            ms = getattr(ms_res, "data", None) or {}
+            author_id = ms.get("author_id")
+            manuscript_title = ms.get("title") or "Manuscript"
+        except Exception:
+            author_id = None
+            manuscript_title = "Manuscript"
+
+        if author_id:
+            decision_label = "Accepted" if decision == "accept" else "Revision Required"
+            decision_title = "Editorial Decision" if decision == "accept" else "Editorial Decision: Revision Required"
+
+            NotificationService().create_notification(
+                user_id=str(author_id),
+                manuscript_id=manuscript_id,
+                type="decision",
+                title=decision_title,
+                content=f"Decision for '{manuscript_title}': {decision_label}.",
+            )
+
+            try:
+                author_profile = (
+                    supabase_admin.table("user_profiles")
+                    .select("email")
+                    .eq("id", str(author_id))
+                    .single()
+                    .execute()
+                )
+                author_email = (getattr(author_profile, "data", None) or {}).get("email")
+            except Exception:
+                author_email = None
+
+            if author_email and background_tasks is not None:
+                email_service = EmailService()
+                background_tasks.add_task(
+                    email_service.send_template_email,
+                    to_email=author_email,
+                    subject=decision_title,
+                    template_name="decision.html",
+                    context={
+                        "subject": decision_title,
+                        "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                        "manuscript_title": manuscript_title,
+                        "manuscript_id": manuscript_id,
+                        "decision_title": decision_title,
+                        "decision_label": decision_label,
+                        "comment": comment or "",
+                    },
+                )
 
         return {
             "success": True,

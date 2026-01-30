@@ -42,3 +42,16 @@ export interface Invoice {
   status: 'unpaid' | 'paid';
   confirmed_at?: string;
 }
+
+export type NotificationType = 'submission' | 'review_invite' | 'decision' | 'chase' | 'system'
+
+export interface Notification {
+  id: string
+  user_id: string
+  manuscript_id?: string | null
+  type: NotificationType
+  title: string
+  content: string
+  is_read: boolean
+  created_at: string
+}

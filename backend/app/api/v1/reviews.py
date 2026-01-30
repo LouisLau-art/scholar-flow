@@ -1,16 +1,22 @@
-from fastapi import APIRouter, HTTPException, Depends, Body
-from app.lib.api_client import supabase
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
+from app.core.mail import EmailService
+from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import List, Dict, Any
 from postgrest.exceptions import APIError
+from datetime import datetime, timedelta, timezone
+import secrets
+import os
 
 router = APIRouter(tags=["Reviews"])
 
 # === 1. 分配审稿人 (Editor Task) ===
 @router.post("/reviews/assign")
 async def assign_reviewer(
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
@@ -24,20 +30,87 @@ async def assign_reviewer(
     2. 插入 review_assignments 表。
     """
     # 模拟校验: 获取稿件信息
-    ms_res = supabase.table("manuscripts").select("author_id").eq("id", str(manuscript_id)).single().execute()
+    ms_res = (
+        supabase.table("manuscripts")
+        .select("author_id, title")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
     
     try:
+        # 中文注释: 默认给审稿任务 7 天期限，后续可改为按期刊/稿件类型配置
+        due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
         res = supabase.table("review_assignments").insert({
             "manuscript_id": str(manuscript_id),
             "reviewer_id": str(reviewer_id),
-            "status": "pending"
+            "status": "pending",
+            "due_at": due_at,
         }).execute()
         # 更新稿件状态为评审中
         supabase.table("manuscripts").update({
             "status": "under_review"
         }).eq("id", str(manuscript_id)).execute()
+
+        # === 通知中心 (Feature 011) ===
+        # 站内信：审稿人收到邀请提醒
+        manuscript_title = (ms_res.data or {}).get("title") or "Manuscript"
+        NotificationService().create_notification(
+            user_id=str(reviewer_id),
+            manuscript_id=str(manuscript_id),
+            type="review_invite",
+            title="Review Invitation",
+            content=f"You have been invited to review '{manuscript_title}'.",
+        )
+
+        # 邮件：审稿邀请（含免登录 Token 链接）
+        try:
+            profile_res = (
+                supabase_admin.table("user_profiles")
+                .select("email")
+                .eq("id", str(reviewer_id))
+                .single()
+                .execute()
+            )
+            reviewer_email = (getattr(profile_res, "data", None) or {}).get("email")
+        except Exception:
+            reviewer_email = None
+
+        if reviewer_email:
+            token = secrets.token_urlsafe(32)
+            expiry_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+            try:
+                supabase_admin.table("review_reports").insert({
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "token": token,
+                    "expiry_date": expiry_date,
+                    "status": "invited",
+                }).execute()
+            except Exception as e:
+                # 中文注释: 缺表/缺列时不阻塞主流程；邮件仍可发送，但 Token 校验可能无法落库
+                print(f"[Review Invite] 写入 review_reports 失败（降级继续）: {e}")
+
+            frontend_base_url = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+            review_url = f"{frontend_base_url}/review/{token}"
+            email_service = EmailService()
+            background_tasks.add_task(
+                email_service.send_template_email,
+                to_email=reviewer_email,
+                subject="Invitation to Review",
+                template_name="review_invite.html",
+                context={
+                    "subject": "Invitation to Review",
+                    "recipient_name": reviewer_email.split("@")[0].replace(".", " ").title(),
+                    "manuscript_title": manuscript_title,
+                    "manuscript_id": str(manuscript_id),
+                    "due_at": due_at,
+                    "review_url": review_url,
+                },
+            )
+
         return {"success": True, "data": res.data[0]}
     except Exception as e:
         # 如果表还没建，我们返回模拟成功以不阻塞开发
