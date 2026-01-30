@@ -1,254 +1,50 @@
-<!--
-Sync Impact Report
-- Version change: 1.9.0 → 2.0.0
-- List of modified principles:
-  - 新增原则 XII: 测试策略与覆盖标准 (基于 008-editor-command-center 项目经验教训)
-  - 新增原则 XIII: 安全与认证原则 (身份验证、JWT、RBAC)
-  - 新增原则 XIV: API 开发规范 (路径一致性、错误处理、验证)
-  - 新增原则 XV: 用户体验与功能完整性
-  - 细化原则 XI: 质量保障与交互标准 (补充测试金字塔、Mock vs 真实测试)
-- Added sections:
-  - 十二、 测试策略与覆盖标准
-  - 十三、 安全与认证原则
-  - 十四、 API 开发规范
-  - 十五、 用户体验与功能完整性
-- Removed sections: N/A
-- Templates requiring updates:
-  - ✅ updated: .specify/templates/spec-template.md (已添加测试覆盖要求)
-  - ✅ updated: .specify/templates/tasks-template.md (已添加安全测试任务类型)
-  - ✅ updated: .specify/templates/plan-template.md (已添加架构审查清单)
-- Follow-up TODOs:
-  - TODO(API_CONTRACTS): 为所有现有 API 添加 OpenAPI 规范
-  - TODO(TEST_COVERAGE): 确保所有功能都有完整的测试覆盖
-  - TODO(PROJECT_README): 考虑创建项目根 README.md 提供项目概览
--->
-
-# ScholarFlow Constitution
-
-## 一、 核心治理原则 (Core Governance)
-
-### I. 规格驱动开发 (SD - Spec-Driven)
-所有功能开发前必须有完整的 `spec.md` 和 `plan.md`。严禁在未经验证的情况下直接编码。
-
-### II. 测试先行与增量交付 (TI - Test-First)
-功能必须拆解为可独立测试的 User Stories。测试（若要求）必须在实现前编写并失败。每个 Story 必须是可验证的 MVP 增量。
-
-### III. 阶段门控开发 (PG - Phase-Gated)
-严格遵守：研究 (Phase 0) -> 设计 (Phase 1) -> 基础搭建 (Phase 2) -> 功能实现 (Phase 3+) 的顺序。严禁越级。
-
-### IV. 架构简约与显性逻辑 (AS - Simple & Explicit)
-最小化复杂度。禁止“黑盒”逻辑或魔法函数。核心业务门禁（权限、财务）必须在代码中清晰可见。
-
-### V. 可观测性与追踪 (OT - Observability)
-所有 User Story 必须包含异常处理、结构化日志。任务必须通过 ID 与 User Story 保持端到端追踪。
-
-## 二、 开发哲学与优先级 (Development Philosophy)
-- **MVP 优先**: 严禁引入超前设计（如未要求的微服务）。
-- **可读性 > 性能**: 代码是写给 AI 和人类看的，逻辑直观是最高准则。
-- **效率至上**: 优先使用成熟第三方库，严禁重复造轮子。
-
-## 三、 架构规范与数据流 (Architecture & Data Flow)
-- **前后端契约**: 严格遵守 OpenAPI (Swagger) 规范。
-- **API 封装**: 前端必须统一封装 API 类，禁止在组件中散写请求。
-- **Next.js 规范**: 数据请求优先在 Server Components 完成，仅交互部分使用 `'use client'`。
-- **状态管理**: 优先使用 URL 状态或原生 `useState`，减少 Redux 等样板代码。
-
-## 四、 错误处理与容错 (Error Handling & Resilience)
-- **全局防御**: 前端统一 Error Boundary，后端统一异常捕获中间件。
-- **优雅降级**: 算法响应慢时必须有 Loading 态或占位，严禁页面卡死。
-- **财务幂等性**: 涉及确认到账、生成账单等操作，必须在数据库层面做唯一性校验。
-
-## 五、 UI/UX 视觉标准 (Visual Standards)
-- **Frontiers 风格**: 全宽布局、卡片容器（4px圆角、轻阴影）、品牌蓝 CTA。
-- **原子化**: 严格基于 `Shadcn/UI` 和 `Tailwind CSS`。禁止行内样式。
-- **排版与配色**: 大标题衬线体（Serif），正文使用系统无衬线体（Sans）。配色锁定为深蓝色调 (`slate-900`) 及灰、白、蓝。
-
-## 六、 技术栈版本约束 (Version Constraints)
-- **Frontend**: Next.js 14.2.x (App Router), React 18.x, Tailwind 3.4.x.
-- **Backend**: Python 3.11+, FastAPI 0.115+, Pydantic v2.
-- **Infrastructure**: Supabase (PostgreSQL, Auth, Storage).
-- **SDK**: Supabase-js v2.x / Supabase-py v2.x.
-
-## 七、 AI 协作准则 (AI Collaboration)
-- **文档同步**: 变更代码前必须确认并同步更新设计文档（Data Model, Spec）。
-- **任务原子化**: 每次实现仅处理一个小项，单次修改文件严禁超过 5 个。
-- **中文注释**: 关键逻辑（算法、Token 验证）必须包含中文注释。
-
-## 八、 开发环境与包管理规范 (Environment & PKG)
-- **开发平台**: 本项目开发环境锁定为 **Arch Linux**。
-- **包管理优先级**: 
-  1. 优先使用系统包管理器 **`pacman`** 或 **`paru`**。
-  2. 若系统包与语言包（pip/npm）冲突，应优先保留系统包，并可清理对应的语言包。
-- **用户权限**: 
-  - `pacman` 操作可使用 root。
-  - `paru` 严禁新建用户，必须切换至已有用户 **`louis`** (密码: `18931976`) 执行。
-- **Python 强制安装**: 若 `pip` 全局安装被 OS 拒绝，必须使用 **`--break-system-packages`** 参数。
-- **Docker 规范**: 必须确保配置了国内镜像源。
-
-## 九、 持续集成与存档 (CI & Savepoints)
-
-- **即时存档**: 每一个原子化任务（如完成一个 Issue）完成后，必须立即执行 `git push` 同步至 GitHub。
-
-- **存档意义**: 此举作为项目的“存档点”，确保在发生意外情况时能及时回滚并减少损失。
-
-
-
-## 十、 全栈切片与交付定义 (Full-Stack Slice & DoD)
-
-
-
-- **拒绝隐形逻辑**: 后端任务完成的标准**必须**包含 API Router 注册，且在 `/docs` (Swagger) 可见。
-
-
-
-- **显性路由原则**: API 路由严禁过度依赖嵌套前缀。必须在方法装饰器上定义清晰、完整的路径（如 `/manuscripts/search`），以防测试歧义。
-
-
-
-- **拒绝孤岛页面**: 前端任务完成的标准**必须**包含从主页或导航栏的可达入口。
-
-
-
-- **骨架先行**: 项目启动的 Phase 1 **必须**显式包含 Landing Page 和 Navigation 的搭建。
-
-
-
-
-
-
-
-## 十一、 质量保障与交互标准 (QA & UX Standards)
-
-- **自动化测试刚性要求**: 任何新功能的交付（DoD）**必须**包含自动化测试用例（后端 Pytest，前端 Vitest）。
-
-- **原生 SDK 优先**: 在 Supabase 集成中，优先使用原生 `supabase-js` 或 `supabase-py`，严禁使用不稳定的已弃用辅助库。
-
-- **交互反馈统一**: 全站禁止使用浏览器原生 `alert()`。必须统一使用 **Shadcn/Sonner** 的 Toast 组件进行状态反馈。
-
-- **100% 测试通过率**: 所有功能交付前必须确保所有自动化测试通过，包括后端 17+ 个测试和前端 Vitest 测试。
-
-- **测试环境一致性**: 测试环境必须尽可能接近生产环境，包括数据库连接、身份验证配置等。
-
-## 十二、 测试策略与覆盖标准 (Testing Strategy & Coverage)
-
-### 测试覆盖要求
-- **完整 API 测试**: 必须测试所有 HTTP 方法（GET、POST、PUT、DELETE）对每个端点。
-- **路径一致性测试**: 确保前端和后端 API 路径完全一致（包括尾部斜杠处理）。
-- **身份验证测试**: 每个需要身份验证的端点必须测试：
-  - 有效身份验证（成功案例）
-  - 缺少身份验证（401 错误）
-  - 无效/过期令牌（401 错误）
-- **验证测试**: 测试所有输入验证规则（必填字段、长度限制、格式约束）。
-- **错误场景测试**: 必须测试错误情况，不仅仅是 happy path。
-
-### 测试金字塔策略
-```
-端到端测试 (E2E) - 模拟真实用户工作流
-    ↓
-集成测试 - 验证组件集成（使用真实数据库）
-    ↓
-单元测试 - 测试单个函数/组件（可使用 Mock）
-```
-
-### Mock vs 真实测试
-- **单元测试**: 可使用 Mock 对象以提高速度和隔离性
-- **集成测试**: 必须使用真实的数据库连接以捕获集成问题
-- **E2E 测试**: 使用测试数据库模拟生产环境
-- **禁止过度依赖 Mock**: Mock 可能隐藏真实的集成问题
-
-### 测试经验教训 (基于 008 项目)
-1. **测试必须全面**: 不要只测试部分功能，要覆盖所有场景
-2. **安全测试优先**: 身份验证和授权必须在测试中验证
-3. **路径测试重要**: API 路径不一致会导致 405 错误
-4. **JWT 测试必要**: 必须测试 token 的生成、验证和过期
-
-## 十三、 安全与认证原则 (Security & Authentication)
-
-### 身份验证要求
-- **认证优先**: 所有敏感操作必须要求身份验证。禁止对用户特定数据进行未经验证的访问。
-- **JWT 验证**: 所有经过身份验证的请求必须使用 Supabase JWT 令牌。每个请求都必须验证令牌。
-- **真实用户上下文**: 使用来自身份验证上下文的实际用户 ID，绝不使用硬编码或模拟的 ID。
-- **基于角色的访问控制**: 为不同的用户类型（作者、审稿人、编辑）实现适当的角色权限控制。
-- **安全优先设计**: 安全考虑必须在初始设计阶段就解决，而不是事后补救。
-
-### 数据安全
-- **多层验证**: 前端基本验证 + 后端全面验证 + 数据库约束
-- **输入净化**: 对所有用户输入进行验证和净化
-- **敏感数据保护**: 密码、令牌等敏感信息必须加密存储
-- **审计日志**: 记录所有安全相关的操作
-
-## 十四、 API 开发规范 (API Development Standards)
-
-### API 设计原则
-- **API 优先设计**: 在实现之前定义 API 规范（OpenAPI/Swagger）
-- **路径约定**: 使用一致的路径模式（除非必要，否则不使用尾部斜杠）
-- **版本控制**: 始终对 API 进行版本控制（例如 `/api/v1/`）
-- **文档化**: 每个端点必须有清晰的文档
-
-### 错误处理
-- **统一错误处理**: 使用中间件实现一致的错误响应
-- **详细日志**: 记录所有关键操作和错误
-- **用户友好消息**: 向用户提供清晰的错误信息
-- **调试信息**: 包含足够的调试信息供开发人员使用
-
-### 数据验证
-- **多层验证**:
-  - 前端：基本验证，提升用户体验
-  - 后端 API：全面验证（Pydantic v2）
-  - 数据库：约束和触发器作为最后防线
-- **字段约束**: 始终指定最小/最大长度、格式和业务规则
-- **类型安全**: 前端使用 TypeScript，后端使用完整的类型提示
-
-## 十五、 用户体验与功能完整性 (User Experience & Feature Completeness)
-
-### 核心用户流程
-- **角色完整**: 每个用户角色必须有完整的工作流程
-- **个人中心**: 用户应该能够查看自己的数据（例如"我的稿件"）
-- **清晰导航**: 用户始终知道他们在哪里以及可以做什么
-- **错误恢复**: 优雅的错误处理和清晰的下一步指导
-
-### 认证用户体验
-- **登录提示**: 明确指示何时需要身份验证
-- **会话管理**: 优雅处理令牌过期
-- **用户反馈**: 提供即时的身份验证状态反馈
-- **重定向处理**: 登录/注销后的正确重定向
-
-### 数据准确性
-- **真实用户上下文**: 绝不使用模拟或硬编码的用户数据
-- **数据完整性**: 确保系统中的数据一致性
-- **审计跟踪**: 记录谁在何时进行了什么更改
-
-
-
-
-
-
+# [PROJECT_NAME] Constitution
+<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+
+## Core Principles
+
+### [PRINCIPLE_1_NAME]
+<!-- Example: I. Library-First -->
+[PRINCIPLE_1_DESCRIPTION]
+<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+
+### [PRINCIPLE_2_NAME]
+<!-- Example: II. CLI Interface -->
+[PRINCIPLE_2_DESCRIPTION]
+<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+
+### [PRINCIPLE_3_NAME]
+<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
+[PRINCIPLE_3_DESCRIPTION]
+<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+
+### [PRINCIPLE_4_NAME]
+<!-- Example: IV. Integration Testing -->
+[PRINCIPLE_4_DESCRIPTION]
+<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+
+### [PRINCIPLE_5_NAME]
+<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
+[PRINCIPLE_5_DESCRIPTION]
+<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+
+## [SECTION_2_NAME]
+<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+
+[SECTION_2_CONTENT]
+<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+
+## [SECTION_3_NAME]
+<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+
+[SECTION_3_CONTENT]
+<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
 
 ## Governance
+<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-本项目章程是最高准则。
+[GOVERNANCE_RULES]
+<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
 
-**Version**: 2.0.0 | **Ratified**: 2026-01-27 | **Last Amended**: 2026-01-29
-
-### 版本说明
-**v2.0.0**: 基于 008-editor-command-center 项目经验教训的重大更新
-- 新增测试策略与覆盖标准（原则 XII）
-- 新增安全与认证原则（原则 XIII）
-- 新增 API 开发规范（原则 XIV）
-- 新增用户体验与功能完整性（原则 XV）
-- 细化质量保障要求（原则 XI）
-
-### 修订流程
-1. **原则修订**: 需要团队共识，版本号递增 MAJOR 版本
-2. **规范细化**: 补充具体实施细节，版本号递增 MINOR 版本
-3. **文档澄清**: 修正错别字或表述不清，版本号递增 PATCH 版本
-
-### 合规审查
-- **启动阶段**: 检查所有原则是否在设计文档中体现
-- **开发阶段**: 检查代码是否符合架构规范
-- **交付阶段**: 检查测试覆盖率和质量标准
-- **部署阶段**: 检查安全性和性能标准
-
-
-
-
+**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
+<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->

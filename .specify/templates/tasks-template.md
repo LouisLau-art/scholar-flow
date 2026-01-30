@@ -83,46 +83,17 @@ Examples of foundational tasks (adjust based on your project):
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-**Security & Authentication Tests** (Principle XIII):
-- [ ] T010 [P] [US1] Authentication test: Verify endpoint requires valid JWT token
-- [ ] T011 [P] [US1] Authorization test: Verify RBAC permissions for different user roles
-- [ ] T012 [P] [US1] Security test: Verify no unauthenticated access to user-specific data
-
-**API Development Tests** (Principle XIV):
-- [ ] T013 [P] [US1] Path consistency test: Verify frontend/backend API paths match exactly
-- [ ] T014 [P] [US1] Error handling test: Verify unified error responses for all error scenarios
-- [ ] T015 [P] [US1] Validation test: Verify all input validation rules (required fields, length limits, format)
-
-**Test Coverage Tests** (Principle XII):
-- [ ] T016 [P] [US1] HTTP method test: Test GET, POST, PUT, DELETE for every endpoint
-- [ ] T017 [P] [US1] Integration test: Use REAL database connection (not Mock) to catch integration issues
-- [ ] T018 [P] [US1] Error scenario test: Test error cases, not just happy paths
-- [ ] T019 [P] [US1] JWT token test: Test token generation, validation, and expiration
+- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
 
 ### Implementation for User Story 1
 
-**Security & Authentication Implementation** (Principle XIII):
-- [ ] T020 [P] [US1] Add authentication middleware to protect endpoints
-- [ ] T021 [P] [US1] Implement JWT token validation for all sensitive operations
-- [ ] T022 [P] [US1] Use real user ID from authentication context (never hardcoded)
-- [ ] T023 [P] [US1] Implement RBAC based on user roles (author/reviewer/editor)
-
-**API Development Implementation** (Principle XIV):
-- [ ] T024 [P] [US1] Define API specification (OpenAPI/Swagger) BEFORE implementation
-- [ ] T025 [P] [US1] Implement unified error handling middleware
-- [ ] T026 [P] [US1] Add detailed logging for all critical operations
-- [ ] T027 [US1] Implement [endpoint/feature] in src/[location]/[file].py with consistent paths
-
-**Data Validation Implementation** (Principle XIV):
-- [ ] T028 [P] [US1] Add Pydantic v2 validation for all input fields
-- [ ] T029 [P] [US1] Implement multi-layer validation (frontend + backend + database)
-- [ ] T030 [P] [US1] Add field constraints (min/max length, format, business rules)
-
-**Core Implementation**:
-- [ ] T031 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T032 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T033 [US1] Implement [Service] in src/services/[service].py (depends on T031, T032)
-- [ ] T034 [US1] Add logging for user story 1 operations
+- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
+- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
+- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
+- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T016 [US1] Add validation and error handling
+- [ ] T017 [US1] Add logging for user story 1 operations
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -183,11 +154,8 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
 - [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening (Principle XIII)
-- [ ] TXXX Test coverage review - ensure all scenarios covered (Principle XII)
-- [ ] TXXX API documentation review - verify OpenAPI/Swagger is complete (Principle XIV)
+- [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
-- [ ] TXXX User experience review - verify all user flows are complete (Principle XV)
 
 ---
 
@@ -276,20 +244,8 @@ With multiple developers:
 
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
-- **原子化原则**: 每个任务应保持极小粒度，单次实施严禁修改超过 5 个文件。
-- **注释规范**: 实现代码必须包含核心逻辑的中文注释。
-- **文档同步**: 任务完成后必须确认是否需要同步更新设计文档。
-- **即时存档**: 每个任务（Issue）完成后，必须立即 `git push` 到 GitHub 以防意外。
-- **环境准则 (Arch Linux)**:
-  - 依赖安装优先顺序: `pacman` > `paru` (使用用户 `louis`) > `pip`/`pnpm`。
-  - 包冲突处理: 优先保留系统包，可清理对应的 `npm`/`pip` 全局包。
-  - Python 强制安装: 若 `pip` 被拒，使用 `--break-system-packages`。
-  - Docker 任务需显式包含镜像源配置校验。
-- **DoD 验收**:
-  - 后端：接口必须在 Swagger (/docs) 显式定义且可点。
-  - 前端：页面必须有从主页或导航栏的可达入口。
-  - **QA**: 自动化测试（Backend/Frontend）必须 100% 通过。
-  - **Security**: 所有敏感操作必须有身份验证（Principle XIII）
-  - **API**: API 路径必须前后端一致，使用 OpenAPI 规范（Principle XIV）
-  - **Test Coverage**: 必须测试所有 HTTP 方法、错误场景、身份验证（Principle XII）
+- Each user story should be independently completable and testable
+- Verify tests fail before implementing
+- Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
+- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
