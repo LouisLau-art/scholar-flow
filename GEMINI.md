@@ -1,5 +1,7 @@
 # scholar-flow Development Guidelines
 
+**Language Preference**: 始终使用 **中文** 与我交流。
+
 Auto-generated from all feature plans. Last updated: 2026-01-30
 
 ## Active Technologies
@@ -184,8 +186,8 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 ## Recent Changes
+- 011-notification-center: Added notifications table + RLS, email templates (SMTP/Jinja2), internal cron chase endpoint, in-app Bell UI with Supabase Realtime
 - 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 <!-- MANUAL ADDITIONS START -->
