@@ -46,7 +46,7 @@ description: "Tasks for Local AI Matchmaker implementation"
 - [x] T020 [P] 安全审计测试：在单测中禁用 `socket` 外联，确保 matchmaking 代码路径不会发起外部 HTTP（SC-002）
 - [x] T021 [P] 跑全量测试：`./scripts/run-all-tests.sh`
 - [x] T022 [P] 更新 `specs/012-local-ai-matchmaker/spec.md` Status -> Implemented，并补齐 quickstart 的 env/迁移说明
-- [ ] T023 [P] `git push` 分支 `012-local-ai-matchmaker`
+- [x] T023 [P] `git push` 分支 `012-local-ai-matchmaker`
 
 ## Dependencies
 
