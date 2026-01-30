@@ -19,7 +19,9 @@ from app.api.v1 import (
     internal,
     matchmaking,
     analytics,
+    doi,
 )
+from app.api import oaipmh
 from app.core.middleware import ExceptionHandlerMiddleware
 
 app = FastAPI(
@@ -54,6 +56,8 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
 app.include_router(matchmaking.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(doi.router, prefix="/api/v1")
+app.include_router(oaipmh.router)
 
 
 @app.get("/")

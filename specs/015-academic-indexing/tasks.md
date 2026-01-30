@@ -24,11 +24,11 @@
 
 **Purpose**: 项目初始化和基础结构
 
-- [ ] T001 创建数据库迁移文件 `supabase/migrations/20260130210000_doi_registration.sql`
-- [ ] T002 [P] 安装后端依赖 `httpx`, `lxml` 在 `backend/requirements.txt`
-- [ ] T003 [P] 创建 DOI Pydantic 模型 `backend/app/models/doi.py`
-- [ ] T004 [P] 创建 OAI-PMH Pydantic 模型 `backend/app/models/oaipmh.py`
-- [ ] T005 添加环境变量配置 (CROSSREF_*, JOURNAL_*) 在 `backend/app/core/config.py`
+- [x] T001 创建数据库迁移文件 `supabase/migrations/20260130210000_doi_registration.sql`
+- [x] T002 [P] 安装后端依赖 `httpx`, `lxml` 在 `backend/requirements.txt`
+- [x] T003 [P] 创建 DOI Pydantic 模型 `backend/app/models/doi.py`
+- [x] T004 [P] 创建 OAI-PMH Pydantic 模型 `backend/app/models/oaipmh.py`
+- [x] T005 添加环境变量配置 (CROSSREF_*, JOURNAL_*) 在 `backend/app/core/config.py`
 
 ---
 
@@ -38,11 +38,11 @@
 
 **⚠️ CRITICAL**: 此阶段完成前不能开始任何 User Story
 
-- [ ] T006 运行数据库迁移，创建 `doi_registrations`, `doi_tasks`, `doi_audit_log` 表
-- [ ] T007 [P] 创建 Crossref XML 生成器 `backend/app/services/crossref_client.py` (基础结构)
-- [ ] T008 [P] 创建 Dublin Core 映射器 `backend/app/services/oaipmh/dublin_core.py` (基础结构)
-- [ ] T009 注册 DOI API 路由 `backend/app/api/v1/doi.py` 在 `backend/app/api/v1/__init__.py`
-- [ ] T010 注册 OAI-PMH 路由 `backend/app/api/oaipmh.py` 在 `backend/app/main.py`（无版本前缀）
+- [x] T006 运行数据库迁移，创建 `doi_registrations`, `doi_tasks`, `doi_audit_log` 表
+- [x] T007 [P] 创建 Crossref XML 生成器 `backend/app/services/crossref_client.py` (基础结构)
+- [x] T008 [P] 创建 Dublin Core 映射器 `backend/app/services/oaipmh/dublin_core.py` (基础结构)
+- [x] T009 注册 DOI API 路由 `backend/app/api/v1/doi.py` 在 `backend/app/api/v1/__init__.py`
+- [x] T010 注册 OAI-PMH 路由 `backend/app/api/oaipmh.py` 在 `backend/app/main.py`（无版本前缀）
 
 **Checkpoint**: 基础设施就绪 - 可以开始 User Story 实现
 
@@ -56,29 +56,29 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] 单元测试 Crossref XML 生成 `backend/tests/unit/test_crossref_xml.py`
-- [ ] T012 [P] [US1] 集成测试 DOI 注册流程 `backend/tests/integration/test_doi_registration.py`
+- [x] T011 [P] [US1] 单元测试 Crossref XML 生成 `backend/tests/unit/test_crossref_xml.py`
+- [x] T012 [P] [US1] 集成测试 DOI 注册流程 `backend/tests/integration/test_doi_registration.py`
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] 实现 Crossref XML 生成逻辑 `backend/app/services/crossref_client.py`
+- [x] T013 [US1] 实现 Crossref XML 生成逻辑 `backend/app/services/crossref_client.py`
   - DOI 批次 XML 构建 (Schema 5.4.0)
   - journal_article 元素生成
   - 作者信息映射
-- [ ] T014 [US1] 实现 Crossref HTTP 客户端 `backend/app/services/crossref_client.py`
+- [x] T014 [US1] 实现 Crossref HTTP 客户端 `backend/app/services/crossref_client.py`
   - multipart/form-data 请求
   - HTTP Basic Auth
   - 响应解析
-- [ ] T015 [US1] 实现 DOI 服务层 `backend/app/services/doi_service.py`
+- [x] T015 [US1] 实现 DOI 服务层 `backend/app/services/doi_service.py`
   - `generate_doi()` - 生成 DOI 后缀 (sf.{year}.{sequence})
   - `create_registration()` - 创建注册记录
   - `submit_to_crossref()` - 提交到 Crossref
   - `update_registration_status()` - 更新状态
-- [ ] T016 [US1] 实现 DOI API 端点 `backend/app/api/v1/doi.py`
+- [x] T016 [US1] 实现 DOI API 端点 `backend/app/api/v1/doi.py`
   - POST `/api/v1/doi/register` - 触发注册
   - GET `/api/v1/doi/{article_id}` - 查询状态
-- [ ] T017 [US1] 添加发表触发器 - 修改文章发表流程调用 DOI 注册
-- [ ] T018 [US1] 添加 DOI 显示 - 更新文章详情页显示 DOI 链接
+- [x] T017 [US1] 添加发表触发器 - 修改文章发表流程调用 DOI 注册
+- [x] T018 [US1] 添加 DOI 显示 - 更新文章详情页显示 DOI 链接
 
 **Checkpoint**: DOI 自动注册功能完整可测试
 
@@ -92,19 +92,19 @@
 
 ### Tests for User Story 2
 
-- [ ] T019 [P] [US2] 单元测试 Meta Tags 生成 `frontend/tests/unit/citation.test.ts`
+- [x] T019 [P] [US2] 单元测试 Meta Tags 生成 `frontend/tests/unit/citation.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] 创建 citation 标签生成函数 `frontend/src/lib/metadata/citation.ts`
+- [x] T020 [P] [US2] 创建 citation 标签生成函数 `frontend/src/lib/metadata/citation.ts`
   - `generateCitationMetadata()` - 生成 Highwire Press 标签
   - 必需标签: citation_title, citation_author, citation_publication_date, citation_journal_title, citation_doi
   - 可选标签: citation_pdf_url, citation_abstract, citation_volume, citation_issue
-- [ ] T021 [US2] 更新文章详情页 `frontend/src/app/articles/[id]/page.tsx`
+- [x] T021 [US2] 更新文章详情页 `frontend/src/app/articles/[id]/page.tsx`
   - 添加 `generateMetadata` 函数 (Next.js SSR)
   - 集成 citation 标签生成
-- [ ] T022 [US2] 处理多作者场景 - 每位作者生成独立 citation_author 标签
-- [ ] T023 [US2] 处理 PDF URL - 如有 PDF 附件生成 citation_pdf_url
+- [x] T022 [US2] 处理多作者场景 - 每位作者生成独立 citation_author 标签
+- [x] T023 [US2] 处理 PDF URL - 如有 PDF 附件生成 citation_pdf_url
 
 **Checkpoint**: Google Scholar Meta Tags 功能完整可测试
 
@@ -118,38 +118,38 @@
 
 ### Tests for User Story 3
 
-- [ ] T024 [P] [US3] 单元测试 Dublin Core 映射 `backend/tests/unit/test_dublin_core.py`
-- [ ] T025 [P] [US3] 集成测试 OAI-PMH 动词 `backend/tests/integration/test_oaipmh_verbs.py`
+- [x] T024 [P] [US3] 单元测试 Dublin Core 映射 `backend/tests/unit/test_dublin_core.py`
+- [x] T025 [P] [US3] 集成测试 OAI-PMH 动词 `backend/tests/integration/test_oaipmh_verbs.py`
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] 实现 Dublin Core 映射 `backend/app/services/oaipmh/dublin_core.py`
+- [x] T026 [US3] 实现 Dublin Core 映射 `backend/app/services/oaipmh/dublin_core.py`
   - Article → Dublin Core 元素映射
   - XML 命名空间处理
   - 特殊字符转义
-- [ ] T027 [US3] 实现 OAI-PMH 协议处理 `backend/app/services/oaipmh/protocol.py`
+- [x] T027 [US3] 实现 OAI-PMH 协议处理 `backend/app/services/oaipmh/protocol.py`
   - 请求参数解析
   - 响应 XML 构建
   - 错误响应生成
-- [ ] T028 [US3] 实现 Identify 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T028 [US3] 实现 Identify 动词 `backend/app/services/oaipmh/protocol.py`
   - repositoryName, baseURL, protocolVersion
   - adminEmail, earliestDatestamp, granularity
-- [ ] T029 [US3] 实现 ListMetadataFormats 动词 `backend/app/services/oaipmh/protocol.py`
-- [ ] T030 [US3] 实现 ListSets 动词 `backend/app/services/oaipmh/protocol.py`
-- [ ] T031 [US3] 实现 GetRecord 动词 `backend/app/services/oaipmh/protocol.py`
-- [ ] T032 [US3] 实现 ListIdentifiers 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T029 [US3] 实现 ListMetadataFormats 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T030 [US3] 实现 ListSets 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T031 [US3] 实现 GetRecord 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T032 [US3] 实现 ListIdentifiers 动词 `backend/app/services/oaipmh/protocol.py`
   - 日期范围过滤 (from, until)
-- [ ] T033 [US3] 实现 ListRecords 动词 `backend/app/services/oaipmh/protocol.py`
+- [x] T033 [US3] 实现 ListRecords 动词 `backend/app/services/oaipmh/protocol.py`
   - 日期范围过滤
   - 完整元数据返回
-- [ ] T034 [US3] 实现 resumptionToken 分页 `backend/app/services/oaipmh/protocol.py`
+- [x] T034 [US3] 实现 resumptionToken 分页 `backend/app/services/oaipmh/protocol.py`
   - Token 编码/解码 (Base64)
   - 游标分页 SQL
   - 每页 100 条限制
-- [ ] T035 [US3] 实现 OAI-PMH API 端点 `backend/app/api/oaipmh.py`
+- [x] T035 [US3] 实现 OAI-PMH API 端点 `backend/app/api/oaipmh.py`
   - GET `/api/oai-pmh` - 统一入口（无版本前缀，符合 OAI-PMH 标准）
   - POST `/api/oai-pmh` - POST 方式支持
-- [ ] T036 [US3] 实现速率限制中间件 (60 req/min/IP) `backend/app/api/oaipmh.py`
+- [x] T036 [US3] 实现速率限制中间件 (60 req/min/IP) `backend/app/api/oaipmh.py`
 
 **Checkpoint**: OAI-PMH 接口功能完整可测试
 
@@ -168,30 +168,30 @@
 
 ### Implementation for User Story 4
 
-- [ ] T039 [US4] 实现数据库队列 Worker `backend/app/core/doi_worker.py`
+- [x] T039 [US4] 实现数据库队列 Worker `backend/app/core/doi_worker.py`
   - 任务轮询 (SELECT FOR UPDATE SKIP LOCKED)
   - 任务执行和状态更新
   - asyncio 非阻塞轮询
-- [ ] T040 [US4] 实现指数退避重试 `backend/app/core/doi_worker.py`
+- [x] T040 [US4] 实现指数退避重试 `backend/app/core/doi_worker.py`
   - 重试间隔: 1min, 5min, 30min, 2h
   - 最大重试次数: 4
   - 失败状态标记
-- [ ] T041 [US4] 实现审计日志记录 `backend/app/services/doi_service.py`
+- [x] T041 [US4] 实现审计日志记录 `backend/app/services/doi_service.py`
   - 请求参数记录 (脱敏)
   - 响应状态记录
   - 错误详情记录
-- [ ] T042 [US4] 实现失败通知邮件 `backend/app/core/doi_worker.py`
+- [x] T042 [US4] 实现失败通知邮件 `backend/app/core/doi_worker.py`
   - 邮件模板
   - 管理员邮箱配置
-- [ ] T043 [US4] 实现任务管理 API `backend/app/api/v1/doi.py`
+- [x] T043 [US4] 实现任务管理 API `backend/app/api/v1/doi.py`
   - GET `/api/v1/doi/tasks` - 任务列表
   - GET `/api/v1/doi/tasks/failed` - 失败任务
   - POST `/api/v1/doi/{article_id}/retry` - 手动重试
-- [ ] T044 [P] [US4] 创建 DOI API 客户端 `frontend/src/lib/api/doi.ts`
-- [ ] T045 [P] [US4] 创建 DOI 状态组件 `frontend/src/components/doi/DOIStatus.tsx`
-- [ ] T046 [P] [US4] 创建 DOI 任务列表组件 `frontend/src/components/doi/DOITaskList.tsx`
-- [ ] T047 [US4] 创建 DOI 任务管理页面 `frontend/src/app/(admin)/editor/doi-tasks/page.tsx`
-- [ ] T048 [US4] E2E 测试 DOI 任务管理 `frontend/tests/e2e/doi-tasks.spec.ts`
+- [x] T044 [P] [US4] 创建 DOI API 客户端 `frontend/src/lib/api/doi.ts`
+- [x] T045 [P] [US4] 创建 DOI 状态组件 `frontend/src/components/doi/DOIStatus.tsx`
+- [x] T046 [P] [US4] 创建 DOI 任务列表组件 `frontend/src/components/doi/DOITaskList.tsx`
+- [x] T047 [US4] 创建 DOI 任务管理页面 `frontend/src/app/(admin)/editor/doi-tasks/page.tsx`
+- [x] T048 [US4] E2E 测试 DOI 任务管理 `frontend/tests/e2e/doi-tasks.spec.ts`
 
 **Checkpoint**: 失败处理与管理界面功能完整可测试
 

@@ -43,7 +43,9 @@ class SMTPConfig:
         user = (os.environ.get("SMTP_USER") or "").strip() or None
         password = (os.environ.get("SMTP_PASSWORD") or "").strip() or None
 
-        from_email = (os.environ.get("SMTP_FROM_EMAIL") or user or "no-reply@scholarflow.local").strip()
+        from_email = (
+            os.environ.get("SMTP_FROM_EMAIL") or user or "no-reply@scholarflow.local"
+        ).strip()
 
         use_starttls = _env_bool("SMTP_USE_STARTTLS", True)
 
@@ -87,7 +89,10 @@ class MatchmakingConfig:
 
     @staticmethod
     def from_env() -> "MatchmakingConfig":
-        model_name = (os.environ.get("MATCHMAKING_MODEL_NAME") or "sentence-transformers/all-MiniLM-L6-v2").strip()
+        model_name = (
+            os.environ.get("MATCHMAKING_MODEL_NAME")
+            or "sentence-transformers/all-MiniLM-L6-v2"
+        ).strip()
 
         threshold_raw = (os.environ.get("MATCHMAKING_THRESHOLD") or "0.70").strip()
         try:
@@ -112,4 +117,47 @@ class MatchmakingConfig:
             threshold=threshold,
             top_k=top_k,
             min_reviewers=min_reviewers,
+        )
+
+
+@dataclass(frozen=True)
+class CrossrefConfig:
+    """
+    Crossref DOI 注册 (Feature 015) 配置
+    """
+
+    depositor_email: str
+    depositor_password: str
+    doi_prefix: str
+    api_url: str
+    journal_title: str
+    journal_issn: Optional[str]
+
+    @staticmethod
+    def from_env() -> Optional["CrossrefConfig"]:
+        depositor_email = (os.environ.get("CROSSREF_DEPOSITOR_EMAIL") or "").strip()
+        if not depositor_email:
+            # 允许为空，此时 DOI 功能不可用
+            return None
+
+        depositor_password = (
+            os.environ.get("CROSSREF_DEPOSITOR_PASSWORD") or ""
+        ).strip()
+        doi_prefix = (os.environ.get("CROSSREF_DOI_PREFIX") or "10.12345").strip()
+        api_url = (
+            os.environ.get("CROSSREF_API_URL")
+            or "https://test.crossref.org/servlet/deposit"
+        ).strip()
+        journal_title = (
+            os.environ.get("JOURNAL_TITLE") or "Scholar Flow Journal"
+        ).strip()
+        journal_issn = (os.environ.get("JOURNAL_ISSN") or "").strip() or None
+
+        return CrossrefConfig(
+            depositor_email=depositor_email,
+            depositor_password=depositor_password,
+            doi_prefix=doi_prefix,
+            api_url=api_url,
+            journal_title=journal_title,
+            journal_issn=journal_issn,
         )
