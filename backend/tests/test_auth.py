@@ -1,6 +1,5 @@
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch
 
 # === Auth 逻辑与权限测试 ===
 

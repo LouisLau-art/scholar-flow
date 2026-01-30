@@ -5,7 +5,7 @@ from app.core.roles import require_any_role
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from uuid import UUID
-from typing import List, Dict, Any
+from typing import Dict
 from postgrest.exceptions import APIError
 from datetime import datetime, timedelta, timezone
 import secrets
@@ -112,7 +112,7 @@ async def assign_reviewer(
             )
 
         return {"success": True, "data": res.data[0]}
-    except Exception as e:
+    except Exception:
         # 如果表还没建，我们返回模拟成功以不阻塞开发
         return {"success": True, "message": "模拟分配成功 (请确保创建了 review_assignments 表)"}
 

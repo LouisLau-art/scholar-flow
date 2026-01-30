@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from uuid import UUID
 
 from app.lib.api_client import create_user_supabase_client, supabase_admin
 

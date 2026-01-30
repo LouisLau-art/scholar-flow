@@ -1,7 +1,6 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 from lxml import etree
-import base64
 from app.models.oaipmh import OAIPMHRequest, OAIPMHVerb, OAIErrorCode, OAIMetadataPrefix
 from app.services.oaipmh.dublin_core import DublinCoreMapper
 from app.lib.api_client import supabase

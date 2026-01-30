@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
-from uuid import UUID
 from datetime import datetime
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService

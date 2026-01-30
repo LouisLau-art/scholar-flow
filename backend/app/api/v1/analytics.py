@@ -23,7 +23,7 @@ from app.models.analytics import (
     GeoResponse,
 )
 from app.services.analytics_service import AnalyticsService, get_analytics_service
-from app.core.auth import get_current_user, require_roles
+from app.core.auth import get_current_user
 
 # 配置日志（用于审计）
 logger = logging.getLogger(__name__)

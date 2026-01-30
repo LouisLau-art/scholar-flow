@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from uuid import UUID
-from typing import Optional, List
+from typing import Optional
 from app.services.doi_service import DOIService
 from app.models.doi import DOIRegistration, DOITask, DOITaskList, DOIRegistrationCreate
 from app.core.config import CrossrefConfig

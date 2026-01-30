@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, Dict, Any
-from app.models.doi import DOIRegistration, DOIRegistrationCreate, DOIRegistrationStatus
+from typing import Optional
+from app.models.doi import DOIRegistration, DOIRegistrationStatus
 from app.core.config import CrossrefConfig
 # NOTE: In a real app, we would inject DB session here.
 # For this implementation, we will assume a service class that can be extended with DB logic.

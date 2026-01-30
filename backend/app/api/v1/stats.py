@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth_utils import get_current_user
 from app.lib.api_client import supabase
-import uuid
 from datetime import datetime
 
 router = APIRouter(prefix="/stats", tags=["Dashboard Statistics"])

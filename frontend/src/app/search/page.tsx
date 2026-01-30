@@ -109,7 +109,7 @@ export default function SearchPage() {
         <header className="mb-12 border-b border-slate-200 pb-8">
           <h1 className="text-3xl font-serif font-bold text-slate-900 flex items-center gap-4">
             <SearchIcon className="h-8 w-8 text-blue-600" />
-            Search Results for "{query}"
+            Search Results for &quot;{query}&quot;
           </h1>
           <p className="mt-2 text-slate-500 font-medium">Showing top results in {currentMode}</p>
         </header>

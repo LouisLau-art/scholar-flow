@@ -1,6 +1,4 @@
-import pytest
 from app.services.oaipmh.dublin_core import DublinCoreMapper
-from lxml import etree
 
 
 def test_dublin_core_mapping():

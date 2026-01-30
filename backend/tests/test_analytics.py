@@ -8,8 +8,7 @@ Analytics API 单元测试
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
+from unittest.mock import MagicMock, patch
 
 from app.models.analytics import (
     KPISummary,

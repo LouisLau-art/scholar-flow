@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from app.models.plagiarism import PlagiarismReport, PlagiarismRetryRequest
+from fastapi import APIRouter, BackgroundTasks
+from app.models.plagiarism import PlagiarismRetryRequest
 from app.core.plagiarism_worker import plagiarism_check_worker
 from uuid import UUID
-from datetime import datetime
 
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
 

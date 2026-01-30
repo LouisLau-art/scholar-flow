@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, Response, HTTPException
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response as FastAPIResponse
 from app.models.oaipmh import OAIPMHRequest, OAIPMHVerb
 from app.services.oaipmh.protocol import OAIPMHProtocol

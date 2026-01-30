@@ -1,6 +1,5 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from lxml import etree
-from app.models.oaipmh import OAIMetadataPrefix
 
 
 class DublinCoreMapper:

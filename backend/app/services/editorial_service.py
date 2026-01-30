@@ -1,5 +1,4 @@
 from uuid import UUID
-from datetime import datetime
 from typing import Optional
 
 async def process_quality_check(

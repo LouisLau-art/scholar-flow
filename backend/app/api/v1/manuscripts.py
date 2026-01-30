@@ -3,15 +3,12 @@ from app.core.pdf_processor import extract_text_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
 from app.services.editorial_service import process_quality_check
-from app.services.publishing_service import publish_manuscript
-from app.core.recommender import recommend_reviewers
 from app.models.schemas import ManuscriptCreate
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from uuid import uuid4, UUID
-from typing import Dict, Any, List
 import shutil
 import os
 

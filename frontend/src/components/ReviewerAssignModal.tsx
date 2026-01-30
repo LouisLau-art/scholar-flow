@@ -273,7 +273,7 @@ export default function ReviewerAssignModal({
 
                 {filteredReviewers.length === 0 && (
                   <div className="text-center py-8 text-slate-500">
-                    No reviewers found matching "{searchTerm}"
+                    No reviewers found matching &quot;{searchTerm}&quot;
                   </div>
                 )}
               </div>

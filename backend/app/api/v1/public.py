@@ -1,5 +1,4 @@
 from fastapi import APIRouter
-from app.lib.api_client import supabase
 
 router = APIRouter(prefix="/public", tags=["Public Resources"])
 

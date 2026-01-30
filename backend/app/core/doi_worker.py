@@ -1,8 +1,6 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-import random
-from typing import Optional
 from app.lib.api_client import supabase
 from app.services.doi_service import DOIService
 from app.core.config import CrossrefConfig, SMTPConfig

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime
 from uuid import UUID
 from app.services.crossref_client import CrossrefClient
 

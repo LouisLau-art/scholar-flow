@@ -11,7 +11,6 @@ Analytics 数据模型 (Pydantic v2)
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import date
 
 

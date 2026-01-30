@@ -150,7 +150,7 @@ export default function ReviewerDashboard() {
                   <div className="mb-6">
                     <h4 className="font-serif text-2xl">Structured Peer Review</h4>
                     <p className="text-sm text-slate-500">
-                      Submit your professional assessment for "{task.manuscripts?.title}"
+                      Submit your professional assessment for &quot;{task.manuscripts?.title}&quot;
                     </p>
                   </div>
 

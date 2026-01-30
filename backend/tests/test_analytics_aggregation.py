@@ -11,7 +11,6 @@ Analytics 聚合测试
 import pytest
 from unittest.mock import MagicMock
 
-from app.models.analytics import TrendData, GeoData, PipelineData, DecisionData
 
 
 class TestTrendAggregation:
