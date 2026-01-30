@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "学术标准化与索引集成 - DOI注册、OAI-PMH接口、Google Scholar适配"
 
+## Clarifications
+
+### Session 2026-01-30
+
+- Q: OAI-PMH 接口是否需要认证？ → A: 完全公开（无需认证，仅限已发表文章）
+- Q: 异步任务队列使用什么实现？ → A: 数据库队列（避免 Celery/Redis 依赖）
+- Q: DOI 后缀格式如何生成？ → A: sf.{year}.{sequence} 格式（如 10.12345/sf.2026.00001）
+- Q: 作者姓名格式如何处理？ → A: 按原始输入保留，不做自动转换
+- Q: OAI-PMH 速率限制阈值？ → A: 60 请求/分钟/IP
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -97,8 +107,8 @@
 
 - **元数据不完整**: 文章缺少必填字段（如作者信息）时，DOI 注册应提前校验并拒绝，提示编辑补充信息
 - **DOI 冲突**: 尝试注册已存在的 DOI 时，系统应识别冲突并更新而非创建
-- **OAI-PMH 恶意请求**: 大量快速请求应受速率限制保护，避免服务过载
-- **作者姓名格式**: 中英文作者姓名格式不同，需正确处理（姓在前/名在前）
+- **OAI-PMH 恶意请求**: 大量快速请求应受速率限制保护（60 请求/分钟/IP），避免服务过载
+- **作者姓名格式**: 按作者原始输入保留，不做中英文自动转换
 - **特殊字符转义**: 标题或摘要中的 XML 特殊字符需正确转义
 
 ## Requirements *(mandatory)*
@@ -108,7 +118,7 @@
 #### DOI 注册
 - **FR-001**: 系统 MUST 在文章发表时自动触发 DOI 注册流程
 - **FR-002**: 系统 MUST 调用 Crossref Deposit API 提交元数据 XML
-- **FR-003**: 系统 MUST 支持 DOI 前缀配置（期刊特定前缀，如 `10.12345`）
+- **FR-003**: 系统 MUST 支持 DOI 前缀配置（期刊特定前缀，如 `10.12345`），后缀格式为 `sf.{year}.{sequence}`（如 `10.12345/sf.2026.00001`）
 - **FR-004**: 系统 MUST 在注册成功后将 DOI 保存到文章记录
 - **FR-005**: 系统 MUST 支持 DOI 元数据更新（文章信息修正时）
 
@@ -119,14 +129,15 @@
 - **FR-009**: 系统 MUST 确保标签内容与页面可见内容一致
 
 #### OAI-PMH 接口
-- **FR-010**: 系统 MUST 实现 OAI-PMH v2.0 协议的 6 个标准动词: `Identify`, `ListMetadataFormats`, `ListSets`, `ListIdentifiers`, `ListRecords`, `GetRecord`
+- **FR-010**: 系统 MUST 实现 OAI-PMH v2.0 协议的 6 个标准动词: `Identify`, `ListMetadataFormats`, `ListSets`, `ListIdentifiers`, `ListRecords`, `GetRecord`（完全公开，无需认证）
 - **FR-011**: 系统 MUST 支持 Dublin Core (`oai_dc`) 元数据格式
 - **FR-012**: 系统 MUST 支持日期范围过滤 (`from`, `until` 参数)
 - **FR-013**: 系统 MUST 实现分页机制 (`resumptionToken`)，每页最多 100 条记录
 - **FR-014**: 系统 MUST 返回符合 OAI-PMH XML Schema 的响应
+- **FR-014a**: 系统 MUST 实现速率限制（60 请求/分钟/IP）防止滥用
 
 #### 失败处理
-- **FR-015**: 系统 MUST 实现异步任务队列处理 DOI 注册
+- **FR-015**: 系统 MUST 实现异步任务队列处理 DOI 注册（使用数据库队列，避免 Celery/Redis 依赖）
 - **FR-016**: 系统 MUST 实现指数退避重试策略（最多 4 次重试）
 - **FR-017**: 系统 MUST 在最终失败时发送邮件通知管理员
 - **FR-018**: 系统 MUST 记录所有 DOI 操作的详细日志
@@ -174,5 +185,5 @@
 - 示例请求: `/api/oai-pmh?verb=ListRecords&metadataPrefix=oai_dc`
 
 ### 依赖项
-- **后端**: `httpx` (HTTP 客户端), `lxml` (XML 处理), `celery` 或数据库队列 (异步任务)
+- **后端**: `httpx` (HTTP 客户端), `lxml` (XML 处理), 数据库队列 (异步任务，基于 PostgreSQL)
 - **前端**: Next.js `generateMetadata` (SSR Meta Tags)
