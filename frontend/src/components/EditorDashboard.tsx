@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import EditorPipeline from '@/components/EditorPipeline'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import DecisionPanel from '@/components/DecisionPanel'
+import CmsManagementPanel from '@/components/cms/CmsManagementPanel'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
 import Link from 'next/link'
@@ -15,7 +16,7 @@ export default function EditorDashboard() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | undefined>()
   const [selectedManuscriptTitle, setSelectedManuscriptTitle] = useState<string | undefined>()
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'reviewers' | 'decisions'>('pipeline')
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'reviewers' | 'decisions' | 'website'>('pipeline')
   const [pipelineRefresh, setPipelineRefresh] = useState(0)
 
   const handleAssignReviewer = async (reviewerIds: string[]) => {
@@ -80,11 +81,12 @@ export default function EditorDashboard() {
           </Link>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-6">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-6">
           <TabsList className="border border-border bg-background p-1">
             <TabsTrigger value="pipeline" data-testid="editor-tab-pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="reviewers" data-testid="editor-tab-reviewers">Reviewers</TabsTrigger>
             <TabsTrigger value="decisions" data-testid="editor-tab-decisions">Decisions</TabsTrigger>
+            <TabsTrigger value="website" data-testid="editor-tab-website">Website</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline" className="space-y-6">
@@ -144,6 +146,10 @@ export default function EditorDashboard() {
                 No manuscript selected. Go to the <span className="font-semibold text-slate-900">Pipeline</span> tab and click “Make Decision”.
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="website" className="space-y-6">
+            <CmsManagementPanel />
           </TabsContent>
         </Tabs>
 

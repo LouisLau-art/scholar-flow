@@ -5,18 +5,19 @@ import Link from 'next/link'
 import { Search, Menu, X, ChevronDown, User, Globe } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { getCmsMenu } from '@/services/cms'
 
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
   const [user, setUser] = useState<{ email?: string } | null>(null)
 
-  const navLinks = [
+  const [navLinks, setNavLinks] = useState<{ name: string; href: string; hasMega?: boolean }[]>([
     { name: 'Journals', href: '#', hasMega: true },
     { name: 'Topics', href: '/topics' },
     { name: 'Publish', href: '/submit' },
     { name: 'About', href: '/about' },
-  ]
+  ])
 
   useEffect(() => {
     let isMounted = true
@@ -28,6 +29,27 @@ export default function SiteHeader() {
       }
     }
     loadSession()
+
+    // CMS 菜单（公开接口）：若存在则覆盖默认导航（保留 Journals MegaMenu）
+    ;(async () => {
+      try {
+        const headerMenu = await getCmsMenu('header')
+        const dynamic = (headerMenu || [])
+          .map((item: any) => {
+            const name = String(item?.label || '').trim()
+            const href = item?.page_slug ? `/journal/${item.page_slug}` : String(item?.url || '').trim()
+            if (!name || !href) return null
+            return { name, href }
+          })
+          .filter(Boolean) as { name: string; href: string }[]
+
+        if (isMounted && dynamic.length > 0) {
+          setNavLinks([{ name: 'Journals', href: '#', hasMega: true }, ...dynamic])
+        }
+      } catch {
+        // 忽略：回退默认 navLinks
+      }
+    })()
 
     const { data: { subscription } } = authService.onAuthStateChange((session) => {
       setUser(session?.user ? { email: session.user.email ?? '' } : null)
