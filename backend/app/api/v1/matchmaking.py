@@ -27,7 +27,7 @@ class MatchmakingAnalyzeRequest(BaseModel):
 
 
 @router.post("/analyze")
-async def analyze_matchmaking(
+def analyze_matchmaking(
     req: MatchmakingAnalyzeRequest,
     _current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
@@ -46,4 +46,3 @@ async def analyze_matchmaking(
         abstract=req.abstract,
     )
     return {"success": True, "data": result}
-
