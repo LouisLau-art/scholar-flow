@@ -1,0 +1,96 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow CMS API
+  version: 1.0.0
+paths:
+  /api/v1/cms/pages:
+    get:
+      summary: List all pages (Editor only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of pages
+    post:
+      summary: Create a new page
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageCreate'
+      responses:
+        '201':
+          description: Page created
+
+  /api/v1/cms/pages/{slug}:
+    get:
+      summary: Get page by slug (Public)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page details
+        '404':
+          description: Not found or not published
+    patch:
+      summary: Update page
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Updated
+
+  /api/v1/cms/menu:
+    get:
+      summary: Get menu structure (Public)
+      responses:
+        '200':
+          description: Tree structure of menu items
+    put:
+      summary: Update menu structure (Editor)
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/MenuItem'
+
+components:
+  schemas:
+    PageCreate:
+      type: object
+      required:
+        - title
+        - slug
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        is_published:
+          type: boolean
+    MenuItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        url:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
