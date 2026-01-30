@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Search, Users, Check } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { toast } from 'sonner'
+import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 
 interface Reviewer {
   id: string
@@ -31,11 +32,16 @@ export default function ReviewerAssignModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiRecommendations, setAiRecommendations] = useState<ReviewerRecommendation[]>([])
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('')
       setSelectedReviewers([])
+      setAiRecommendations([])
+      setAiMessage(null)
       fetchReviewers()
     }
   }, [isOpen])
@@ -80,6 +86,36 @@ export default function ReviewerAssignModal({
     }
   }
 
+  const handleAiAnalyze = async () => {
+    if (!manuscriptId) {
+      toast.error('Please select a manuscript first.')
+      return
+    }
+    setAiLoading(true)
+    setAiMessage(null)
+    try {
+      const result = await analyzeReviewerMatchmaking(manuscriptId)
+      setAiRecommendations(result.recommendations || [])
+      if (result.insufficient_data) {
+        setAiMessage(result.message || 'Insufficient reviewer data.')
+      } else if ((result.recommendations || []).length === 0) {
+        setAiMessage('No highly matching reviewers found. Try manual search.')
+      }
+    } catch (error) {
+      console.error('AI analysis failed:', error)
+      setAiRecommendations([])
+      setAiMessage('Analysis unavailable. Please try again later.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleInviteFromAi = (reviewerId: string) => {
+    onAssign([reviewerId])
+    onClose()
+    setSelectedReviewers([])
+  }
+
   const toggleReviewer = (reviewerId: string) => {
     setSelectedReviewers((prev) =>
       prev.includes(reviewerId)
@@ -112,6 +148,58 @@ export default function ReviewerAssignModal({
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-semibold text-slate-900">AI Recommendations</div>
+              <button
+                type="button"
+                onClick={handleAiAnalyze}
+                disabled={aiLoading || !manuscriptId}
+                className="px-3 py-2 text-sm font-semibold rounded-md bg-slate-900 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                data-testid="ai-analyze"
+              >
+                {aiLoading ? 'Analyzing...' : 'AI Analysis'}
+              </button>
+            </div>
+
+            {aiLoading && (
+              <div className="mt-3 flex items-center text-sm text-slate-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span className="ml-2">Running local embedding match...</span>
+              </div>
+            )}
+
+            {!aiLoading && aiMessage && (
+              <div className="mt-3 text-sm text-slate-600" data-testid="ai-message">
+                {aiMessage}
+              </div>
+            )}
+
+            {!aiLoading && aiRecommendations.length > 0 && (
+              <div className="mt-4 space-y-2" data-testid="ai-recommendations">
+                {aiRecommendations.map((rec) => (
+                  <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 truncate">{rec.name || rec.email}</div>
+                      <div className="text-xs text-slate-500 truncate">{rec.email}</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        Match Score: {(rec.match_score * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleInviteFromAi(rec.reviewer_id)}
+                      className="ml-3 px-3 py-2 text-sm font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                      data-testid={`ai-invite-${rec.reviewer_id}`}
+                    >
+                      Invite
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="mb-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
