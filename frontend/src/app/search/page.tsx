@@ -126,11 +126,11 @@ export default function SearchPage() {
             {results.length === 0 && (
               <div className="bg-white rounded-3xl border border-slate-100 p-10 space-y-6">
                 <div className="text-center">
-                  <p className="text-slate-700 font-semibold text-lg">没有搜到匹配结果</p>
+                  <p className="text-slate-700 font-semibold text-lg">No results found</p>
                   <p className="text-slate-500 text-sm mt-2">
                     {currentMode === 'articles'
-                      ? '提示：公开搜索只展示已发布（published）的文章。'
-                      : '提示：当前环境的期刊数据可能尚未初始化。'}
+                      ? 'Tip: public search only shows published articles.'
+                      : 'Tip: journal data may not be initialized in this environment.'}
                   </p>
                 </div>
 
@@ -138,7 +138,7 @@ export default function SearchPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-bold text-slate-900">
-                        {currentMode === 'articles' ? '你的投稿（未发布）' : '示例期刊'}
+                        {currentMode === 'articles' ? 'Your submissions (unpublished)' : 'Sample journals'}
                       </p>
                       <Link href="/dashboard" className="text-sm font-bold text-blue-600 hover:underline inline-flex items-center gap-1">
                         Dashboard <ExternalLink className="h-4 w-4" />

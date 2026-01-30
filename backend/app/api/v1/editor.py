@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body, Depends
 from app.lib.api_client import supabase
 from app.core.auth_utils import get_current_user
+from app.core.roles import require_any_role
 from uuid import UUID
 from datetime import datetime
 
@@ -22,7 +23,10 @@ def _extract_supabase_data(response):
     return None
 
 @router.get("/pipeline")
-async def get_editor_pipeline(current_user: dict = Depends(get_current_user)):
+async def get_editor_pipeline(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
     """
     获取全站稿件流转状态看板数据
     分栏：待质检、评审中、待录用、已发布
@@ -79,7 +83,10 @@ async def get_editor_pipeline(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to fetch pipeline data")
 
 @router.get("/available-reviewers")
-async def get_available_reviewers(current_user: dict = Depends(get_current_user)):
+async def get_available_reviewers(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
     """
     获取可用的审稿人专家池
     """
@@ -117,6 +124,7 @@ async def get_available_reviewers(current_user: dict = Depends(get_current_user)
 @router.post("/decision")
 async def submit_final_decision(
     current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: str = Body(..., embed=True),
     decision: str = Body(..., embed=True),
     comment: str = Body("", embed=True)
@@ -167,6 +175,37 @@ async def submit_final_decision(
     except Exception as e:
         print(f"Decision submission failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit decision")
+
+
+@router.post("/publish")
+async def publish_manuscript_dev(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    manuscript_id: str = Body(..., embed=True),
+):
+    """
+    快捷发布：将稿件直接设置为 published。
+
+    中文注释:
+    1) 用于演示/测试，让公开搜索（published-only）能快速看到结果。
+    2) 仍然需要 editor/admin 角色，避免普通作者误操作。
+    """
+    try:
+        doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        update_data = {
+            "status": "published",
+            "published_at": datetime.now().isoformat(),
+            "doi": doi,
+        }
+        response = supabase.table("manuscripts").update(update_data).eq("id", manuscript_id).execute()
+        if not getattr(response, "data", None):
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        return {"success": True, "data": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Publish failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to publish manuscript")
 
 
 # 测试端点 - 不需要身份验证

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
 from app.lib.api_client import supabase
+from app.core.auth_utils import get_current_user
+from app.core.roles import require_any_role
 from uuid import UUID
 from typing import List, Dict, Any
 from postgrest.exceptions import APIError
@@ -9,6 +11,8 @@ router = APIRouter(tags=["Reviews"])
 # === 1. 分配审稿人 (Editor Task) ===
 @router.post("/reviews/assign")
 async def assign_reviewer(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
     reviewer_id: UUID = Body(..., embed=True)
 ):
@@ -37,10 +41,16 @@ async def assign_reviewer(
 
 # === 2. 获取我的审稿任务 (Reviewer Task) ===
 @router.get("/reviews/my-tasks")
-async def get_my_review_tasks(user_id: UUID):
+async def get_my_review_tasks(
+    user_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["reviewer", "admin"])),
+):
     """
     审稿人获取自己名下的任务
     """
+    if str(user_id) != str(current_user["id"]):
+        raise HTTPException(status_code=403, detail="Cannot access other user's tasks")
     try:
         res = (
             supabase.table("review_assignments")

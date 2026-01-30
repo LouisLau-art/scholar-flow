@@ -28,6 +28,9 @@
   - 通过后端接口 `GET /api/v1/manuscripts/search?q=...&mode=articles|journals` 提供检索结果。
   - `mode=articles`: 仅返回状态为 `published` 的文章（公开检索）。
   - `mode=journals`: 从 `journals` 表按标题模糊检索期刊。
+  - **Empty State**: 当公开检索无结果时，页面必须展示清晰提示，避免用户误判为“功能坏了”。
+    - 若已登录：可额外展示“我的投稿（未发布）”作为补充内容（不影响公开检索规则）。
+    - 若未登录：展示示例内容或引导用户登录/进入 Dashboard。
 
 ## Success Criteria
 - [ ] 每个发表的稿件都有一个唯一的公开 URL（如 `/articles/{id}`）。

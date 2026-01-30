@@ -19,8 +19,9 @@ def _mock_supabase_with_data(data=None):
     return mock
 
 @pytest.mark.asyncio
-async def test_editor_pipeline_methods(client: AsyncClient, auth_token: str):
+async def test_editor_pipeline_methods(client: AsyncClient, auth_token: str, monkeypatch):
     """验证 /editor/pipeline 仅支持 GET"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     headers = {"Authorization": f"Bearer {auth_token}"}
     mock = _mock_supabase_with_data([])
 
@@ -33,8 +34,9 @@ async def test_editor_pipeline_methods(client: AsyncClient, auth_token: str):
         assert post_resp.status_code == 405
 
 @pytest.mark.asyncio
-async def test_editor_available_reviewers_methods(client: AsyncClient, auth_token: str):
+async def test_editor_available_reviewers_methods(client: AsyncClient, auth_token: str, monkeypatch):
     """验证 /editor/available-reviewers 仅支持 GET"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     headers = {"Authorization": f"Bearer {auth_token}"}
     mock = _mock_supabase_with_data([])
 
@@ -47,8 +49,9 @@ async def test_editor_available_reviewers_methods(client: AsyncClient, auth_toke
         assert post_resp.status_code == 405
 
 @pytest.mark.asyncio
-async def test_editor_decision_methods(client: AsyncClient, auth_token: str):
+async def test_editor_decision_methods(client: AsyncClient, auth_token: str, monkeypatch):
     """验证 /editor/decision 仅支持 POST"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     headers = {"Authorization": f"Bearer {auth_token}"}
     mock = _mock_supabase_with_data([{"id": "decision-1"}])
 
@@ -60,6 +63,26 @@ async def test_editor_decision_methods(client: AsyncClient, auth_token: str):
         post_resp = await client.post(
             "/api/v1/editor/decision",
             json={"manuscript_id": "00000000-0000-0000-0000-000000000000", "decision": "accept"},
+            headers=headers,
+        )
+        assert post_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_editor_publish_methods(client: AsyncClient, auth_token: str, monkeypatch):
+    """验证 /editor/publish 仅支持 POST，且需要 editor/admin 角色"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    mock = _mock_supabase_with_data([{"id": "m-1", "status": "published"}])
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.editor.supabase", mock):
+        get_resp = await client.get("/api/v1/editor/publish", headers=headers)
+        assert get_resp.status_code == 405
+
+        post_resp = await client.post(
+            "/api/v1/editor/publish",
+            json={"manuscript_id": "00000000-0000-0000-0000-000000000000"},
             headers=headers,
         )
         assert post_resp.status_code == 200

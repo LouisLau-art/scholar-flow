@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [roles, setRoles] = useState<string[]>([])
 
   useEffect(() => {
     async function fetchStats() {
@@ -41,8 +42,22 @@ export default function DashboardPage() {
         console.error('Failed to load submissions:', err)
       }
     }
+    async function fetchProfile() {
+      try {
+        const token = await authService.getAccessToken()
+        if (!token) return
+        const res = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const result = await res.json()
+        if (result.success) setRoles(result.data?.roles || [])
+      } catch (err) {
+        console.error('Failed to load profile:', err)
+      }
+    }
     fetchStats()
     fetchSubmissions()
+    fetchProfile()
   }, [])
 
   const statCards = [
@@ -51,6 +66,11 @@ export default function DashboardPage() {
     { label: 'Under Review', value: stats?.under_review, icon: Clock, color: 'text-amber-600' },
     { label: 'Revision Required', value: stats?.revision_required, icon: AlertCircle, color: 'text-rose-600' },
   ]
+
+  const canSeeReviewer = roles.includes('reviewer') || roles.includes('admin')
+  const canSeeEditor = roles.includes('editor') || roles.includes('admin')
+  const roleLabel =
+    roles.length > 0 ? roles.join(', ') : 'author'
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -62,18 +82,23 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Dashboard</h1>
               <p className="mt-1 text-slate-500 font-medium">Manage your roles and track academic progress.</p>
+              <p className="mt-2 text-xs font-mono text-slate-400">roles: {roleLabel}</p>
             </div>
 
             <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
               <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                 <LayoutDashboard className="h-4 w-4" /> Author
               </TabsTrigger>
-              <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                <Users className="h-4 w-4" /> Reviewer
-              </TabsTrigger>
-              <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                <Shield className="h-4 w-4" /> Editor
-              </TabsTrigger>
+              {canSeeReviewer && (
+                <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <Users className="h-4 w-4" /> Reviewer
+                </TabsTrigger>
+              )}
+              {canSeeEditor && (
+                <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <Shield className="h-4 w-4" /> Editor
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -130,13 +155,17 @@ export default function DashboardPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <ReviewerDashboard />
-          </TabsContent>
+          {canSeeReviewer && (
+            <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <ReviewerDashboard />
+            </TabsContent>
+          )}
 
-          <TabsContent value="editor" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <EditorDashboard />
-          </TabsContent>
+          {canSeeEditor && (
+            <TabsContent value="editor" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <EditorDashboard />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

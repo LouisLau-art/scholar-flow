@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { authService } from '@/services/auth'
 
 export default function ArticleDetailPage() {
   const { id } = useParams()
@@ -12,6 +14,7 @@ export default function ArticleDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [citeCopied, setCiteCopied] = useState(false)
+  const [roles, setRoles] = useState<string[] | null>(null)
 
   useEffect(() => {
     async function fetchArticle() {
@@ -35,7 +38,23 @@ export default function ArticleDetailPage() {
         setIsLoading(false)
       }
     }
+    async function fetchRoles() {
+      try {
+        const token = await authService.getAccessToken()
+        if (!token) return
+        const res = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (data?.success) {
+          setRoles(data?.data?.roles || null)
+        }
+      } catch (err) {
+        console.error('Failed to load roles:', err)
+      }
+    }
     fetchArticle()
+    fetchRoles()
   }, [id])
 
   async function handleDownload(articleId: string) {
@@ -81,6 +100,29 @@ export default function ArticleDetailPage() {
     }
   }
 
+  async function handlePublish() {
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) return
+      const res = await fetch('/api/v1/editor/publish', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ manuscript_id: article.id }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        setArticle(data.data)
+      } else {
+        console.error('Publish failed:', data)
+      }
+    } catch (err) {
+      console.error('Publish error:', err)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
@@ -99,6 +141,8 @@ export default function ArticleDetailPage() {
   const sourceCodeUrl = article?.source_code_url
   const datasetReady = Boolean(datasetUrl)
   const sourceCodeReady = Boolean(sourceCodeUrl)
+  const canPublish = Boolean(roles?.includes('editor') || roles?.includes('admin'))
+  const isPublished = article?.status === 'published' || Boolean(article?.published_at)
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -131,6 +175,16 @@ export default function ArticleDetailPage() {
               </span>
               <span className="flex items-center gap-1.5"><Hash className="h-4 w-4" /> DOI: {article.doi || 'Pending'}</span>
             </div>
+            {canPublish && !isPublished && (
+              <div>
+                <button
+                  onClick={handlePublish}
+                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
+                >
+                  Publish (dev)
+                </button>
+              </div>
+            )}
           </header>
 
           {/* Abstract Section */}
@@ -249,5 +303,3 @@ export default function ArticleDetailPage() {
     </div>
   )
 }
-
-import Link from 'next/link'

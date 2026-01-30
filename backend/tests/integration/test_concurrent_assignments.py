@@ -16,8 +16,9 @@ def _mock_supabase_with_side_effect(responses):
     return mock
 
 @pytest.mark.asyncio
-async def test_concurrent_reviewer_assignments(client: AsyncClient):
+async def test_concurrent_reviewer_assignments(client: AsyncClient, auth_token: str, monkeypatch):
     """验证并发分配审稿人不会导致异常"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     responses = []
     # 每个请求需要 2 次 execute: select -> insert
     for idx in range(5):
@@ -38,6 +39,7 @@ async def test_concurrent_reviewer_assignments(client: AsyncClient):
                     "manuscript_id": "00000000-0000-0000-0000-000000000000",
                     "reviewer_id": f"00000000-0000-0000-0000-00000000000{i}",
                 },
+                headers={"Authorization": f"Bearer {auth_token}"},
             )
 
         results = await asyncio.gather(*[assign(i) for i in range(5)])
