@@ -3,6 +3,8 @@
 **Feature Branch**: `013-portal-cms`
 **Date**: 2026-01-30
 
+**Migration**: `supabase/migrations/20260130193000_add_portal_cms.sql`
+
 ## Entities
 
 ### 1. CMS Page
@@ -42,7 +44,7 @@
 
 ## Validation Rules
 - `slug`: Regex `^[a-z0-9-]+$`.
-- `page_id` vs `url`: Exactly one should be set (or prioritize `page_id`).
+- `page_id` vs `url`: **不能同时设置**；允许两者都为空（用于“分组标题/下拉父级”）。
 - `order_index`: Unique per parent scope (preferred, but soft constraint ok).
 
 ## State Transitions

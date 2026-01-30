@@ -2,7 +2,7 @@
 
 **Feature Branch**: `013-portal-cms`
 **Created**: 2026-01-30
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "开启 Feature 013: 动态门户内容管理系统 (Lightweight CMS)..."
 
 ## Clarifications
@@ -67,3 +67,11 @@
 - **SC-002**: Editors can create and publish a new page with an image in under 2 minutes (Usability).
 - **SC-003**: System initializes with 5 standard pages fully accessible immediately after deployment.
 - **SC-004**: Public pages are fully rendered in the HTML source (SSR verified) for SEO compliance.
+
+## Implementation Notes
+
+- **DB Migration**: `supabase/migrations/20260130193000_add_portal_cms.sql`
+- **Backend API**: `backend/app/api/v1/cms.py` (注册于 `backend/main.py`)
+- **CMS 初始化**: `backend/app/core/init_cms.py`（启动时补齐 About/Board/Guidelines/Contact/Ethics）
+- **Frontend 管理入口**: `Dashboard → Editor → Website`（`frontend/src/components/EditorDashboard.tsx`）
+- **公开页面 SSR/ISR**: `frontend/src/app/journal/[slug]/page.tsx`（`revalidate=60`）

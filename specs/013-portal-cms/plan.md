@@ -101,18 +101,20 @@ backend/
 │   │   └── cms.py              # NEW: Pydantic Models
 │   ├── services/
 │   │   └── cms_service.py      # NEW: Business Logic
-│   └── main.py                 # UPDATE: Register router
+│   └── core/init_cms.py         # NEW: Seed default pages
+├── main.py                      # UPDATE: Register router + startup init
 └── tests/
 
 frontend/
 ├── src/
 │   ├── app/
-│   │   ├── (admin)/editor/cms/ # NEW: Admin Interface
 │   │   └── journal/[slug]/     # NEW: Dynamic Public Page
 │   ├── components/
 │   │   └── cms/                # NEW: Rich Text Editor, Menu Builder
-│   └── lib/
-│       └── api/cms.ts          # NEW: API Client
+│   ├── services/
+│   │   └── cms.ts              # NEW: API Client
+│   └── components/layout/
+│       └── SiteFooter.tsx      # NEW: Footer driven by CMS menu
 └── tests/
 ```
 
@@ -125,8 +127,8 @@ frontend/
 - **全栈切片**: Admin Panel -> API -> DB -> Public Render.
 
 ### 2. Dependencies & SDKs
-- **Rich Text**: `Tiptap` (Headless, flexible) or `React-Quill`. Research phase to decide.
-- **Sanitization**: `dompurify` (Frontend) or `bleach` (Backend).
+- **Rich Text**: `Tiptap`（已选型）
+- **Sanitization**: `bleach`（后端写入消毒）+ `isomorphic-dompurify`（前端渲染前二次消毒）
 
 ## Quality Assurance (QA Suite)
 

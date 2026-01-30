@@ -9,17 +9,17 @@ description: "Tasks for Dynamic Portal CMS implementation"
 
 ## Phase 1: Setup (Project Initialization)
 
-- [ ] T001 [P] Install frontend dependencies: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `isomorphic-dompurify` in `frontend/package.json`
-- [ ] T002 [P] Install backend dependencies: `bleach` in `backend/requirements.txt`
-- [ ] T003 [P] Create `cms_pages` and `cms_menu_items` tables migration with RLS in `supabase/migrations/`
-- [ ] T004 [P] Create `cms-assets` public storage bucket in Supabase via migration or setup script
+- [x] T001 [P] Install frontend dependencies: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `isomorphic-dompurify` in `frontend/package.json`
+- [x] T002 [P] Install backend dependencies: `bleach` in `backend/requirements.txt`
+- [x] T003 [P] Create `cms_pages` and `cms_menu_items` tables migration with RLS in `supabase/migrations/`
+- [x] T004 [P] Create `cms-assets` public storage bucket in Supabase via migration or setup script
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T005 [P] Implement `CMSPage` and `CMSMenuItem` Pydantic models in `backend/app/models/cms.py`
-- [ ] T006 [P] Implement `CMSService` for DB operations (CRUD for pages and menus) in `backend/app/services/cms_service.py`
-- [ ] T007 [P] Create `cms` API router and register in `backend/app/main.py`
-- [ ] T008 [P] Implement backend XSS sanitization using `bleach` in `backend/app/services/cms_service.py`
+- [x] T005 [P] Implement `CMSPage` and `CMSMenuItem` Pydantic models in `backend/app/models/cms.py`
+- [x] T006 [P] Implement `CMSService` for DB operations (CRUD for pages and menus) in `backend/app/services/cms_service.py`
+- [x] T007 [P] Create `cms` API router and register in `backend/main.py`
+- [x] T008 [P] Implement backend XSS sanitization using `bleach` in `backend/app/services/cms_service.py`
 
 ## Phase 3: User Story 1 - Editor Page Management (Priority: P1)
 
@@ -30,35 +30,39 @@ description: "Tasks for Dynamic Portal CMS implementation"
 - [ ] T010 [P] [US1] Implement "Reserved Slugs" validation and duplicate slug check in `backend/app/api/v1/cms.py`
 - [ ] T011 [P] [US1] Implement image upload proxy endpoint `POST /api/v1/cms/upload` in `backend/app/api/v1/cms.py`
 - [ ] T012 [US1] Create `TiptapEditor` component with image upload support in `frontend/src/components/cms/TiptapEditor.tsx`
-- [ ] T013 [US1] Create Page Management UI (List/Edit) in `frontend/src/app/(admin)/editor/cms/page.tsx`
-- [ ] T014 [P] [US1] Add unit tests for CMS API endpoints (including slug conflict and audit tests) in `backend/tests/test_cms_api.py`
+- [x] T009 [P] [US1] Implement `POST /api/v1/cms/pages` and `PATCH /api/v1/cms/pages/{slug}` with Audit Trail logging (API-006) in `backend/app/api/v1/cms.py`
+- [x] T010 [P] [US1] Implement "Reserved Slugs" validation and duplicate slug check in `backend/app/api/v1/cms.py`
+- [x] T011 [P] [US1] Implement image upload proxy endpoint `POST /api/v1/cms/upload` in `backend/app/api/v1/cms.py`
+- [x] T012 [US1] Create `TiptapEditor` component with image upload support in `frontend/src/components/cms/TiptapEditor.tsx`
+- [x] T013 [US1] Create Page Management UI (List/Edit) in `frontend/src/components/cms/CmsPagesPanel.tsx` (入口：`Dashboard → Editor → Website`)
+- [x] T014 [P] [US1] Add unit tests for CMS API endpoints (including slug conflict tests) in `backend/tests/unit/test_cms_api.py`
 
 ## Phase 4: User Story 2 - Dynamic Page Rendering (Priority: P1)
 
 **Goal**: Publicly render dynamic pages with SSR and SEO support.
 **Independent Test**: Visit `/journal/about` and verify content matches the published database entry.
 
-- [ ] T015 [P] [US2] Implement `GET /api/v1/cms/pages/{slug}` with 404 for drafts in `backend/app/api/v1/cms.py`
-- [ ] T016 [US2] Create dynamic route `app/journal/[slug]/page.tsx` using SSR and DOMPurify for sanitization
-- [ ] T017 [US2] Configure Incremental Static Regeneration (ISR) with `revalidate: 60` in `app/journal/[slug]/page.tsx`
-- [ ] T018 [US2] Create branded 404 page for missing CMS slugs in `frontend/src/app/not-found.tsx` (or specific CMS handler)
+- [x] T015 [P] [US2] Implement `GET /api/v1/cms/pages/{slug}` with 404 for drafts in `backend/app/api/v1/cms.py`
+- [x] T016 [US2] Create dynamic route `frontend/src/app/journal/[slug]/page.tsx` using SSR and DOMPurify for sanitization
+- [x] T017 [US2] Configure Incremental Static Regeneration (ISR) with `revalidate: 60` in `frontend/src/app/journal/[slug]/page.tsx`
+- [x] T018 [US2] Create branded 404 page for missing CMS slugs in `frontend/src/app/not-found.tsx`
 
 ## Phase 5: User Story 3 - Menu & Navigation Management (Priority: P2)
 
 **Goal**: Allow editors to manage Navbar and Footer links.
 **Independent Test**: Update menu via admin UI and verify changes on the public homepage.
 
-- [ ] T019 [P] [US3] Implement `GET /api/v1/cms/menu` and `PUT /api/v1/cms/menu` in `backend/app/api/v1/cms.py`
-- [ ] T020 [US3] Create Menu Builder UI (Hierarchical list) in `frontend/src/app/(admin)/editor/cms/menu/page.tsx`
-- [ ] T021 [US3] Update `Navbar` and `Footer` components to fetch data from CMS menu API in `frontend/src/components/layout/`
+- [x] T019 [P] [US3] Implement `GET /api/v1/cms/menu` and `PUT /api/v1/cms/menu` in `backend/app/api/v1/cms.py`
+- [x] T020 [US3] Create Menu Builder UI (MVP: flat list) in `frontend/src/components/cms/CmsMenuPanel.tsx` (入口：`Dashboard → Editor → Website`)
+- [x] T021 [US3] Update `SiteHeader` and add `SiteFooter` to fetch data from CMS menu API in `frontend/src/components/layout/`
 
 ## Phase 6: User Story 4 - Preset Content Initialization (Priority: P3)
 
 **Goal**: Auto-initialize standard pages.
 **Independent Test**: Fresh DB deployment should contain placeholder content for standard pages.
 
-- [ ] T022 [P] [US4] Implement initialization script/service to seed `cms_pages` with standard entries in `backend/app/core/init_cms.py`
-- [ ] T023 [US4] Trigger CMS initialization on application startup in `backend/app/main.py`
+- [x] T022 [P] [US4] Implement initialization script/service to seed `cms_pages` with standard entries in `backend/app/core/init_cms.py`
+- [x] T023 [US4] Trigger CMS initialization on application startup in `backend/main.py`
 
 ## Final Phase: Polish & Cross-Cutting Concerns
 
