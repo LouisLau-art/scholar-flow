@@ -42,7 +42,7 @@
 - [ ] T007 [P] 创建 Crossref XML 生成器 `backend/app/services/crossref_client.py` (基础结构)
 - [ ] T008 [P] 创建 Dublin Core 映射器 `backend/app/services/oaipmh/dublin_core.py` (基础结构)
 - [ ] T009 注册 DOI API 路由 `backend/app/api/v1/doi.py` 在 `backend/app/api/v1/__init__.py`
-- [ ] T010 注册 OAI-PMH 路由 `backend/app/api/v1/oaipmh.py` 在 `backend/app/api/v1/__init__.py`
+- [ ] T010 注册 OAI-PMH 路由 `backend/app/api/oaipmh.py` 在 `backend/app/main.py`（无版本前缀）
 
 **Checkpoint**: 基础设施就绪 - 可以开始 User Story 实现
 
@@ -146,10 +146,10 @@
   - Token 编码/解码 (Base64)
   - 游标分页 SQL
   - 每页 100 条限制
-- [ ] T035 [US3] 实现 OAI-PMH API 端点 `backend/app/api/v1/oaipmh.py`
-  - GET `/api/oai-pmh` - 统一入口
+- [ ] T035 [US3] 实现 OAI-PMH API 端点 `backend/app/api/oaipmh.py`
+  - GET `/api/oai-pmh` - 统一入口（无版本前缀，符合 OAI-PMH 标准）
   - POST `/api/oai-pmh` - POST 方式支持
-- [ ] T036 [US3] 实现速率限制中间件 (60 req/min/IP) `backend/app/api/v1/oaipmh.py`
+- [ ] T036 [US3] 实现速率限制中间件 (60 req/min/IP) `backend/app/api/oaipmh.py`
 
 **Checkpoint**: OAI-PMH 接口功能完整可测试
 

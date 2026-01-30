@@ -147,7 +147,7 @@
 
 - **DOIRegistration**: DOI 注册记录，包含 article_id, doi, status (pending/registered/failed), attempts, created_at, registered_at, error_message
 - **DOITask**: DOI 任务队列项，包含 registration_id, scheduled_at, retry_count, last_error
-- **OAIRecord**: OAI-PMH 记录映射，包含 article_id, oai_identifier, datestamp, set_spec
+- **OAIRecord**: OAI-PMH 记录（虚拟实体，无独立表）- 通过查询 `articles` 表动态生成，oai_identifier 格式为 `oai:scholarflow:article:{id}`，datestamp 使用 `published_at`
 
 ## Success Criteria *(mandatory)*
 

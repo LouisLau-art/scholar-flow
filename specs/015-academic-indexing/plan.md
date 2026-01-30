@@ -58,9 +58,10 @@ specs/015-academic-indexing/
 ```text
 backend/
 ├── app/
-│   ├── api/v1/
-│   │   ├── doi.py           # DOI 注册 API 端点
-│   │   └── oaipmh.py        # OAI-PMH 接口端点
+│   ├── api/
+│   │   ├── v1/
+│   │   │   └── doi.py           # DOI 注册 API 端点
+│   │   └── oaipmh.py            # OAI-PMH 接口端点 (无版本前缀)
 │   ├── core/
 │   │   └── doi_worker.py    # 数据库队列 Worker
 │   ├── models/

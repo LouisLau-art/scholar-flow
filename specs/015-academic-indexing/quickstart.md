@@ -18,11 +18,23 @@ CROSSREF_API_URL=https://test.crossref.org/servlet/deposit  # 测试环境
 JOURNAL_TITLE="Scholar Flow Journal"
 JOURNAL_ISSN=1234-5678
 
-# 邮件通知 (可选)
+# 邮件通知 (失败通知必需)
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
-ADMIN_EMAIL=admin@example.com
+SMTP_USER=your-smtp-user           # SMTP 认证用户名
+SMTP_PASSWORD=your-smtp-password   # SMTP 认证密码
+SMTP_FROM=noreply@example.com      # 发件人地址
+ADMIN_EMAIL=admin@example.com      # 接收失败通知的管理员邮箱
+
+# 可选: 使用 TLS
+SMTP_TLS=true
 ```
+
+**邮件服务提供商示例**:
+- **Gmail SMTP**: `smtp.gmail.com:587` (需开启应用专用密码)
+- **AWS SES**: `email-smtp.us-east-1.amazonaws.com:587`
+- **SendGrid**: `smtp.sendgrid.net:587`
+- **阿里云邮件推送**: `smtpdm.aliyun.com:465`
 
 ### Dependencies
 
@@ -128,7 +140,7 @@ python -m app.core.doi_worker
 | `backend/app/services/doi_service.py` | DOI 业务逻辑 |
 | `backend/app/core/doi_worker.py` | 任务队列 Worker |
 | `backend/app/api/v1/doi.py` | DOI API 端点 |
-| `backend/app/api/v1/oaipmh.py` | OAI-PMH 端点 |
+| `backend/app/api/oaipmh.py` | OAI-PMH 端点 (无版本前缀) |
 | `frontend/src/lib/metadata/citation.ts` | Meta Tags 生成 |
 | `frontend/src/app/articles/[id]/page.tsx` | 文章详情页 (含 Meta) |
 
