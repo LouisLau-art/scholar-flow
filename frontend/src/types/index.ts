@@ -1,0 +1,103 @@
+// === ScholarFlow 核心业务接口定义 ===
+
+export type ManuscriptStatus = 
+  | 'draft' 
+  | 'submitted' 
+  | 'returned_for_revision' 
+  | 'under_review' 
+  | 'approved' 
+  | 'pending_payment' 
+  | 'published' 
+  | 'rejected';
+
+export interface Manuscript {
+  id: string;
+  title: string;
+  abstract: string;
+  file_path?: string;
+  author_id: string;
+  editor_id?: string;
+  status: ManuscriptStatus;
+  kpi_owner_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewReport {
+  id: string;
+  manuscript_id: string;
+  reviewer_id: string;
+  token: string;
+  expiry_date: string;
+  status: 'invited' | 'accepted' | 'completed' | 'expired' | 'revoked';
+  content?: string;
+  score?: number;
+}
+
+export interface Invoice {
+  id: string;
+  manuscript_id: string;
+  amount: number;
+  pdf_url?: string;
+  status: 'unpaid' | 'paid';
+  confirmed_at?: string;
+}
+
+export type NotificationType = 'submission' | 'review_invite' | 'decision' | 'chase' | 'system'
+
+export interface Notification {
+  id: string
+  user_id: string
+  manuscript_id?: string | null
+  type: NotificationType
+  title: string
+  content: string
+  is_read: boolean
+  created_at: string
+}
+
+// === Analytics Dashboard Types ===
+
+export interface KPISummary {
+  new_submissions_month: number
+  total_pending: number
+  avg_first_decision_days: number
+  yearly_acceptance_rate: number
+  apc_revenue_month: number
+  apc_revenue_year: number
+}
+
+export interface TrendData {
+  month: string
+  submission_count: number
+  acceptance_count: number
+}
+
+export interface GeoData {
+  country: string
+  submission_count: number
+}
+
+export interface PipelineData {
+  stage: string
+  count: number
+}
+
+export interface DecisionData {
+  decision: string
+  count: number
+}
+
+export interface AnalyticsSummaryResponse {
+  kpi: KPISummary
+}
+
+export interface TrendsResponse {
+  trends: TrendData[]
+  pipeline: PipelineData[]
+  decisions: DecisionData[]
+}
+
+export interface GeoResponse {
+  countries: GeoData[]
+}

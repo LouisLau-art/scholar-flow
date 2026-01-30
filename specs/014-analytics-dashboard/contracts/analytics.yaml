@@ -1,0 +1,60 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow Analytics API
+  version: 1.0.0
+paths:
+  /api/v1/analytics/summary:
+    get:
+      summary: Get core KPI card data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: KPI summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KPISummary'
+
+  /api/v1/analytics/trends:
+    get:
+      summary: Get submission and decision trends (12 months)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Time-series trend data
+
+  /api/v1/analytics/geo:
+    get:
+      summary: Get top 10 author countries
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Geo distribution data
+
+  /api/v1/analytics/export:
+    get:
+      summary: Export analytics report
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [xlsx, csv]
+      responses:
+        '200':
+          description: File download (binary)
+
+components:
+  schemas:
+    KPISummary:
+      type: object
+      properties:
+        new_submissions_month: {type: integer}
+        total_pending: {type: integer}
+        avg_first_decision_days: {type: number}
+        yearly_acceptance_rate: {type: number}
+        apc_revenue_month: {type: number}
+        apc_revenue_year: {type: number}

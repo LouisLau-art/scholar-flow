@@ -1,0 +1,38 @@
+# Node.js
+node_modules/
+dist/
+build/
+.next/
+*.log
+.env*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Test coverage
+/coverage/
+/backend/coverage/
+/frontend/coverage/
+htmlcov/
+*.coverage
+*.xml
+*.html
+
+# Supabase
+.supabase/
+.supabase.toml
+
+# Universal
+.DS_Store
+*.tmp
+*.swp
+.vscode/
+.idea/
+
+# Local scratch files (do not commit)
+/Text File.txt
+/apple-touch-icon.png
