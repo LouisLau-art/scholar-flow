@@ -19,9 +19,12 @@ from app.api.v1 import (
     matchmaking,
     analytics,
     doi,
+    cms,
 )
 from app.api import oaipmh
 from app.core.middleware import ExceptionHandlerMiddleware
+from app.core.init_cms import ensure_cms_initialized
+from app.lib.api_client import supabase_admin
 
 app = FastAPI(
     title="ScholarFlow API",
@@ -57,6 +60,13 @@ app.include_router(matchmaking.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(doi.router, prefix="/api/v1")
 app.include_router(oaipmh.router)
+app.include_router(cms.router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+async def _startup_init_cms() -> None:
+    # 中文注释: CMS 初始化应容错（未迁移时不阻塞启动）
+    ensure_cms_initialized(supabase_admin)
 
 
 @app.get("/")
