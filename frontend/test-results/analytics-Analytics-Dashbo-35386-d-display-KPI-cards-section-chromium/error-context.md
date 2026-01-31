@@ -1,0 +1,44 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e5]
+        - generic [ref=e7]:
+          - heading "分析仪表盘" [level=1] [ref=e8]
+          - paragraph [ref=e9]: 期刊运营核心指标概览
+      - generic [ref=e10]:
+        - button "Excel" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+          - text: Excel
+        - button "CSV" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+          - text: CSV
+    - heading "核心指标" [level=2] [ref=e20]
+    - heading "财务指标" [level=2] [ref=e51]
+    - heading "投稿趋势" [level=2] [ref=e68]
+    - generic [ref=e74]:
+      - heading "状态分布" [level=2] [ref=e76]
+      - heading "决定分布" [level=2] [ref=e83]
+    - heading "作者地理分布" [level=2] [ref=e90]
+  - contentinfo [ref=e96]:
+    - generic [ref=e97]:
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - generic [ref=e100]: ScholarFlow
+          - generic [ref=e101]: Modern academic workflow platform.
+        - navigation [ref=e102]:
+          - link "About" [ref=e103] [cursor=pointer]:
+            - /url: /journal/about
+          - link "Guidelines" [ref=e104] [cursor=pointer]:
+            - /url: /journal/guidelines
+          - link "Contact" [ref=e105] [cursor=pointer]:
+            - /url: /journal/contact
+          - link "Ethics" [ref=e106] [cursor=pointer]:
+            - /url: /journal/ethics
+      - generic [ref=e107]: © 2026 ScholarFlow. All rights reserved.
+  - region "Notifications alt+T"
+  - alert [ref=e108]
+```

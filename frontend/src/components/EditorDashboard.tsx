@@ -154,12 +154,14 @@ export default function EditorDashboard() {
         </Tabs>
 
         {/* Assign Modal */}
-        <ReviewerAssignModal
-          isOpen={isAssignModalOpen}
-          onClose={() => setIsAssignModalOpen(false)}
-          onAssign={handleAssignReviewer}
-          manuscriptId={selectedManuscriptId}
-        />
+        {isAssignModalOpen && selectedManuscriptId && (
+          <ReviewerAssignModal
+            isOpen={isAssignModalOpen}
+            onClose={() => setIsAssignModalOpen(false)}
+            onAssign={handleAssignReviewer}
+            manuscriptId={selectedManuscriptId}
+          />
+        )}
       </div>
     </div>
   )

@@ -9,6 +9,7 @@ EXPECTED_ROUTES = {
     ("POST", "/api/v1/manuscripts/upload"),
     ("POST", "/api/v1/manuscripts/{manuscript_id}/quality-check"),
     ("GET", "/api/v1/manuscripts/search"),
+    ("GET", "/api/v1/manuscripts/mine"),  # Added missing route
     ("GET", "/api/v1/manuscripts/articles/{id}"),
     ("GET", "/api/v1/manuscripts/journals/{slug}"),
     ("GET", "/api/v1/editor/pipeline"),
@@ -40,6 +41,12 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/public/topics"),
     ("GET", "/api/v1/public/announcements"),
     ("GET", "/"),
+    # Admin User Management (017)
+    ("GET", "/api/v1/admin/users"),
+    ("POST", "/api/v1/admin/users"),
+    ("PUT", "/api/v1/admin/users/{user_id}/role"),
+    ("GET", "/api/v1/admin/users/{user_id}/role-changes"),
+    ("POST", "/api/v1/admin/users/invite-reviewer"),
 }
 
 @pytest.mark.asyncio
@@ -54,6 +61,8 @@ async def test_api_paths_match_expected():
             if method in {"HEAD", "OPTIONS"}:
                 continue
             actual_routes.add((method, route.path))
-
+    
+    # 允许 EXPECTED_ROUTES 是 actual_routes 的子集 (即允许有未测试的新路由)
+    # 但反过来，所有 Expected 的必须存在
     missing = EXPECTED_ROUTES - actual_routes
     assert not missing, f"Missing routes: {sorted(missing)}"

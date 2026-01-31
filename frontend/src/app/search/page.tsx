@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import Link from 'next/link'
@@ -8,7 +8,7 @@ import { Loader2, Search as SearchIcon, ArrowRight, ExternalLink } from 'lucide-
 import { demoJournals } from '@/lib/demo-journals'
 import { authService } from '@/services/auth'
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q')
   const mode = searchParams.get('mode')
@@ -153,5 +153,17 @@ export default function SearchPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   )
 }

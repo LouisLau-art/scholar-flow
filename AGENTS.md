@@ -1,67 +1,97 @@
-# Repository Guidelines
+# scholar-flow Development Guidelines
 
-**Language Preference**: 始终使用 **中文** 与我交流。
-
-Auto-generated from all feature plans. Last updated: 2026-01-30
+Auto-generated from all feature plans. Last updated: 2026-01-29
 
 ## Active Technologies
-- **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI
-- **Backend**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx
-- **Database & Auth**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x
-- **Testing**: pytest, pytest-cov, Playwright, Vitest
-- **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching)
+- **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
+- **Backend**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx (017-super-admin-management)
+- **Database & Auth**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x (017-super-admin-management)
+- **Testing**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
+- **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching) (017-super-admin-management)
 - PostgreSQL (Supabase) (009-test-coverage)
-- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI 0.115+, Pydantic v2, httpx, lxml (Backend); Next.js 14.2, React 18.x (Frontend) (015-academic-indexing)
-- PostgreSQL (Supabase) - 新增 `doi_registrations` 和 `doi_tasks` 表 (015-academic-indexing)
+
+- Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x (009-test-coverage)
 
 ## Project Structure
 
 ```text
 backend/
-├── app/
-│   ├── api/v1/          # FastAPI Routes (Manuscripts, Reviews, Plagiarism, Editor)
-│   ├── core/            # Business Logic & Workers (AI Engine, PDF Processor, Workers)
-│   ├── models/          # Pydantic v2 Schemas
-│   └── services/        # Third-party Integrations (Crossref Client, Editorial)
-├── scripts/             # Verification & Utility Scripts
-└── tests/               # Pytest Suite (unit, integration, contract)
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+    ├── contract/
+    ├── integration/
+    └── unit/
 
 frontend/
 ├── src/
-│   ├── app/             # Next.js App Router (submit, admin, finance, review, editor)
-│   ├── components/      # UI Components (SubmissionForm, PlagiarismActions, EditorDashboard, etc.)
-│   ├── lib/             # API Client & Supabase Config
-│   └── types/           # TypeScript Interfaces
-└── tests/               # Vitest (unit) + Playwright (e2e)
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+    ├── unit/
+    └── e2e/
 ```
 
 ## Commands
 
-### Backend
-- **Run**: `uvicorn main:app --reload`
-- **Tests**: `pytest` (all tests), `pytest --cov=src --cov-report=html` (with coverage)
-- **Linting**: `ruff check .`
+### Backend Tests
+```bash
+cd backend
+pytest                          # Run all tests
+pytest --cov=src --cov-report=html  # Run with coverage
+pytest -m unit                  # Unit tests only
+pytest -m integration           # Integration tests only
+pytest -m auth                  # Authentication tests
+pytest -m error                 # Error handling tests
+pytest -m boundary              # Boundary condition tests
+pytest -m concurrent            # Concurrent request tests
+```
 
-### Frontend
-- **Run**: `pnpm dev`
-- **Tests**: `npm run test` (Vitest unit tests), `npm run test:coverage` (with coverage)
-- **E2E Tests**: `npm run test:e2e` (Playwright), `npm run test:e2e:ui` (with UI)
-- **Linting**: `pnpm lint`
+### Frontend Tests
+```bash
+cd frontend
+npm run test                    # Unit tests (Vitest)
+npm run test:coverage           # Unit tests with coverage
+npm run test:e2e                # E2E tests (Playwright)
+npm run test:e2e:ui             # E2E tests with UI mode
+```
 
-### Combined
-- **All Tests**: `./scripts/run-all-tests.sh`
-- **Coverage Report**: `./scripts/generate-coverage-report.sh`
-
-### Database
-- **Migration**: `supabase migration new [name]`
+### Combined Tests
+```bash
+./scripts/run-all-tests.sh      # Run all tests
+./scripts/generate-coverage-report.sh  # Generate coverage reports
+```
 
 ## Code Style
-- **Naming**: camelCase for Frontend, snake_case for Backend.
-- **Comments**: Mandatory **Chinese comments** for core logic (algorithms, security).
-- **Architecture**: Server Components first, unified API client encapsulation.
-- **Strict QA**: **100% test pass rate** required for all feature deliveries.
-- **Native Only**: Use native Supabase SDKs; explicit full-path routing only.
-- **Type Safety**: TypeScript (frontend) and Python type hints (backend) required.
+
+Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
+
+### Python
+- Use pytest for testing
+- Follow PEP 8
+- Type hints required
+- Chinese comments for critical logic
+
+### TypeScript
+- Use Vitest for unit tests
+- Use Playwright for E2E tests
+- Follow ESLint rules
+- Page Object Model for E2E tests
+
+## Test Coverage Requirements
+
+- **Backend**: >80% coverage (line + branch)
+- **Frontend**: >70% coverage (line + branch)
+- **Key Business Logic**: 100% coverage
+
+- **E2E Tests**: 5+ critical user flows
+
+## Recent Changes
+- 017-super-admin-management: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, React 18.x, Next.js 14.2.x, Shadcn/UI, Tailwind CSS 3.4.x
+- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 ## 🛡️ Security & Authentication Principles
 - **Authentication First**: All sensitive operations MUST require authentication. Never allow unauthenticated access to user-specific data.
@@ -117,6 +147,8 @@ Unit Tests - Test individual functions/components
 - **Field Constraints**: Always specify min/max length, format, and business rules
 - **Type Safety**: Use TypeScript (frontend) and type hints (Python) extensively
 
+
+
 ## 📊 Quality Assurance Standards
 ### Code Quality
 - **Type Safety**: 100% type coverage (TypeScript, Python type hints)
@@ -130,11 +162,7 @@ Unit Tests - Test individual functions/components
 - **Continuous Testing**: Run tests on every commit
 - **CI/CD Integration**: Automated testing in CI pipeline
 
-### Performance Standards
-- **Response Time**: API responses < 500ms for standard requests
-- **Page Load**: Frontend page loads < 2 seconds
-- **Database Queries**: Optimize queries to avoid N+1 problems
-- **Caching Strategy**: Implement caching for frequently accessed data
+
 
 ## 🎯 User Experience Principles
 ### Feature Completeness
@@ -154,27 +182,20 @@ Unit Tests - Test individual functions/components
 - **Data Integrity**: Ensure data consistency across the system
 - **Audit Trail**: Track who made what changes and when
 
+
+
 ## 🚀 Deployment & Operations
 ### Environment Management
 - **Development vs Production**: Clear separation of dev/prod configurations
 - **Environment Variables**: Use proper env vars for configuration
 - **Secret Management**: Never commit secrets to version control
 
-### Hot Reload Awareness
-- **Development**: Use `--reload` for automatic restart (FastAPI) and HMR (Next.js)
-- **Production**: Manual restart required; hot reload disabled
-- **State Management**: Be aware that restarts clear in-memory state
 
-### Monitoring & Logging
-- **Structured Logging**: Use consistent log format with timestamps
-- **Error Tracking**: Monitor and track all errors
-- **Performance Monitoring**: Monitor response times and resource usage
-- **Security Auditing**: Log security-relevant events
 
 ## 📈 Continuous Improvement
 ### Post-Mortem Culture
 - **Learn from Issues**: Document and learn from every bug or issue
-- **Root Cause Analysis**: Find and fix root causes, not just symptoms
+- **Root-Cause Analysis**: Find and fix root causes, not just symptoms
 - **Process Improvement**: Update processes based on lessons learned
 
 ### Regular Reviews
@@ -186,11 +207,6 @@ Unit Tests - Test individual functions/components
 - **Keep Updated**: Update documentation when code changes
 - **Lessons Learned**: Document patterns and anti-patterns
 - **Best Practices**: Share and document best practices
-
-## Recent Changes
-- 015-academic-indexing: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI 0.115+, Pydantic v2, httpx, lxml (Backend); Next.js 14.2, React 18.x (Frontend)
-- 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

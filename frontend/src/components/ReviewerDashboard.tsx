@@ -8,8 +8,17 @@ import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 
+interface ReviewTask {
+  id: string
+  manuscript_id: string
+  manuscripts: {
+    title: string
+    abstract: string
+  }
+}
+
 export default function ReviewerDashboard() {
-  const [tasks, setTasks] = useState([])
+  const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<any>(null)

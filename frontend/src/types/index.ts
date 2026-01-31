@@ -8,7 +8,8 @@ export type ManuscriptStatus =
   | 'approved' 
   | 'pending_payment' 
   | 'published' 
-  | 'rejected';
+  | 'rejected'
+  | 'high_similarity';
 
 export interface Manuscript {
   id: string;

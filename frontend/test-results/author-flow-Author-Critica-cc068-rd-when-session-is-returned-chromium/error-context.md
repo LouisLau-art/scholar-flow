@@ -1,0 +1,50 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - link "ScholarFlow" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e6]
+        - generic [ref=e9]: ScholarFlow
+      - heading "Sign in to your account" [level=2] [ref=e10]
+      - paragraph [ref=e11]: Manage your research and peer reviews in one place.
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e16]: Email address
+          - generic [ref=e17]:
+            - img [ref=e18]
+            - textbox "name@university.edu" [ref=e21]
+        - generic [ref=e22]:
+          - generic [ref=e23]: Password
+          - generic [ref=e24]:
+            - img [ref=e25]
+            - textbox [ref=e28]
+        - button "Sign In" [ref=e29] [cursor=pointer]:
+          - text: Sign In
+          - img [ref=e30]
+      - paragraph [ref=e32]:
+        - text: Not a member?
+        - link "Create an account" [ref=e33] [cursor=pointer]:
+          - /url: /signup
+  - contentinfo [ref=e34]:
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]: ScholarFlow
+          - generic [ref=e39]: Modern academic workflow platform.
+        - navigation [ref=e40]:
+          - link "About" [ref=e41] [cursor=pointer]:
+            - /url: /journal/about
+          - link "Guidelines" [ref=e42] [cursor=pointer]:
+            - /url: /journal/guidelines
+          - link "Contact" [ref=e43] [cursor=pointer]:
+            - /url: /journal/contact
+          - link "Ethics" [ref=e44] [cursor=pointer]:
+            - /url: /journal/ethics
+      - generic [ref=e45]: © 2026 ScholarFlow. All rights reserved.
+  - region "Notifications alt+T"
+  - alert [ref=e46]
+```
