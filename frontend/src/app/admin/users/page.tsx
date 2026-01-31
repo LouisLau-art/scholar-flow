@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { adminUserService } from '@/services/admin/userService';
 import { UserTable } from '@/components/admin/UserTable';
 import { UserFilters } from '@/components/admin/UserFilters';
@@ -33,11 +33,7 @@ export default function UserManagementPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [page, debouncedSearch, role]);
-
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const response = await adminUserService.getUsers(page, 10, debouncedSearch, role);
@@ -49,7 +45,11 @@ export default function UserManagementPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, debouncedSearch, role]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleRoleChange = (newRole: string) => {
     setRole(newRole);

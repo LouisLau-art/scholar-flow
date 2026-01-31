@@ -6,8 +6,17 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { authService } from "@/services/auth"
 
+interface ReviewTask {
+  id: string
+  manuscript_id: string
+  manuscripts: {
+    title: string
+    abstract: string
+  }
+}
+
 export default function ReviewerDashboard() {
-  const [tasks, setTasks] = useState([])
+  const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<any>(null)
@@ -102,7 +111,7 @@ export default function ReviewerDashboard() {
                   <div className="mb-6">
                     <h4 className="font-serif text-2xl">Structured Peer Review</h4>
                     <p className="text-sm text-slate-500">
-                      Submit your professional assessment for "{task.manuscripts?.title}"
+                      Submit your professional assessment for &quot;{task.manuscripts?.title}&quot;
                     </p>
                   </div>
 

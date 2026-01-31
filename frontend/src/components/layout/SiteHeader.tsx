@@ -163,7 +163,7 @@ export default function SiteHeader() {
               </ul>
             </div>
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-              <h4 className="font-bold mb-2">Can't find your journal?</h4>
+              <h4 className="font-bold mb-2">Can&apos;t find your journal?</h4>
               <p className="text-sm text-slate-500 mb-4">Explore our full portfolio of 200+ high-impact journals.</p>
               <Link href="#" className="text-sm font-bold text-blue-600 flex items-center gap-1 hover:underline">
                 View all journals →

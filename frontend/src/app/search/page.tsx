@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import Link from 'next/link'
@@ -8,7 +8,7 @@ import { Loader2, Search as SearchIcon, ArrowRight, ExternalLink } from 'lucide-
 import { demoJournals } from '@/lib/demo-journals'
 import { authService } from '@/services/auth'
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q')
   const mode = searchParams.get('mode')
@@ -109,7 +109,7 @@ export default function SearchPage() {
         <header className="mb-12 border-b border-slate-200 pb-8">
           <h1 className="text-3xl font-serif font-bold text-slate-900 flex items-center gap-4">
             <SearchIcon className="h-8 w-8 text-blue-600" />
-            Search Results for "{query}"
+            Search Results for &quot;{query}&quot;
           </h1>
           <p className="mt-2 text-slate-500 font-medium">Showing top results in {currentMode}</p>
         </header>
@@ -153,5 +153,17 @@ export default function SearchPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   )
 }

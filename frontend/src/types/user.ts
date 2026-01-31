@@ -11,6 +11,9 @@ export interface User {
   is_verified: boolean;
 }
 
+// Alias for single user response
+export type UserResponse = User;
+
 export interface Pagination {
   total: number;
   page: number;

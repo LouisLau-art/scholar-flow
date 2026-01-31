@@ -1,18 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, Search, Users, Check, UserPlus } from 'lucide-react'
 import { InviteReviewerDialog } from '@/components/admin/InviteReviewerDialog'
 import { adminUserService } from '@/services/admin/userService'
 import { toast } from 'sonner'
+import { User } from '@/types/user'
 
-interface Reviewer {
-// ...
+interface ReviewerAssignModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onAssign: (reviewerId: string) => void
+  manuscriptId: string
+}
+
 export default function ReviewerAssignModal({
   isOpen,
   onClose,
   onAssign,
   manuscriptId
 }: ReviewerAssignModalProps) {
-  const [reviewers, setReviewers] = useState<Reviewer[]>([])
+  const [reviewers, setReviewers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReviewer, setSelectedReviewer] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -20,8 +26,27 @@ export default function ReviewerAssignModal({
   // Invite Dialog
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
 
+  const fetchReviewers = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Fetch users with role 'reviewer'
+      // Page 1, 100 items (to get a good list), filtering by search term if any
+      const response = await adminUserService.getUsers(1, 100, searchTerm, 'reviewer')
+      setReviewers(response.data)
+    } catch (error) {
+      console.error('Failed to fetch reviewers:', error)
+      toast.error('Failed to load reviewers')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [searchTerm])
+
   useEffect(() => {
-// ...
+    if (isOpen) {
+      fetchReviewers()
+    }
+  }, [isOpen, fetchReviewers])
+
   const handleAssign = () => {
     if (selectedReviewer) {
       onAssign(selectedReviewer)
@@ -32,15 +57,17 @@ export default function ReviewerAssignModal({
 
   const handleInviteConfirm = async (email: string, fullName: string) => {
     try {
-      const newUser = await adminUserService.inviteReviewer({
+      await adminUserService.inviteReviewer({
         email,
         full_name: fullName,
         manuscript_id: manuscriptId
       })
       toast.success('Reviewer invited successfully!')
-      // Refresh list or select new user
+      // Refresh list to show the new reviewer (if they are returned or if we just want to refresh)
+      // Note: The invited user might not immediately show up if they haven't accepted, 
+      // but for ad-hoc reviewer flow, they are created immediately as 'reviewer'.
       fetchReviewers()
-      // Optionally pre-select the new user if we can find them
+      setIsInviteDialogOpen(false)
     } catch (error) {
       console.error('Invite failed:', error)
       throw error // Let dialog handle error
@@ -94,7 +121,44 @@ export default function ReviewerAssignModal({
             </div>
 
             {isLoading ? (
-// ...
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : reviewers.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                No reviewers found. Invite a new one?
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {reviewers.map((reviewer) => (
+                  <div
+                    key={reviewer.id}
+                    onClick={() => setSelectedReviewer(reviewer.id)}
+                    className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all border ${
+                      selectedReviewer === reviewer.id
+                        ? 'bg-blue-50 border-blue-200 shadow-sm'
+                        : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
+                        selectedReviewer === reviewer.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {reviewer.full_name?.charAt(0) || reviewer.email.charAt(0)}
+                      </div>
+                      <div>
+                        <div className={`font-medium ${selectedReviewer === reviewer.id ? 'text-blue-900' : 'text-slate-900'}`}>
+                          {reviewer.full_name || 'Unnamed'}
+                        </div>
+                        <div className="text-sm text-slate-500">{reviewer.email}</div>
+                      </div>
+                    </div>
+                    {selectedReviewer === reviewer.id && (
+                      <Check className="h-5 w-5 text-blue-600" />
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
