@@ -311,8 +311,13 @@ class UserManagementService:
             )
             
             # 5. Send Notification (T086)
-            # Integrate with Feature 011 (mocked for now as I don't see the email service code easily here)
-            # I will just log it for T086.
+            print("-" * 50)
+            print(f"🚀 [INTERNAL USER CREATED]")
+            print(f"📧 Email: {email}")
+            print(f"🔑 Temp Password: {temp_password}")
+            print(f"🎭 Role: {role}")
+            print("-" * 50)
+
             self.log_email_notification(
                 recipient_email=email,
                 notification_type="account_created",
@@ -406,14 +411,17 @@ class UserManagementService:
             )
             
             # 5. Send Notification (Email with Magic Link)
-            # Log the link for now (In real prod, send email)
-            # WARNING: Logging magic link is sensitive. In prod we mask it. 
-            # For this feature, we log that we sent it.
+            print("-" * 50)
+            print(f"🔗 [REVIEWER INVITE GENERATED]")
+            print(f"📧 Recipient: {email}")
+            print(f"🌐 Magic Link: {magic_link}")
+            print("-" * 50)
+
             self.log_email_notification(
                 recipient_email=email,
                 notification_type="reviewer_invite",
                 status="sent",
-                error_message=f"Magic Link generated (hidden)" 
+                error_message=f"Magic Link generated (logged to console)" 
             )
             
             return {

@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Search, Menu, X, ChevronDown, User, Globe } from 'lucide-react'
+import { Search, Menu, X, ChevronDown, User as UserIcon, Globe } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { getCmsMenu } from '@/services/cms'
+import { useProfile } from '@/hooks/useProfile'
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
-  const [user, setUser] = useState<{ email?: string } | null>(null)
+  
+  // Use React Query for profile data (handles caching & updates)
+  const { profile } = useProfile()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   const [navLinks, setNavLinks] = useState<{ name: string; href: string; hasMega?: boolean }[]>([
     { name: 'Journals', href: '#', hasMega: true },
@@ -21,16 +26,13 @@ export default function SiteHeader() {
 
   useEffect(() => {
     let isMounted = true
-    // 登录态同步（用于 header 显示）
-    const loadSession = async () => {
-      const session = await authService.getSession()
-      if (isMounted) {
-        setUser(session?.user ? { email: session.user.email ?? '' } : null)
-      }
-    }
-    loadSession()
+    
+    // Check initial session
+    authService.getSession().then(session => {
+      if (isMounted) setIsAuthenticated(!!session)
+    })
 
-    // CMS 菜单（公开接口）：若存在则覆盖默认导航（保留 Journals MegaMenu）
+    // CMS Menu
     ;(async () => {
       try {
         const headerMenu = await getCmsMenu('header')
@@ -47,12 +49,12 @@ export default function SiteHeader() {
           setNavLinks([{ name: 'Journals', href: '#', hasMega: true }, ...dynamic])
         }
       } catch {
-        // 忽略：回退默认 navLinks
+        // Ignore
       }
     })()
 
     const { data: { subscription } } = authService.onAuthStateChange((session) => {
-      setUser(session?.user ? { email: session.user.email ?? '' } : null)
+      setIsAuthenticated(!!session)
     })
 
     return () => {
@@ -63,8 +65,12 @@ export default function SiteHeader() {
 
   const handleSignOut = async () => {
     await authService.signOut()
-    setUser(null)
+    window.location.href = '/' // Force reload to clear query cache
   }
+
+  // Display Name: Full Name > Email > "User"
+  const displayName = profile?.full_name || profile?.email || 'User'
+  const displayAvatar = profile?.avatar_url
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-900 text-white shadow-xl">
@@ -110,15 +116,18 @@ export default function SiteHeader() {
             </button>
             <div className="h-6 w-px bg-slate-800 hidden sm:block" />
 
-            <NotificationBell isAuthenticated={!!user} />
+            <NotificationBell isAuthenticated={isAuthenticated} />
 
-            {user ? (
+            {isAuthenticated ? (
               <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-slate-200">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-700 text-xs font-bold">
-                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
-                  </span>
-                  <span className="max-w-[160px] truncate text-slate-200">{user.email}</span>
+                  <Avatar className="h-8 w-8 border border-slate-700">
+                    <AvatarImage src={displayAvatar || undefined} />
+                    <AvatarFallback className="bg-slate-700 text-slate-200 text-xs">
+                      {displayName.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="max-w-[160px] truncate text-slate-200">{displayName}</span>
                 </div>
                 <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">
                   Dashboard
@@ -133,7 +142,7 @@ export default function SiteHeader() {
               </div>
             ) : (
               <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white">
-                <User className="h-4 w-4" /> Sign In
+                <UserIcon className="h-4 w-4" /> Sign In
               </Link>
             )}
             
@@ -155,13 +164,14 @@ export default function SiteHeader() {
         </div>
       </div>
 
-      {/* Mega Menu (Journals) */}
+      {/* Mega Menu */}
       {isMegaMenuOpen && (
         <div 
           className="absolute left-0 w-full bg-white text-slate-900 shadow-2xl border-b border-slate-200 animate-in fade-in slide-in-from-top-2 duration-200"
           onMouseEnter={() => setIsMegaMenuOpen(true)}
           onMouseLeave={() => setIsMegaMenuOpen(false)}
         >
+          {/* ... (Existing Mega Menu Content) ... */}
           <div className="mx-auto max-w-7xl px-8 py-12 grid grid-cols-4 gap-12">
             <div>
               <h4 className="font-serif text-lg font-bold mb-4 text-blue-600 border-b border-blue-100 pb-2">Medicine</h4>
@@ -198,7 +208,7 @@ export default function SiteHeader() {
         </div>
       )}
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-slate-900 border-t border-slate-800 px-4 py-8 space-y-4 animate-in slide-in-from-right w-full h-screen fixed">
           {navLinks.map(link => (
@@ -212,9 +222,10 @@ export default function SiteHeader() {
             </Link>
           ))}
           <div className="pt-8 border-t border-slate-800 space-y-4">
-            {user ? (
+            {isAuthenticated ? (
               <>
                 <Link href="/dashboard" className="block text-slate-400">Dashboard</Link>
+                <Link href="/settings" className="block text-slate-400">Settings</Link>
                 <button
                   type="button"
                   onClick={handleSignOut}

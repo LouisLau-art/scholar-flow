@@ -91,10 +91,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
 - **E2E Tests**: 5+ critical user flows
 
 ## Recent Changes
+- 018-user-profile: Added User Profile & Security Center. Tech stack: Next.js 14 (Tabs, Forms, React Query), FastAPI (UserService, RLS compliant endpoints), Supabase Storage (Avatar uploads). Features: Basic Info edit, Research Interests (TagInput), Avatar Upload, Password Change.
 - 017-super-admin-management: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, React 18.x, Next.js 14.2.x, Shadcn/UI, Tailwind CSS 3.4.x
 - 011-notification-center: Added notifications table + RLS, email templates (SMTP/Jinja2), internal cron chase endpoint, in-app Bell UI with Supabase Realtime
-- 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 ## 🛡️ Security & Authentication Principles
 - **Authentication First**: All sensitive operations MUST require authentication. Never allow unauthenticated access to user-specific data.

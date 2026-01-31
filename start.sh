@@ -3,10 +3,14 @@
 # ScholarFlow 一键启动脚本
 # 功能: 加载环境变量 -> 启动后端 (8000) -> 启动前端 (3000)
 
-echo "🚀 Starting ScholarFlow..."
+# 颜色定义
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}🚀 Starting ScholarFlow...${NC}"
 
 # 1. 加载环境变量 (优先根目录 .env，其次 backend/.env)
-# 注：使用 source 以支持带引号/特殊字符的值
 if [ -f .env ]; then
   echo "📄 Loading root environment variables..."
   set -a
@@ -24,38 +28,31 @@ fi
 echo "🧹 Cleaning up old processes..."
 pkill -f "uvicorn main:app" || true
 pkill -f "next dev" || true
-pkill -f "next-server" || true
 
-# 3. 启动后端 (后台运行)
-echo "🐍 Starting Backend (FastAPI on :8000)..."
-BACKEND_RELOAD="${BACKEND_RELOAD:-0}"
-BACKEND_CMD="uvicorn main:app --host 0.0.0.0 --port 8000"
-if [ "$BACKEND_RELOAD" = "1" ]; then
-  BACKEND_CMD="$BACKEND_CMD --reload"
-fi
-nohup bash -lc "cd backend && $BACKEND_CMD" > backend/backend.log 2>&1 &
+# 3. 启动后端 (后台运行，保留颜色和输出)
+echo -e "${GREEN}🐍 Starting Backend (FastAPI on :8000)...${NC}"
+cd backend
+# 使用 --reload 启用热重载，便于开发
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
+cd ..
 
-# 等待后端就绪（最多 10 秒）
-for i in $(seq 1 20); do
-  if curl -fsS "http://127.0.0.1:8000/docs" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.5
-done
-
-# 4. 启动前端 (前台运行，以便查看输出)
-echo "⚛️  Starting Frontend (Next.js on :3000)..."
-NODE_OPTIONS="${NODE_OPTIONS:-} --dns-result-order=ipv4first"
-export NODE_OPTIONS
-nohup bash -lc "cd frontend && HOSTNAME=0.0.0.0 pnpm dev" > frontend.log 2>&1 &
+# 4. 启动前端 (后台运行，保留颜色和输出)
+echo -e "${GREEN}⚛️  Starting Frontend (Next.js on :3000)...${NC}"
+cd frontend
+# 确保 pnpm dev 的输出包含颜色
+FORCE_COLOR=1 pnpm dev &
 FRONTEND_PID=$!
+cd ..
 
-echo "✅ ScholarFlow is running!"
-echo "👉 Frontend: http://localhost:3000"
-echo "👉 Backend:  http://localhost:8000/docs"
+echo -e "${GREEN}✅ ScholarFlow is running!${NC}"
+echo -e "👉 Frontend: ${BLUE}http://localhost:3000${NC}"
+echo -e "👉 Backend:  ${BLUE}http://localhost:8000/docs${NC}"
 echo "Press Ctrl+C to stop both services."
+echo "---------------------------------------------------"
 
 # 5. 捕获退出信号，同时关闭前后端
-trap "kill $BACKEND_PID $FRONTEND_PID; exit" INT
+trap "kill $BACKEND_PID $FRONTEND_PID; exit" INT TERM EXIT
+
+# 等待所有子进程
 wait
