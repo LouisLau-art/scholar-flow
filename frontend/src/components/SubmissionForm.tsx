@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { Upload, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from "sonner"
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { authService } from '@/services/auth'
 import { supabase } from '@/lib/supabase'
 import LoginPrompt from '@/components/LoginPrompt'
 
 export default function SubmissionForm() {
+  const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [metadata, setMetadata] = useState({ title: '', abstract: '', authors: [] as string[] })
@@ -184,7 +186,7 @@ export default function SubmissionForm() {
 
       if (result.success) {
         toast.success("Manuscript submitted successfully!", { id: toastId })
-        window.location.href = '/'
+        router.push('/dashboard')
       } else {
         throw new Error(result.message || "Persistence failed")
       }

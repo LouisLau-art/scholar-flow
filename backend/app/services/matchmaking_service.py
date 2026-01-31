@@ -104,7 +104,7 @@ class MatchmakingService:
             score = float(m.get("score") or 0.0)
             profile = profiles.get(str(user_id), {})
             email = profile.get("email") or "reviewer@example.com"
-            name = profile.get("name") or email.split("@")[0].replace(".", " ").title()
+            name = profile.get("full_name") or email.split("@")[0].replace(".", " ").title()
             recommendations.append(
                 {
                     "reviewer_id": str(user_id),
@@ -133,7 +133,7 @@ class MatchmakingService:
         try:
             profile = (
                 self._db.table("user_profiles")
-                .select("id, email, name, institution, research_interests, roles")
+                .select("id, email, full_name, affiliation, research_interests, roles")
                 .eq("id", user_id)
                 .single()
                 .execute()
@@ -142,7 +142,12 @@ class MatchmakingService:
         except Exception:
             profile_data = {}
 
-        interests = (profile_data.get("research_interests") or "").strip()
+        # 优先使用数组格式的 research_interests
+        interests_data = profile_data.get("research_interests")
+        if isinstance(interests_data, list):
+            interests = ", ".join(interests_data)
+        else:
+            interests = str(interests_data or "").strip()
 
         history_titles: List[str] = []
         try:
@@ -264,7 +269,7 @@ class MatchmakingService:
         try:
             resp = (
                 self._db.table("user_profiles")
-                .select("id, email, name")
+                .select("id, email, full_name")
                 .in_("id", ids)
                 .execute()
             )

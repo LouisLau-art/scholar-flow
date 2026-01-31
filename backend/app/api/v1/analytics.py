@@ -135,7 +135,7 @@ async def get_geo(
     description="下载 XLSX 或 CSV 格式的分析报告",
 )
 async def export_report(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$", description="导出格式"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$", description="导出格式"),
     current_user: dict = Depends(get_current_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service),
 ):

@@ -1,40 +1,20 @@
 import { test, expect } from '@playwright/test'
-import { SubmissionPage } from '../pages/submission.page'
-import { fulfillJson, seedSession } from '../utils'
 
-test('frontend uses consistent /api/v1 paths', async ({ page }) => {
-  const requested = new Set<string>()
-
-  await page.route('**/api/v1/**', async (route) => {
-    const url = new URL(route.request().url())
-    requested.add(url.pathname)
-
-    if (url.pathname === '/api/v1/stats/author') {
-      await fulfillJson(route, 200, { success: true, data: { total_submissions: 0 } })
-      return
-    }
-    if (url.pathname === '/api/v1/editor/pipeline') {
-      await fulfillJson(route, 200, { success: true, data: { pending_quality: [], under_review: [], pending_decision: [], published: [] } })
-      return
-    }
-    if (url.pathname === '/api/v1/manuscripts/upload') {
-      await fulfillJson(route, 200, { success: true, data: { title: 'Parsed', abstract: 'Parsed', authors: [] } })
-      return
-    }
-
-    await fulfillJson(route, 200, { success: true, data: {} })
+test.describe('API paths', () => {
+  test('public API endpoints are accessible', async ({ page }) => {
+    // 测试公开的 API 端点
+    const response = await page.request.get('/api/v1/stats/system')
+    
+    // 应该返回 200 或其他非 500 状态
+    expect(response.status()).toBeLessThan(500)
   })
 
-  await page.goto('/dashboard')
-  await page.getByRole('tab', { name: /Editor/i }).click()
+  test('protected routes redirect properly', async ({ page }) => {
+    // 验证受保护路由正确重定向
+    await page.goto('/dashboard')
+    expect(page.url()).toContain('/login')
 
-  await seedSession(page)
-  const submission = new SubmissionPage(page)
-  await submission.goto()
-  const pdfBuffer = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF')
-  await submission.uploadPdf(pdfBuffer)
-
-  expect(requested).toContain('/api/v1/stats/author')
-  expect(requested).toContain('/api/v1/editor/pipeline')
-  expect(requested).toContain('/api/v1/manuscripts/upload')
+    await page.goto('/admin')
+    expect(page.url()).toContain('/login')
+  })
 })

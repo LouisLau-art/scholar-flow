@@ -67,7 +67,9 @@ async def test_retry_plagiarism_check_adds_task():
 
 
 class _FakeSupabase:
-    def __init__(self, pipeline_data, reviewers_data, decision_data, raise_on_update=False):
+    def __init__(
+        self, pipeline_data, reviewers_data, decision_data, raise_on_update=False
+    ):
         self.pipeline_data = pipeline_data
         self.reviewers_data = reviewers_data
         self.decision_data = decision_data
@@ -92,6 +94,9 @@ class _FakeQuery:
         return self
 
     def contains(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
         return self
 
     def eq(self, key, value):
@@ -250,7 +255,10 @@ def test_extract_supabase_error_tuple():
 
 
 def test_is_missing_column_error():
-    assert editor_api._is_missing_column_error('column "published_at" does not exist') is True
+    assert (
+        editor_api._is_missing_column_error('column "published_at" does not exist')
+        is True
+    )
     assert editor_api._is_missing_column_error("some other error") is False
 
 

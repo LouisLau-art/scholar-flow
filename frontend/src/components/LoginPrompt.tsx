@@ -1,3 +1,5 @@
+'use client'
+
 type LoginPromptProps = {
   message?: string
   actionHref?: string

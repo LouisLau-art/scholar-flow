@@ -25,7 +25,7 @@ import {
 } from '@/components/analytics/EditorialCharts'
 import { AuthorGeoChart } from '@/components/analytics/AuthorGeoChart'
 import { ExportButton } from '@/components/analytics/ExportButton'
-import { QueryProvider } from '@/components/providers/QueryProvider'
+import QueryProvider from '@/components/providers/QueryProvider'
 import { BarChart3 } from 'lucide-react'
 
 function AnalyticsDashboardContent() {

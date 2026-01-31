@@ -91,9 +91,9 @@ class UserManagementService:
                 # roles is a text array, we use overlap or contains
                 query = query.contains("roles", [role])
             
-            # Searching by email or name
+            # Searching by email or full_name
             if search:
-                query = query.or_(f"email.ilike.%{search}%,name.ilike.%{search}%")
+                query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
             
             # Pagination
             offset = (page - 1) * per_page

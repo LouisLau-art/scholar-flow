@@ -57,7 +57,7 @@ async def get_editor_pipeline(
             supabase.table("manuscripts")
             .select("*")
             .eq("status", "submitted")
-            .order("created_at", descending=True)
+            .order("created_at", desc=True)
             .execute()
         )
         pending_quality = _extract_supabase_data(pending_quality_resp) or []
@@ -67,7 +67,7 @@ async def get_editor_pipeline(
             supabase.table("manuscripts")
             .select("*")
             .eq("status", "under_review")
-            .order("created_at", descending=True)
+            .order("created_at", desc=True)
             .execute()
         )
         under_review = _extract_supabase_data(under_review_resp) or []
@@ -77,7 +77,7 @@ async def get_editor_pipeline(
             supabase.table("manuscripts")
             .select("*")
             .eq("status", "pending_decision")
-            .order("created_at", descending=True)
+            .order("created_at", desc=True)
             .execute()
         )
         pending_decision = _extract_supabase_data(pending_decision_resp) or []
@@ -87,7 +87,7 @@ async def get_editor_pipeline(
             supabase.table("manuscripts")
             .select("*")
             .eq("status", "published")
-            .order("created_at", descending=True)
+            .order("created_at", desc=True)
             .execute()
         )
         published = _extract_supabase_data(published_resp) or []

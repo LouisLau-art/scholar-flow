@@ -12,7 +12,12 @@ async function fetchProfile(): Promise<User | null> {
   })
 
   if (!res.ok) {
-    if (res.status === 401) return null
+    if (res.status === 401) {
+      // Token exists but session is dead (e.g. password changed)
+      await authService.signOut()
+      window.location.href = '/login?error=session_expired'
+      return null
+    }
     throw new Error('Failed to fetch profile')
   }
 
@@ -75,7 +80,7 @@ export function useProfile() {
   const { mutate: saveProfile, isPending: isSaving } = useMutation({
     mutationFn: updateProfile,
     onSuccess: (updatedProfile) => {
-      queryClient.setQueryKeyData(['user-profile'], updatedProfile)
+      queryClient.setQueryData(['user-profile'], updatedProfile)
       toast.success('Profile updated successfully')
     },
     onError: (err) => {
@@ -85,6 +90,15 @@ export function useProfile() {
 
   const { mutateAsync: changePassword } = useMutation({
     mutationFn: updatePassword,
+    onSuccess: () => {
+      toast.success('Password updated successfully. Please sign in again.')
+      // Sign out and redirect to login
+      setTimeout(() => {
+        authService.signOut().then(() => {
+          window.location.href = '/login'
+        })
+      }, 2000)
+    },
     onError: (err) => {
       toast.error(err.message)
     },

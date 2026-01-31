@@ -67,6 +67,9 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     const inviteBtn = await screen.findByTestId('ai-invite-r-1')
     fireEvent.click(inviteBtn)
 
+    const assignBtn = await screen.findByTestId('reviewer-assign')
+    fireEvent.click(assignBtn)
+
     await waitFor(() => {
       expect(onAssign).toHaveBeenCalledWith(['r-1'])
       expect(onClose).toHaveBeenCalled()

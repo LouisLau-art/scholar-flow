@@ -27,8 +27,8 @@ async def get_profile(
         "data": {
             "id": current_user["id"],
             "email": current_user["email"],
-            "full_name": profile.get("full_name") or profile.get("name") or "Demo User",
-            "affiliation": profile.get("affiliation") or profile.get("institution") or "Unknown",
+            "full_name": profile.get("full_name") or "Demo User",
+            "affiliation": profile.get("affiliation") or "Unknown",
             "title": profile.get("title"),
             "orcid_id": profile.get("orcid_id"),
             "google_scholar_url": profile.get("google_scholar_url"),
