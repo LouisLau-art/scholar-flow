@@ -1,0 +1,88 @@
+name: ScholarFlow CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # === 1. Backend Pipeline (Python) ===
+  backend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: 'pip'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        # Install dev dependencies explicitly if they are not in requirements.txt
+        pip install pytest pytest-asyncio pytest-cov httpx mock
+
+    - name: Lint with Ruff
+      run: |
+        pip install ruff
+        # Stop the build if there are Python syntax errors or undefined names
+        ruff check . --select=E9,F63,F7,F82 --show-source
+        # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        ruff check . --exit-zero --statistics
+
+    - name: Run Tests
+      env:
+        # Mock env vars for testing (skip integration tests requiring real DB)
+        SUPABASE_URL: "https://mock.supabase.co"
+        SUPABASE_KEY: "mock-key"
+        SUPABASE_JWT_SECRET: "mock-secret"
+        # Skip tests that require real DB connection
+        PYTEST_ADDOPTS: "-m 'not integration'"
+      run: |
+        pytest tests/unit
+
+  # === 2. Frontend Pipeline (Next.js) ===
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+        cache-dependency-path: './frontend/pnpm-lock.yaml'
+
+    - name: Install Dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Lint
+      run: pnpm lint
+
+    - name: Run Unit Tests (Vitest)
+      run: pnpm test:run
+
+    - name: Build Check
+      env:
+        # Next.js build often needs these to be present even if empty
+        NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock-key"
+      run: pnpm build
