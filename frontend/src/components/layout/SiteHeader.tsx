@@ -120,7 +120,7 @@ export default function SiteHeader() {
 
             {isAuthenticated ? (
               <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-slate-200">
-                <div className="flex items-center gap-2">
+                <Link href="/settings" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <Avatar className="h-8 w-8 border border-slate-700">
                     <AvatarImage src={displayAvatar || undefined} />
                     <AvatarFallback className="bg-slate-700 text-slate-200 text-xs">
@@ -128,9 +128,12 @@ export default function SiteHeader() {
                     </AvatarFallback>
                   </Avatar>
                   <span className="max-w-[160px] truncate text-slate-200">{displayName}</span>
-                </div>
+                </Link>
                 <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">
                   Dashboard
+                </Link>
+                <Link href="/settings" className="text-slate-400 hover:text-white transition-colors">
+                  Settings
                 </Link>
                 <button
                   type="button"
