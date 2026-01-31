@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { storageService } from "@/services/storage"
 import { Upload, Loader2, Image as ImageIcon } from "lucide-react"
 import { toast } from "sonner"
+import { compressImage } from "@/lib/image-utils"
 
 interface AvatarUploadProps {
   userId: string
@@ -22,26 +23,25 @@ export function AvatarUpload({ userId, currentAvatarUrl, onUploadSuccess, userNa
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validation
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!validTypes.includes(file.type)) {
-      toast.error('Invalid file type. Please use JPG, PNG, or WEBP.')
-      return
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('File too large. Max size is 2MB.')
+    // Basic type validation
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file.')
       return
     }
 
     try {
       setIsUploading(true)
-      const url = await storageService.uploadAvatar(userId, file)
+      
+      // Compress/Resize image (Standardize to max 800x800 JPEG)
+      // This handles files > 2MB automatically
+      const processedFile = await compressImage(file, 800, 800, 0.8)
+
+      const url = await storageService.uploadAvatar(userId, processedFile)
       onUploadSuccess(url)
       toast.success('Avatar updated successfully')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to upload avatar')
+      toast.error('Failed to process or upload avatar')
     } finally {
       setIsUploading(false)
       // Reset input
@@ -80,12 +80,12 @@ export function AvatarUpload({ userId, currentAvatarUrl, onUploadSuccess, userNa
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept=".jpg,.jpeg,.png,.webp"
+            accept="image/png, image/jpeg, image/webp"
             onChange={handleFileSelect}
           />
         </div>
         <p className="text-xs text-slate-500">
-          JPG, PNG or WEBP. Max 2MB.
+          Supported formats: JPG, PNG, WEBP.
         </p>
       </div>
     </div>
