@@ -1,13 +1,22 @@
 import os
 from supabase import create_client, Client
+from app.core.config import app_config
 
-url: str = os.environ.get("SUPABASE_URL", "")
+# Use configuration from AppConfig (Feature 019 support for staging)
+url: str = app_config.supabase_url
+# Legacy fallback logic preserved but using app_config values where possible
+# Note: app_config loads SUPABASE_URL. Keys are still loaded from env directly here
+# but ideally should move to config. for minimal disruption, we keep env reads for keys
+# but ensure URL comes from our unified config which handles staging logic.
+
 # 中文注释:
 # - 历史原因：项目里同时存在 SUPABASE_KEY 与 SUPABASE_ANON_KEY（两者在多数环境下等价）。
 # - 为保证兼容性，优先读 SUPABASE_ANON_KEY，缺省时回退到 SUPABASE_KEY。
 key: str = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_KEY") or ""
 
-service_role_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+service_role_key: str = app_config.supabase_key or os.environ.get(
+    "SUPABASE_SERVICE_ROLE_KEY", ""
+)
 
 # === 统一 Supabase 客户端 ===
 # 中文注释:

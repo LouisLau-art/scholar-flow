@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-29
 - **Testing**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching) (017-super-admin-management)
 - PostgreSQL (Supabase) (009-test-coverage)
+- Python 3.10+ (FastAPI), TypeScript 5.x (Next.js 14.2) (019-uat-staging-setup)
+- Supabase (PostgreSQL) - Separate Project for Staging (019-uat-staging-setup)
 
 - Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x (009-test-coverage)
 
@@ -90,9 +92,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
 - **E2E Tests**: 5+ critical user flows
 
 ## Recent Changes
+- 019-uat-staging-setup: Added Python 3.10+ (FastAPI), TypeScript 5.x (Next.js 14.2)
 - 018-user-profile & System Optimization: Added User Profile & Security Center (Next.js 14, FastAPI, Supabase). Standardized database schema: merged `name` -> `full_name`, `institution` -> `affiliation`, converted `research_interests` to `text[]`. Implemented full Notification Center page, improved Editor Dashboard sorting (descending), and relaxed admin API permissions for editors. Added GIN index for full-text search and Postgres triggers for Auth-to-Profile sync. Added CI/CD pipeline (GitHub Actions).
 - 017-super-admin-management: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, React 18.x, Next.js 14.2.x, Shadcn/UI, Tailwind CSS 3.4.x
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 ## 🛡️ Security & Authentication Principles
 - **Authentication First**: All sensitive operations MUST require authentication. Never allow unauthenticated access to user-specific data.

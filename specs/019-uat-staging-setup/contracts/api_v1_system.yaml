@@ -1,0 +1,123 @@
+openapi: 3.0.0
+info:
+  title: System & Feedback API
+  version: 1.0.0
+paths:
+  /api/v1/system/feedback:
+    post:
+      summary: Submit UAT Feedback
+      operationId: submitFeedback
+      tags:
+        - System
+      security: []  # Publicly accessible (anonymous users allowed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+                - severity
+                - url
+              properties:
+                description:
+                  type: string
+                  minLength: 5
+                severity:
+                  type: string
+                  enum: [low, medium, critical]
+                url:
+                  type: string
+                  format: uri
+                user_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '201':
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: received
+        '422':
+          description: Validation Error
+
+  /api/v1/admin/feedback:
+    get:
+      summary: List UAT Feedback
+      operationId: listFeedback
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, critical]
+          required: false
+      responses:
+        '200':
+          description: List of feedback
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        description:
+                          type: string
+                        severity:
+                          type: string
+                        url:
+                          type: string
+                        user_id:
+                          type: string
+                          format: uuid
+                        created_at:
+                          type: string
+                          format: date-time
+                        status:
+                          type: string
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pages:
+                    type: integer
+        '403':
+          description: Forbidden (Not Admin)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

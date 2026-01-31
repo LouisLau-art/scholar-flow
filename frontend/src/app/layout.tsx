@@ -6,6 +6,8 @@ import Toast from '@/components/Toast'
 import SiteFooter from '@/components/layout/SiteFooter'
 import QueryProvider from '@/components/providers/QueryProvider'
 
+import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'
+
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
@@ -76,7 +78,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <ErrorBoundary>
           <QueryProvider>
-            {children}
+            <EnvironmentProvider>
+              {children}
+            </EnvironmentProvider>
           </QueryProvider>
         </ErrorBoundary>
         <SiteFooter />
