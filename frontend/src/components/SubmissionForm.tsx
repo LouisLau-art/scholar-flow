@@ -18,6 +18,7 @@ export default function SubmissionForm() {
   const [touched, setTouched] = useState({ title: false, abstract: false, datasetUrl: false, sourceCodeUrl: false })
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
+  const [parseErrorDetails, setParseErrorDetails] = useState<string | null>(null)
   const [datasetUrl, setDatasetUrl] = useState('')
   const [sourceCodeUrl, setSourceCodeUrl] = useState('')
   const titleValid = metadata.title.trim().length >= 5
@@ -77,6 +78,7 @@ export default function SubmissionForm() {
     setUploadedPath(null)
     setUploadError(null)
     setParseError(null)
+    setParseErrorDetails(null)
     setIsUploading(true)
     const toastId = toast.loading("Uploading and analyzing manuscript...")
 
@@ -111,11 +113,13 @@ export default function SubmissionForm() {
     } catch (error) {
       console.error('Parsing failed:', error)
       const message = error instanceof Error ? error.message : "AI parsing failed"
-      toast.error(message, { id: toastId })
+      // 中文注释: 统一错误提示（Feature 016 E2E 断言依赖该文案）。
+      toast.error('AI parsing failed. Please fill manually.', { id: toastId })
       if (message.toLowerCase().includes('upload failed')) {
         setUploadError(message.replace('Upload failed: ', ''))
       } else {
-        setParseError(message)
+        setParseError('AI parsing failed. Please fill manually.')
+        setParseErrorDetails(message)
       }
     } finally {
       setIsUploading(false)
@@ -184,7 +188,7 @@ export default function SubmissionForm() {
 
       if (result.success) {
         toast.success("Manuscript submitted successfully!", { id: toastId })
-        window.location.href = '/'
+        window.location.href = '/dashboard'
       } else {
         throw new Error(result.message || "Persistence failed")
       }
@@ -319,7 +323,12 @@ export default function SubmissionForm() {
         )}
         {parseError && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            Parsing failed: {parseError}
+            {parseError}
+            {parseErrorDetails && (
+              <div className="mt-1 text-[11px] text-amber-700/80">
+                Details: {parseErrorDetails}
+              </div>
+            )}
           </div>
         )}
         <button

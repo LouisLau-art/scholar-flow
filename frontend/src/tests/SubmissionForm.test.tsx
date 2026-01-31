@@ -184,7 +184,7 @@ describe('SubmissionForm Component', () => {
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        'bad',
+        'AI parsing failed. Please fill manually.',
         expect.any(Object)
       )
     })

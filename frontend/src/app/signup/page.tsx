@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/utils'
 import { Globe, ArrowRight, Loader2, Mail, Lock, UserPlus } from 'lucide-react'
 
 export default function SignupPage() {
@@ -19,7 +20,7 @@ export default function SignupPage() {
     const toastId = toast.loading('Creating your account...')
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -29,10 +30,18 @@ export default function SignupPage() {
 
       if (error) throw error
 
-      toast.success('Registration successful! Please check your email for verification.', { id: toastId })
-      router.push('/login')
+      // 中文注释:
+      // - 部分环境（本地/测试）可能关闭邮箱确认，此时会直接返回 session。
+      // - 若有 session，则视为“已登录”并进入 Dashboard；否则提示用户去邮箱验证。
+      if (data?.session) {
+        toast.success('Registration successful! Welcome to ScholarFlow.', { id: toastId })
+        router.push('/dashboard')
+      } else {
+        toast.success('Registration successful! Please check your email for verification.', { id: toastId })
+        router.push('/login')
+      }
     } catch (error: any) {
-      toast.error(error.message || 'Signup failed', { id: toastId })
+      showErrorToast(error, 'Signup failed', { id: toastId })
     } finally {
       setIsLoading(false)
     }
@@ -68,6 +77,7 @@ export default function SignupPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm transition-all"
                   placeholder="name@university.edu"
+                  data-testid="signup-email"
                 />
               </div>
             </div>
@@ -82,6 +92,7 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm transition-all"
+                  data-testid="signup-password"
                 />
               </div>
               <p className="mt-2 text-xs text-slate-400">At least 8 characters with numbers and symbols.</p>
@@ -91,6 +102,7 @@ export default function SignupPage() {
               type="submit"
               disabled={isLoading}
               className="flex w-full justify-center items-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-sm font-bold leading-6 text-white shadow-lg hover:bg-blue-500 transition-all disabled:opacity-50"
+              data-testid="signup-submit"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Create Account'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}

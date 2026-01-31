@@ -28,6 +28,8 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/cms/menu"),
     ("PUT", "/api/v1/cms/menu"),
     ("POST", "/api/v1/internal/cron/chase-reviews"),
+    ("POST", "/api/v1/internal/reset-db"),
+    ("POST", "/api/v1/internal/seed-db"),
     ("GET", "/api/v1/plagiarism/report/{report_id}/download"),
     ("POST", "/api/v1/plagiarism/retry"),
     ("POST", "/api/v1/reviews/assign"),

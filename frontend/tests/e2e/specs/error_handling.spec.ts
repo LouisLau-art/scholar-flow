@@ -6,6 +6,10 @@ test('upload failure shows error message', async ({ page }) => {
   await seedSession(page, buildSession())
   const submission = new SubmissionPage(page)
 
+  await page.route('**/storage/v1/object/manuscripts/**', async (route) => {
+    await route.fulfill({ status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+  })
+
   await page.route('**/api/v1/manuscripts/upload', async (route) => {
     await fulfillJson(route, 500, { success: false, message: 'Upload failed' })
   })

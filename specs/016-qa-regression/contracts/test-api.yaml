@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: Scholar Flow Test API
+  description: Internal API for resetting and seeding the database for E2E testing.
+  version: 1.0.0
+servers:
+  - url: /api/v1/internal
+    description: Internal API path
+paths:
+  /reset-db:
+    post:
+      summary: Reset Database
+      description: |
+        Truncates all operational tables to return the database to a clean slate.
+        WARNING: This is a destructive operation and should only be available in test/dev environments.
+      tags:
+        - Internal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Database reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Database reset complete."
+        '403':
+          description: Forbidden - Not allowed in this environment
+  /seed-db:
+    post:
+      summary: Seed Database
+      description: |
+        Populates the database with the standard "Seed Data" set (Users, Journals, Manuscripts).
+        Should usually be run immediately after /reset-db.
+      tags:
+        - Internal
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Database seeded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Database seeded successfully."
+                  summary:
+                    type: object
+                    properties:
+                      users_created:
+                        type: integer
+                      manuscripts_created:
+                        type: integer
+        '403':
+          description: Forbidden - Not allowed in this environment
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer

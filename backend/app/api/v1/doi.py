@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from uuid import UUID
 from typing import Optional
 from app.services.doi_service import DOIService
@@ -9,9 +9,10 @@ from app.lib.api_client import supabase
 router = APIRouter(prefix="/doi", tags=["DOI"])
 
 
-def get_doi_service() -> DOIService:
+def get_doi_service(request: Request) -> DOIService:
     config = CrossrefConfig.from_env()
-    return DOIService(config)
+    crossref_client = getattr(request.app.state, "crossref_client", None)
+    return DOIService(config, crossref_client=crossref_client)
 
 
 @router.post("/register", response_model=DOIRegistration, status_code=201)
@@ -21,8 +22,47 @@ async def register_doi(
     """
     Trigger DOI registration for a published article
     """
-    registration = await service.create_registration(request.article_id)
-    return registration
+    try:
+        registration = await service.create_registration(request.article_id)
+        return registration
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/tasks", response_model=DOITaskList)
+async def list_doi_tasks(
+    status: Optional[str] = Query(None),
+    limit: int = Query(20, le=100),
+    offset: int = Query(0),
+):
+    """
+    List DOI tasks (admin only)
+    """
+    query = supabase.table("doi_tasks").select("*", count="exact")
+    if status:
+        query = query.eq("status", status)
+
+    query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+    res = query.execute()
+
+    return DOITaskList(items=res.data, total=res.count or 0, limit=limit, offset=offset)
+
+
+@router.get("/tasks/failed", response_model=DOITaskList)
+async def list_failed_tasks(
+    limit: int = Query(20, le=100),
+    offset: int = Query(0),
+):
+    """
+    List failed DOI tasks
+    """
+    query = (
+        supabase.table("doi_tasks").select("*", count="exact").eq("status", "failed")
+    )
+    query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+    res = query.execute()
+
+    return DOITaskList(items=res.data, total=res.count or 0, limit=limit, offset=offset)
 
 
 @router.get("/{article_id}", response_model=DOIRegistration)
@@ -77,39 +117,3 @@ async def retry_doi_registration(
         raise HTTPException(status_code=500, detail="Failed to create retry task")
 
     return res.data[0]
-
-
-@router.get("/tasks", response_model=DOITaskList)
-async def list_doi_tasks(
-    status: Optional[str] = Query(None),
-    limit: int = Query(20, le=100),
-    offset: int = Query(0),
-):
-    """
-    List DOI tasks (admin only)
-    """
-    query = supabase.table("doi_tasks").select("*", count="exact")
-    if status:
-        query = query.eq("status", status)
-
-    query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
-    res = query.execute()
-
-    return DOITaskList(items=res.data, total=res.count or 0, limit=limit, offset=offset)
-
-
-@router.get("/tasks/failed", response_model=DOITaskList)
-async def list_failed_tasks(
-    limit: int = Query(20, le=100),
-    offset: int = Query(0),
-):
-    """
-    List failed DOI tasks
-    """
-    query = (
-        supabase.table("doi_tasks").select("*", count="exact").eq("status", "failed")
-    )
-    query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
-    res = query.execute()
-
-    return DOITaskList(items=res.data, total=res.count or 0, limit=limit, offset=offset)

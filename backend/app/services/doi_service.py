@@ -1,61 +1,69 @@
-from datetime import datetime
-from uuid import UUID
-from typing import Optional
-from app.models.doi import DOIRegistration, DOIRegistrationStatus
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Dict, Optional
+from uuid import UUID, uuid4
+
 from app.core.config import CrossrefConfig
-# NOTE: In a real app, we would inject DB session here.
-# For this implementation, we will assume a service class that can be extended with DB logic.
+from app.models.doi import DOIRegistration, DOIRegistrationStatus
+from app.services.crossref_client import CrossrefClient
 
 
 class DOIService:
-    def __init__(self, config: Optional[CrossrefConfig] = None):
+    """
+    DOI Service（Feature 015）
+
+    中文注释:
+    - Feature 016 的核心是“回归测试可靠性”。默认测试运行不应依赖外部网络（Supabase/Crossref）。
+    - 因此该服务在当前阶段使用“进程内存存根”来支持 API 行为与回归验证。
+    - 数据库表/迁移已由 `supabase/migrations/` 提供；若后续要做真实持久化，可将此处替换为 DB 实现。
+    """
+
+    _registrations_by_article_id: Dict[str, DOIRegistration] = {}
+
+    def __init__(
+        self,
+        config: Optional[CrossrefConfig] = None,
+        crossref_client: Optional[CrossrefClient] = None,
+    ):
         self.config = config
+        self.crossref_client = crossref_client or CrossrefClient(config)
 
     def generate_doi(self, year: int, sequence: int) -> str:
         """
-        Generate DOI string: prefix/sf.{year}.{sequence}
+        生成 DOI 字符串: prefix/sf.{year}.{sequence}
         e.g. 10.12345/sf.2026.00001
         """
-        if not self.config:
-            return f"10.12345/sf.{year}.{sequence:05d}"
-        return f"{self.config.doi_prefix}/sf.{year}.{sequence:05d}"
+
+        # 中文注释: 为满足 `app/models/doi.py` 的 DOI 正则校验，这里使用大写字母前缀。
+        prefix = self.config.doi_prefix if self.config else "10.12345"
+        return f"{prefix}/SF.{year}.{sequence:05d}"
 
     async def create_registration(self, article_id: UUID) -> DOIRegistration:
-        """
-        Create a new DOI registration record
-        """
-        # Logic to insert into DB
-        # This is a placeholder for the actual DB logic
-        return DOIRegistration(
-            id=UUID("00000000-0000-0000-0000-000000000000"),
+        existing = self._registrations_by_article_id.get(str(article_id))
+        if existing:
+            return existing
+
+        now = datetime.now(timezone.utc)
+        reg = DOIRegistration(
+            id=uuid4(),
             article_id=article_id,
+            doi=self.generate_doi(now.year, 1),
             status=DOIRegistrationStatus.PENDING,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            attempts=0,
+            crossref_batch_id=None,
+            error_message=None,
+            registered_at=None,
+            created_at=now,
+            updated_at=now,
         )
+        self._registrations_by_article_id[str(article_id)] = reg
+        return reg
 
     async def get_registration(self, article_id: UUID) -> Optional[DOIRegistration]:
-        """
-        Get registration by article_id
-        """
-        # Logic to query DB
-        # Mock for testing
-        if str(article_id) == "00000000-0000-0000-0000-000000000000":
-            return DOIRegistration(
-                id=UUID("00000000-0000-0000-0000-000000000000"),
-                article_id=article_id,
-                status=DOIRegistrationStatus.PENDING,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-        return None
+        return self._registrations_by_article_id.get(str(article_id))
 
-    async def register_doi(self, registration_id: UUID):
-        """
-        Trigger the registration process (Task Queue worker will call this)
-        """
-        # 1. Fetch registration and article data
-        # 2. Call CrossrefClient.generate_xml
-        # 3. Call CrossrefClient.submit_deposit
-        # 4. Update registration status
-        pass
+    async def register_doi(self, registration_id: UUID) -> None:
+        # 中文注释: 当前存根不执行外部网络请求；worker 调用不抛错即可。
+        _ = registration_id
+        return

@@ -190,7 +190,6 @@ Unit Tests - Test individual functions/components
 ## Recent Changes
 - 015-academic-indexing: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI 0.115+, Pydantic v2, httpx, lxml (Backend); Next.js 14.2, React 18.x (Frontend)
 - 010-ui-standardization: Added Shadcn config + CSS variables, new UI primitives (Button/Card/Label/RadioGroup), updated Tabs, refactored DecisionPanel/Reviewer modal/Editor pipeline for legibility and filtering
-- 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

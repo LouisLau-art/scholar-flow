@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/utils'
 import { Globe, ArrowRight, Loader2, Mail, Lock } from 'lucide-react'
 
 export default function LoginPage() {
@@ -27,10 +28,10 @@ export default function LoginPage() {
       if (error) throw error
 
       toast.success('Welcome back to ScholarFlow!', { id: toastId })
-      router.push('/')
+      router.push('/dashboard')
       router.refresh()
     } catch (error: any) {
-      toast.error(error.message || 'Login failed', { id: toastId })
+      showErrorToast(error, 'Login failed', { id: toastId })
     } finally {
       setIsLoading(false)
     }

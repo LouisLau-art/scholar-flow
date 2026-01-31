@@ -2,7 +2,7 @@ import httpx
 import os
 from typing import Dict, Any, Optional
 from lxml import etree
-from app.core.config import CrossrefConfig
+from app.core.config import CrossrefConfig, crossref_mock_mode
 
 
 class CrossrefClient:
@@ -150,6 +150,10 @@ class CrossrefClient:
         """
         Submit XML to Crossref API
         """
+        if crossref_mock_mode():
+            # 中文注释: E2E/CI 中禁止访问真实 Crossref，此处返回可预测的 mock 响应。
+            return "<mock_crossref_response status=\"ok\" />"
+
         if not self.deposit_config:
             raise ValueError("Crossref deposit configuration missing")
 
@@ -166,3 +170,18 @@ class CrossrefClient:
             response = await client.post(url, data=params, files=files, timeout=60.0)
             response.raise_for_status()
             return response.text
+
+
+class MockCrossrefClient(CrossrefClient):
+    """
+    Mock Crossref Client（Feature 016）
+
+    中文注释:
+    - 该类用于服务级 mock（不需要起额外 mock server）。
+    - 通过环境变量 CROSSREF_MOCK_MODE=true 启用（见 crossref_mock_mode）。
+    """
+
+    async def submit_deposit(
+        self, xml_content: bytes, file_name: str = "crossref_submission.xml"
+    ) -> str:
+        return "<mock_crossref_response status=\"ok\" />"

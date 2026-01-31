@@ -72,6 +72,34 @@ def get_admin_api_key() -> Optional[str]:
     return raw.strip() if raw else None
 
 
+def allow_test_endpoints() -> bool:
+    """
+    是否允许暴露“测试专用”内部接口（reset/seed）。
+
+    中文注释:
+    - 该能力极其危险（可清库），默认必须关闭。
+    - 只允许在开发/测试环境开启：
+      - ENABLE_TEST_ENDPOINTS=true
+      - 或 GO_ENV/ENV in {test, development, dev}
+    """
+
+    if _env_bool("ENABLE_TEST_ENDPOINTS", False):
+        return True
+    env = (os.environ.get("GO_ENV") or os.environ.get("ENV") or "").strip().lower()
+    return env in {"test", "testing", "development", "dev"}
+
+
+def crossref_mock_mode() -> bool:
+    """
+    Crossref Mock Mode（E2E/CI 使用）。
+
+    中文注释:
+    - Feature 016 规定：DOI 外部依赖必须可被 mock，避免 CI 访问真实 Crossref。
+    """
+
+    return _env_bool("CROSSREF_MOCK_MODE", False)
+
+
 @dataclass(frozen=True)
 class MatchmakingConfig:
     """

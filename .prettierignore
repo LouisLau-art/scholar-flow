@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+build/
+coverage/
+htmlcov/
+.supabase/
+
+# Lockfiles（避免大文件/自动生成文件导致格式化噪声）
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

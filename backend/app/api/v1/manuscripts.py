@@ -142,8 +142,7 @@ async def create_manuscript(
             "author_id": current_user["id"],  # 使用真实的用户 ID
             "status": "submitted",
             "kpi_owner_id": None,
-            "created_at": "now()",
-            "updated_at": "now()"
+            # 中文注释: created_at/updated_at 由数据库默认值生成，避免传入 now() 字符串导致类型问题
         }
 
         # 插入到数据库

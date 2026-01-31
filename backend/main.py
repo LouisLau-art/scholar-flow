@@ -25,6 +25,8 @@ from app.api import oaipmh
 from app.core.middleware import ExceptionHandlerMiddleware
 from app.core.init_cms import ensure_cms_initialized
 from app.lib.api_client import supabase_admin
+from app.core.config import CrossrefConfig, crossref_mock_mode
+from app.services.crossref_client import CrossrefClient, MockCrossrefClient
 
 app = FastAPI(
     title="ScholarFlow API",
@@ -67,6 +69,14 @@ app.include_router(cms.router, prefix="/api/v1")
 async def _startup_init_cms() -> None:
     # 中文注释: CMS 初始化应容错（未迁移时不阻塞启动）
     ensure_cms_initialized(supabase_admin)
+
+    # 中文注释: CrossrefClient 注入（Feature 016）。
+    # - E2E/CI 可以通过 CROSSREF_MOCK_MODE=true 禁止真实外网调用。
+    config = CrossrefConfig.from_env()
+    if crossref_mock_mode():
+        app.state.crossref_client = MockCrossrefClient(config)
+    else:
+        app.state.crossref_client = CrossrefClient(config)
 
 
 @app.get("/")

@@ -5,7 +5,7 @@ CREATE TYPE doi_task_status AS ENUM ('pending', 'processing', 'completed', 'fail
 -- DOI Registrations
 CREATE TABLE doi_registrations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    article_id UUID NOT NULL UNIQUE REFERENCES articles(id) ON DELETE CASCADE,
+    article_id UUID NOT NULL UNIQUE REFERENCES public.manuscripts(id) ON DELETE CASCADE,
     doi VARCHAR(255) UNIQUE,
     status doi_registration_status NOT NULL DEFAULT 'pending',
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -46,9 +46,9 @@ CREATE TABLE doi_audit_log (
     created_by UUID REFERENCES auth.users(id)
 );
 
--- Articles updates
-ALTER TABLE articles ADD COLUMN IF NOT EXISTS doi VARCHAR(255) UNIQUE;
-ALTER TABLE articles ADD COLUMN IF NOT EXISTS doi_registered_at TIMESTAMPTZ;
+-- Manuscripts updates
+ALTER TABLE public.manuscripts ADD COLUMN IF NOT EXISTS doi VARCHAR(255) UNIQUE;
+ALTER TABLE public.manuscripts ADD COLUMN IF NOT EXISTS doi_registered_at TIMESTAMPTZ;
 
 -- Indexes
 CREATE INDEX idx_doi_tasks_pending ON doi_tasks (run_at ASC) WHERE status = 'pending';
