@@ -38,6 +38,20 @@ describe('ReviewerAssignModal AI Recommendations', () => {
             }),
         }) as any
       }
+      if (String(url).includes('/api/v1/admin/users')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: [
+              { id: 'r-manual', full_name: 'Manual Reviewer', email: 'manual@test.com' }
+            ],
+            total: 1,
+            page: 1,
+            per_page: 100
+          }),
+        }) as any
+      }
       return Promise.reject(new Error(`unexpected url ${url}`))
     }) as any
   })
@@ -72,6 +86,39 @@ describe('ReviewerAssignModal AI Recommendations', () => {
 
     await waitFor(() => {
       expect(onAssign).toHaveBeenCalledWith(['r-1'])
+      expect(onClose).toHaveBeenCalled()
+    })
+  })
+
+  it('allows manual search and assignment', async () => {
+    const onAssign = vi.fn()
+    const onClose = vi.fn()
+
+    render(
+      <ReviewerAssignModal
+        isOpen={true}
+        onClose={onClose}
+        onAssign={onAssign}
+        manuscriptId="ms-1"
+      />
+    )
+
+    // Initial load fetches reviewers
+    expect(await screen.findByText('Manual Reviewer')).toBeInTheDocument()
+
+    // Search (updates state, triggers fetch)
+    const searchInput = screen.getByTestId('reviewer-search')
+    fireEvent.change(searchInput, { target: { value: 'Manual' } })
+
+    // Select manual reviewer
+    const reviewerRow = await screen.findByText('Manual Reviewer')
+    fireEvent.click(reviewerRow)
+
+    const assignBtn = await screen.findByTestId('reviewer-assign')
+    fireEvent.click(assignBtn)
+
+    await waitFor(() => {
+      expect(onAssign).toHaveBeenCalledWith(['r-manual'])
       expect(onClose).toHaveBeenCalled()
     })
   })
