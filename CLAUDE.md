@@ -89,7 +89,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
 - **E2E Tests**: 5+ critical user flows
 
 ## Recent Changes
-- 018-user-profile: Added User Profile & Security Center. Tech stack: Next.js 14 (Tabs, Forms, React Query), FastAPI (UserService, RLS compliant endpoints), Supabase Storage (Avatar uploads). Features: Basic Info edit, Research Interests (TagInput), Avatar Upload, Password Change. Added CI/CD pipeline (GitHub Actions) for automated testing and build verification.
+- 018-user-profile & System Optimization: Added User Profile & Security Center (Next.js 14, FastAPI, Supabase). Standardized database schema: merged `name` -> `full_name`, `institution` -> `affiliation`, converted `research_interests` to `text[]`. Implemented full Notification Center page, improved Editor Dashboard sorting (descending), and relaxed admin API permissions for editors. Added GIN index for full-text search and Postgres triggers for Auth-to-Profile sync. Added CI/CD pipeline (GitHub Actions).
 - 017-super-admin-management: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, React 18.x, Next.js 14.2.x, Shadcn/UI, Tailwind CSS 3.4.x
 - 009-test-coverage: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x
 
