@@ -4,6 +4,7 @@ import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Toast from '@/components/Toast'
 import SiteFooter from '@/components/layout/SiteFooter'
+import QueryProvider from '@/components/providers/QueryProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -74,7 +75,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ErrorBoundary>
-          {children}
+          <QueryProvider>
+            {children}
+          </QueryProvider>
         </ErrorBoundary>
         <SiteFooter />
         <Toast />
