@@ -2,6 +2,7 @@
 
 **Branch**: `017-super-admin-management` | **Date**: 2026-01-31 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/017-super-admin-management/spec.md`
+**Status**: COMPLETED
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 

@@ -1,173 +1,110 @@
-"""
-用户管理相关数据模型
-Feature: 017-super-admin-management
-Created: 2026-01-31
-"""
-
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
-from pydantic import BaseModel, Field, EmailStr, field_validator
-from pydantic.types import UUIDv1
+# --- Enums & Shared Types ---
+# (User roles are typically strings in Supabase: "author", "editor", "reviewer", "admin")
 
-
-# ============================================================================
-# 审计日志模型
-# ============================================================================
+# --- Log Models (T008, T009, T010) ---
 
 class RoleChangeLog(BaseModel):
-    """角色变更记录模型"""
-    id: UUIDv1
-    user_id: UUIDv1
-    operator_id: UUIDv1
-    old_role: str = Field(..., pattern=r'^(author|editor|reviewer|admin)$')
-    new_role: str = Field(..., pattern=r'^(author|editor|reviewer|admin)$')
-    reason: str = Field(..., min_length=10, max_length=500)
-    ip_address: Optional[str] = Field(None, max_length=45)
-    user_agent: Optional[str] = None
+    """
+    User role modification audit log.
+    T008: 记录用户角色变更历史
+    """
+    id: UUID
+    user_id: UUID
+    changed_by: UUID
+    old_role: str
+    new_role: str
+    reason: str
     created_at: datetime
 
-    @field_validator('old_role', 'new_role')
-    @classmethod
-    def validate_roles(cls, v: str) -> str:
-        """验证角色值"""
-        valid_roles = {'author', 'editor', 'reviewer', 'admin'}
-        if v not in valid_roles:
-            raise ValueError(f'Invalid role: {v}. Must be one of {valid_roles}')
-        return v
-
+    model_config = ConfigDict(from_attributes=True)
 
 class AccountCreationLog(BaseModel):
-    """账号创建记录模型"""
-    id: UUIDv1
-    user_id: UUIDv1
-    creator_id: UUIDv1
-    creation_type: str = Field(..., pattern=r'^(internal_editor|temporary_reviewer)$')
-    invitation_status: str = Field(
-        default='pending',
-        pattern=r'^(pending|sent|delivered|opened|failed)$'
-    )
-    invitation_sent_at: Optional[datetime] = None
-    invitation_opened_at: Optional[datetime] = None
+    """
+    Internal account creation audit log.
+    T009: 记录内部账号创建操作
+    """
+    id: UUID
+    created_user_id: UUID
+    created_by: UUID
+    initial_role: str
     created_at: datetime
 
-    @field_validator('creation_type')
-    @classmethod
-    def validate_creation_type(cls, v: str) -> str:
-        """验证创建类型"""
-        valid_types = {'internal_editor', 'temporary_reviewer'}
-        if v not in valid_types:
-            raise ValueError(f'Invalid creation type: {v}. Must be one of {valid_types}')
-        return v
-
+    model_config = ConfigDict(from_attributes=True)
 
 class EmailNotificationLog(BaseModel):
-    """邮件通知记录模型"""
-    id: UUIDv1
+    """
+    Email notification log.
+    T010: 记录关键邮件通知发送状态
+    """
+    id: UUID
     recipient_email: EmailStr
-    template_type: str = Field(..., pattern=r'^(editor_account_created|reviewer_invitation)$')
-    user_id: Optional[UUIDv1] = None
-    status: str = Field(
-        default='queued',
-        pattern=r'^(queued|sent|delivered|opened|failed)$'
-    )
-    failure_reason: Optional[str] = None
-    sent_at: Optional[datetime] = None
-    delivered_at: Optional[datetime] = None
-    opened_at: Optional[datetime] = None
-    created_at: datetime
+    notification_type: str  # e.g., "account_created", "reviewer_invite"
+    status: str             # "sent", "failed"
+    error_message: Optional[str] = None
+    sent_at: datetime
 
-    @field_validator('status', 'failure_reason')
-    @classmethod
-    def validate_failure_reason(cls, v: str, info) -> str:
-        """验证失败原因：当状态为failed时必须提供失败原因"""
-        if info.data.get('status') == 'failed' and v is None:
-            raise ValueError('failure_reason is required when status is "failed"')
-        return v
+    model_config = ConfigDict(from_attributes=True)
 
 
-# ============================================================================
-# API 请求/响应模型
-# ============================================================================
-
-class Pagination(BaseModel):
-    """分页信息模型"""
-    page: int = Field(..., ge=1)
-    per_page: int = Field(..., ge=1, le=100)
-    total_pages: int = Field(..., ge=0)
-    total_items: int = Field(..., ge=0)
-    has_next: bool
-    has_prev: bool
-
-
-class User(BaseModel):
-    """用户信息模型"""
-    id: UUIDv1
-    email: EmailStr
-    name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(..., pattern=r'^(author|editor|reviewer|admin)$')
-    created_at: datetime
-    last_sign_in_at: Optional[datetime] = None
-
+# --- Response Models (T011) ---
 
 class UserResponse(BaseModel):
-    """用户详情响应模型"""
-    id: UUIDv1
+    """
+    Standard user profile response.
+    T011: 用户详情响应
+    """
+    id: UUID
     email: EmailStr
-    name: str
-    role: str
+    full_name: Optional[str] = None
+    roles: List[str] = []
     created_at: datetime
-    last_sign_in_at: Optional[datetime] = None
-    role_changes: list[RoleChangeLog] = Field(default_factory=list)
+    is_verified: bool = False  # Derived from email_confirmed_at
 
+    model_config = ConfigDict(from_attributes=True)
+
+class Pagination(BaseModel):
+    """
+    T011: 通用分页元数据
+    """
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
 
 class UserListResponse(BaseModel):
-    """用户列表响应模型"""
-    users: list[User]
+    """
+    T011: 用户列表响应
+    """
+    data: List[UserResponse]
     pagination: Pagination
 
 
-# ============================================================================
-# API 请求模型
-# ============================================================================
+# --- Request Models (T012) ---
 
 class CreateUserRequest(BaseModel):
-    """创建用户请求模型"""
+    """
+    T012: 创建内部账号请求
+    """
     email: EmailStr
-    name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(default='editor', pattern=r'^editor$')
-
+    full_name: str = Field(..., min_length=1, max_length=100)
+    role: str = Field(..., pattern="^(editor|reviewer|admin)$")  # 限制只能创建非 Author 角色
 
 class UpdateRoleRequest(BaseModel):
-    """更新角色请求模型"""
-    new_role: str = Field(..., pattern=r'^(editor|reviewer)$')
-    reason: str = Field(..., min_length=10, max_length=500)
-
+    """
+    T012: 修改用户角色请求
+    """
+    new_role: str = Field(..., pattern="^(author|editor|reviewer|admin)$")
+    reason: str = Field(..., min_length=10, description="Reason for role change is mandatory for audit trail")
 
 class InviteReviewerRequest(BaseModel):
-    """邀请审稿人请求模型"""
+    """
+    T012: 邀请临时审稿人请求
+    """
     email: EmailStr
-    name: str = Field(..., min_length=1, max_length=100)
-    manuscript_id: Optional[UUIDv1] = None
-
-
-class RoleChangeResponse(BaseModel):
-    """角色变更响应模型"""
-    success: bool
-    message: str
-    role_change: Optional[RoleChangeLog] = None
-
-
-class RoleChangeListResponse(BaseModel):
-    """角色变更历史响应模型"""
-    role_changes: list[RoleChangeLog]
-    total_count: int
-
-
-class InviteReviewerResponse(BaseModel):
-    """邀请审稿人响应模型"""
-    success: bool
-    message: str
-    user_id: Optional[UUIDv1] = None
-    invitation_sent: bool
+    full_name: str = Field(..., min_length=1, max_length=100)
+    manuscript_id: Optional[UUID] = None  # Context for the invitation

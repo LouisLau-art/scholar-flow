@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReviewerDashboard from "@/components/ReviewerDashboard"
 import EditorDashboard from "@/components/EditorDashboard"
+import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
 
 export default function DashboardPage() {
@@ -69,6 +70,7 @@ export default function DashboardPage() {
 
   const canSeeReviewer = roles.includes('reviewer') || roles.includes('admin')
   const canSeeEditor = roles.includes('editor') || roles.includes('admin')
+  const canSeeAdmin = roles.includes('admin')
   const roleLabel =
     roles.length > 0 ? roles.join(', ') : 'author'
 
@@ -97,6 +99,11 @@ export default function DashboardPage() {
               {canSeeEditor && (
                 <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                   <Shield className="h-4 w-4" /> Editor
+                </TabsTrigger>
+              )}
+              {canSeeAdmin && (
+                <TabsTrigger value="admin" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <Shield className="h-4 w-4" /> Admin
                 </TabsTrigger>
               )}
             </TabsList>
@@ -164,6 +171,12 @@ export default function DashboardPage() {
           {canSeeEditor && (
             <TabsContent value="editor" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <EditorDashboard />
+            </TabsContent>
+          )}
+
+          {canSeeAdmin && (
+            <TabsContent value="admin" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <AdminDashboard />
             </TabsContent>
           )}
         </Tabs>

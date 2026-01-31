@@ -40,40 +40,40 @@
 
 ### Database Migration (Blocking)
 
-- [ ] T004 Create database migration file for role_change_logs table in backend/migrations/
-- [ ] T005 Create database migration file for account_creation_logs table in backend/migrations/
-- [ ] T006 Create database migration file for email_notification_logs table in backend/migrations/
-- [ ] T007 Apply database migrations to Supabase
+- [X] T004 Create database migration file for role_change_logs table in backend/migrations/
+- [X] T005 Create database migration file for account_creation_logs table in backend/migrations/
+- [X] T006 Create database migration file for email_notification_logs table in backend/migrations/
+- [X] T007 Apply database migrations to Supabase
 
 ### Backend Models (Blocking)
 
-- [ ] T008 [P] Create RoleChangeLog Pydantic model in backend/src/models/user_management.py
-- [ ] T009 [P] Create AccountCreationLog Pydantic model in backend/src/models/user_management.py
-- [ ] T010 [P] Create EmailNotificationLog Pydantic model in backend/src/models/user_management.py
-- [ ] T011 Create UserResponse, UserListResponse, Pagination models in backend/src/models/user_management.py
-- [ ] T012 Create request models (CreateUserRequest, UpdateRoleRequest, InviteReviewerRequest) in backend/src/models/user_management.py
+- [X] T008 [P] Create RoleChangeLog Pydantic model in backend/app/models/user_management.py
+- [X] T009 [P] Create AccountCreationLog Pydantic model in backend/app/models/user_management.py
+- [X] T010 [P] Create EmailNotificationLog Pydantic model in backend/app/models/user_management.py
+- [X] T011 Create UserResponse, UserListResponse, Pagination models in backend/app/models/user_management.py
+- [X] T012 Create request models (CreateUserRequest, UpdateRoleRequest, InviteReviewerRequest) in backend/app/models/user_management.py
 
 ### Backend Services (Blocking)
 
-- [ ] T013 Create UserManagementService base class in backend/src/services/user_management.py
-- [ ] T014 Implement Supabase client initialization with service role key in backend/src/services/user_management.py
-- [ ] T015 Implement audit logging helper functions in backend/src/services/user_management.py
+- [X] T013 Create UserManagementService base class in backend/app/services/user_management.py
+- [X] T014 Implement Supabase client initialization with service role key in backend/app/services/user_management.py
+- [X] T015 Implement audit logging helper functions in backend/app/services/user_management.py
 
 ### Backend API Structure (Blocking)
 
-- [ ] T016 Create admin users API router file in backend/src/api/v1/admin/users.py
-- [ ] T017 Register admin users router in backend/src/api/v1/__init__.py
-- [ ] T018 Create admin package __init__.py in backend/src/api/v1/admin/__init__.py
+- [X] T016 Create admin users API router file in backend/app/api/v1/admin/users.py
+- [X] T017 Register admin users router in backend/app/api/v1/__init__.py
+- [X] T018 Create admin package __init__.py in backend/app/api/v1/admin/__init__.py
 
 ### Frontend Services (Blocking)
 
-- [ ] T019 Create admin user service in frontend/src/services/admin/userService.ts
-- [ ] T020 [P] Create TypeScript types for user management in frontend/src/types/user.ts
+- [X] T019 Create admin user service in frontend/src/services/admin/userService.ts
+- [X] T020 [P] Create TypeScript types for user management in frontend/src/types/user.ts
 
 ### Frontend Components Structure (Blocking)
 
-- [ ] T021 Create admin components directory in frontend/src/components/admin/
-- [ ] T022 Create admin pages directory in frontend/src/app/admin/users/
+- [X] T021 Create admin components directory in frontend/src/components/admin/
+- [X] T022 Create admin pages directory in frontend/src/app/admin/users/
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -88,43 +88,43 @@
 ### Tests for User Story 1 (Principle XII & XIII & XIV)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T023 [P] [US1] Authentication test: GET /api/v1/admin/users requires valid JWT token in backend/tests/integration/test_admin_users.py
-- [ ] T024 [P] [US1] Authorization test: Non-admin users cannot access user list in backend/tests/integration/test_admin_users.py
-- [ ] T025 [P] [US1] Security test: Unauthenticated access returns 401 in backend/tests/integration/test_admin_users.py
+- [X] T023 [P] [US1] Authentication test: GET /api/v1/admin/users requires valid JWT token in backend/tests/integration/test_admin_users.py
+- [X] T024 [P] [US1] Authorization test: Non-admin users cannot access user list in backend/tests/integration/test_admin_users.py
+- [X] T025 [P] [US1] Security test: Unauthenticated access returns 401 in backend/tests/integration/test_admin_users.py
 
 **API Development Tests** (Principle XIV):
-- [ ] T026 [P] [US1] Path consistency test: Verify frontend/backend API paths match exactly in backend/tests/contract/test_user_contracts.py
-- [ ] T027 [P] [US1] Error handling test: Verify unified error responses for invalid pagination in backend/tests/integration/test_admin_users.py
-- [ ] T028 [P] [US1] Validation test: Verify pagination parameters (page, per_page, search, role) in backend/tests/integration/test_admin_users.py
+- [X] T026 [P] [US1] Path consistency test: Verify frontend/backend API paths match exactly in backend/tests/contract/test_user_contracts.py
+- [X] T027 [P] [US1] Error handling test: Verify unified error responses for invalid pagination in backend/tests/integration/test_admin_users.py
+- [X] T028 [P] [US1] Validation test: Verify pagination parameters (page, per_page, search, role) in backend/tests/integration/test_admin_users.py
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T029 [P] [US1] HTTP method test: Test GET /api/v1/admin/users with all query parameters in backend/tests/integration/test_admin_users.py
-- [ ] T030 [P] [US1] Integration test: Use REAL database connection to fetch users in backend/tests/integration/test_admin_users.py
-- [ ] T031 [P] [US1] Error scenario test: Test empty search results, invalid role filter in backend/tests/integration/test_admin_users.py
+- [X] T029 [P] [US1] HTTP method test: Test GET /api/v1/admin/users with all query parameters in backend/tests/integration/test_admin_users.py
+- [X] T030 [P] [US1] Integration test: Use REAL database connection to fetch users in backend/tests/integration/test_admin_users.py
+- [X] T031 [P] [US1] Error scenario test: Test empty search results, invalid role filter in backend/tests/integration/test_admin_users.py
 
 ### Implementation for User Story 1
 
 **Backend API Implementation**:
-- [ ] T032 [US1] Implement GET /api/v1/admin/users endpoint with pagination in backend/src/api/v1/admin/users.py
-- [ ] T033 [US1] Implement search and filter logic (email, name, role) in backend/src/services/user_management.py
-- [ ] T034 [US1] Implement pagination logic (offset, limit, total count) in backend/src/services/user_management.py
-- [ ] T035 [US1] Add authentication middleware to admin users endpoints in backend/src/api/v1/admin/users.py
-- [ ] T036 [US1] Implement admin role verification in backend/src/api/v1/admin/users.py
+- [X] T032 [US1] Implement GET /api/v1/admin/users endpoint with pagination in backend/app/api/v1/admin/users.py
+- [X] T033 [US1] Implement search and filter logic (email, name, role) in backend/app/services/user_management.py
+- [X] T034 [US1] Implement pagination logic (offset, limit, total count) in backend/app/services/user_management.py
+- [X] T035 [US1] Add authentication middleware to admin users endpoints in backend/app/api/v1/admin/users.py
+- [X] T036 [US1] Implement admin role verification in backend/app/api/v1/admin/users.py
 
 **Frontend API Service Implementation**:
-- [ ] T037 [US1] Implement getUsers() method in frontend/src/services/admin/userService.ts
-- [ ] T038 [US1] Add TypeScript types for UserListResponse in frontend/src/types/user.ts
+- [X] T037 [US1] Implement getUsers() method in frontend/src/services/admin/userService.ts
+- [X] T038 [US1] Add TypeScript types for UserListResponse in frontend/src/types/user.ts
 
 **Frontend Components Implementation**:
-- [ ] T039 [P] [US1] Create UserTable component in frontend/src/components/admin/UserTable.tsx
-- [ ] T040 [P] [US1] Create UserFilters component in frontend/src/components/admin/UserFilters.tsx
-- [ ] T041 [US1] Create user list page in frontend/src/app/admin/users/page.tsx
-- [ ] T042 [US1] Add "用户管理" menu item to admin navigation in frontend/src/app/admin/layout.tsx
+- [X] T039 [P] [US1] Create UserTable component in frontend/src/components/admin/UserTable.tsx
+- [X] T040 [P] [US1] Create UserFilters component in frontend/src/components/admin/UserFilters.tsx
+- [X] T041 [US1] Create user list page in frontend/src/app/admin/users/page.tsx
+- [X] T042 [US1] Add "用户管理" menu item to admin navigation in frontend/src/app/admin/layout.tsx
 
 **Frontend Styling & UX**:
-- [ ] T043 [US1] Add empty state UI for "未找到匹配用户" in frontend/src/components/admin/UserTable.tsx
-- [ ] T044 [US1] Add loading state for user list in frontend/src/components/admin/UserTable.tsx
-- [ ] T045 [US1] Add error handling and toast notifications in frontend/src/app/admin/users/page.tsx
+- [X] T043 [US1] Add empty state UI for "未找到匹配用户" in frontend/src/components/admin/UserTable.tsx
+- [X] T044 [US1] Add loading state for user list in frontend/src/components/admin/UserTable.tsx
+- [X] T045 [US1] Add error handling and toast notifications in frontend/src/app/admin/users/page.tsx
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -139,49 +139,49 @@
 ### Tests for User Story 2 (Principle XII & XIII & XIV)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T046 [P] [US2] Authentication test: PUT /api/v1/admin/users/{id}/role requires valid JWT token in backend/tests/integration/test_admin_users.py
-- [ ] T047 [P] [US2] Authorization test: Non-admin users cannot modify roles in backend/tests/integration/test_admin_users.py
-- [ ] T048 [P] [US2] Security test: User cannot modify their own role in backend/tests/integration/test_admin_users.py
+- [X] T046 [P] [US2] Authentication test: PUT /api/v1/admin/users/{id}/role requires valid JWT token in backend/tests/integration/test_admin_users.py
+- [X] T047 [P] [US2] Authorization test: Non-admin users cannot modify roles in backend/tests/integration/test_admin_users.py
+- [X] T048 [P] [US2] Security test: User cannot modify their own role in backend/tests/integration/test_admin_users.py
 
 **API Development Tests** (Principle XIV):
-- [ ] T049 [P] [US2] Validation test: Verify reason field is required (min 10 chars) in backend/tests/integration/test_admin_users.py
-- [ ] T050 [P] [US2] Error handling test: Verify error when old_role == new_role in backend/tests/integration/test_admin_users.py
-- [ ] T051 [P] [US2] Error handling test: Verify error when modifying admin role in backend/tests/integration/test_admin_users.py
+- [X] T049 [P] [US2] Validation test: Verify reason field is required (min 10 chars) in backend/tests/integration/test_admin_users.py
+- [X] T050 [P] [US2] Error handling test: Verify error when old_role == new_role in backend/tests/integration/test_admin_users.py
+- [X] T051 [P] [US2] Error handling test: Verify error when modifying admin role in backend/tests/integration/test_admin_users.py
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T052 [P] [US2] HTTP method test: Test PUT /api/v1/admin/users/{id}/role in backend/tests/integration/test_admin_users.py
-- [ ] T053 [P] [US2] Integration test: Role change creates audit log in backend/tests/integration/test_admin_users.py
-- [ ] T054 [P] [US2] Error scenario test: Test invalid user ID, missing reason in backend/tests/integration/test_admin_users.py
+- [X] T052 [P] [US2] HTTP method test: Test PUT /api/v1/admin/users/{id}/role in backend/tests/integration/test_admin_users.py
+- [X] T053 [P] [US2] Integration test: Role change creates audit log in backend/tests/integration/test_admin_users.py
+- [X] T054 [P] [US2] Error scenario test: Test invalid user ID, missing reason in backend/tests/integration/test_admin_users.py
 
 ### Implementation for User Story 2
 
 **Backend API Implementation**:
-- [ ] T055 [US2] Implement GET /api/v1/admin/users/{user_id} endpoint in backend/src/api/v1/admin/users.py
-- [ ] T056 [US2] Implement PUT /api/v1/admin/users/{user_id}/role endpoint in backend/src/api/v1/admin/users.py
-- [ ] T057 [US2] Implement role change logic with validation in backend/src/services/user_management.py
-- [ ] T058 [US2] Implement audit log creation for role changes in backend/src/services/user_management.py
-- [ ] T059 [US2] Add validation: prevent self role modification in backend/src/services/user_management.py
-- [ ] T060 [US2] Add validation: prevent admin role modification in backend/src/services/user_management.py
+- [X] T055 [US2] Implement GET /api/v1/admin/users/{user_id} endpoint in backend/src/api/v1/admin/users.py
+- [X] T056 [US2] Implement PUT /api/v1/admin/users/{user_id}/role endpoint in backend/src/api/v1/admin/users.py
+- [X] T057 [US2] Implement role change logic with validation in backend/src/services/user_management.py
+- [X] T058 [US2] Implement audit log creation for role changes in backend/src/services/user_management.py
+- [X] T059 [US2] Add validation: prevent self role modification in backend/src/services/user_management.py
+- [X] T060 [US2] Add validation: prevent admin role modification in backend/src/services/user_management.py
 
 **Backend API Extension**:
-- [ ] T061 [US2] Implement GET /api/v1/admin/users/{user_id}/role-changes endpoint in backend/src/api/v1/admin/users.py
+- [X] T061 [US2] Implement GET /api/v1/admin/users/{user_id}/role-changes endpoint in backend/src/api/v1/admin/users.py
 
 **Frontend API Service Implementation**:
-- [ ] T062 [US2] Implement getUserDetail() method in frontend/src/services/admin/userService.ts
-- [ ] T063 [US2] Implement updateUserRole() method in frontend/src/services/admin/userService.ts
-- [ ] T064 [US2] Implement getRoleChanges() method in frontend/src/services/admin/userService.ts
-- [ ] T065 [US2] Add TypeScript types for role change in frontend/src/types/user.ts
+- [X] T062 [US2] Implement getUserDetail() method in frontend/src/services/admin/userService.ts
+- [X] T063 [US2] Implement updateUserRole() method in frontend/src/services/admin/userService.ts
+- [X] T064 [US2] Implement getRoleChanges() method in frontend/src/services/admin/userService.ts
+- [X] T065 [US2] Add TypeScript types for role change in frontend/src/types/user.ts
 
 **Frontend Components Implementation**:
-- [ ] T066 [P] [US2] Create UserRoleDialog component in frontend/src/components/admin/UserRoleDialog.tsx
-- [ ] T067 [US2] Create user detail page in frontend/src/app/admin/users/[id]/page.tsx
-- [ ] T068 [US2] Add "详情" button to UserTable component in frontend/src/components/admin/UserTable.tsx
-- [ ] T069 [US2] Add role change history display in user detail page in frontend/src/app/admin/users/[id]/page.tsx
+- [X] T066 [P] [US2] Create UserRoleDialog component in frontend/src/components/admin/UserRoleDialog.tsx
+- [X] T067 [US2] Create user detail page in frontend/src/app/admin/users/[id]/page.tsx
+- [X] T068 [US2] Add "详情" button to UserTable component in frontend/src/components/admin/UserTable.tsx
+- [X] T069 [US2] Add role change history display in user detail page in frontend/src/app/admin/users/[id]/page.tsx
 
 **Frontend Styling & UX**:
-- [ ] T070 [US2] Add form validation for role change reason (min 10 chars) in frontend/src/components/admin/UserRoleDialog.tsx
-- [ ] T071 [US2] Add confirmation dialog for role change in frontend/src/components/admin/UserRoleDialog.tsx
-- [ ] T072 [US2] Add success/error toast notifications in frontend/src/components/admin/UserRoleDialog.tsx
+- [X] T070 [US2] Add form validation for role change reason (min 10 chars) in frontend/src/components/admin/UserRoleDialog.tsx
+- [X] T071 [US2] Add confirmation dialog for role change in frontend/src/components/admin/UserRoleDialog.tsx
+- [X] T072 [US2] Add success/error toast notifications in frontend/src/components/admin/UserRoleDialog.tsx
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -196,43 +196,43 @@
 ### Tests for User Story 3 (Principle XII & XIII & XIV)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T073 [P] [US3] Authentication test: POST /api/v1/admin/users requires valid JWT token in backend/tests/integration/test_admin_users.py
-- [ ] T074 [P] [US3] Authorization test: Non-admin users cannot create users in backend/tests/integration/test_admin_users.py
-- [ ] T075 [P] [US3] Security test: Service role key is used securely in backend/tests/integration/test_admin_users.py
+- [X] T073 [P] [US3] Authentication test: POST /api/v1/admin/users requires valid JWT token in backend/tests/integration/test_admin_users.py
+- [X] T074 [P] [US3] Authorization test: Non-admin users cannot create users in backend/tests/integration/test_admin_users.py
+- [X] T075 [P] [US3] Security test: Service role key is used securely in backend/tests/integration/test_admin_users.py
 
 **API Development Tests** (Principle XIV):
-- [ ] T076 [P] [US3] Validation test: Verify email uniqueness check in backend/tests/integration/test_admin_users.py
-- [ ] T077 [P] [US3] Error handling test: Verify error when email already exists (409) in backend/tests/integration/test_admin_users.py
-- [ ] T078 [P] [US3] Validation test: Verify name field validation (1-100 chars) in backend/tests/integration/test_admin_users.py
+- [X] T076 [P] [US3] Validation test: Verify email uniqueness check in backend/tests/integration/test_admin_users.py
+- [X] T077 [P] [US3] Error handling test: Verify error when email already exists (409) in backend/tests/integration/test_admin_users.py
+- [X] T078 [P] [US3] Validation test: Verify name field validation (1-100 chars) in backend/tests/integration/test_admin_users.py
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T079 [P] [US3] HTTP method test: Test POST /api/v1/admin/users in backend/tests/integration/test_admin_users.py
-- [ ] T080 [P] [US3] Integration test: User creation creates account creation log in backend/tests/integration/test_admin_users.py
-- [ ] T081 [P] [US3] Error scenario test: Test email send failure rollback in backend/tests/integration/test_admin_users.py
+- [X] T079 [P] [US3] HTTP method test: Test POST /api/v1/admin/users in backend/tests/integration/test_admin_users.py
+- [X] T080 [P] [US3] Integration test: User creation creates account creation log in backend/tests/integration/test_admin_users.py
+- [X] T081 [P] [US3] Error scenario test: Test email send failure rollback in backend/tests/integration/test_admin_users.py
 
 ### Implementation for User Story 3
 
 **Backend API Implementation**:
-- [ ] T082 [US3] Implement POST /api/v1/admin/users endpoint in backend/src/api/v1/admin/users.py
-- [ ] T083 [US3] Implement user creation with Supabase Admin API in backend/src/services/user_management.py
-- [ ] T084 [US3] Implement email uniqueness check in backend/src/services/user_management.py
-- [ ] T085 [US3] Implement account creation log in backend/src/services/user_management.py
-- [ ] T086 [US3] Integrate with email service for account notification in backend/src/services/user_management.py
-- [ ] T087 [US3] Add rollback logic for email send failure in backend/src/services/user_management.py
+- [X] T082 [US3] Implement POST /api/v1/admin/users endpoint in backend/app/api/v1/admin/users.py
+- [X] T083 [US3] Implement user creation with Supabase Admin API in backend/app/services/user_management.py
+- [X] T084 [US3] Implement email uniqueness check in backend/app/services/user_management.py
+- [X] T085 [US3] Implement account creation log in backend/app/services/user_management.py
+- [X] T086 [US3] Integrate with email service for account notification in backend/app/services/user_management.py
+- [X] T087 [US3] Add rollback logic for email send failure in backend/app/services/user_management.py
 
 **Frontend API Service Implementation**:
-- [ ] T088 [US3] Implement createInternalEditor() method in frontend/src/services/admin/userService.ts
-- [ ] T089 [US3] Add TypeScript types for CreateUserRequest in frontend/src/types/user.ts
+- [X] T088 [US3] Implement createInternalEditor() method in frontend/src/services/admin/userService.ts
+- [X] T089 [US3] Add TypeScript types for CreateUserRequest in frontend/src/types/user.ts
 
 **Frontend Components Implementation**:
-- [ ] T090 [P] [US3] Create CreateUserForm component in frontend/src/components/admin/CreateUserForm.tsx
-- [ ] T091 [US3] Add "新增内部成员" button to user list page in frontend/src/app/admin/users/page.tsx
-- [ ] T092 [US3] Integrate CreateUserForm with user list page in frontend/src/app/admin/users/page.tsx
+- [X] T090 [P] [US3] Create CreateUserForm component in frontend/src/components/admin/CreateUserForm.tsx
+- [X] T091 [US3] Add "新增内部成员" button to user list page in frontend/src/app/admin/users/page.tsx
+- [X] T092 [US3] Integrate CreateUserForm with user list page in frontend/src/app/admin/users/page.tsx
 
 **Frontend Styling & UX**:
-- [ ] T093 [US3] Add form validation (email format, name length) in frontend/src/components/admin/CreateUserForm.tsx
-- [ ] T094 [US3] Add email uniqueness check on client side in frontend/src/components/admin/CreateUserForm.tsx
-- [ ] T095 [US3] Add success/error toast notifications in frontend/src/components/admin/CreateUserForm.tsx
+- [X] T093 [US3] Add form validation (email format, name length) in frontend/src/components/admin/CreateUserForm.tsx
+- [X] T094 [US3] Add email uniqueness check on client side in frontend/src/components/admin/CreateUserForm.tsx
+- [X] T095 [US3] Add success/error toast notifications in frontend/src/components/admin/CreateUserForm.tsx
 
 **Checkpoint**: User Stories 1, 2, and 3 should now be independently functional
 
@@ -247,41 +247,41 @@
 ### Tests for User Story 4 (Principle XII & XIII & XIV)
 
 **Security & Authentication Tests** (Principle XIII):
-- [ ] T096 [P] [US4] Authentication test: POST /api/v1/admin/users/invite-reviewer requires valid JWT token in backend/tests/integration/test_admin_users.py
-- [ ] T097 [P] [US4] Authorization test: Only editors and admins can invite reviewers in backend/tests/integration/test_admin_users.py
-- [ ] T098 [P] [US4] Security test: Magic Link is used for temporary accounts in backend/tests/integration/test_admin_users.py
+- [X] T096 [P] [US4] Authentication test: POST /api/v1/admin/users/invite-reviewer requires valid JWT token in backend/tests/integration/test_admin_users.py
+- [X] T097 [P] [US4] Authorization test: Only editors and admins can invite reviewers in backend/tests/integration/test_admin_users.py
+- [X] T098 [P] [US4] Security test: Magic Link is used for temporary accounts in backend/tests/integration/test_admin_users.py
 
 **API Development Tests** (Principle XIV):
-- [ ] T099 [P] [US4] Validation test: Verify email format validation in backend/tests/integration/test_admin_users.py
-- [ ] T100 [P] [US4] Error handling test: Verify error when email already exists (409) in backend/tests/integration/test_admin_users.py
-- [ ] T101 [P] [US4] Validation test: Verify name field validation in backend/tests/integration/test_admin_users.py
+- [X] T099 [P] [US4] Validation test: Verify email format validation in backend/tests/integration/test_admin_users.py
+- [X] T100 [P] [US4] Error handling test: Verify error when email already exists (409) in backend/tests/integration/test_admin_users.py
+- [X] T101 [P] [US4] Validation test: Verify name field validation in backend/tests/integration/test_admin_users.py
 
 **Test Coverage Tests** (Principle XII):
-- [ ] T102 [P] [US4] HTTP method test: Test POST /api/v1/admin/users/invite-reviewer in backend/tests/integration/test_admin_users.py
-- [ ] T103 [P] [US4] Integration test: Reviewer creation uses Magic Link in backend/tests/integration/test_admin_users.py
-- [ ] T104 [P] [US4] Error scenario test: Test concurrent invite requests in backend/tests/integration/test_admin_users.py
+- [X] T102 [P] [US4] HTTP method test: Test POST /api/v1/admin/users/invite-reviewer in backend/tests/integration/test_admin_users.py
+- [X] T103 [P] [US4] Integration test: Reviewer creation uses Magic Link in backend/tests/integration/test_admin_users.py
+- [X] T104 [P] [US4] Error scenario test: Test concurrent invite requests in backend/tests/integration/test_admin_users.py
 
 ### Implementation for User Story 4
 
 **Backend API Implementation**:
-- [ ] T105 [US4] Implement POST /api/v1/admin/users/invite-reviewer endpoint in backend/src/api/v1/admin/users.py
-- [ ] T106 [US4] Implement temporary reviewer creation with Magic Link in backend/src/services/user_management.py
-- [ ] T107 [US4] Implement editor/admin role permission check in backend/src/api/v1/admin/users.py
-- [ ] T108 [US4] Implement Magic Link generation for reviewer invitation in backend/src/services/user_management.py
-- [ ] T109 [US4] Integrate with email service for reviewer invitation in backend/src/services/user_management.py
+- [X] T105 [US4] Implement POST /api/v1/admin/users/invite-reviewer endpoint in backend/src/api/v1/admin/users.py
+- [X] T106 [US4] Implement temporary reviewer creation with Magic Link in backend/src/services/user_management.py
+- [X] T107 [US4] Implement editor/admin role permission check in backend/src/api/v1/admin/users.py
+- [X] T108 [US4] Implement Magic Link generation for reviewer invitation in backend/src/services/user_management.py
+- [X] T109 [US4] Integrate with email service for reviewer invitation in backend/src/services/user_management.py
 
 **Frontend API Service Implementation**:
-- [ ] T110 [US4] Implement inviteReviewer() method in frontend/src/services/admin/userService.ts
-- [ ] T111 [US4] Add TypeScript types for InviteReviewerRequest in frontend/src/types/user.ts
+- [X] T110 [US4] Implement inviteReviewer() method in frontend/src/services/admin/userService.ts
+- [X] T111 [US4] Add TypeScript types for InviteReviewerRequest in frontend/src/types/user.ts
 
 **Frontend Components Implementation**:
-- [ ] T112 [P] [US4] Create InviteReviewerDialog component in frontend/src/components/admin/InviteReviewerDialog.tsx
-- [ ] T113 [US4] Integrate reviewer invitation in manuscript assignment flow (existing page)
-- [ ] T114 [US4] Add confirmation dialog for temporary account creation in frontend/src/components/admin/InviteReviewerDialog.tsx
+- [X] T112 [P] [US4] Create InviteReviewerDialog component in frontend/src/components/admin/InviteReviewerDialog.tsx
+- [X] T113 [US4] Integrate reviewer invitation in manuscript assignment flow (existing page)
+- [X] T114 [US4] Add confirmation dialog for temporary account creation in frontend/src/components/admin/InviteReviewerDialog.tsx
 
 **Frontend Styling & UX**:
-- [ ] T115 [US4] Add prompt: "用户不存在，是否创建临时审稿账号？" in frontend/src/components/admin/InviteReviewerDialog.tsx
-- [ ] T116 [US4] Add success/error toast notifications in frontend/src/components/admin/InviteReviewerDialog.tsx
+- [X] T115 [US4] Add prompt: "用户不存在，是否创建临时审稿账号？" in frontend/src/components/admin/InviteReviewerDialog.tsx
+- [X] T116 [US4] Add success/error toast notifications in frontend/src/components/admin/InviteReviewerDialog.tsx
 
 **Checkpoint**: All user stories should now be independently functional
 

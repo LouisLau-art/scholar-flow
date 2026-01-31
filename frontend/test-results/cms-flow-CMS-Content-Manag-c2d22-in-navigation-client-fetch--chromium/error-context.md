@@ -1,0 +1,77 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - img [ref=e4]
+    - heading "Something went wrong" [level=1] [ref=e6]
+    - paragraph [ref=e7]: We encountered an unexpected error. Please try refreshing the page or contact support if the issue persists.
+    - button "Refresh Page" [ref=e8] [cursor=pointer]:
+      - img [ref=e9]
+      - text: Refresh Page
+  - contentinfo [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: ScholarFlow
+          - generic [ref=e19]: Modern academic workflow platform.
+        - navigation [ref=e20]:
+          - link "About" [ref=e21] [cursor=pointer]:
+            - /url: /journal/about
+          - link "Guidelines" [ref=e22] [cursor=pointer]:
+            - /url: /journal/guidelines
+          - link "Contact" [ref=e23] [cursor=pointer]:
+            - /url: /journal/contact
+          - link "Ethics" [ref=e24] [cursor=pointer]:
+            - /url: /journal/ethics
+      - generic [ref=e25]: © 2026 ScholarFlow. All rights reserved.
+  - region "Notifications alt+T"
+  - alert [ref=e26]
+  - dialog [ref=e29]:
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "Build Error" [level=1] [ref=e32]
+        - paragraph [ref=e33]: Failed to compile
+        - generic [ref=e34]:
+          - text: Next.js (14.2.0) is outdated
+          - link "(learn more)" [ref=e36] [cursor=pointer]:
+            - /url: https://nextjs.org/docs/messages/version-staleness
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - link "./src/components/doi/DOIStatus.tsx:1:1" [ref=e39] [cursor=pointer]:
+            - text: ./src/components/doi/DOIStatus.tsx:1:1
+            - img [ref=e40]
+          - generic [ref=e44]:
+            - generic [ref=e45]: "Module not found: Can't resolve '@/components/ui/badge'"
+            - text: ">"
+            - generic [ref=e46]: 1 |
+            - text: import
+            - generic [ref=e47]: "{"
+            - text: Badge
+            - generic [ref=e48]: "}"
+            - text: from '@/components/ui/badge'
+            - generic [ref=e49]: "|"
+            - text: ^
+            - generic [ref=e50]: 2 |
+            - text: import
+            - generic [ref=e51]: "{"
+            - text: AlertCircle, CheckCircle2, Clock, Loader2
+            - generic [ref=e52]: "}"
+            - text: from 'lucide-react'
+            - generic [ref=e53]: 3 |
+            - generic [ref=e54]: 4 |
+            - text: interface DOIStatusProps
+            - generic [ref=e55]: "{"
+            - generic [ref=e56]:
+              - link "https://nextjs.org/docs/messages/module-not-found" [ref=e57] [cursor=pointer]:
+                - /url: https://nextjs.org/docs/messages/module-not-found
+              - text: "Import trace for requested module:"
+            - link "./src/components/doi/DOITaskList.tsx" [ref=e58] [cursor=pointer]:
+              - text: ./src/components/doi/DOITaskList.tsx
+              - img [ref=e59]
+            - link "./src/app/(admin)/editor/doi-tasks/page.tsx" [ref=e63] [cursor=pointer]:
+              - text: ./src/app/(admin)/editor/doi-tasks/page.tsx
+              - img [ref=e64]
+        - contentinfo [ref=e68]:
+          - paragraph [ref=e69]: This error occurred during the build process and can only be dismissed by fixing the error.
+```

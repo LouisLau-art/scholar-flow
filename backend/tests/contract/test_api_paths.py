@@ -29,6 +29,11 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/public/topics"),
     ("GET", "/api/v1/public/announcements"),
     ("GET", "/"),
+    # Admin User Management
+    ("GET", "/api/v1/admin/users"),
+    ("POST", "/api/v1/admin/users"),
+    ("PUT", "/api/v1/admin/users/{user_id}/role"),
+    ("POST", "/api/v1/admin/users/invite-reviewer"),
 }
 
 @pytest.mark.asyncio
