@@ -46,14 +46,14 @@ export function AcademicForm({ user, onSave, isSaving }: AcademicFormProps) {
             maxTags={10}
             maxLength={50}
           />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             These tags help us match you with relevant manuscripts.
           </p>
         </div>
       </div>
 
-      <div className="space-y-4 pt-4 border-t border-slate-100">
-        <h3 className="font-medium text-slate-900">Academic Identity</h3>
+      <div className="space-y-4 pt-4 border-t border-border">
+        <h3 className="font-medium text-foreground">Academic Identity</h3>
         
         <div className="space-y-2">
           <Label htmlFor="orcid_id">ORCID iD</Label>

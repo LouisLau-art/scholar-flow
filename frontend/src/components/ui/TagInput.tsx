@@ -64,13 +64,13 @@ export function TagInput({
         {tags.map((tag, index) => (
           <span
             key={index}
-            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-sm font-medium text-slate-900"
+            className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-sm font-medium text-secondary-foreground"
           >
             {tag}
             <button
               type="button"
               onClick={() => removeTag(index)}
-              className="text-slate-500 hover:text-slate-900"
+              className="text-muted-foreground hover:text-foreground"
             >
               <X className="h-3 w-3" />
               <span className="sr-only">Remove {tag}</span>
@@ -97,7 +97,7 @@ export function TagInput({
           Add
         </Button>
       </div>
-      <div className="text-xs text-slate-500">
+      <div className="text-xs text-muted-foreground">
         {tags.length}/{maxTags} tags. Press Enter to add.
       </div>
     </div>

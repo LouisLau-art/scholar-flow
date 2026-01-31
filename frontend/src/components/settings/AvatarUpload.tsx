@@ -84,7 +84,7 @@ export function AvatarUpload({ userId, currentAvatarUrl, onUploadSuccess, userNa
             onChange={handleFileSelect}
           />
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Supported formats: JPG, PNG, WEBP.
         </p>
       </div>

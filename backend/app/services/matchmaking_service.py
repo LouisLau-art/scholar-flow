@@ -185,9 +185,13 @@ class MatchmakingService:
         except Exception:
             pass
 
-        vector = self._embedder(source_text)
-        if not isinstance(vector, list) or len(vector) != 384:
-            print("[matchmaking] reviewer embedding generation failed: unexpected dimension")
+        try:
+            vector = self._embedder(source_text)
+            if not isinstance(vector, list) or len(vector) != 384:
+                print("[matchmaking] reviewer embedding generation failed: unexpected dimension")
+                return
+        except Exception as e:
+            print(f"[matchmaking] failed to generate embedding for reviewer {user_id}: {e}")
             return
 
         payload = {
