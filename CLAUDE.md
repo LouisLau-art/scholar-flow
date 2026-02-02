@@ -9,10 +9,17 @@
 - **后端**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx (017-super-admin-management)
 - **数据库与认证**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x (017-super-admin-management)
 - **测试**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
-- **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF 匹配) (017-super-admin-management)
+- **AI/ML**:
+  - **PDF 文本提取（本地）**：`pdfplumber`（仅前几页 + 字符截断，见 `backend/app/core/pdf_processor.py`）
+  - **元数据抽取（远程 LLM）**：通过 **OpenAI SDK** 调用 **OpenAI-compatible** 接口（当前默认配置指向火山引擎/豆包：`OPENAI_BASE_URL`，日志中会出现 `ark.cn-beijing.volces.com`；见 `backend/app/core/ai_engine.py`）
+  - **匹配**：scikit-learn（TF-IDF 匹配）
 - PostgreSQL (Supabase) (009-test-coverage)
 - Python 3.14+ (后端), TypeScript 5.x (前端) (011-notification-center)
 - Supabase (`notifications` 表, `review_assignments` 扩展) (011-notification-center)
+
+## 关键环境假设（必须一致）
+- **Supabase 使用云端项目**（非本地 DB 作为默认）；迁移优先用 `supabase` CLI（`supabase login` / `supabase link` / `supabase db push --linked`），必要时可在 Dashboard 的 SQL Editor 手动执行迁移 SQL。
+- **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
 
 ## 项目结构
 
