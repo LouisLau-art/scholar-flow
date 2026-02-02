@@ -21,7 +21,7 @@
 - **As a** 研究人员, **I want** 在首屏直接搜索文章, **So that** 我能快速验证平台的学术资源。
 - **Requirements**:
   - **Hero Section**: 背景需体现学术严谨感（抽象几何或科研图片）。
-  - **Search Box**: 支持通过 Title, DOI, Author 进行检索（前端模拟）。
+  - **Search Box**: 跳转到 `/search?mode=...&q=...` 并对接后端 `GET /api/v1/manuscripts/search`（公开检索仅返回 `published`）。
   - **Call to Action (CTA)**: 醒目的 "Submit your manuscript" 按钮。
 
 ### US3: 动态内容展示 (Dynamic Content)

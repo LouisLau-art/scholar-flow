@@ -1,0 +1,204 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { adminUserService } from '@/services/admin/userService';
+import { authService } from '@/services/auth';
+import { UserTable } from '@/components/admin/UserTable';
+import { UserFilters } from '@/components/admin/UserFilters';
+import { UserRoleDialog } from '@/components/admin/UserRoleDialog';
+import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
+import { User, UserRole } from '@/types/user';
+import { toast } from 'sonner';
+import { Loader2, ShieldAlert } from 'lucide-react';
+
+export default function UserManagementPage() {
+  const router = useRouter();
+  // Auth State
+  const [verifyingRole, setVerifyingRole] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Data State
+  const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState('');
+  
+  // Dialog State
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Debounce search
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+
+  // 1. Security Check: Verify Admin Role on Mount
+  useEffect(() => {
+    async function checkAdminAccess() {
+      try {
+        const session = await authService.getSession();
+        if (!session?.user) {
+          router.replace('/login');
+          return;
+        }
+
+        // Fetch user profile to get roles
+        const profile = await authService.getUserProfile();
+        const roles = profile?.roles || [];
+        
+        if (!roles.includes('admin')) {
+          toast.error('Access Denied: You do not have permission to view this page.');
+          router.replace('/dashboard'); // Redirect unauthorized users
+        } else {
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        router.replace('/dashboard');
+      } finally {
+        setVerifyingRole(false);
+      }
+    }
+    checkAdminAccess();
+  }, [router]);
+
+  // 2. Data Fetching (Only if Admin)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); 
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!isAdmin) return; // Stop fetching if not admin
+
+    setLoading(true);
+    try {
+      const response = await adminUserService.getUsers(page, 10, debouncedSearch, role);
+      setUsers(response.data);
+      setTotal(response.pagination.total);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      // Don't toast here if it's a 403, as the initial check should handle it.
+      // But for robust UX, we can check status.
+      toast.error('Failed to load users.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, debouncedSearch, role, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUsers();
+    }
+  }, [fetchUsers, isAdmin]);
+
+  // 3. Actions
+  const handleRoleChange = (newRole: string) => {
+    setRole(newRole);
+    setPage(1);
+  };
+
+  const handleEditClick = (user: User) => {
+    setSelectedUser(user);
+    setIsRoleDialogOpen(true);
+  };
+
+  const handleRoleUpdate = async (userId: string, newRole: UserRole, reason: string) => {
+    try {
+      await adminUserService.updateUserRole(userId, { new_role: newRole, reason });
+      toast.success('User role updated successfully');
+      fetchUsers(); 
+    } catch (error) {
+      console.error('Update failed:', error);
+      throw error;
+    }
+  };
+
+  const handleInviteUser = async (email: string, fullName: string, role: UserRole) => {
+    try {
+      await adminUserService.createUser({ email, full_name: fullName, role });
+      toast.success('Invitation sent successfully!');
+      fetchUsers(); 
+    } catch (error) {
+      console.error('Invite failed:', error);
+      throw error; 
+    }
+  };
+
+  // 4. Render Loading or Access Denied state
+  if (verifyingRole) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+        <p className="text-slate-500 font-medium">Verifying access privileges...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+        <ShieldAlert className="h-12 w-12 text-red-500" />
+        <h1 className="text-xl font-bold text-slate-900">Access Denied</h1>
+        <p className="text-slate-500">Redirecting you to dashboard...</p>
+      </div>
+    );
+  }
+
+  // 5. Render Admin Page
+  return (
+    <div className="p-8">
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage user accounts, roles, and permissions.
+          </p>
+        </div>
+        <button 
+          onClick={() => setIsInviteDialogOpen(true)}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        >
+          Invite Member
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+        <UserFilters 
+          search={search} 
+          role={role} 
+          onSearchChange={setSearch} 
+          onRoleChange={handleRoleChange} 
+        />
+        
+        <UserTable 
+          users={users} 
+          isLoading={loading} 
+          page={page} 
+          perPage={10} 
+          total={total} 
+          onPageChange={setPage} 
+          onEdit={handleEditClick}
+        />
+      </div>
+
+      <UserRoleDialog 
+        isOpen={isRoleDialogOpen} 
+        onClose={() => setIsRoleDialogOpen(false)} 
+        onConfirm={handleRoleUpdate}
+        user={selectedUser}
+      />
+
+      <CreateUserDialog 
+        isOpen={isInviteDialogOpen} 
+        onClose={() => setIsInviteDialogOpen(false)} 
+        onConfirm={handleInviteUser}
+      />
+    </div>
+  );
+}

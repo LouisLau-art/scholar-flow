@@ -1,0 +1,66 @@
+openapi: 3.0.0
+info:
+  title: Manuscript Revisions API
+  version: 1.0.0
+paths:
+  /api/v1/editor/revisions:
+    post:
+      summary: Request a revision (Editor)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manuscript_id, type, comment]
+              properties:
+                manuscript_id:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [major, minor]
+                comment:
+                  type: string
+      responses:
+        200:
+          description: Revision requested successfully
+  
+  /api/v1/manuscripts/{id}/revisions:
+    post:
+      summary: Submit a revision (Author)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, response_letter]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                response_letter:
+                  type: string
+      responses:
+        200:
+          description: Revision submitted successfully
+  
+  /api/v1/manuscripts/{id}/versions:
+    get:
+      summary: Get version history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: List of versions and revision history

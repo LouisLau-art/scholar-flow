@@ -31,13 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-1. **治理合规 (SD/PG)**: 是否有完整 Spec？是否遵循了阶段门控（0->1->2->3+）？
-2. **交付模型 (TI/MVP)**: 是否按独立可测试的 User Story 拆分？是否 MVP 优先？
-3. **架构与版本**: 是否满足 Next.js 14.2 / Pydantic v2 / Supabase 约束？
-4. **数据流规范**: 是否采用 Server Components 优先且显性逻辑设计？
-5. **容错机制**: 财务操作是否有幂等性方案？是否有优雅降级设计？
-6. **视觉标准**: 是否符合 Frontiers 风格及 Shadcn/Tailwind 配色限制？
-7. **AI 协作**: 任务是否原子化（<5文件）？是否有中文注释计划？
+[Gates determined based on constitution file]
 
 ## Project Structure
 
@@ -100,15 +94,11 @@ ios/ or android/
 **Structure Decision**: [Document the selected structure and reference the real
 directories captured above]
 
-## Technical Decisions
+## Complexity Tracking
 
-### 1. Architecture & Routing
-- **显性路由**: 必须在方法装饰器上定义完整路径（如 `/manuscripts/upload`），严禁过度依赖 APIRouter 的 prefix。
-- **全栈切片**: 每一个交付单元必须包含 API、UI 及导航入口。
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-### 2. Dependencies & SDKs
-- **原生优先**: 优先使用 Supabase 原生 `supabase-js`/`supabase-py`，严禁使用不稳定的第三方 Helper 库。
-- **交互标准**: 严禁使用浏览器原生 `alert()`，必须统一使用 Shadcn/Sonner Toast。
-
-## Quality Assurance (QA Suite)
-- **QA 刚性要求**: 任何 Feature 必须包含对应的自动化测试（Backend Pytest, Frontend Vitest）。DoD 必须包含测试全通过截图/报告。
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

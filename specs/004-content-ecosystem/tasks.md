@@ -12,7 +12,7 @@ description: "ScholarFlow 内容生态构建任务列表"
 - [x] T001 创建 `journals` 数据库表并关联 `manuscripts` (SETUP_DATABASE.sql 更新)
 - [x] T002 开发后端 `GET /api/v1/journals` 接口
 - [x] T003 开发后端 `GET /api/v1/articles/{id}` 接口
-- [x] T004 实现基于 PostgreSQL 的全文检索接口 `GET /api/v1/search`
+- [x] T004 实现全文检索接口 `GET /api/v1/manuscripts/search`
 - [x] **CP01** [存档点] 完成后端数据层并推送
 
 ## Phase 2: Article Reading Experience (The Public View)
@@ -30,7 +30,7 @@ description: "ScholarFlow 内容生态构建任务列表"
 
 ## Phase 4: Integration & Polish
 
-- [ ] T011 增加“下载文章”记录统计逻辑 (Mock)
-- [ ] T012 [P] 适配学术门户的 SEO 元数据 (Open Graph)
-- [ ] T013 [DoD] 验证从 首页 -> 搜索 -> 文章页 的全路径通畅
-- [ ] **CP03** [最终存档] 执行 `git push` 同步变更
+- [x] T011 增加“下载文章”记录统计逻辑 (Mock)
+- [x] T012 [P] 适配学术门户的 SEO 元数据 (Open Graph)
+- [x] T013 [DoD] 验证从 首页 -> 搜索 -> 文章页 的全路径通畅
+- [x] **CP03** [最终存档] 执行 `git push` 同步变更

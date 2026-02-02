@@ -9,7 +9,7 @@ echo "🛡️ Starting ScholarFlow Quality Shield..."
 echo "🐍 Running Backend Tests (pytest)..."
 cd backend
 export PYTHONPATH=$PYTHONPATH:.
-pytest tests/ -v
+pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 BACKEND_STATUS=$?
 cd ..
 

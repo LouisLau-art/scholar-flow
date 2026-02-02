@@ -1,0 +1,98 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow Notification API
+  version: 1.0.0
+paths:
+  /api/v1/notifications:
+    get:
+      summary: Fetch current user's notifications
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+
+  /api/v1/notifications/{id}/read:
+    patch:
+      summary: Mark a notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Notification'
+
+  /api/v1/internal/cron/chase-reviews:
+    post:
+      summary: Trigger auto-chasing logic (Internal)
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Chasing job triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  processed_count:
+                    type: integer
+                  emails_sent:
+                    type: integer
+
+components:
+  securitySchemes:
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [submission, review_invite, decision, chase, system]
+        title:
+          type: string
+        content:
+          type: string
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time

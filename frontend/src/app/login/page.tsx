@@ -67,6 +67,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 transition-all"
                   placeholder="name@university.edu"
+                  data-testid="login-email"
                 />
               </div>
             </div>
@@ -81,6 +82,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 transition-all"
+                  data-testid="login-password"
                 />
               </div>
             </div>
@@ -89,6 +91,7 @@ export default function LoginPage() {
               type="submit"
               disabled={isLoading}
               className="flex w-full justify-center items-center gap-2 rounded-xl bg-slate-900 px-3 py-3 text-sm font-bold leading-6 text-white shadow-lg hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 transition-all disabled:opacity-50"
+              data-testid="login-submit"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign In'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}

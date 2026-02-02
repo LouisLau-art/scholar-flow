@@ -7,3 +7,15 @@ Dockerfile*
 .next/
 venv/
 .venv/
+coverage/
+htmlcov/
+*.coverage
+*.xml
+*.html
+.supabase/
+.supabase.toml
+dist/
+build/
+__pycache__/
+*.pyc
+*.egg-info/

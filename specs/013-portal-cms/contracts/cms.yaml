@@ -1,0 +1,265 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow CMS API
+  version: 1.0.0
+paths:
+  /api/v1/cms/pages:
+    get:
+      summary: List all pages (Editor only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of pages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagesListResponse'
+    post:
+      summary: Create a new page
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageCreate'
+      responses:
+        '201':
+          description: Page created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+
+  /api/v1/cms/pages/{slug}:
+    get:
+      summary: Get page by slug (Public)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '404':
+          description: Not found or not published
+    patch:
+      summary: Update page
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+
+  /api/v1/cms/upload:
+    post:
+      summary: Upload an image to cms-assets (Editor only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Public URL for inserted image
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+
+  /api/v1/cms/menu:
+    get:
+      summary: Get menu structure (Public)
+      parameters:
+        - name: location
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [header, footer]
+      responses:
+        '200':
+          description: Menu structure
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/MenuAllResponse'
+                  - $ref: '#/components/schemas/MenuLocationResponse'
+    put:
+      summary: Update menu structure (Editor)
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuUpdateRequest'
+      responses:
+        '200':
+          description: Updated menu (for the given location)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuLocationResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data: {}
+
+    PageCreate:
+      type: object
+      required:
+        - title
+        - slug
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        is_published:
+          type: boolean
+
+    PageUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        is_published:
+          type: boolean
+
+    Page:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        is_published:
+          type: boolean
+
+    PageResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Page'
+
+    PagesListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Page'
+
+    MenuItem:
+      type: object
+      properties:
+        label:
+          type: string
+        url:
+          type: string
+        page_slug:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+
+    MenuUpdateRequest:
+      type: object
+      required: [location, items]
+      properties:
+        location:
+          type: string
+          enum: [header, footer]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+
+    MenuAllResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                header:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MenuItem'
+                footer:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MenuItem'
+
+    MenuLocationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MenuItem'
+
+    UploadResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                url:
+                  type: string

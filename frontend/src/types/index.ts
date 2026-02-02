@@ -8,7 +8,8 @@ export type ManuscriptStatus =
   | 'approved' 
   | 'pending_payment' 
   | 'published' 
-  | 'rejected';
+  | 'rejected'
+  | 'high_similarity';
 
 export interface Manuscript {
   id: string;
@@ -41,4 +42,63 @@ export interface Invoice {
   pdf_url?: string;
   status: 'unpaid' | 'paid';
   confirmed_at?: string;
+}
+
+export type NotificationType = 'submission' | 'review_invite' | 'decision' | 'chase' | 'system'
+
+export interface Notification {
+  id: string
+  user_id: string
+  manuscript_id?: string | null
+  type: NotificationType
+  title: string
+  content: string
+  is_read: boolean
+  created_at: string
+}
+
+// === Analytics Dashboard Types ===
+
+export interface KPISummary {
+  new_submissions_month: number
+  total_pending: number
+  avg_first_decision_days: number
+  yearly_acceptance_rate: number
+  apc_revenue_month: number
+  apc_revenue_year: number
+}
+
+export interface TrendData {
+  month: string
+  submission_count: number
+  acceptance_count: number
+}
+
+export interface GeoData {
+  country: string
+  submission_count: number
+}
+
+export interface PipelineData {
+  stage: string
+  count: number
+}
+
+export interface DecisionData {
+  decision: string
+  count: number
+}
+
+export interface AnalyticsSummaryResponse {
+  kpi: KPISummary
+}
+
+export interface TrendsResponse {
+  trends: TrendData[]
+  pipeline: PipelineData[]
+  decisions: DecisionData[]
+}
+
+export interface GeoResponse {
+  countries: GeoData[]
 }

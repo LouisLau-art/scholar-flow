@@ -1,0 +1,787 @@
+# Test Suites API Contract
+# Feature: 完善测试覆盖 (009-test-coverage)
+# Version: 1.0.0
+# Date: 2026-01-29
+
+openapi: 3.0.3
+info:
+  title: Test Suites API
+  description: API for managing test suites, test cases, and coverage reports
+  version: 1.0.0
+  contact:
+    name: ScholarFlow Team
+    email: support@scholarflow.io
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+  - url: https://api.scholarflow.io/api/v1
+    description: Production server
+
+paths:
+  # Test Suites Endpoints
+  /test-suites:
+    get:
+      summary: List test suites
+      description: Retrieve all test suites with optional filtering
+      operationId: listTestSuites
+      parameters:
+        - name: type
+          in: query
+          description: Filter by test suite type
+          required: false
+          schema:
+            type: string
+            enum: [unit, integration, e2e]
+        - name: status
+          in: query
+          description: Filter by test suite status
+          required: false
+          schema:
+            type: string
+            enum: [pending, running, passed, failed]
+      responses:
+        '200':
+          description: List of test suites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestSuite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Create test suite
+      description: Create a new test suite
+      operationId: createTestSuite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestSuiteCreate'
+      responses:
+        '201':
+          description: Test suite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestSuite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /test-suites/{id}:
+    get:
+      summary: Get test suite
+      description: Retrieve a specific test suite by ID
+      operationId: getTestSuite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Test suite found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestSuite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update test suite
+      description: Update an existing test suite
+      operationId: updateTestSuite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestSuiteUpdate'
+      responses:
+        '200':
+          description: Test suite updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestSuite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete test suite
+      description: Delete a test suite and all associated test cases
+      operationId: deleteTestSuite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Test suite deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Test Cases Endpoints
+  /test-suites/{suiteId}/test-cases:
+    get:
+      summary: List test cases
+      description: Retrieve all test cases for a test suite
+      operationId: listTestCases
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: priority
+          in: query
+          description: Filter by priority
+          required: false
+          schema:
+            type: string
+            enum: [P1, P2, P3]
+        - name: category
+          in: query
+          description: Filter by category
+          required: false
+          schema:
+            type: string
+            enum: [auth, validation, error, boundary, concurrent, integration]
+      responses:
+        '200':
+          description: List of test cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestCase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Create test case
+      description: Create a new test case for a test suite
+      operationId: createTestCase
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCaseCreate'
+      responses:
+        '201':
+          description: Test case created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /test-cases/{id}:
+    get:
+      summary: Get test case
+      description: Retrieve a specific test case by ID
+      operationId: getTestCase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Test case found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update test case
+      description: Update an existing test case
+      operationId: updateTestCase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCaseUpdate'
+      responses:
+        '200':
+          description: Test case updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete test case
+      description: Delete a test case
+      operationId: deleteTestCase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Test case deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Coverage Reports Endpoints
+  /test-suites/{suiteId}/coverage:
+    get:
+      summary: Get coverage report
+      description: Retrieve the latest coverage report for a test suite
+      operationId: getCoverageReport
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Coverage report found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Create coverage report
+      description: Create a new coverage report for a test suite
+      operationId: createCoverageReport
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoverageReportCreate'
+      responses:
+        '201':
+          description: Coverage report created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    TestSuite:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - language
+        - framework
+        - target_coverage
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          example: "Backend API Tests"
+        type:
+          type: string
+          enum: [unit, integration, e2e]
+          example: "integration"
+        language:
+          type: string
+          enum: [python, typescript]
+          example: "python"
+        framework:
+          type: string
+          example: "pytest"
+        target_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.8
+        current_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+          example: 0.75
+        status:
+          type: string
+          enum: [pending, running, passed, failed]
+          example: "passed"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-29T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-01-29T10:05:00Z"
+
+    TestSuiteCreate:
+      type: object
+      required:
+        - name
+        - type
+        - language
+        - framework
+        - target_coverage
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Backend API Tests"
+        type:
+          type: string
+          enum: [unit, integration, e2e]
+          example: "integration"
+        language:
+          type: string
+          enum: [python, typescript]
+          example: "python"
+        framework:
+          type: string
+          example: "pytest"
+        target_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.8
+
+    TestSuiteUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        current_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        status:
+          type: string
+          enum: [pending, running, passed, failed]
+
+    TestCase:
+      type: object
+      required:
+        - id
+        - suite_id
+        - name
+        - priority
+        - category
+        - given
+        - when
+        - then
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        suite_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          example: "Test missing JWT token"
+        description:
+          type: string
+          nullable: true
+          example: "Verify 401 error when JWT token is missing"
+        priority:
+          type: string
+          enum: [P1, P2, P3]
+          example: "P1"
+        category:
+          type: string
+          enum: [auth, validation, error, boundary, concurrent, integration]
+          example: "auth"
+        given:
+          type: string
+          example: "一个需要身份验证的API端点"
+        when:
+          type: string
+          example: "发送请求时缺少JWT令牌"
+        then:
+          type: string
+          example: "系统返回401 Unauthorized错误"
+        status:
+          type: string
+          enum: [pending, passing, failing, skipped]
+          example: "passing"
+        execution_time:
+          type: number
+          format: float
+          minimum: 0
+          nullable: true
+          example: 0.5
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-29T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-01-29T10:05:00Z"
+
+    TestCaseCreate:
+      type: object
+      required:
+        - name
+        - priority
+        - category
+        - given
+        - when
+        - then
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "Test missing JWT token"
+        description:
+          type: string
+          maxLength: 1000
+          example: "Verify 401 error when JWT token is missing"
+        priority:
+          type: string
+          enum: [P1, P2, P3]
+          example: "P1"
+        category:
+          type: string
+          enum: [auth, validation, error, boundary, concurrent, integration]
+          example: "auth"
+        given:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: "一个需要身份验证的API端点"
+        when:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: "发送请求时缺少JWT令牌"
+        then:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: "系统返回401 Unauthorized错误"
+
+    TestCaseUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        priority:
+          type: string
+          enum: [P1, P2, P3]
+        category:
+          type: string
+          enum: [auth, validation, error, boundary, concurrent, integration]
+        given:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        when:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        then:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        status:
+          type: string
+          enum: [pending, passing, failing, skipped]
+        execution_time:
+          type: number
+          format: float
+          minimum: 0
+
+    CoverageReport:
+      type: object
+      required:
+        - id
+        - suite_id
+        - total_statements
+        - covered_statements
+        - total_branches
+        - covered_branches
+        - total_functions
+        - covered_functions
+        - line_coverage
+        - branch_coverage
+        - function_coverage
+        - generated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        suite_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        total_statements:
+          type: integer
+          minimum: 0
+          example: 1000
+        covered_statements:
+          type: integer
+          minimum: 0
+          example: 800
+        total_branches:
+          type: integer
+          minimum: 0
+          example: 200
+        covered_branches:
+          type: integer
+          minimum: 0
+          example: 160
+        total_functions:
+          type: integer
+          minimum: 0
+          example: 50
+        covered_functions:
+          type: integer
+          minimum: 0
+          example: 45
+        line_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.8
+        branch_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.8
+        function_coverage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.9
+        generated_at:
+          type: string
+          format: date-time
+          example: "2026-01-29T10:00:00Z"
+
+    CoverageReportCreate:
+      type: object
+      required:
+        - total_statements
+        - covered_statements
+        - total_branches
+        - covered_branches
+        - total_functions
+        - covered_functions
+      properties:
+        total_statements:
+          type: integer
+          minimum: 0
+          example: 1000
+        covered_statements:
+          type: integer
+          minimum: 0
+          example: 800
+        total_branches:
+          type: integer
+          minimum: 0
+          example: 200
+        covered_branches:
+          type: integer
+          minimum: 0
+          example: 160
+        total_functions:
+          type: integer
+          minimum: 0
+          example: 50
+        covered_functions:
+          type: integer
+          minimum: 0
+          example: 45
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid input
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+                example: "Invalid input data"
+
+    Unauthorized:
+      description: Unauthorized - Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+                example: "Not authenticated"
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+                example: "Insufficient permissions"
+
+    NotFound:
+      description: Not Found - Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+                example: "Test suite not found"
+
+  securitySchemes:
+    JWTAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - JWTAuth: []

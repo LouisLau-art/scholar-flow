@@ -18,8 +18,9 @@ def get_supabase_mock(return_data):
     return mock
 
 @pytest.mark.asyncio
-async def test_assign_reviewer_conflict(client: AsyncClient):
+async def test_assign_reviewer_conflict(client: AsyncClient, auth_token: str, monkeypatch):
     """验证作者不能被分配为自己稿件的审稿人"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     author_id = uuid4()
     # 模拟返回的稿件作者正是我们要分配的审稿人
     mock = get_supabase_mock({"author_id": author_id})
@@ -29,7 +30,11 @@ async def test_assign_reviewer_conflict(client: AsyncClient):
             "manuscript_id": str(uuid4()),
             "reviewer_id": str(author_id)
         }
-        response = await client.post("/api/v1/reviews/assign", json=payload)
+        response = await client.post(
+            "/api/v1/reviews/assign",
+            json=payload,
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
         assert response.status_code == 400
         assert "作者不能评审自己的稿件" in response.json()["detail"]
 

@@ -1,15 +1,53 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from pydantic.config import ConfigDict
+from app.models.reviews import ReviewReport
+from app.models.invoices import Invoice
 
 # === 核心业务实体模型 (Pydantic v2) ===
 
 class ManuscriptBase(BaseModel):
     """稿件基础模型"""
-    title: str = Field(..., description="稿件标题")
-    abstract: str = Field(..., description="稿件摘要")
+    title: str = Field(..., min_length=5, max_length=500, description="稿件标题")
+    abstract: str = Field(..., min_length=30, max_length=5000, description="稿件摘要")
     file_path: Optional[str] = Field(None, description="Supabase Storage 路径")
+    dataset_url: Optional[str] = Field(None, max_length=1000, description="外部数据集链接")
+    source_code_url: Optional[str] = Field(None, max_length=1000, description="代码仓库链接")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        # 中文注释: 标题必须有意义，避免空白或过短提交
+        trimmed = value.strip()
+        if len(trimmed) < 5:
+            raise ValueError("title must be at least 5 characters")
+        return trimmed
+
+    @field_validator("abstract")
+    @classmethod
+    def validate_abstract(cls, value: str) -> str:
+        # 中文注释: 摘要必须有足够内容，避免空白或过短提交
+        trimmed = value.strip()
+        if len(trimmed) < 30:
+            raise ValueError("abstract must be at least 30 characters")
+        return trimmed
+
+    @field_validator("dataset_url", "source_code_url", mode="before")
+    @classmethod
+    def normalize_optional_urls(cls, value):
+        # 中文注释: 链接字段允许为空，但若填写必须是 http(s) URL
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if trimmed == "":
+                return None
+            if not (trimmed.startswith("http://") or trimmed.startswith("https://")):
+                raise ValueError("url must start with http:// or https://")
+            return trimmed
+        return value
 
 class ManuscriptCreate(ManuscriptBase):
     """创建稿件时使用的模型"""
@@ -23,24 +61,4 @@ class Manuscript(ManuscriptBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-class ReviewReport(BaseModel):
-    """审稿报告模型"""
-    id: UUID
-    manuscript_id: UUID
-    reviewer_id: UUID
-    token: str
-    expiry_date: datetime
-    status: str = Field("invited", description="评审状态")
-    content: Optional[str] = None
-    score: Optional[int] = Field(None, ge=1, le=5)
-
-class Invoice(BaseModel):
-    """财务账单模型"""
-    id: UUID
-    manuscript_id: UUID
-    amount: float
-    status: str = Field("unpaid", description="支付状态")
-    confirmed_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)

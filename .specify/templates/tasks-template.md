@@ -244,17 +244,8 @@ With multiple developers:
 
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
-- **原子化原则**: 每个任务应保持极小粒度，单次实施严禁修改超过 5 个文件。
-- **注释规范**: 实现代码必须包含核心逻辑的中文注释。
-- **文档同步**: 任务完成后必须确认是否需要同步更新设计文档。
-- **即时存档**: 每个任务（Issue）完成后，必须立即 `git push` 到 GitHub 以防意外。
-- **环境准则 (Arch Linux)**: 
-  - 依赖安装优先顺序: `pacman` > `paru` (使用用户 `louis`) > `pip`/`pnpm`。
-  - 包冲突处理: 优先保留系统包，可清理对应的 `npm`/`pip` 全局包。
-  - Python 强制安装: 若 `pip` 被拒，使用 `--break-system-packages`。
-  - Docker 任务需显式包含镜像源配置校验。
-- **DoD 验收**: 
-  - 后端：接口必须在 Swagger (/docs) 显式定义且可点。
-  - 前端：页面必须有从主页或导航栏的可达入口。
-  - **QA**: 自动化测试（Backend/Frontend）必须 100% 通过。
+- Each user story should be independently completable and testable
+- Verify tests fail before implementing
+- Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
+- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
