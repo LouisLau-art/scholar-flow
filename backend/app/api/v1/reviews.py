@@ -62,13 +62,22 @@ async def assign_reviewer(
     # 模拟校验: 获取稿件信息
     ms_res = (
         supabase.table("manuscripts")
-        .select("author_id, title, version")
+        .select("author_id, title, version, status, owner_id")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
     )
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
+
+    # Feature 023: 初审阶段必须绑定 Internal Owner（KPI 归属人）
+    # 中文注释: 分配审稿人会把稿件推进到 under_review，因此这里强制要求 owner_id 已设置。
+    owner_raw = (ms_res.data or {}).get("owner_id")
+    if not owner_raw:
+        raise HTTPException(
+            status_code=400,
+            detail="请先绑定 Internal Owner（owner_id）后再分配审稿人",
+        )
 
     current_version = ms_res.data.get("version", 1) if ms_res.data else 1
 

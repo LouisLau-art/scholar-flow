@@ -9,6 +9,13 @@ import { toast } from 'sonner'
 import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 
+type StaffProfile = {
+  id: string
+  email?: string | null
+  full_name?: string | null
+  roles?: string[]
+}
+
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
@@ -41,6 +48,49 @@ export default function ReviewerAssignModal({
   const [loadingExisting, setLoadingExisting] = useState(false)
   const [pendingRemove, setPendingRemove] = useState<any | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+
+  // Feature 023: Internal Owner Binding（KPI 归属人）
+  const [internalStaff, setInternalStaff] = useState<StaffProfile[]>([])
+  const [ownerId, setOwnerId] = useState<string>('') // '' 表示未绑定
+  const [ownerSearch, setOwnerSearch] = useState('')
+  const [loadingOwner, setLoadingOwner] = useState(false)
+  const [savingOwner, setSavingOwner] = useState(false)
+
+  const fetchOwner = useCallback(async () => {
+    if (!manuscriptId) return
+    setLoadingOwner(true)
+    try {
+      const res = await fetch(`/api/v1/manuscripts/articles/${manuscriptId}`)
+      const payload = await res.json().catch(() => null)
+      const ms = payload?.data || {}
+      const raw = ms?.owner_id || ms?.kpi_owner_id || ''
+      setOwnerId(typeof raw === 'string' ? raw : raw ? String(raw) : '')
+    } catch (e) {
+      console.error('Failed to load manuscript owner', e)
+      setOwnerId('')
+    } finally {
+      setLoadingOwner(false)
+    }
+  }, [manuscriptId])
+
+  const fetchInternalStaff = useCallback(async () => {
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) return
+      const res = await fetch('/api/v1/editor/internal-staff', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.success) {
+        setInternalStaff([])
+        return
+      }
+      setInternalStaff(payload.data || [])
+    } catch (e) {
+      console.error('Failed to load internal staff', e)
+      setInternalStaff([])
+    }
+  }, [])
 
   const fetchExistingReviewers = useCallback(async () => {
     if (!manuscriptId) return
@@ -120,13 +170,20 @@ export default function ReviewerAssignModal({
       setAiRecommendations([])
       setAiMessage(null)
       setPendingRemove(null)
+      setOwnerSearch('')
       fetchReviewers()
       fetchExistingReviewers()
+      fetchOwner()
+      fetchInternalStaff()
     }
-  }, [isOpen, fetchReviewers, fetchExistingReviewers])
+  }, [isOpen, fetchReviewers, fetchExistingReviewers, fetchOwner, fetchInternalStaff])
 
   const handleAssign = async () => {
     if (selectedReviewers.length > 0) {
+      if (!ownerId) {
+        toast.error('请先绑定 Internal Owner（用于 KPI 归属），再分配审稿人。')
+        return
+      }
       setIsSubmitting(true)
       try {
         const ret = await Promise.resolve(onAssign(selectedReviewers) as any)
@@ -239,6 +296,78 @@ export default function ReviewerAssignModal({
       return aName.localeCompare(bName)
     })
 
+  const currentOwnerLabel = (() => {
+    if (!ownerId) return 'Unassigned'
+    const u = internalStaff.find((x) => x.id === ownerId)
+    return u ? (u.full_name || u.email || u.id || 'Unassigned') : ownerId
+  })()
+
+  const qOwner = ownerSearch.trim().toLowerCase()
+  const filteredInternalStaff: StaffProfile[] = (qOwner
+    ? internalStaff.filter((u) => {
+        const name = (u.full_name || '').toLowerCase()
+        const email = (u.email || '').toLowerCase()
+        return name.includes(qOwner) || email.includes(qOwner)
+      })
+    : internalStaff
+  )
+    .slice()
+    .sort((a, b) => {
+      // 置顶：当前已选 owner
+      const aPinned = ownerId && a.id === ownerId
+      const bPinned = ownerId && b.id === ownerId
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      const aName = (a.full_name || a.email || '').toLowerCase()
+      const bName = (b.full_name || b.email || '').toLowerCase()
+      return aName.localeCompare(bName)
+    })
+
+  const handleOwnerChange = async (nextOwnerId: string) => {
+    if (!manuscriptId) return
+    const prev = ownerId
+    setOwnerId(nextOwnerId)
+    setSavingOwner(true)
+    const toastId = toast.loading('Updating owner...')
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.', { id: toastId })
+        setOwnerId(prev)
+        return
+      }
+      const res = await fetch(`/api/v1/manuscripts/${manuscriptId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ owner_id: nextOwnerId ? nextOwnerId : null }),
+      })
+      const raw = await res.text().catch(() => '')
+      let payload: any = null
+      try {
+        payload = raw ? JSON.parse(raw) : null
+      } catch {
+        payload = null
+      }
+      if (!res.ok || payload?.success === false) {
+        const msg =
+          payload?.detail ||
+          payload?.message ||
+          (typeof raw === 'string' && raw.trim() ? raw.trim() : '') ||
+          `HTTP ${res.status}`
+        throw new Error(msg)
+      }
+      toast.success('Owner updated', { id: toastId })
+    } catch (e: any) {
+      console.error('Failed to update owner', e)
+      toast.error(e?.message || 'Failed to update owner', { id: toastId })
+      setOwnerId(prev)
+    } finally {
+      setSavingOwner(false)
+    }
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="reviewer-modal">
@@ -262,6 +391,54 @@ export default function ReviewerAssignModal({
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
+            {/* Feature 023: Owner Binding（KPI 归属人） */}
+            <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">Internal Owner / Invited By</div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    在初审阶段绑定负责人（仅 editor/admin），修改后自动保存并提示。
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {savingOwner ? 'Saving…' : loadingOwner ? 'Loading…' : ''}
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Search internal staff..."
+                  value={ownerSearch}
+                  onChange={(e) => setOwnerSearch(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+                <select
+                  value={ownerId}
+                  onChange={(e) => handleOwnerChange(e.target.value)}
+                  disabled={savingOwner || loadingOwner}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:bg-slate-50"
+                  data-testid="owner-select"
+                >
+                  <option value="">Unassigned</option>
+                  {filteredInternalStaff.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {(u.full_name || u.email || u.id) as string}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-2 text-xs text-slate-600">
+                Current: <span className="font-medium text-slate-900">{currentOwnerLabel}</span>
+              </div>
+              {!ownerId && (
+                <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  未绑定 Owner：后端会拒绝分配审稿人（KPI 必须先绑定）。
+                </div>
+              )}
+            </div>
+
             {/* Existing Reviewers */}
             {existingReviewers.length > 0 && (
               <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">

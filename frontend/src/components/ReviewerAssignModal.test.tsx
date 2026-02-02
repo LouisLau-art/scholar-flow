@@ -12,6 +12,31 @@ vi.mock('@/services/auth', () => ({
 describe('ReviewerAssignModal AI Recommendations', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn((url: any) => {
+      if (String(url).includes('/api/v1/manuscripts/articles/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: {
+                id: 'ms-1',
+                owner_id: 'u-owner',
+              },
+            }),
+        }) as any
+      }
+      if (String(url).includes('/api/v1/editor/internal-staff')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: [
+                { id: 'u-owner', full_name: 'Owner User', email: 'owner@test.com', roles: ['editor'] },
+              ],
+            }),
+        }) as any
+      }
       if (String(url).includes('/api/v1/reviews/assignments/')) {
         return Promise.resolve({
           ok: true,
@@ -94,6 +119,11 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       />
     )
 
+    const ownerSelect = (await screen.findByTestId('owner-select')) as HTMLSelectElement
+    await waitFor(() => {
+      expect(ownerSelect.value).toBe('u-owner')
+    })
+
     const analyzeBtn = await screen.findByTestId('ai-analyze')
     fireEvent.click(analyzeBtn)
 
@@ -123,6 +153,11 @@ describe('ReviewerAssignModal AI Recommendations', () => {
         manuscriptId="ms-1"
       />
     )
+
+    const ownerSelect = (await screen.findByTestId('owner-select')) as HTMLSelectElement
+    await waitFor(() => {
+      expect(ownerSelect.value).toBe('u-owner')
+    })
 
     // Initial load fetches reviewers
     expect(await screen.findByText('Manual Reviewer')).toBeInTheDocument()
