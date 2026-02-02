@@ -56,9 +56,17 @@ class _FakeQuery:
         return self
 
     def execute(self):
-        # manuscripts: 返回 author_id，避免触发“作者不能评审自己的稿件”
+        # manuscripts: 返回 author_id/version/file_path/owner_id，避免触发校验失败
         if self._table == "manuscripts" and self._op == "select":
-            return _FakeResp({"author_id": "author-1", "title": "t", "version": 1})
+            return _FakeResp(
+                {
+                    "author_id": "author-1",
+                    "title": "t",
+                    "version": 1,
+                    "owner_id": None,
+                    "file_path": "mock/ms.pdf",
+                }
+            )
 
         # review_assignments: 幂等检查返回空；insert 返回一条记录
         if self._table == "review_assignments":

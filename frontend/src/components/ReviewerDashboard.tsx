@@ -11,11 +11,11 @@ import { FileUpload } from "@/components/FileUpload"
 interface ReviewTask {
   id: string
   manuscript_id: string
-  manuscripts: {
+  manuscripts?: {
     title: string
     abstract: string
     file_path?: string | null
-  }
+  } | null
 }
 
 type ReviewData = {
@@ -241,7 +241,11 @@ export default function ReviewerDashboard() {
     fetchTasks()
   }, [])
 
-  const handleOpenPreview = async (task: any) => {
+  const handleOpenPreview = async (task: ReviewTask) => {
+    if (!task?.manuscripts?.file_path) {
+      toast.error("该稿件没有可预览的 PDF（file_path 为空）。请让 Editor 重新上传/绑定文件。")
+      return
+    }
     setIsPreviewOpen(true)
     setPreviewTitle(task?.manuscripts?.title || "Full Text Preview")
     setPreviewUrl(null)
@@ -299,6 +303,7 @@ export default function ReviewerDashboard() {
                 variant="outline"
                 size="sm"
                 className="gap-2"
+                disabled={!task.manuscripts?.file_path}
               >
                 <FileText className="h-4 w-4" /> Read Full Text
               </Button>

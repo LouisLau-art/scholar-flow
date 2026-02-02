@@ -53,6 +53,33 @@ def _get_signed_url_for_review_attachments_bucket(file_path: str, *, expires_in:
             continue
     raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
 
+
+def _ensure_review_attachments_bucket_exists() -> None:
+    """
+    确保 review-attachments 桶存在（用于开发/演示环境的一键可用）。
+
+    中文注释:
+    - 正式环境建议通过 migration / Dashboard 创建 bucket。
+    - 但为了减少“缺桶导致 500”的踩坑，这里做一次性兜底创建。
+    """
+    storage = getattr(supabase_admin, "storage", None)
+    # 单元测试里会用 FakeStorage 替换；若不支持 bucket 管理方法则直接跳过
+    if storage is None or not hasattr(storage, "get_bucket") or not hasattr(storage, "create_bucket"):
+        return
+
+    try:
+        storage.get_bucket("review-attachments")
+        return
+    except Exception:
+        pass
+    try:
+        storage.create_bucket("review-attachments", options={"public": False})
+    except Exception as e:
+        text = str(e).lower()
+        if "already" in text or "exists" in text or "duplicate" in text:
+            return
+        raise
+
 def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
     """
     判断 Supabase/PostgREST 返回的“表不存在/Schema cache 未更新”等错误。
@@ -102,7 +129,7 @@ async def assign_reviewer(
     # 模拟校验: 获取稿件信息
     ms_res = (
         supabase.table("manuscripts")
-        .select("author_id, title, version, status, owner_id")
+        .select("author_id, title, version, status, owner_id, file_path")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
@@ -110,14 +137,27 @@ async def assign_reviewer(
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
 
+    # 体验/数据兜底：没有 PDF 的稿件不允许分配审稿人，否则 reviewer 侧无法预览全文
+    file_path = (ms_res.data or {}).get("file_path")
+    if not file_path:
+        raise HTTPException(
+            status_code=400,
+            detail="该稿件缺少 PDF（file_path 为空），无法分配审稿人。请先在投稿/修订流程上传 PDF。",
+        )
+
     # Feature 023: 初审阶段必须绑定 Internal Owner（KPI 归属人）
     # 中文注释: 分配审稿人会把稿件推进到 under_review，因此这里强制要求 owner_id 已设置。
     owner_raw = (ms_res.data or {}).get("owner_id")
     if not owner_raw:
-        raise HTTPException(
-            status_code=400,
-            detail="请先绑定 Internal Owner（owner_id）后再分配审稿人",
-        )
+        # 体验优化：若 Editor 尚未手动绑定，则默认绑定为当前 Editor（仍满足“初审阶段完成绑定”的业务要求）
+        try:
+            supabase_admin.table("manuscripts").update({"owner_id": str(current_user["id"])}).eq(
+                "id", str(manuscript_id)
+            ).execute()
+            owner_raw = str(current_user["id"])
+        except Exception as e:
+            print(f"[OwnerBinding] auto-bind owner_id failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to bind Internal Owner")
 
     current_version = ms_res.data.get("version", 1) if ms_res.data else 1
 
@@ -593,6 +633,7 @@ async def upload_review_attachment(
         file_bytes = await attachment.read()
         path = f"review_assignments/{assignment_id}/{safe_name}"
         try:
+            _ensure_review_attachments_bucket_exists()
             supabase_admin.storage.from_("review-attachments").upload(
                 path,
                 file_bytes,
@@ -771,6 +812,7 @@ async def submit_review_by_token(
             safe_name = (attachment.filename or "attachment").replace("/", "_")
             attachment_path = f"review_reports/{rr['id']}/{safe_name}"
             try:
+                _ensure_review_attachments_bucket_exists()
                 supabase_admin.storage.from_("review-attachments").upload(
                     attachment_path,
                     file_bytes,
