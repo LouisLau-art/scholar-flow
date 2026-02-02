@@ -44,10 +44,30 @@ async def assign_reviewer(
     current_version = ms_res.data.get("version", 1) if ms_res.data else 1
 
     try:
+        # 幂等保护：避免同一审稿人被重复指派（UI 可能因“已指派列表”加载失败而重复提交）
+        existing = (
+            supabase_admin.table("review_assignments")
+            .select("id, status, due_at, reviewer_id, round_number")
+            .eq("manuscript_id", str(manuscript_id))
+            .eq("reviewer_id", str(reviewer_id))
+            .eq("round_number", current_version)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if getattr(existing, "data", None):
+            # 中文注释: 返回现有 assignment，前端可直接刷新展示。
+            return {
+                "success": True,
+                "data": existing.data[0],
+                "message": "Reviewer already assigned",
+            }
+
         # 中文注释: 默认给审稿任务 7 天期限，后续可改为按期刊/稿件类型配置
         due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
         res = (
-            supabase.table("review_assignments")
+            # 中文注释: 使用 service_role 写入，避免云端 RLS/权限导致“写入成功但读取不到”的不一致体验
+            supabase_admin.table("review_assignments")
             .insert(
                 {
                     "manuscript_id": str(manuscript_id),
@@ -60,7 +80,7 @@ async def assign_reviewer(
             .execute()
         )
         # 更新稿件状态为评审中
-        supabase.table("manuscripts").update({"status": "under_review"}).eq(
+        supabase_admin.table("manuscripts").update({"status": "under_review"}).eq(
             "id", str(manuscript_id)
         ).execute()
 
@@ -148,8 +168,8 @@ async def unassign_reviewer(
     try:
         # 1. 获取 manuscript_id 以便后续状态检查
         assign_res = (
-            supabase.table("review_assignments")
-            .select("manuscript_id, reviewer_id")
+            supabase_admin.table("review_assignments")
+            .select("manuscript_id, reviewer_id, round_number")
             .eq("id", str(assignment_id))
             .single()
             .execute()
@@ -159,11 +179,19 @@ async def unassign_reviewer(
 
         manuscript_id = assign_res.data["manuscript_id"]
         reviewer_id = assign_res.data["reviewer_id"]
+        round_number = assign_res.data.get("round_number")
 
         # 2. 删除指派
-        supabase.table("review_assignments").delete().eq(
-            "id", str(assignment_id)
-        ).execute()
+        # 中文注释: 同一 reviewer 可能被重复指派（历史数据/并发），这里按 reviewer+round 做幂等清理。
+        delete_q = (
+            supabase_admin.table("review_assignments")
+            .delete()
+            .eq("manuscript_id", manuscript_id)
+            .eq("reviewer_id", reviewer_id)
+        )
+        if round_number is not None:
+            delete_q = delete_q.eq("round_number", round_number)
+        delete_q.execute()
 
         # 3. 尝试删除关联的 review_reports (如果状态是 invited/pending)
         try:
@@ -177,7 +205,7 @@ async def unassign_reviewer(
 
         # 4. 检查是否还有其他审稿人
         remaining_res = (
-            supabase.table("review_assignments")
+            supabase_admin.table("review_assignments")
             .select("id")
             .eq("manuscript_id", manuscript_id)
             .execute()
@@ -186,7 +214,7 @@ async def unassign_reviewer(
 
         # 5. 如果没有审稿人了，回滚稿件状态为 submitted
         if remaining_count == 0:
-            supabase.table("manuscripts").update({"status": "submitted"}).eq(
+            supabase_admin.table("manuscripts").update({"status": "submitted"}).eq(
                 "id", manuscript_id
             ).execute()
 
@@ -206,28 +234,58 @@ async def get_manuscript_assignments(
     获取某篇稿件的审稿指派列表
     """
     try:
-        # 关联查询 user_profiles 获取审稿人名字
         res = (
             # 使用 service_role 读取，避免 RLS/权限导致编辑端看不到已指派数据
             supabase_admin.table("review_assignments")
             .select(
-                "id, status, due_at, reviewer_id, round_number, user_profiles:reviewer_id(full_name, email)"
+                "id, status, due_at, reviewer_id, round_number, created_at"
             )
             .eq("manuscript_id", str(manuscript_id))
+            .order("created_at", desc=True)
             .execute()
         )
-        data = res.data or []
-        # Flatten structure
+        assignments = res.data or []
+
+        # 中文注释:
+        # - review_assignments.reviewer_id 外键指向 auth.users(id)，并不指向 public.user_profiles(id)
+        # - 因此不能用 PostgREST embed 语法直接 join user_profiles（会报错/返回空）
+        # - 这里用两次查询做“应用层 join”，保证 UI 能拿到 reviewer_id 并正确预选
+        reviewer_ids = list({a.get("reviewer_id") for a in assignments if a.get("reviewer_id")})
+        profiles_by_id: Dict[str, Dict[str, Any]] = {}
+        if reviewer_ids:
+            try:
+                profiles_res = (
+                    supabase_admin.table("user_profiles")
+                    .select("id, full_name, email")
+                    .in_("id", reviewer_ids)
+                    .execute()
+                )
+                for p in (profiles_res.data or []):
+                    pid = p.get("id")
+                    if pid:
+                        profiles_by_id[str(pid)] = p
+            except Exception as e:
+                # 不阻塞主流程：仍返回 assignments，只是名称/邮箱为空
+                print(f"Fetch reviewer profiles failed (fallback to ids only): {e}")
+
+        # 去重：同一个 reviewer 在同一 round 被重复指派时，只返回最新一条（避免 UI 显示 2 个“同一人”）
+        seen_keys = set()
         result = []
-        for item in data:
-            profile = item.get("user_profiles") or {}
+        for item in assignments:
+            rid = str(item.get("reviewer_id") or "")
+            rnd = item.get("round_number", 1)
+            key = (rid, rnd)
+            if not rid or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            profile = profiles_by_id.get(rid, {})
             result.append(
                 {
                     "id": item["id"],  # assignment_id
-                    "status": item["status"],
-                    "due_at": item["due_at"],
-                    "round_number": item.get("round_number", 1),
-                    "reviewer_id": item["reviewer_id"],
+                    "status": item.get("status"),
+                    "due_at": item.get("due_at"),
+                    "round_number": rnd,
+                    "reviewer_id": rid,
                     "reviewer_name": profile.get("full_name") or "Unknown",
                     "reviewer_email": profile.get("email") or "",
                 }

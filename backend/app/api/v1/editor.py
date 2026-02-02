@@ -85,33 +85,39 @@ async def get_editor_pipeline(
             .execute()
         )
         under_review_data = _extract_supabase_data(under_review_resp) or []
+        # 中文注释: review_assignments(count) 会按“行数”计数，若历史/并发导致重复指派，会把同一 reviewer 计为 2。
+        # 这里改为统计 distinct reviewer_id，保证 UI 中 review_count 与“人数”一致。
+        under_review_ids = [str(m.get("id")) for m in under_review_data if m.get("id")]
+        reviewers_by_ms: dict[str, set[str]] = {}
+        if under_review_ids:
+            try:
+                ras = (
+                    db.table("review_assignments")
+                    .select("manuscript_id, reviewer_id")
+                    .in_("manuscript_id", under_review_ids)
+                    .execute()
+                )
+                for row in (getattr(ras, "data", None) or []):
+                    mid = str(row.get("manuscript_id") or "")
+                    rid = str(row.get("reviewer_id") or "")
+                    if not mid or not rid:
+                        continue
+                    reviewers_by_ms.setdefault(mid, set()).add(rid)
+            except Exception as e:
+                print(f"Pipeline reviewer count fallback to row count: {e}")
         under_review = []
         for item in under_review_data:
-            # Flatten review_assignments count
-            assignments = item.get("review_assignments", [])
-            count = 0
-            if isinstance(assignments, list):
-                count = len(assignments)  # If standard select
-            elif isinstance(assignments, dict):
-                count = assignments.get("count", 0)  # If using head=true or similar?
-            # Actually PostgREST select(*, review_assignments(count)) returns review_assignments: [{count: N}] usually
-            # But wait, review_assignments(count) is count of rows? No, it returns rows with count?
-            # Correct PostgREST syntax for count is select=*,review_assignments(count) which returns array of objects.
-            # Actually, PostgREST doesn't support simple count relation easily in one query without returning data.
-            # But let's try just getting the array and counting length.
-            # select("*, review_assignments(id)")
-
-            # Let's try mapping manually.
-            count = 0
-            if "review_assignments" in item:
-                # Assuming it returns a list of items or objects with count
+            mid = str(item.get("id") or "")
+            distinct_count = len(reviewers_by_ms.get(mid, set())) if reviewers_by_ms else 0
+            if distinct_count == 0 and "review_assignments" in item:
+                # 兜底：若 distinct 查询失败，仍用后端原始 count
                 ra = item["review_assignments"]
-                if isinstance(ra, list):
-                    count = len(ra)
-                    if len(ra) > 0 and "count" in ra[0]:
-                        count = ra[0]["count"]  # If exact count requested
+                if isinstance(ra, list) and ra and isinstance(ra[0], dict) and "count" in ra[0]:
+                    distinct_count = ra[0].get("count", 0)
+                elif isinstance(ra, list):
+                    distinct_count = len(ra)
 
-            item["review_count"] = count
+            item["review_count"] = distinct_count
             if "review_assignments" in item:
                 del item["review_assignments"]
             under_review.append(item)
@@ -125,16 +131,36 @@ async def get_editor_pipeline(
             .execute()
         )
         pending_decision_data = _extract_supabase_data(pending_decision_resp) or []
+        pending_ids = [str(m.get("id")) for m in pending_decision_data if m.get("id")]
+        reviewers_by_ms_pending: dict[str, set[str]] = {}
+        if pending_ids:
+            try:
+                ras = (
+                    db.table("review_assignments")
+                    .select("manuscript_id, reviewer_id")
+                    .in_("manuscript_id", pending_ids)
+                    .execute()
+                )
+                for row in (getattr(ras, "data", None) or []):
+                    mid = str(row.get("manuscript_id") or "")
+                    rid = str(row.get("reviewer_id") or "")
+                    if not mid or not rid:
+                        continue
+                    reviewers_by_ms_pending.setdefault(mid, set()).add(rid)
+            except Exception as e:
+                print(f"Pipeline reviewer count fallback to row count (pending_decision): {e}")
         pending_decision = []
         for item in pending_decision_data:
-            count = 0
-            if "review_assignments" in item:
+            mid = str(item.get("id") or "")
+            distinct_count = len(reviewers_by_ms_pending.get(mid, set())) if reviewers_by_ms_pending else 0
+            if distinct_count == 0 and "review_assignments" in item:
                 ra = item["review_assignments"]
-                if isinstance(ra, list):
-                    count = len(ra)
-                    if len(ra) > 0 and "count" in ra[0]:
-                        count = ra[0]["count"]
-            item["review_count"] = count
+                if isinstance(ra, list) and ra and isinstance(ra[0], dict) and "count" in ra[0]:
+                    distinct_count = ra[0].get("count", 0)
+                elif isinstance(ra, list):
+                    distinct_count = len(ra)
+
+            item["review_count"] = distinct_count
             if "review_assignments" in item:
                 del item["review_assignments"]
             pending_decision.append(item)
