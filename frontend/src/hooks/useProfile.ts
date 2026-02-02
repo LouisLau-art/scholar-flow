@@ -41,8 +41,45 @@ async function updateProfile(data: Partial<User>): Promise<User> {
   })
 
   if (!res.ok) {
+    if (res.status === 401) {
+      await authService.signOut()
+      window.location.href = '/login?error=session_expired'
+      throw new Error('会话已过期，请重新登录')
+    }
     const error = await res.json().catch(() => ({}))
-    throw new Error(error.detail || 'Failed to update profile')
+    let errorMessage: unknown = error.detail ?? error.message ?? '更新失败'
+
+    if (Array.isArray(errorMessage)) {
+      errorMessage = errorMessage
+        .map((e: any) => {
+          const loc = Array.isArray(e?.loc) ? e.loc : []
+          const fieldKey = loc[loc.length - 1]
+          const fieldLabel =
+            fieldKey === 'orcid_id'
+              ? 'ORCID iD'
+              : fieldKey === 'google_scholar_url'
+                ? 'Google Scholar URL'
+                : fieldKey === 'avatar_url'
+                  ? 'Avatar URL'
+                  : fieldKey || '表单字段'
+
+          const msg = String(e?.msg ?? '输入不合法')
+          if (fieldKey === 'orcid_id') {
+            return `${fieldLabel}：格式不正确（示例：0000-0000-0000-0000），也可以留空`
+          }
+          if (fieldKey === 'google_scholar_url') {
+            return `${fieldLabel}：不是有效链接，也可以留空`
+          }
+          return `${fieldLabel}：${msg}`
+        })
+        .join('；')
+    } else if (typeof errorMessage === 'object' && errorMessage !== null) {
+      errorMessage = JSON.stringify(errorMessage)
+    } else {
+      errorMessage = String(errorMessage)
+    }
+
+    throw new Error(errorMessage)
   }
 
   const result = await res.json()
@@ -64,7 +101,13 @@ async function updatePassword(password: string): Promise<void> {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
-    throw new Error(error.detail || 'Failed to update password')
+    let errorMessage = error.detail || 'Failed to update password'
+    if (Array.isArray(errorMessage)) {
+      errorMessage = errorMessage.map((e: any) => e.msg).join(', ')
+    } else if (typeof errorMessage === 'object') {
+      errorMessage = JSON.stringify(errorMessage)
+    }
+    throw new Error(errorMessage)
   }
 }
 
