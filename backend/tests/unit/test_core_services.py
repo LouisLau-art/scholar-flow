@@ -1,5 +1,4 @@
 import logging
-from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -10,54 +9,8 @@ from app.services import editorial_service, publishing_service
 
 
 @pytest.mark.asyncio
-async def test_parse_manuscript_metadata_missing_env(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
-    assert result == {"title": "", "abstract": "", "authors": []}
-
-
-@pytest.mark.asyncio
-async def test_parse_manuscript_metadata_parses_json(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
-
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            content = '```json {"title":"T","abstract":"A","authors":["X"]} ```'
-
-            self.chat = SimpleNamespace(
-                completions=SimpleNamespace(
-                    create=lambda *a, **k: SimpleNamespace(
-                        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-                    )
-                )
-            )
-
-    monkeypatch.setattr(ai_engine, "OpenAI", DummyClient)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
-    assert result["title"] == "T"
-    assert result["abstract"] == "A"
-    assert result["authors"] == ["X"]
-
-
-@pytest.mark.asyncio
-async def test_parse_manuscript_metadata_handles_error(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
-
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr(ai_engine, "OpenAI", DummyClient)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
+async def test_parse_manuscript_metadata_local_parser_returns_empty_for_blank():
+    result = await ai_engine.parse_manuscript_metadata("")
     assert result == {"title": "", "abstract": "", "authors": []}
 
 

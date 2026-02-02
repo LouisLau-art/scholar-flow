@@ -8,7 +8,7 @@ from fastapi import (
     Depends,
 )
 from fastapi.responses import JSONResponse
-from app.core.pdf_processor import extract_text_from_pdf
+from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
 from app.services.editorial_service import process_quality_check
@@ -169,8 +169,8 @@ async def upload_manuscript(
             max_chars = 20000
 
         try:
-            text = await asyncio.wait_for(
-                asyncio.to_thread(extract_text_from_pdf, temp_path, max_pages=max_pages, max_chars=max_chars),
+            text, layout_lines = await asyncio.wait_for(
+                asyncio.to_thread(extract_text_and_layout_from_pdf, temp_path, max_pages=max_pages, max_chars=max_chars),
                 timeout=timeout_sec,
             )
         except asyncio.TimeoutError:
@@ -184,7 +184,7 @@ async def upload_manuscript(
 
         # 元数据提取：本地解析（无 HTTP），仅用于前端预填
         meta_start = time.monotonic()
-        metadata = await parse_manuscript_metadata(text or "")
+        metadata = await parse_manuscript_metadata(text or "", layout_lines=layout_lines or [])
         meta_cost = time.monotonic() - meta_start
         total_cost = time.monotonic() - start
         print(
