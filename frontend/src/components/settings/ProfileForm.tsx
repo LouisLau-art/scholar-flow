@@ -30,7 +30,12 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
+    onSave({
+      ...formData,
+      full_name: formData.full_name, // Required, so keep as is
+      title: formData.title || undefined,
+      affiliation: formData.affiliation || undefined,
+    })
   }
 
   return (

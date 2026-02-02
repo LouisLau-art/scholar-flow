@@ -68,6 +68,37 @@ async def test_update_profile_success(client: AsyncClient, auth_token, mock_user
     mock_user_service.update_profile.assert_called_once()
 
 @pytest.mark.asyncio
+async def test_update_profile_accepts_empty_optional_fields(client: AsyncClient, auth_token, mock_user_service, mock_user_profile):
+    """
+    空字符串的可选字段不应触发 422（前端可能会提交空字符串）。
+    期望后端将其规范化为 None，并完成更新流程。
+    """
+    payload = {
+        "orcid_id": "",
+        "google_scholar_url": "",
+    }
+
+    mock_user_service.update_profile.return_value = {
+        "id": mock_user_profile["id"],
+        "email": mock_user_profile["email"],
+        "full_name": "Test User",
+        "roles": ["author"],
+        "orcid_id": None,
+        "google_scholar_url": None,
+    }
+
+    response = await client.put(
+        "/api/v1/user/profile",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    mock_user_service.update_profile.assert_called_once()
+
+@pytest.mark.asyncio
 async def test_update_profile_validation_error(client: AsyncClient, auth_token):
     """Test validation (e.g., tag length)"""
     payload = {

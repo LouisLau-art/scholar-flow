@@ -11,6 +11,21 @@ class UserProfileUpdate(BaseModel):
     avatar_url: Optional[HttpUrl] = None
     research_interests: Optional[List[str]] = Field(None, max_length=10)
 
+    @field_validator("orcid_id", "google_scholar_url", "avatar_url", mode="before")
+    @classmethod
+    def normalize_optional_text_fields(cls, v):
+        """
+        允许前端传空字符串（例如未填写 ORCID/Scholar URL）而不触发 422。
+        - "" / "   " -> None
+        - " xxx " -> "xxx"（保留供后续 HttpUrl/regex 校验）
+        """
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
     @field_validator("research_interests")
     @classmethod
     def validate_interest_length(cls, v):
