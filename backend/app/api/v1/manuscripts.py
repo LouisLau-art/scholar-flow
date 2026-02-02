@@ -19,7 +19,7 @@ from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from app.services.revision_service import RevisionService
 from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
-from app.core.roles import require_any_role
+from app.core.roles import require_any_role, get_current_profile
 from app.services.owner_binding_service import get_profile_for_owner, validate_internal_owner_id
 from uuid import uuid4, UUID
 import shutil
@@ -30,6 +30,102 @@ from datetime import datetime, timezone
 from typing import Optional
 
 router = APIRouter(tags=["Manuscripts"])
+
+def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
+    """
+    生成 manuscripts bucket 的 signed URL（优先使用 service_role）。
+
+    中文注释:
+    - 前端 iframe 无法携带 Authorization header，因此必须把可访问的 signed URL 交给前端。
+    - 为避免受 Storage RLS 影响，这里优先用 supabase_admin（service_role）签名。
+    """
+    last_err: Exception | None = None
+
+    for client in (supabase_admin, supabase):
+        try:
+            signed = client.storage.from_("manuscripts").create_signed_url(file_path, expires_in)
+            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+            if url:
+                return str(url)
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
+
+
+@router.get("/manuscripts/{manuscript_id}/pdf-signed")
+async def get_manuscript_pdf_signed(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    返回稿件 PDF 的 signed URL（用于预览 iframe）。
+
+    中文注释:
+    - 之所以不直接返回 file_path：Storage RLS/权限会导致前端预览空白或报错。
+    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / editor/admin 可取 signedUrl。
+    """
+    user_id = str(current_user["id"])
+    roles = set((profile or {}).get("roles") or [])
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, author_id, file_path")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+    file_path = ms.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Manuscript PDF not found")
+
+    allowed = False
+    if roles.intersection({"admin", "editor"}):
+        allowed = True
+    elif str(ms.get("author_id") or "") == user_id:
+        allowed = True
+    else:
+        # Reviewer: 允许已指派 reviewer 预览（避免 editor 通过 UI 分配后 reviewer 侧打不开 PDF）
+        try:
+            ra = (
+                supabase_admin.table("review_assignments")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .eq("reviewer_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if getattr(ra, "data", None):
+                allowed = True
+        except Exception:
+            allowed = False
+
+        # 兼容：免登录 token 模式可能只写了 review_reports
+        if not allowed:
+            try:
+                rr = (
+                    supabase_admin.table("review_reports")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("reviewer_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
+                if getattr(rr, "data", None):
+                    allowed = True
+            except Exception:
+                pass
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="No permission to access this manuscript PDF")
+
+    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
 
 
 # === 1. 投稿 (User Story 1) ===

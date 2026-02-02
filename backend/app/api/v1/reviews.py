@@ -13,6 +13,26 @@ import os
 
 router = APIRouter(tags=["Reviews"])
 
+def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
+    """
+    生成 manuscripts bucket 的 signed URL（优先使用 service_role）。
+
+    中文注释:
+    - 免登录 token 页面与 iframe 无法携带 Authorization header，因此需要后端返回可访问的 signed URL。
+    - 为避免受 Storage RLS 影响，这里优先用 supabase_admin（service_role）签名。
+    """
+    last_err: Exception | None = None
+    for client in (supabase_admin, supabase):
+        try:
+            signed = client.storage.from_("manuscripts").create_signed_url(file_path, expires_in)
+            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+            if url:
+                return str(url)
+        except Exception as e:
+            last_err = e
+            continue
+    raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
+
 def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
     """
     判断 Supabase/PostgREST 返回的“表不存在/Schema cache 未更新”等错误。
@@ -466,17 +486,34 @@ async def submit_review(
 
         # 若全部评审完成，推动稿件进入待终审状态
         if manuscript_id:
-            pending = (
-                supabase.table("review_assignments")
-                .select("id")
-                .eq("manuscript_id", str(manuscript_id))
-                .eq("status", "pending")
-                .execute()
-            )
-            if not (pending.data or []):
-                supabase.table("manuscripts").update({"status": "pending_decision"}).eq(
-                    "id", str(manuscript_id)
-                ).execute()
+            try:
+                pending = (
+                    supabase_admin.table("review_assignments")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("status", "pending")
+                    .execute()
+                )
+                pending_rows = getattr(pending, "data", None) or []
+            except Exception:
+                pending = (
+                    supabase.table("review_assignments")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("status", "pending")
+                    .execute()
+                )
+                pending_rows = getattr(pending, "data", None) or []
+
+            if not pending_rows:
+                try:
+                    supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
+                        "id", str(manuscript_id)
+                    ).execute()
+                except Exception:
+                    supabase.table("manuscripts").update({"status": "pending_decision"}).eq(
+                        "id", str(manuscript_id)
+                    ).execute()
 
         return {"success": True, "data": res.data[0] if res.data else {}}
     except APIError as e:
@@ -540,6 +577,60 @@ async def get_review_by_token(token: str):
     except Exception as e:
         print(f"Get review by token failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch review task")
+
+
+@router.get("/reviews/token/{token}/pdf-signed")
+async def get_review_pdf_signed_by_token(token: str):
+    """
+    免登录审稿：返回该 token 对应稿件 PDF 的 signed URL。
+
+    中文注释:
+    - 前端 iframe 无法携带 Authorization header，因此必须由后端生成 signed URL。
+    - token 本身是访问凭证，必须严格校验有效性与过期时间。
+    """
+    try:
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, manuscript_id, reviewer_id, status, expiry_date")
+            .eq("token", token)
+            .single()
+            .execute()
+        )
+        rr = getattr(rr_resp, "data", None) or {}
+        if not rr:
+            raise HTTPException(status_code=404, detail="Review token not found")
+
+        expiry = rr.get("expiry_date")
+        try:
+            expiry_dt = (
+                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                if isinstance(expiry, str)
+                else expiry
+            )
+        except Exception:
+            expiry_dt = None
+        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Review token expired")
+
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,file_path")
+            .eq("id", rr["manuscript_id"])
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+        file_path = ms.get("file_path")
+        if not file_path:
+            raise HTTPException(status_code=404, detail="Manuscript PDF not found")
+
+        signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+        return {"success": True, "data": {"signed_url": signed_url}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Get review pdf signed url by token failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate PDF preview URL")
 
 
 @router.post("/reviews/token/{token}/submit")
@@ -606,6 +697,80 @@ async def submit_review_by_token(
             "attachment_path": attachment_path,
         }
         supabase_admin.table("review_reports").update(update_payload).eq("id", rr["id"]).execute()
+
+        # === 同步到 review_assignments / manuscripts（修复 Editor 状态不同步）===
+        # 中文注释:
+        # - Editor Pipeline 依赖 review_assignments 的 pending/completed 统计。
+        # - 免登录 token 提交如果只更新 review_reports，会导致 Editor 侧看不到变化。
+        try:
+            ms_version = 1
+            try:
+                ms_v = (
+                    supabase_admin.table("manuscripts")
+                    .select("version")
+                    .eq("id", rr["manuscript_id"])
+                    .single()
+                    .execute()
+                )
+                ms_version = int((getattr(ms_v, "data", None) or {}).get("version") or 1)
+            except Exception:
+                ms_version = 1
+
+            assignment_rows = []
+            try:
+                a = (
+                    supabase_admin.table("review_assignments")
+                    .select("id")
+                    .eq("manuscript_id", str(rr["manuscript_id"]))
+                    .eq("reviewer_id", str(rr["reviewer_id"]))
+                    .eq("round_number", ms_version)
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                assignment_rows = getattr(a, "data", None) or []
+            except Exception:
+                assignment_rows = []
+
+            if not assignment_rows:
+                # 兼容旧数据：round_number 可能为空
+                try:
+                    a2 = (
+                        supabase_admin.table("review_assignments")
+                        .select("id")
+                        .eq("manuscript_id", str(rr["manuscript_id"]))
+                        .eq("reviewer_id", str(rr["reviewer_id"]))
+                        .order("created_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    assignment_rows = getattr(a2, "data", None) or []
+                except Exception:
+                    assignment_rows = []
+
+            if assignment_rows:
+                supabase_admin.table("review_assignments").update(
+                    {
+                        "status": "completed",
+                        "comments": content,
+                        "scores": {"overall": score},
+                    }
+                ).eq("id", assignment_rows[0]["id"]).execute()
+
+            pending = (
+                supabase_admin.table("review_assignments")
+                .select("id")
+                .eq("manuscript_id", str(rr["manuscript_id"]))
+                .eq("status", "pending")
+                .execute()
+            )
+            if not (getattr(pending, "data", None) or []):
+                supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
+                    "id", str(rr["manuscript_id"])
+                ).execute()
+        except Exception as e:
+            # 中文注释: 不因同步失败阻塞免登录提交主流程，但要打日志便于排查。
+            print(f"[Reviews] token submit sync to assignments/manuscripts failed (ignored): {e}")
 
         return {"success": True, "data": {"review_report_id": rr["id"]}}
     except HTTPException:

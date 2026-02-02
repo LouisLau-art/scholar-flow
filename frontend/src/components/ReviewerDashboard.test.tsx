@@ -2,21 +2,6 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest'
 import ReviewerDashboard from '@/components/ReviewerDashboard'
 
-const createSignedUrl = vi.fn().mockResolvedValue({
-  data: { signedUrl: 'https://example.com/test.pdf' },
-  error: null,
-})
-
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    storage: {
-      from: vi.fn(() => ({
-        createSignedUrl,
-      })),
-    },
-  },
-}))
-
 vi.mock('@/services/auth', () => ({
   authService: {
     getSession: vi.fn().mockResolvedValue({
@@ -29,22 +14,43 @@ vi.mock('@/services/auth', () => ({
 
 describe('ReviewerDashboard', () => {
   beforeEach(() => {
-    createSignedUrl.mockClear()
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      json: vi.fn().mockResolvedValue({
-        success: true,
-        data: [
-          {
-            id: 'assign-1',
-            manuscript_id: 'ms-1',
-            manuscripts: {
-              title: 'Test Paper',
-              abstract: 'Test abstract',
-              file_path: 'manuscripts/ms-1.pdf',
-            },
-          },
-        ],
-      }),
+    globalThis.fetch = vi.fn(async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.url
+
+      if (String(url).startsWith('/api/v1/reviews/my-tasks')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                id: 'assign-1',
+                manuscript_id: 'ms-1',
+                manuscripts: {
+                  title: 'Test Paper',
+                  abstract: 'Test abstract',
+                  file_path: 'manuscripts/ms-1.pdf',
+                },
+              },
+            ],
+          }),
+        } as any
+      }
+
+      if (String(url).startsWith('/api/v1/manuscripts/ms-1/pdf-signed')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { signed_url: 'https://example.com/test.pdf' },
+          }),
+        } as any
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      } as any
     }) as any
   })
 
@@ -59,7 +65,12 @@ describe('ReviewerDashboard', () => {
     fireEvent.click(openButton)
 
     await waitFor(() => {
-      expect(createSignedUrl).toHaveBeenCalledWith('manuscripts/ms-1.pdf', 60 * 5)
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/manuscripts/ms-1/pdf-signed',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        })
+      )
     })
 
     expect(await screen.findByTitle('PDF Preview')).toBeInTheDocument()
