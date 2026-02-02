@@ -43,11 +43,12 @@ Sync Impact Report:
 
 ## Development Workflow
 
-- **Contribution**: Use `gh` CLI for issues/PRs. Update blog/profile upon completion.
-- **Doc Sync**: Any change to environment assumptions or core rules must be reflected in all three context files (`GEMINI.md`, `CLAUDE.md`, `AGENTS.md`).
+- **单人开发提速（默认模式）**：本项目当前为“单人 + 单机 + 单目录”开发，默认不走 PR / review / auto-merge 流程；直接在工作分支小步提交并 `git push` 同步到 GitHub 作为备份与回滚点。
+- **PR（可选）**：仅在需要多人协作、外部审查、或重大高风险改动时才使用 PR；否则视为不必要开销。
+- **Doc Sync**：任何“环境假设/核心规则/提速策略”的变更，必须同步更新 `GEMINI.md`、`CLAUDE.md`、`AGENTS.md` 三个上下文文件。
 
 ## Governance
 
-Constitution supersedes all other practices. Amendments require documentation and version bump. All PRs and reviews must verify compliance with these principles.
+Constitution supersedes all other practices. Amendments require documentation and version bump. 若使用 PR 流程，则 PR 必须验证符合本宪法原则。
 
 **Version**: 1.1.0 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-02
