@@ -2,6 +2,7 @@ import os
 import json
 from typing import Dict, Any
 from openai import OpenAI
+import asyncio
 
 async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
     """
@@ -19,13 +20,21 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
         max_chars = int(os.environ.get("AI_PARSE_MAX_CHARS", "4000"))
     except Exception:
         max_chars = 4000
+
+    try:
+        timeout_sec = float(os.environ.get("AI_PARSE_TIMEOUT_SEC", "6"))
+    except Exception:
+        timeout_sec = 6.0
     
     if not api_key or not base_url:
         print("警告: 缺少 AI 配置，无法解析。")
         return {"title": "", "abstract": "", "authors": []}
 
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        # 中文注释:
+        # - OpenAI SDK 这里是同步 client；若直接在 async 环境调用会阻塞事件循环。
+        # - 因此必须放到线程池执行，并用 timeout 控制最坏耗时。
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_sec)
         safe_content = content or ""
         
         prompt = f"""
@@ -41,17 +50,24 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
         {safe_content[:max_chars]}
         """
 
-        response = client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": "You are a metadata extraction assistant that outputs raw JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1
-        )
-        
+        def _call_model() -> str:
+            resp = client.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": "You are a metadata extraction assistant that outputs raw JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,
+            )
+            return (resp.choices[0].message.content or "").strip()
+
         # 清理可能存在的 markdown 代码块标记
-        raw_content = response.choices[0].message.content.strip()
+        try:
+            raw_content = await asyncio.wait_for(asyncio.to_thread(_call_model), timeout=timeout_sec + 0.5)
+        except asyncio.TimeoutError:
+            print(f"AI 解析超时（>{timeout_sec:.1f}s），降级为空数据")
+            return {"title": "", "abstract": "", "authors": []}
+
         if raw_content.startswith("```json"):
             raw_content = raw_content[7:-3].strip()
         

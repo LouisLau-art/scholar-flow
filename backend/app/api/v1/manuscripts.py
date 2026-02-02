@@ -26,6 +26,7 @@ import shutil
 import os
 import asyncio
 import tempfile
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -142,15 +143,30 @@ async def upload_manuscript(
 
     manuscript_id = uuid4()
     temp_path = None
+    start = time.monotonic()
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             temp_path = tmp.name
             shutil.copyfileobj(file.file, tmp)
 
-        timeout_sec = float(os.environ.get("PDF_PARSE_TIMEOUT_SEC", "12"))
+        try:
+            timeout_sec = float(os.environ.get("PDF_PARSE_TIMEOUT_SEC", "8"))
+        except Exception:
+            timeout_sec = 8.0
+
+        # 中文注释: 只解析前几页/截断字符，避免“整篇论文”塞给 AI 造成超时与成本浪费
+        try:
+            max_pages = int(os.environ.get("PDF_PARSE_MAX_PAGES", "5"))
+        except Exception:
+            max_pages = 5
+        try:
+            max_chars = int(os.environ.get("PDF_PARSE_MAX_CHARS", "20000"))
+        except Exception:
+            max_chars = 20000
+
         try:
             text = await asyncio.wait_for(
-                asyncio.to_thread(extract_text_from_pdf, temp_path),
+                asyncio.to_thread(extract_text_from_pdf, temp_path, max_pages=max_pages, max_chars=max_chars),
                 timeout=timeout_sec,
             )
         except asyncio.TimeoutError:
@@ -162,7 +178,16 @@ async def upload_manuscript(
                 "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
             }
 
+        # AI 提取也必须有超时，避免阻塞上传体验
+        ai_start = time.monotonic()
         metadata = await parse_manuscript_metadata(text or "")
+        ai_cost = time.monotonic() - ai_start
+        total_cost = time.monotonic() - start
+        print(
+            f"[UploadManuscript] parsed: pdf_timeout={timeout_sec:.1f}s max_pages={max_pages} "
+            f"max_chars={max_chars} ai_time={ai_cost:.2f}s total={total_cost:.2f}s"
+        )
+
         # 该接口仅用于前端预填元数据；查重应在正式创建稿件后触发。
         # 为避免历史行为变化导致的依赖，这里保留 background task，但不影响解析结果。
         background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
