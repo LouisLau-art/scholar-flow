@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 
@@ -11,6 +12,25 @@ vi.mock('@/services/auth', () => ({
 describe('ReviewerAssignModal AI Recommendations', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn((url: any) => {
+      if (String(url).includes('/api/v1/reviews/assignments/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: [
+              {
+                id: 'a-1',
+                status: 'pending',
+                due_at: null,
+                round_number: 1,
+                reviewer_id: 'r-assigned',
+                reviewer_name: 'Assigned Reviewer',
+                reviewer_email: 'assigned@test.com',
+              },
+            ],
+          }),
+        }) as any
+      }
       if (String(url).includes('/api/v1/editor/available-reviewers')) {
         return Promise.resolve({
           ok: true,
@@ -44,6 +64,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
           json: () => Promise.resolve({
             success: true,
             data: [
+              { id: 'r-assigned', full_name: 'Assigned Reviewer', email: 'assigned@test.com' },
               { id: 'r-manual', full_name: 'Manual Reviewer', email: 'manual@test.com' }
             ],
             total: 1,
@@ -122,5 +143,27 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       expect(onClose).toHaveBeenCalled()
     })
   })
-})
 
+  it('pins assigned reviewers and shows as selected', async () => {
+    const onAssign = vi.fn()
+    const onClose = vi.fn()
+
+    render(
+      <ReviewerAssignModal
+        isOpen={true}
+        onClose={onClose}
+        onAssign={onAssign}
+        manuscriptId="ms-1"
+      />
+    )
+
+    const list = await screen.findByTestId('reviewer-list')
+    const firstRow = list.firstChild as HTMLElement
+    expect(firstRow).toBeTruthy()
+
+    // 置顶：第一个就是已分配 reviewer
+    expect(firstRow.getAttribute('data-testid')).toBe('reviewer-row-r-assigned')
+    expect(within(list).getByText('Assigned Reviewer')).toBeInTheDocument()
+    expect(within(list).getByText('Assigned')).toBeInTheDocument()
+  })
+})
