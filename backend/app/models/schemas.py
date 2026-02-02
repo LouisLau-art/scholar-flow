@@ -57,7 +57,7 @@ class Manuscript(ManuscriptBase):
     """数据库中的完整稿件模型"""
     id: UUID
     status: str = Field("draft", description="稿件状态 (submitted, approved, etc.)")
-    kpi_owner_id: Optional[UUID] = None
+    owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 

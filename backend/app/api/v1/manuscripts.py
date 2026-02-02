@@ -19,11 +19,15 @@ from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from app.services.revision_service import RevisionService
 from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
+from app.core.roles import require_any_role
+from app.services.owner_binding_service import get_profile_for_owner, validate_internal_owner_id
 from uuid import uuid4, UUID
 import shutil
 import os
 import asyncio
 import tempfile
+from datetime import datetime, timezone
+from typing import Optional
 
 router = APIRouter(tags=["Manuscripts"])
 
@@ -256,9 +260,20 @@ async def get_manuscript_versions(
 async def submit_quality_check(
     manuscript_id: UUID,
     passed: bool = Body(..., embed=True),
-    kpi_owner_id: UUID = Body(..., embed=True),
+    owner_id: Optional[UUID] = Body(None, embed=True),
+    kpi_owner_id: Optional[UUID] = Body(None, embed=True),  # 兼容旧字段名
 ):
-    result = await process_quality_check(manuscript_id, passed, kpi_owner_id)
+    resolved_owner_id = owner_id or kpi_owner_id
+    if not resolved_owner_id:
+        raise HTTPException(status_code=422, detail="owner_id is required")
+
+    # 显性逻辑：owner_id 必须属于内部员工（editor/admin）
+    try:
+        validate_internal_owner_id(resolved_owner_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+
+    result = await process_quality_check(manuscript_id, passed, resolved_owner_id)
     return {"success": True, "data": result}
 
 
@@ -337,6 +352,20 @@ async def get_article_detail(id: UUID):
         manuscript = manuscript_response.data
         if not manuscript:
             raise HTTPException(status_code=404, detail="Article not found")
+
+        # Feature 023: 返回 owner 详细信息（姓名/邮箱），用于 KPI 归属展示
+        owner_raw = manuscript.get("owner_id") or manuscript.get("kpi_owner_id")
+        if owner_raw:
+            try:
+                profile = get_profile_for_owner(UUID(str(owner_raw)))
+                if profile:
+                    manuscript["owner"] = {
+                        "id": profile.get("id"),
+                        "full_name": profile.get("full_name"),
+                        "email": profile.get("email"),
+                    }
+            except Exception as e:
+                print(f"[OwnerBinding] 获取 owner profile 失败（降级忽略）: {e}")
         # 中文注释: 兼容未建立 journals 外键关系的环境，按需补充期刊信息
         journal_id = manuscript.get("journal_id")
         if journal_id:
@@ -356,6 +385,48 @@ async def get_article_detail(id: UUID):
     except Exception as e:
         print(f"文章详情查询失败: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch article detail")
+
+
+@router.patch("/manuscripts/{manuscript_id}")
+async def update_manuscript(
+    manuscript_id: UUID,
+    owner_id: Optional[UUID] = Body(None, embed=True),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 023: 允许 Editor/Admin 更新稿件 owner_id（KPI 归属人绑定）。
+
+    中文注释:
+    - owner_id 允许为空（自然投稿/未绑定）。
+    - 若传入非空 owner_id，必须校验其角色为 editor/admin（防止误绑定外部作者/审稿人）。
+    """
+    try:
+        update_data = {
+            "owner_id": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if owner_id is not None:
+            try:
+                validate_internal_owner_id(owner_id)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+            update_data["owner_id"] = str(owner_id)
+
+        resp = (
+            supabase_admin.table("manuscripts")
+            .update(update_data)
+            .eq("id", str(manuscript_id))
+            .execute()
+        )
+        data = getattr(resp, "data", None) or []
+        if not data:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        return {"success": True, "data": data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[OwnerBinding] 更新 owner_id 失败: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update manuscript")
 
 
 @router.post("/manuscripts")
@@ -378,9 +449,9 @@ async def create_manuscript(
             "source_code_url": manuscript.source_code_url,
             "author_id": current_user["id"],  # 使用真实的用户 ID
             "status": "submitted",
-            "kpi_owner_id": None,
-            "created_at": "now()",
-            "updated_at": "now()",
+            "owner_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         # 插入到数据库

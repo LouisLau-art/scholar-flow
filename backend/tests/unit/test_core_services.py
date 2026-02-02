@@ -139,21 +139,21 @@ async def test_publish_manuscript_success():
 @pytest.mark.asyncio
 async def test_process_quality_check_passed():
     manuscript_id = UUID(int=2)
-    kpi_owner_id = UUID(int=3)
+    owner_id = UUID(int=3)
 
-    result = await editorial_service.process_quality_check(manuscript_id, True, kpi_owner_id)
+    result = await editorial_service.process_quality_check(manuscript_id, True, owner_id)
 
     assert result["status"] == "under_review"
-    assert result["kpi_owner_id"] == kpi_owner_id
+    assert result["owner_id"] == owner_id
 
 
 @pytest.mark.asyncio
 async def test_process_quality_check_failed_with_notes():
     manuscript_id = UUID(int=4)
-    kpi_owner_id = UUID(int=5)
+    owner_id = UUID(int=5)
 
     result = await editorial_service.process_quality_check(
-        manuscript_id, False, kpi_owner_id, revision_notes="Need fixes"
+        manuscript_id, False, owner_id, revision_notes="Need fixes"
     )
 
     assert result["status"] == "returned_for_revision"

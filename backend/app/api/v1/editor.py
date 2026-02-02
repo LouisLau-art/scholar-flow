@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -51,6 +51,37 @@ def _is_missing_column_error(error_text: str) -> bool:
         or "reject_comment" in lowered
         or "doi" in lowered
     )
+
+
+@router.get("/internal-staff")
+async def list_internal_staff(
+    search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 023: 提供 Internal Owner 下拉框的数据源（仅 editor/admin）。
+    """
+    try:
+        query = (
+            supabase_admin.table("user_profiles")
+            .select("id, email, full_name, roles")
+            .or_("roles.cs.{editor},roles.cs.{admin}")
+        )
+        resp = query.execute()
+        data = getattr(resp, "data", None) or []
+        if search.strip():
+            s = search.strip().lower()
+            data = [
+                row
+                for row in data
+                if s in (row.get("email") or "").lower() or s in (row.get("full_name") or "").lower()
+            ]
+        # 中文注释: 置顶有 full_name 的记录，便于下拉框展示
+        data.sort(key=lambda x: (0 if (x.get("full_name") or "").strip() else 1, (x.get("full_name") or x.get("email") or "")))
+        return {"success": True, "data": data}
+    except Exception as e:
+        print(f"[OwnerBinding] 获取内部员工列表失败: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load internal staff")
 
 
 @router.get("/pipeline")
