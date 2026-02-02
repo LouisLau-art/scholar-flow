@@ -135,11 +135,14 @@ describe('SubmissionForm Component', () => {
       user: { id: 'u1', email: 'user@example.com' },
     })
     const fetchMock = vi.fn().mockResolvedValue({
-      json: () =>
-        Promise.resolve({
-          success: true,
-          data: { title: 'Parsed Title', abstract: 'Parsed Abstract', authors: [] },
-        }),
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: true,
+            data: { title: 'Parsed Title', abstract: 'Parsed Abstract', authors: [] },
+          })
+        ),
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -167,7 +170,8 @@ describe('SubmissionForm Component', () => {
       user: { id: 'u1', email: 'user@example.com' },
     })
     const fetchMock = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ success: false, message: 'bad' }),
+      ok: false,
+      text: () => Promise.resolve(JSON.stringify({ success: false, message: 'bad' })),
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -199,20 +203,22 @@ describe('SubmissionForm Component', () => {
     const fetchMock = vi.fn(async (url: any) => {
       if (url === '/api/v1/manuscripts/upload') {
         return {
-          json: async () => ({
-            success: true,
-            data: {
-              title: 'Parsed Title',
-              abstract: 'A'.repeat(40),
-              authors: [],
-            },
-          }),
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
         } as any
       }
       if (url === '/api/v1/manuscripts') {
-        return { json: async () => ({ success: true }) } as any
+        return { ok: true, json: async () => ({ success: true }) } as any
       }
-      return { json: async () => ({ success: true }) } as any
+      return { ok: true, json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
     Object.defineProperty(window, 'location', {
@@ -262,20 +268,22 @@ describe('SubmissionForm Component', () => {
     const fetchMock = vi.fn(async (url: any) => {
       if (url === '/api/v1/manuscripts/upload') {
         return {
-          json: async () => ({
-            success: true,
-            data: {
-              title: 'Parsed Title',
-              abstract: 'A'.repeat(40),
-              authors: [],
-            },
-          }),
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
         } as any
       }
       if (url === '/api/v1/manuscripts') {
-        return { json: async () => ({ success: false, message: 'nope' }) } as any
+        return { ok: true, json: async () => ({ success: false, message: 'nope' }) } as any
       }
-      return { json: async () => ({ success: true }) } as any
+      return { ok: true, json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
 

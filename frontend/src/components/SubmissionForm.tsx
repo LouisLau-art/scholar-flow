@@ -98,21 +98,55 @@ export default function SubmissionForm() {
       const formData = new FormData()
       formData.append('file', selectedFile)
 
+      const controller = new AbortController()
+      const timeoutMs = 20000
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+
       const response = await fetch('/api/v1/manuscripts/upload', {
         method: 'POST',
         body: formData,
-      })
-      const result = await response.json()
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timer))
+
+      const raw = await response.text()
+      let result: any = null
+      try {
+        result = raw ? JSON.parse(raw) : null
+      } catch {
+        result = null
+      }
+
+      if (!response.ok) {
+        const msg =
+          result?.message ||
+          result?.detail ||
+          (raw && raw.length < 500 ? raw : '') ||
+          'AI parsing failed'
+        throw new Error(msg)
+      }
+
+      if (!result) {
+        throw new Error('AI parsing failed: invalid response')
+      }
 
       if (result.success) {
         setMetadata(result.data)
-        toast.success("AI parsing successful!", { id: toastId })
+        if (result.message) {
+          toast.success(result.message, { id: toastId })
+        } else {
+          toast.success("AI parsing successful!", { id: toastId })
+        }
       } else {
         throw new Error(result.message || "AI parsing failed")
       }
     } catch (error) {
       console.error('Parsing failed:', error)
-      const message = error instanceof Error ? error.message : "AI parsing failed"
+      const message =
+        error instanceof DOMException && error.name === 'AbortError'
+          ? '解析超时（>20s），已跳过 AI 预填，请手动填写标题与摘要。'
+          : error instanceof Error
+            ? error.message
+            : "AI parsing failed"
       toast.error(message, { id: toastId })
       if (message.toLowerCase().includes('upload failed')) {
         setUploadError(message.replace('Upload failed: ', ''))
