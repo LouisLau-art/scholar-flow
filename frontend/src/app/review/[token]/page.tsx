@@ -3,6 +3,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { FileText, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { FileUpload } from '@/components/FileUpload'
 
 function ReviewForm({
   token,
@@ -20,7 +21,7 @@ function ReviewForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!commentsToAuthor.trim()) {
-      toast.error('Comments to author is required.')
+      toast.error('Comments for the Authors is required.')
       return
     }
     if (score < 1 || score > 5) {
@@ -32,7 +33,7 @@ function ReviewForm({
     const toastId = toast.loading('Submitting review...')
     try {
       const fd = new FormData()
-      fd.set('content', commentsToAuthor)
+      fd.set('comments_for_author', commentsToAuthor)
       fd.set('score', String(score))
       if (confidentialComments.trim()) fd.set('confidential_comments_to_editor', confidentialComments)
       if (attachment) fd.set('attachment', attachment)
@@ -77,7 +78,7 @@ function ReviewForm({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900">Comments to Author (required)</label>
+          <label className="block text-sm font-semibold text-slate-900">Comments for the Authors</label>
           <textarea
             rows={8}
             value={commentsToAuthor}
@@ -88,11 +89,9 @@ function ReviewForm({
 
         <div>
           <label className="block text-sm font-semibold text-slate-900">
-            Confidential Comments to Editor (optional)
+            Confidential Comments to the Editor (optional)
           </label>
-          <p className="mt-1 text-xs text-slate-500">
-            This section is confidential and will not be shown to the author.
-          </p>
+          <p className="mt-1 text-xs font-semibold text-red-600">Authors will NOT see this</p>
           <textarea
             rows={5}
             value={confidentialComments}
@@ -101,17 +100,14 @@ function ReviewForm({
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-semibold text-slate-900">Confidential Attachment (optional)</label>
-          <p className="mt-1 text-xs text-slate-500">
-            Upload an annotated PDF or supporting file. Editors only.
-          </p>
-          <input
-            type="file"
-            onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
-            className="mt-2 block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800 hover:file:bg-slate-200"
-          />
-        </div>
+        <FileUpload
+          label="Upload Annotated PDF (Optional)"
+          helperText="Only Editors and you (the Reviewer) can download this file."
+          accept="application/pdf"
+          disabled={isSubmitting}
+          file={attachment}
+          onFileSelected={setAttachment}
+        />
 
         <button
           disabled={isSubmitting}

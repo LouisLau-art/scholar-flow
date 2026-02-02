@@ -33,6 +33,26 @@ def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 
             continue
     raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
 
+
+def _get_signed_url_for_review_attachments_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
+    """
+    生成 review-attachments bucket 的 signed URL（优先使用 service_role）。
+
+    中文注释:
+    - review-attachments 是私有桶：Author 不可见；Reviewer/Editor 通过后端鉴权拿 signed URL 下载。
+    """
+    last_err: Exception | None = None
+    for client in (supabase_admin, supabase):
+        try:
+            signed = client.storage.from_("review-attachments").create_signed_url(file_path, expires_in)
+            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+            if url:
+                return str(url)
+        except Exception as e:
+            last_err = e
+            continue
+    raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
+
 def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
     """
     判断 Supabase/PostgREST 返回的“表不存在/Schema cache 未更新”等错误。
@@ -405,13 +425,19 @@ async def get_my_review_tasks(
 async def submit_review(
     assignment_id: UUID = Body(..., embed=True),
     scores: Dict[str, int] = Body(..., embed=True),  # {novelty: 5, rigor: 4, ...}
-    comments: str = Body(..., embed=True),
+    # Feature 022 completion: comments_for_author 必填；兼容旧字段 comments
+    comments_for_author: str | None = Body(None, embed=True),
+    comments: str | None = Body(None, embed=True),
     confidential_comments_to_editor: str | None = Body(None, embed=True),
     attachment_path: str | None = Body(None, embed=True),
 ):
     """
     提交结构化评审意见
     """
+    public_comments = (comments_for_author or comments or "").strip()
+    if not public_comments:
+        raise HTTPException(status_code=400, detail="comments_for_author is required")
+
     try:
         # 逻辑: 更新状态并存储分数
         assignment_res = (
@@ -433,7 +459,7 @@ async def submit_review(
 
         res = (
             supabase.table("review_assignments")
-            .update({"status": "completed", "scores": scores, "comments": comments})
+            .update({"status": "completed", "scores": scores, "comments": public_comments})
             .eq("id", str(assignment_id))
             .execute()
         )
@@ -453,7 +479,10 @@ async def submit_review(
                 "manuscript_id": str(manuscript_id),
                 "reviewer_id": str(reviewer_id),
                 "status": "completed",
-                "content": comments,
+                # 新字段（Author 可见）
+                "comments_for_author": public_comments,
+                # 兼容旧字段：历史页面仍可能读取 content
+                "content": public_comments,
                 "score": overall_score,
                 "confidential_comments_to_editor": confidential_comments_to_editor,
                 "attachment_path": attachment_path,
@@ -520,6 +549,65 @@ async def submit_review(
         # 缺表时，给出可读提示，避免 500
         print(f"Review submit failed: {e}")
         return {"success": False, "message": "review_assignments table not found"}
+
+
+@router.post("/reviews/assignments/{assignment_id}/attachment")
+async def upload_review_attachment(
+    assignment_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["reviewer", "admin"])),
+    attachment: UploadFile = File(...),
+):
+    """
+    Reviewer 上传机密附件（Annotated PDF）
+
+    中文注释:
+    - 文件存储在 review-attachments 私有桶
+    - 仅 reviewer 本人（或 admin）可上传
+    - 返回 attachment_path，前端在提交 review 时写入 review_reports.attachment_path
+    """
+    if attachment is None:
+        raise HTTPException(status_code=400, detail="attachment is required")
+
+    safe_name = (attachment.filename or "attachment").replace("/", "_")
+    is_pdf = (attachment.content_type == "application/pdf") or safe_name.lower().endswith(".pdf")
+    if not is_pdf:
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    try:
+        assignment_res = (
+            supabase_admin.table("review_assignments")
+            .select("id, reviewer_id")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        assignment = getattr(assignment_res, "data", None) or {}
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+
+        is_admin = "admin" in (profile.get("roles") or [])
+        if not is_admin and str(assignment.get("reviewer_id") or "") != str(current_user.get("id") or ""):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        file_bytes = await attachment.read()
+        path = f"review_assignments/{assignment_id}/{safe_name}"
+        try:
+            supabase_admin.storage.from_("review-attachments").upload(
+                path,
+                file_bytes,
+                {"content-type": attachment.content_type or "application/pdf"},
+            )
+        except Exception as e:
+            print(f"[Review Attachment] upload failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to upload attachment")
+
+        return {"success": True, "data": {"attachment_path": path}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Upload review attachment failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload attachment")
 
 
 def _is_admin_email(email: Optional[str]) -> bool:
@@ -636,7 +724,9 @@ async def get_review_pdf_signed_by_token(token: str):
 @router.post("/reviews/token/{token}/submit")
 async def submit_review_by_token(
     token: str,
-    content: str = Form(...),
+    # Feature 022 completion: comments_for_author 必填；兼容旧字段 content
+    comments_for_author: str | None = Form(None),
+    content: str | None = Form(None),
     score: int = Form(...),
     confidential_comments_to_editor: str | None = Form(None),
     attachment: UploadFile | None = File(None),
@@ -644,8 +734,9 @@ async def submit_review_by_token(
     """
     免登录审稿提交：支持双通道评论 + 机密附件
     """
-    if not content or content.strip() == "":
-        raise HTTPException(status_code=400, detail="content is required")
+    public_comments = (comments_for_author or content or "").strip()
+    if not public_comments:
+        raise HTTPException(status_code=400, detail="comments_for_author is required")
     if score < 1 or score > 5:
         raise HTTPException(status_code=400, detail="score must be 1..5")
 
@@ -678,9 +769,9 @@ async def submit_review_by_token(
             file_bytes = await attachment.read()
             # 中文注释: 机密附件仅供编辑查看；存储路径不暴露给作者
             safe_name = (attachment.filename or "attachment").replace("/", "_")
-            attachment_path = f"review_attachments/{rr['id']}/{safe_name}"
+            attachment_path = f"review_reports/{rr['id']}/{safe_name}"
             try:
-                supabase_admin.storage.from_("manuscripts").upload(
+                supabase_admin.storage.from_("review-attachments").upload(
                     attachment_path,
                     file_bytes,
                     {"content-type": attachment.content_type or "application/octet-stream"},
@@ -690,7 +781,10 @@ async def submit_review_by_token(
                 raise HTTPException(status_code=500, detail="Failed to upload attachment")
 
         update_payload = {
-            "content": content,
+            # 新字段（Author 可见）
+            "comments_for_author": public_comments,
+            # 兼容旧字段
+            "content": public_comments,
             "score": score,
             "status": "completed",
             "confidential_comments_to_editor": confidential_comments_to_editor,
@@ -752,7 +846,7 @@ async def submit_review_by_token(
                 supabase_admin.table("review_assignments").update(
                     {
                         "status": "completed",
-                        "comments": content,
+                        "comments": public_comments,
                         "scores": {"overall": score},
                     }
                 ).eq("id", assignment_rows[0]["id"]).execute()
@@ -811,7 +905,7 @@ async def get_review_feedback_for_manuscript(
 
         rr_resp = (
             supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, content, score, confidential_comments_to_editor, attachment_path")
+            .select("id, manuscript_id, reviewer_id, status, comments_for_author, content, score, confidential_comments_to_editor, attachment_path")
             .eq("manuscript_id", str(manuscript_id))
             .order("created_at", desc=True)
             .execute()
@@ -821,20 +915,108 @@ async def get_review_feedback_for_manuscript(
         if is_author:
             sanitized = []
             for r in rows:
+                public_text = r.get("comments_for_author") or r.get("content")
                 r2 = {
                     "id": r.get("id"),
                     "manuscript_id": r.get("manuscript_id"),
                     "reviewer_id": r.get("reviewer_id"),
                     "status": r.get("status"),
-                    "content": r.get("content"),
+                    # 兼容：旧页面读取 content
+                    "content": public_text,
+                    "comments_for_author": public_text,
                     "score": r.get("score"),
                 }
                 sanitized.append(r2)
             return {"success": True, "data": sanitized}
 
+        # Editor/Admin：返回机密字段，但保证 comments_for_author 有值，避免老数据为空
+        for r in rows:
+            if not r.get("comments_for_author") and r.get("content"):
+                r["comments_for_author"] = r.get("content")
         return {"success": True, "data": rows}
     except HTTPException:
         raise
     except Exception as e:
         print(f"Fetch review feedback failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch review feedback")
+
+
+@router.get("/reviews/token/{token}/attachment-signed")
+async def get_review_attachment_signed_by_token(token: str):
+    """
+    免登录审稿：返回该 token 对应 review attachment 的 signed URL（如果存在）。
+    """
+    try:
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, attachment_path, expiry_date")
+            .eq("token", token)
+            .single()
+            .execute()
+        )
+        rr = getattr(rr_resp, "data", None) or {}
+        if not rr:
+            raise HTTPException(status_code=404, detail="Review token not found")
+
+        expiry = rr.get("expiry_date")
+        try:
+            expiry_dt = (
+                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                if isinstance(expiry, str)
+                else expiry
+            )
+        except Exception:
+            expiry_dt = None
+        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Review token expired")
+
+        path = rr.get("attachment_path")
+        if not path:
+            raise HTTPException(status_code=404, detail="No attachment")
+
+        signed_url = _get_signed_url_for_review_attachments_bucket(str(path))
+        return {"success": True, "data": {"signed_url": signed_url}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Get review attachment signed url by token failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate attachment URL")
+
+
+@router.get("/reviews/reports/{review_report_id}/attachment-signed")
+async def get_review_attachment_signed(
+    review_report_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["reviewer", "editor", "admin"])),
+):
+    """
+    登录态：Reviewer/Editor/Admin 下载机密附件（Author 禁止）。
+    """
+    try:
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, reviewer_id, attachment_path")
+            .eq("id", str(review_report_id))
+            .single()
+            .execute()
+        )
+        rr = getattr(rr_resp, "data", None) or {}
+        if not rr:
+            raise HTTPException(status_code=404, detail="Review report not found")
+
+        roles = set(profile.get("roles") or [])
+        is_editor = bool(roles.intersection({"editor", "admin"}))
+        if not is_editor and str(rr.get("reviewer_id") or "") != str(current_user.get("id") or ""):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        path = rr.get("attachment_path")
+        if not path:
+            raise HTTPException(status_code=404, detail="No attachment")
+
+        signed_url = _get_signed_url_for_review_attachments_bucket(str(path))
+        return {"success": True, "data": {"signed_url": signed_url}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Get review attachment signed url failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate attachment URL")

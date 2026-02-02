@@ -11,7 +11,7 @@ from .test_utils import insert_manuscript, make_user
 def _require_dual_review_schema(db) -> None:
     try:
         db.table("review_reports").select(
-            "id,manuscript_id,token,expiry_date,status,content,confidential_comments_to_editor,attachment_path,score"
+            "id,manuscript_id,token,expiry_date,status,comments_for_author,content,confidential_comments_to_editor,attachment_path,score"
         ).limit(1).execute()
     except APIError as e:
         pytest.skip(
@@ -72,7 +72,7 @@ async def test_reviewer_submits_dual_channel_review(
         res = await client.post(
             f"/api/v1/reviews/token/{token}/submit",
             data={
-                "content": "Public comments to the author.",
+                "comments_for_author": "Public comments to the author.",
                 "score": "4",
                 "confidential_comments_to_editor": "Confidential notes for editor only.",
             },
@@ -83,16 +83,15 @@ async def test_reviewer_submits_dual_channel_review(
 
         rr = (
             supabase_admin_client.table("review_reports")
-            .select("status,content,confidential_comments_to_editor,score")
+            .select("status,comments_for_author,content,confidential_comments_to_editor,score")
             .eq("id", review_report_id)
             .single()
             .execute()
             .data
         )
         assert rr["status"] == "completed"
-        assert rr["content"] == "Public comments to the author."
+        assert (rr.get("comments_for_author") or rr.get("content")) == "Public comments to the author."
         assert rr["confidential_comments_to_editor"] == "Confidential notes for editor only."
         assert rr["score"] == 4
     finally:
         _cleanup(supabase_admin_client, manuscript_id, review_report_id)
-

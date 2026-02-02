@@ -46,7 +46,7 @@ async def test_submit_review_success(client: AsyncClient):
         payload = {
             "assignment_id": str(uuid4()),
             "scores": {"novelty": 5, "rigor": 4},
-            "comments": "Great work!"
+            "comments_for_author": "Great work!"
         }
         response = await client.post("/api/v1/reviews/submit", json=payload)
         assert response.status_code == 200

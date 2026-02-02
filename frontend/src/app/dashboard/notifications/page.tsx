@@ -82,8 +82,12 @@ export default function NotificationsPage() {
             ) : (
               <div className="divide-y divide-slate-100">
                 {notifications.map((n) => (
-                  <div 
+                  <Link
                     key={n.id} 
+                    href={n.action_url || '/dashboard/notifications'}
+                    onClick={() => {
+                      if (!n.is_read) markAsRead(n.id)
+                    }}
                     className={`p-6 flex items-start justify-between transition-all ${!n.is_read ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}
                   >
                     <div className="flex gap-4">
@@ -112,14 +116,18 @@ export default function NotificationsPage() {
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        onClick={() => markAsRead(n.id)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          markAsRead(n.id)
+                        }}
                         className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       >
                         <CheckCircle2 className="h-4 w-4 mr-2" />
                         Mark as read
                       </Button>
                     )}
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

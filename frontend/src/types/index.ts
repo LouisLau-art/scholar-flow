@@ -52,6 +52,7 @@ export interface Notification {
   id: string
   user_id: string
   manuscript_id?: string | null
+  action_url?: string | null
   type: NotificationType
   title: string
   content: string

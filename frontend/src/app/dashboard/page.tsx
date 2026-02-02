@@ -9,13 +9,21 @@ import ReviewerDashboard from "@/components/ReviewerDashboard"
 import EditorDashboard from "@/components/EditorDashboard"
 import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
+import { useSearchParams } from 'next/navigation'
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [roles, setRoles] = useState<string[] | null>(null)
   const [rolesLoading, setRolesLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'author' | 'reviewer' | 'editor' | 'admin'>(() => {
+    const tab = tabParam
+    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') return tab
+    return 'author'
+  })
 
   useEffect(() => {
     async function fetchStats() {
@@ -76,12 +84,28 @@ export default function DashboardPage() {
   const canSeeAdmin = Boolean(roles?.includes('admin'))
   const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
 
+  // 支持 /dashboard?tab=reviewer 之类的深链
+  useEffect(() => {
+    const tab = tabParam
+    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') {
+      setActiveTab(tab)
+    }
+  }, [tabParam])
+
+  // 若 URL 指向无权限 tab，则回退到 author
+  useEffect(() => {
+    if (rolesLoading) return
+    if (activeTab === 'admin' && !canSeeAdmin) setActiveTab('author')
+    if (activeTab === 'editor' && !canSeeEditor) setActiveTab('author')
+    if (activeTab === 'reviewer' && !canSeeReviewer) setActiveTab('author')
+  }, [rolesLoading, activeTab, canSeeAdmin, canSeeEditor, canSeeReviewer])
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <SiteHeader />
 
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12 sm:px-6 lg:px-8">
-        <Tabs defaultValue="author" className="space-y-10">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             <div>
               <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Dashboard</h1>

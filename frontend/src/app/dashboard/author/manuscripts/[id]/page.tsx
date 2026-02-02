@@ -7,6 +7,7 @@ import { Loader2, MessageSquare } from 'lucide-react'
 
 type ReviewFeedback = {
   id: string
+  comments_for_author?: string | null
   content?: string | null
   score?: number | null
   // 中文注释: 机密字段在 Author 视角下应不存在；即便存在也必须忽略渲染
@@ -78,7 +79,7 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
                   <div className="text-xs font-mono text-slate-400">score: {r.score ?? '—'}</div>
                 </div>
                 <div className="mt-4 text-slate-700 whitespace-pre-wrap">
-                  {r.content || '—'}
+                  {r.comments_for_author || r.content || '—'}
                 </div>
               </div>
             ))}
@@ -88,4 +89,3 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
     </div>
   )
 }
-

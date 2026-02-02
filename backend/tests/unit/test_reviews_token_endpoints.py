@@ -143,7 +143,7 @@ async def test_submit_review_by_token_uploads_attachment(monkeypatch):
     upload = UploadFile(filename="annotated.pdf", file=io.BytesIO(b"%PDF-1.4 mocked"))
     result = await reviews_api.submit_review_by_token(
         token=token,
-        content="Public comments",
+        comments_for_author="Public comments",
         score=5,
         confidential_comments_to_editor="Confidential",
         attachment=upload,
@@ -191,7 +191,7 @@ async def test_submit_review_by_token_rejects_invalid_score():
     with pytest.raises(HTTPException) as exc:
         await reviews_api.submit_review_by_token(
             token="tok",
-            content="ok",
+            comments_for_author="ok",
             score=9,
             confidential_comments_to_editor=None,
             attachment=None,

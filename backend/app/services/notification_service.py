@@ -20,14 +20,29 @@ class NotificationService:
         *,
         user_id: str,
         manuscript_id: Optional[str],
+        action_url: Optional[str] = None,
         type: str,
         title: str,
         content: str,
     ) -> Optional[Dict[str, Any]]:
         try:
+            # Feature 011 UX: 通知点击跳转（action_url）
+            if not action_url:
+                if type == "review_invite":
+                    action_url = "/dashboard?tab=reviewer"
+                elif type == "chase":
+                    action_url = "/dashboard?tab=reviewer"
+                elif type == "system":
+                    action_url = "/dashboard?tab=editor"
+                elif manuscript_id:
+                    action_url = f"/dashboard/author/manuscripts/{manuscript_id}"
+                else:
+                    action_url = "/dashboard/notifications"
+
             payload = {
                 "user_id": user_id,
                 "manuscript_id": manuscript_id,
+                "action_url": action_url,
                 "type": type,
                 "title": title,
                 "content": content,

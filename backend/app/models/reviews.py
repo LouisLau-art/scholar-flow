@@ -16,6 +16,7 @@ class ReviewReport(BaseModel):
     status: str = Field("invited", description="评审状态")
 
     # Public (Author-visible)
+    comments_for_author: Optional[str] = None
     content: Optional[str] = None
 
     # Confidential (Editor-only)
@@ -23,4 +24,3 @@ class ReviewReport(BaseModel):
     attachment_path: Optional[str] = None
 
     score: Optional[int] = Field(None, ge=1, le=5)
-

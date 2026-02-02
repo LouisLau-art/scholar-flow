@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import type { Notification } from '@/types'
+import Link from 'next/link'
 
 type Props = {
   notification: Notification
@@ -9,9 +10,10 @@ type Props = {
 }
 
 export function NotificationItem({ notification, onMarkRead }: Props) {
+  const href = notification.action_url || '/dashboard/notifications'
   return (
-    <button
-      type="button"
+    <Link
+      href={href}
       onClick={() => onMarkRead(notification.id)}
       className={cn(
         'w-full text-left rounded-lg border border-border bg-card px-3 py-2 hover:bg-muted transition-colors',
@@ -34,7 +36,6 @@ export function NotificationItem({ notification, onMarkRead }: Props) {
       <div className="mt-1 text-[11px] text-muted-foreground">
         {new Date(notification.created_at).toLocaleString()}
       </div>
-    </button>
+    </Link>
   )
 }
-

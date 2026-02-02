@@ -20,6 +20,7 @@ class Notification(BaseModel):
     id: UUID
     user_id: UUID
     manuscript_id: Optional[UUID] = None
+    action_url: Optional[str] = None
     type: NotificationType
     title: str = Field(..., max_length=255)
     content: str = Field(..., max_length=2000)
@@ -36,7 +37,7 @@ class NotificationCreate(BaseModel):
 
     user_id: UUID
     manuscript_id: Optional[UUID] = None
+    action_url: Optional[str] = None
     type: NotificationType
     title: str = Field(..., max_length=255)
     content: str = Field(..., max_length=2000)
-

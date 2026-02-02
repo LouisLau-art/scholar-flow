@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { authService } from "@/services/auth"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { FileUpload } from "@/components/FileUpload"
 
 interface ReviewTask {
   id: string
@@ -21,7 +22,9 @@ type ReviewData = {
   novelty: number
   rigor: number
   language: number
-  comments: string
+  commentsForAuthor: string
+  confidentialCommentsToEditor: string
+  attachment: File | null
 }
 
 function ReviewModal({
@@ -37,23 +40,54 @@ function ReviewModal({
     novelty: 3,
     rigor: 3,
     language: 3,
-    comments: '',
+    commentsForAuthor: '',
+    confidentialCommentsToEditor: '',
+    attachment: null,
   })
 
   const handleSubmit = async () => {
+    if (!reviewData.commentsForAuthor.trim()) {
+      toast.error("Comments for the Authors is required.")
+      return
+    }
+
     const toastId = toast.loading("Submitting review...")
     try {
       const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error("Please sign in again.", { id: toastId })
+        return
+      }
+
+      let attachmentPath: string | null = null
+      if (reviewData.attachment) {
+        const fd = new FormData()
+        fd.set("attachment", reviewData.attachment)
+        const uploadRes = await fetch(`/api/v1/reviews/assignments/${encodeURIComponent(task.id)}/attachment`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        })
+        const uploadJson = await uploadRes.json().catch(() => null)
+        if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.attachment_path) {
+          toast.error(uploadJson?.detail || uploadJson?.message || "Attachment upload failed.", { id: toastId })
+          return
+        }
+        attachmentPath = uploadJson.data.attachment_path
+      }
+
       const res = await fetch("/api/v1/reviews/submit", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           assignment_id: task.id,
           scores: { novelty: reviewData.novelty, rigor: reviewData.rigor, language: reviewData.language },
-          comments: reviewData.comments,
+          comments_for_author: reviewData.commentsForAuthor,
+          confidential_comments_to_editor: reviewData.confidentialCommentsToEditor || null,
+          attachment_path: attachmentPath,
         }),
       })
       const result = await res.json().catch(() => null)
@@ -127,14 +161,35 @@ function ReviewModal({
           </div>
 
           <div className="space-y-3">
-            <Label className="font-semibold text-slate-700">Review Comments</Label>
+            <Label className="font-semibold text-slate-700">Comments for the Authors</Label>
             <textarea
               placeholder="Provide detailed feedback for the authors..."
               className="min-h-[140px] sm:min-h-[160px] w-full rounded-2xl border border-slate-200 p-3 focus:ring-2 focus:ring-blue-500"
-              value={reviewData.comments}
-              onChange={(e) => setReviewData({ ...reviewData, comments: e.target.value })}
+              value={reviewData.commentsForAuthor}
+              onChange={(e) => setReviewData({ ...reviewData, commentsForAuthor: e.target.value })}
             />
           </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="font-semibold text-slate-700">Confidential Comments to the Editor</Label>
+              <span className="text-xs font-semibold text-red-600">Authors will NOT see this</span>
+            </div>
+            <textarea
+              placeholder="Optional notes for editor only..."
+              className="min-h-[110px] w-full rounded-2xl border border-slate-200 p-3 focus:ring-2 focus:ring-blue-500"
+              value={reviewData.confidentialCommentsToEditor}
+              onChange={(e) => setReviewData({ ...reviewData, confidentialCommentsToEditor: e.target.value })}
+            />
+          </div>
+
+          <FileUpload
+            label="Upload Annotated PDF (Optional)"
+            helperText="Only Editors and you (the Reviewer) can download this file."
+            accept="application/pdf"
+            file={reviewData.attachment}
+            onFileSelected={(file) => setReviewData({ ...reviewData, attachment: file })}
+          />
         </div>
 
         <div className="mt-8 flex flex-col-reverse sm:flex-row justify-end gap-3">
