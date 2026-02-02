@@ -182,14 +182,14 @@ async def upload_manuscript(
                 "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
             }
 
-        # AI 提取也必须有超时，避免阻塞上传体验
-        ai_start = time.monotonic()
+        # 元数据提取：本地解析（无 HTTP），仅用于前端预填
+        meta_start = time.monotonic()
         metadata = await parse_manuscript_metadata(text or "")
-        ai_cost = time.monotonic() - ai_start
+        meta_cost = time.monotonic() - meta_start
         total_cost = time.monotonic() - start
         print(
             f"[UploadManuscript] parsed: pdf_timeout={timeout_sec:.1f}s max_pages={max_pages} "
-            f"max_chars={max_chars} ai_time={ai_cost:.2f}s total={total_cost:.2f}s"
+            f"max_chars={max_chars} meta_time={meta_cost:.2f}s total={total_cost:.2f}s"
         )
 
         # 该接口仅用于前端预填元数据；查重属于“可选项”，且当前实现为 Mock，默认关闭以提速。

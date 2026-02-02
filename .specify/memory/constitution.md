@@ -42,8 +42,8 @@ Sync Impact Report:
 - **Environment Assumptions**: Cloud Supabase as default.
 - **AI 解析（重要事实）**：
   - **PDF 文本提取是本地库**（`pdfplumber`，仅前几页 + 字符截断）。
-  - **元数据抽取是远程 LLM 调用**：通过 OpenAI SDK 走 OpenAI-compatible endpoint；当前项目的默认配置会把 `OPENAI_BASE_URL` 指向火山引擎/豆包（因此日志里会出现 `ark.cn-beijing.volces.com`）。
-  - **成本/耗时约束**：严禁把整篇 PDF 全量塞给 LLM；必须截断页数与字符数，并设置超时降级。
+  - **元数据抽取是本地解析**：`backend/app/core/ai_engine.py` 使用轻量规则/正则提取 title/abstract/authors（无 HTTP、无远程大模型依赖）。
+  - **成本/耗时约束**：严禁在上传链路引入远程大模型网络调用；必须截断页数与字符数，保证上传响应可预测。
 - **日志（可观测性）**：`./start.sh` 必须同时满足“终端实时可见 + 文件持久化”，默认输出到 `logs/backend.log` 与 `logs/frontend.log`（最新别名）。
 
 ## Development Workflow
