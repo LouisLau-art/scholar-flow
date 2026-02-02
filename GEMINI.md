@@ -225,4 +225,4 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 022-core-logic-hardening: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 022-core-logic-hardening: Implemented Financial Gate (payment check), APC Confirmation, and Reviewer Privacy (Dual Comments & Confidential Attachments). Updates to Editor Dashboard and Review Submission flow.
