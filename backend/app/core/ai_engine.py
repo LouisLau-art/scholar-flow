@@ -62,8 +62,10 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
             return (resp.choices[0].message.content or "").strip()
 
         # 清理可能存在的 markdown 代码块标记
+        # 中文注释:
+        # - 允许少量“调度抖动”的宽限时间，否则经常出现 200 OK 但略超时就被丢弃的体验。
         try:
-            raw_content = await asyncio.wait_for(asyncio.to_thread(_call_model), timeout=timeout_sec + 0.5)
+            raw_content = await asyncio.wait_for(asyncio.to_thread(_call_model), timeout=timeout_sec + 1.5)
         except asyncio.TimeoutError:
             print(f"AI 解析超时（>{timeout_sec:.1f}s），降级为空数据")
             return {"title": "", "abstract": "", "authors": []}

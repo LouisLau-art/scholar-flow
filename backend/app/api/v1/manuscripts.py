@@ -32,6 +32,10 @@ from typing import Optional
 
 router = APIRouter(tags=["Manuscripts"])
 
+def _is_truthy_env(name: str, default: str = "0") -> bool:
+    v = (os.environ.get(name, default) or "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
     """
     生成 manuscripts bucket 的 signed URL（优先使用 service_role）。
@@ -188,9 +192,10 @@ async def upload_manuscript(
             f"max_chars={max_chars} ai_time={ai_cost:.2f}s total={total_cost:.2f}s"
         )
 
-        # 该接口仅用于前端预填元数据；查重应在正式创建稿件后触发。
-        # 为避免历史行为变化导致的依赖，这里保留 background task，但不影响解析结果。
-        background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
+        # 该接口仅用于前端预填元数据；查重属于“可选项”，且当前实现为 Mock，默认关闭以提速。
+        # 如需开启：export PLAGIARISM_CHECK_ENABLED=1
+        if _is_truthy_env("PLAGIARISM_CHECK_ENABLED", "0"):
+            background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
         return {"success": True, "id": manuscript_id, "data": metadata}
     except Exception as e:
         return JSONResponse(

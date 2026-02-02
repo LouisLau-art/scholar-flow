@@ -57,6 +57,8 @@ async def test_plagiarism_download_url():
 
 @pytest.mark.asyncio
 async def test_retry_plagiarism_check_adds_task():
+    import os
+    os.environ["PLAGIARISM_CHECK_ENABLED"] = "1"
     request = PlagiarismRetryRequest(manuscript_id=UUID(int=2))
     tasks = BackgroundTasks()
 
