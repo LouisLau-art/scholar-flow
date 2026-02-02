@@ -21,3 +21,7 @@ class FeedbackResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FeedbackAck(BaseModel):
+    status: str = Field(..., description="Acknowledgement status")

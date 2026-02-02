@@ -22,6 +22,7 @@ export default function TiptapEditor({ value, onChange, onUploadImage }: Props) 
   const editor = useEditor({
     extensions,
     content: value || '',
+    immediatelyRender: false,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML())
     },
@@ -37,7 +38,7 @@ export default function TiptapEditor({ value, onChange, onUploadImage }: Props) 
     if (!editor) return
     const current = editor.getHTML()
     if ((value || '') !== current) {
-      editor.commands.setContent(value || '', false)
+      editor.commands.setContent(value || '', { emitUpdate: false })
     }
   }, [editor, value])
 

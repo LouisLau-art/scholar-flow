@@ -133,5 +133,4 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
       </div>
     </div>
   );
-  );
 }

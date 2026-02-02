@@ -45,17 +45,14 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   
   // Convert tags to Next.js metadata format
   // 'other' allows custom meta tags
-  const other: Record<string, string> = {}
+  const other: Record<string, string | string[]> = {}
   tags.forEach(tag => {
-    // For multiple tags with same name (e.g. authors), this might overwrite in simple dict.
-    // Next.js 'other' supports array? No, it's string | number | (string|number)[].
-    // Actually standard Metadata interface has 'other': { [name: string]: string | number | (string | number)[] }
-    
-    if (other[tag.name]) {
-        if (Array.isArray(other[tag.name])) {
-            (other[tag.name] as string[]).push(tag.content)
+    const existing = other[tag.name]
+    if (existing) {
+        if (Array.isArray(existing)) {
+            existing.push(tag.content)
         } else {
-            other[tag.name] = [other[tag.name] as string, tag.content]
+            other[tag.name] = [existing, tag.content]
         }
     } else {
         other[tag.name] = tag.content

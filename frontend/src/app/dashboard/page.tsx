@@ -157,9 +157,19 @@ export default function DashboardPage() {
                                 </p>
                               </div>
                             </div>
-                            <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
-                              <ArrowRight className="h-5 w-5" />
-                            </Link>
+                            <div className="flex items-center gap-3">
+                              {item.status === 'revision_requested' && (
+                                <Link
+                                  href={`/submit-revision/${item.id}`}
+                                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                                >
+                                  Submit Revision
+                                </Link>
+                              )}
+                              <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                                <ArrowRight className="h-5 w-5" />
+                              </Link>
+                            </div>
                           </div>
                         ))}
                       </div>

@@ -1,11 +1,19 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import FeedbackWidget from '../FeedbackWidget';
 
 // Mock fetch
 global.fetch = vi.fn();
 
 describe('FeedbackWidget', () => {
+  beforeEach(() => {
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'received' }),
+    } as unknown as Response);
+  });
+
   it('renders the floating button initially', () => {
     render(<FeedbackWidget />);
     const button = screen.getByRole('button', { name: /report issue/i });
@@ -35,9 +43,14 @@ describe('FeedbackWidget', () => {
     fireEvent.click(submitBtn);
     
     // Assert fetch call
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/system/feedback', expect.objectContaining({
-      method: 'POST',
-      body: expect.stringContaining('Test issue description')
-    }));
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/system/feedback',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('Test issue description'),
+        }),
+      );
+    });
   });
 });

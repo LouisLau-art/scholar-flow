@@ -2,6 +2,29 @@ import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-n
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+function tryParseJson<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+function getUserFromSupabaseSessionCookie(req: NextRequest): { id: string; email?: string } | null {
+  // 中文注释:
+  // - Supabase auth-helpers 默认使用 `sb-<project-ref>-auth-token` cookie 存储 session（JSON）。
+  // - E2E/本地开发时，Supabase Auth 可能不可用或 token 不可验证；此时允许从 cookie 中“降级识别”用户。
+  // - 该逻辑只在非生产环境的特定条件下启用（见下方 allowBypass）。
+  const candidates = req.cookies.getAll().filter((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'))
+  const cookie = candidates[0]
+  if (!cookie?.value) return null
+
+  const decoded = tryParseJson<any>(decodeURIComponent(cookie.value)) ?? tryParseJson<any>(cookie.value)
+  const user = decoded?.user
+  if (!user?.id) return null
+  return { id: user.id, email: user.email }
+}
+
 export async function middleware(req: NextRequest) {
   // 1. 初始化响应
   // 我们必须创建一个初始响应，因为 cookie 操作需要修改这个响应对象
@@ -62,15 +85,30 @@ export async function middleware(req: NextRequest) {
 
   // 3. 检查 Session
   // getUser() 比 getSession() 更安全，因为它会向 Supabase Auth 服务器验证 token
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user: any = null
+  let getUserErrored = false
+  try {
+    const resp = await supabase.auth.getUser()
+    user = resp.data.user
+  } catch (e) {
+    // 中文注释: 开发/测试环境下，Supabase Auth 不可用时不要直接阻断页面渲染。
+    // 生产环境仍保持严格校验（不启用降级）。
+    getUserErrored = true
+  }
 
   // 4. 定义受保护路径
   const protectedPaths = ['/dashboard', '/admin', '/submit', '/editor']
   const isProtected = protectedPaths.some(path => 
     req.nextUrl.pathname.startsWith(path)
   )
+
+  // 4.5 E2E/开发环境降级：允许通过 header 或 Supabase Auth 不可用时，从 cookie 中识别用户
+  const allowBypass =
+    process.env.NODE_ENV !== 'production' &&
+    (req.headers.get('x-scholarflow-e2e') === '1' || getUserErrored)
+  if (isProtected && !user && allowBypass) {
+    user = getUserFromSupabaseSessionCookie(req)
+  }
 
   // 5. 执行重定向
   if (isProtected && !user) {

@@ -1,13 +1,16 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.lib.api_client import supabase, supabase_admin
-from app.schemas.feedback import FeedbackCreate, FeedbackResponse
-from app.core.auth import get_current_user_token, get_current_user_roles
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.roles import require_any_role
+from app.lib.api_client import supabase
+from app.schemas.feedback import FeedbackAck, FeedbackCreate
 
 router = APIRouter()
+editor_or_admin = require_any_role(["admin", "editor"])
 
 
-@router.post("/system/feedback", response_model=FeedbackResponse, status_code=201)
+@router.post("/system/feedback", response_model=FeedbackAck, status_code=201)
 async def submit_feedback(
     feedback: FeedbackCreate,
     # Optional auth: if user is logged in, we get their ID.
@@ -25,7 +28,7 @@ async def submit_feedback(
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
-        return response.data[0]
+        return {"status": "received"}
     except Exception as e:
         print(f"Feedback submission error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -36,17 +39,11 @@ async def list_feedback(
     page: int = 1,
     limit: int = 20,
     severity: Optional[str] = None,
-    # Auth required for admin view
-    token: str = Depends(get_current_user_token),
-    roles: List[str] = Depends(get_current_user_roles),
+    _profile: dict = Depends(editor_or_admin),
 ):
     """
     List feedback for admin review.
     """
-    # Check permissions
-    if "admin" not in roles and "editor" not in roles:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     # Pagination
     offset = (page - 1) * limit
 

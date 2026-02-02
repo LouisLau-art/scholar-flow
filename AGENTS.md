@@ -1,6 +1,8 @@
 # scholar-flow Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-29
+**Language Preference**: 始终使用 **中文** 与我交流。
+
+Auto-generated from all feature plans. Last updated: 2026-01-31
 
 ## Active Technologies
 - **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
@@ -9,10 +11,10 @@ Auto-generated from all feature plans. Last updated: 2026-01-29
 - **Testing**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
 - **AI/ML**: OpenAI SDK (GPT-4o), scikit-learn (TF-IDF matching) (017-super-admin-management)
 - PostgreSQL (Supabase) (009-test-coverage)
-- Python 3.10+ (FastAPI), TypeScript 5.x (Next.js 14.2) (019-uat-staging-setup)
-- Supabase (PostgreSQL) - Separate Project for Staging (019-uat-staging-setup)
-
-- Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, pytest, Playwright, Vitest, Supabase-js v2.x, Supabase-py v2.x (009-test-coverage)
+- Python 3.14+ (Backend), TypeScript 5.x (Frontend) (011-notification-center)
+- Supabase (`notifications` table, `review_assignments` extension) (011-notification-center)
+- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI, Supabase (PostgreSQL), Playwright, Pytest (021-revision-integration-tests)
+- PostgreSQL (Supabase), Supabase Storage (021-revision-integration-tests)
 
 ## Project Structure
 
@@ -88,13 +90,12 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: Follow standard conventions
 - **Backend**: >80% coverage (line + branch)
 - **Frontend**: >70% coverage (line + branch)
 - **Key Business Logic**: 100% coverage
-
 - **E2E Tests**: 5+ critical user flows
 
 ## Recent Changes
-- 019-uat-staging-setup: Added Python 3.10+ (FastAPI), TypeScript 5.x (Next.js 14.2)
-- 018-user-profile & System Optimization: Added User Profile & Security Center (Next.js 14, FastAPI, Supabase). Standardized database schema: merged `name` -> `full_name`, `institution` -> `affiliation`, converted `research_interests` to `text[]`. Implemented full Notification Center page, improved Editor Dashboard sorting (descending), and relaxed admin API permissions for editors. Added GIN index for full-text search and Postgres triggers for Auth-to-Profile sync. Added CI/CD pipeline (GitHub Actions).
-- 017-super-admin-management: Added Python 3.14+, TypeScript 5.x, Node.js 20.x + FastAPI 0.115+, Pydantic v2, React 18.x, Next.js 14.2.x, Shadcn/UI, Tailwind CSS 3.4.x
+- 021-revision-integration-tests: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI, Supabase (PostgreSQL), Playwright, Pytest
+- 021-revision-integration-tests: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + FastAPI, Supabase (PostgreSQL), Playwright, Pytest
+- 019-uat-staging-setup: Added Staging environment isolation (Frontend Banner, Separate DB Config), Feedback Widget, and Seed Script.
 
 ## 🛡️ Security & Authentication Principles
 - **Authentication First**: All sensitive operations MUST require authentication. Never allow unauthenticated access to user-specific data.
@@ -212,4 +213,13 @@ Unit Tests - Test individual functions/components
 - **Best Practices**: Share and document best practices
 
 <!-- MANUAL ADDITIONS START -->
+## 环境约定 / Environment Assumptions（AGENTS / CLAUDE / GEMINI 三份需保持一致）
+
+- **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
+- **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
+- **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
+- **后端单文件测试注意**：`backend/pytest.ini` 强制 `--cov-fail-under=80`，单跑一个文件可能因覆盖率门槛失败；单文件验证用 `pytest -o addopts= tests/integration/test_revision_cycle.py`。
+- **E2E 鉴权说明**：`frontend/src/middleware.ts` 在 **非生产环境** 且请求头带 `x-scholarflow-e2e: 1`（或 Supabase Auth 不可用）时，允许从 Supabase session cookie 解析用户用于 Playwright；生产环境不会启用该降级逻辑。
+- **CI-like 一键测试**：`./scripts/run-all-tests.sh` 默认跑 `backend pytest` + `frontend vitest` + mocked E2E（`frontend/tests/e2e/specs/revision_flow.spec.ts`）。可用 `PLAYWRIGHT_PORT` 改端口，`E2E_SPEC` 指定单个 spec。若要跑全量 Playwright：`E2E_FULL=1 ./scripts/run-all-tests.sh`（脚本会尝试启动 `uvicorn main:app --port 8000`，可用 `BACKEND_PORT` 覆盖）。
+- **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 <!-- MANUAL ADDITIONS END -->

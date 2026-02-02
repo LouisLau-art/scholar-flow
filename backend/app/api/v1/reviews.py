@@ -13,6 +13,7 @@ import os
 
 router = APIRouter(tags=["Reviews"])
 
+
 # === 1. 分配审稿人 (Editor Task) ===
 @router.post("/reviews/assign")
 async def assign_reviewer(
@@ -20,11 +21,11 @@ async def assign_reviewer(
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
-    reviewer_id: UUID = Body(..., embed=True)
+    reviewer_id: UUID = Body(..., embed=True),
 ):
     """
     编辑分配审稿人
-    
+
     中文注释:
     1. 校验逻辑: 确保 reviewer_id 不是稿件的作者 (通过 manuscripts 表查询)。
     2. 插入 review_assignments 表。
@@ -32,27 +33,36 @@ async def assign_reviewer(
     # 模拟校验: 获取稿件信息
     ms_res = (
         supabase.table("manuscripts")
-        .select("author_id, title")
+        .select("author_id, title, version")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
     )
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
-    
+
+    current_version = ms_res.data.get("version", 1) if ms_res.data else 1
+
     try:
         # 中文注释: 默认给审稿任务 7 天期限，后续可改为按期刊/稿件类型配置
         due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-        res = supabase.table("review_assignments").insert({
-            "manuscript_id": str(manuscript_id),
-            "reviewer_id": str(reviewer_id),
-            "status": "pending",
-            "due_at": due_at,
-        }).execute()
+        res = (
+            supabase.table("review_assignments")
+            .insert(
+                {
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "pending",
+                    "due_at": due_at,
+                    "round_number": current_version,
+                }
+            )
+            .execute()
+        )
         # 更新稿件状态为评审中
-        supabase.table("manuscripts").update({
-            "status": "under_review"
-        }).eq("id", str(manuscript_id)).execute()
+        supabase.table("manuscripts").update({"status": "under_review"}).eq(
+            "id", str(manuscript_id)
+        ).execute()
 
         # === 通知中心 (Feature 011) ===
         # 站内信：审稿人收到邀请提醒
@@ -82,18 +92,22 @@ async def assign_reviewer(
             token = secrets.token_urlsafe(32)
             expiry_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
             try:
-                supabase_admin.table("review_reports").insert({
-                    "manuscript_id": str(manuscript_id),
-                    "reviewer_id": str(reviewer_id),
-                    "token": token,
-                    "expiry_date": expiry_date,
-                    "status": "invited",
-                }).execute()
+                supabase_admin.table("review_reports").insert(
+                    {
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "token": token,
+                        "expiry_date": expiry_date,
+                        "status": "invited",
+                    }
+                ).execute()
             except Exception as e:
                 # 中文注释: 缺表/缺列时不阻塞主流程；邮件仍可发送，但 Token 校验可能无法落库
                 print(f"[Review Invite] 写入 review_reports 失败（降级继续）: {e}")
 
-            frontend_base_url = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+            frontend_base_url = os.environ.get(
+                "FRONTEND_BASE_URL", "http://localhost:3000"
+            ).rstrip("/")
             review_url = f"{frontend_base_url}/review/{token}"
             email_service = EmailService()
             background_tasks.add_task(
@@ -103,7 +117,9 @@ async def assign_reviewer(
                 template_name="review_invite.html",
                 context={
                     "subject": "Invitation to Review",
-                    "recipient_name": reviewer_email.split("@")[0].replace(".", " ").title(),
+                    "recipient_name": reviewer_email.split("@")[0]
+                    .replace(".", " ")
+                    .title(),
                     "manuscript_title": manuscript_title,
                     "manuscript_id": str(manuscript_id),
                     "due_at": due_at,
@@ -114,7 +130,112 @@ async def assign_reviewer(
         return {"success": True, "data": res.data[0]}
     except Exception:
         # 如果表还没建，我们返回模拟成功以不阻塞开发
-        return {"success": True, "message": "模拟分配成功 (请确保创建了 review_assignments 表)"}
+        return {
+            "success": True,
+            "message": "模拟分配成功 (请确保创建了 review_assignments 表)",
+        }
+
+
+@router.delete("/reviews/assign/{assignment_id}")
+async def unassign_reviewer(
+    assignment_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    撤销审稿指派
+    """
+    try:
+        # 1. 获取 manuscript_id 以便后续状态检查
+        assign_res = (
+            supabase.table("review_assignments")
+            .select("manuscript_id, reviewer_id")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        if not assign_res.data:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+
+        manuscript_id = assign_res.data["manuscript_id"]
+        reviewer_id = assign_res.data["reviewer_id"]
+
+        # 2. 删除指派
+        supabase.table("review_assignments").delete().eq(
+            "id", str(assignment_id)
+        ).execute()
+
+        # 3. 尝试删除关联的 review_reports (如果状态是 invited/pending)
+        try:
+            supabase_admin.table("review_reports").delete().eq(
+                "manuscript_id", manuscript_id
+            ).eq("reviewer_id", reviewer_id).in_(
+                "status", ["invited", "pending"]
+            ).execute()
+        except Exception:
+            pass
+
+        # 4. 检查是否还有其他审稿人
+        remaining_res = (
+            supabase.table("review_assignments")
+            .select("id")
+            .eq("manuscript_id", manuscript_id)
+            .execute()
+        )
+        remaining_count = len(remaining_res.data or [])
+
+        # 5. 如果没有审稿人了，回滚稿件状态为 submitted
+        if remaining_count == 0:
+            supabase.table("manuscripts").update({"status": "submitted"}).eq(
+                "id", manuscript_id
+            ).execute()
+
+        return {"success": True, "message": "Reviewer unassigned"}
+    except Exception as e:
+        print(f"Unassign failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/reviews/assignments/{manuscript_id}")
+async def get_manuscript_assignments(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    获取某篇稿件的审稿指派列表
+    """
+    try:
+        # 关联查询 user_profiles 获取审稿人名字
+        res = (
+            supabase.table("review_assignments")
+            .select(
+                "id, status, due_at, reviewer_id, round_number, user_profiles:reviewer_id(full_name, email)"
+            )
+            .eq("manuscript_id", str(manuscript_id))
+            .execute()
+        )
+        data = res.data or []
+        # Flatten structure
+        result = []
+        for item in data:
+            profile = item.get("user_profiles") or {}
+            result.append(
+                {
+                    "id": item["id"],  # assignment_id
+                    "status": item["status"],
+                    "due_at": item["due_at"],
+                    "round_number": item.get("round_number", 1),
+                    "reviewer_id": item["reviewer_id"],
+                    "reviewer_name": profile.get("full_name") or "Unknown",
+                    "reviewer_email": profile.get("email") or "",
+                }
+            )
+        return {"success": True, "data": result}
+    except Exception as e:
+        print(f"Fetch assignments failed: {e}")
+        return {"success": True, "data": []}
+
 
 # === 2. 获取我的审稿任务 (Reviewer Task) ===
 @router.get("/reviews/my-tasks")
@@ -142,14 +263,19 @@ async def get_my_review_tasks(
         # 1) 云端 Supabase 可能还没创建 review_assignments 表（schema cache 里会 404/PGRST205）。
         # 2) Reviewer Tab 属于“可选能力”，不要因为缺表把整个 Dashboard 打崩，降级为空列表。
         print(f"Review tasks query failed (fallback to empty): {e}")
-        return {"success": True, "data": [], "message": "review_assignments table not found"}
+        return {
+            "success": True,
+            "data": [],
+            "message": "review_assignments table not found",
+        }
+
 
 # === 3. 提交多维度评价 (Submission) ===
 @router.post("/reviews/submit")
 async def submit_review(
     assignment_id: UUID = Body(..., embed=True),
-    scores: Dict[str, int] = Body(..., embed=True), # {novelty: 5, rigor: 4, ...}
-    comments: str = Body(..., embed=True)
+    scores: Dict[str, int] = Body(..., embed=True),  # {novelty: 5, rigor: 4, ...}
+    comments: str = Body(..., embed=True),
 ):
     """
     提交结构化评审意见
@@ -170,11 +296,12 @@ async def submit_review(
         if assignment_data:
             manuscript_id = assignment_data.get("manuscript_id")
 
-        res = supabase.table("review_assignments").update({
-            "status": "completed",
-            "scores": scores,
-            "comments": comments
-        }).eq("id", str(assignment_id)).execute()
+        res = (
+            supabase.table("review_assignments")
+            .update({"status": "completed", "scores": scores, "comments": comments})
+            .eq("id", str(assignment_id))
+            .execute()
+        )
 
         # 若全部评审完成，推动稿件进入待终审状态
         if manuscript_id:
@@ -186,9 +313,9 @@ async def submit_review(
                 .execute()
             )
             if not (pending.data or []):
-                supabase.table("manuscripts").update({
-                    "status": "pending_decision"
-                }).eq("id", str(manuscript_id)).execute()
+                supabase.table("manuscripts").update({"status": "pending_decision"}).eq(
+                    "id", str(manuscript_id)
+                ).execute()
 
         return {"success": True, "data": res.data[0] if res.data else {}}
     except APIError as e:

@@ -2,10 +2,35 @@ import type { Page, Route } from '@playwright/test'
 
 const SUPABASE_STORAGE_KEY = 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
 
+function base64UrlEncode(input: string) {
+  return Buffer.from(input, 'utf-8')
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+}
+
+function buildFakeJwt(userId: string, email: string, exp: number) {
+  // 中文注释: 前端只需要“可解码”的 JWT 形态用于 session 解析；不做签名校验。
+  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = base64UrlEncode(
+    JSON.stringify({
+      aud: 'authenticated',
+      exp,
+      sub: userId,
+      email,
+      role: 'authenticated',
+    })
+  )
+  const signature = 'test-signature'
+  return `${header}.${payload}.${signature}`
+}
+
 export function buildSession(userId = '00000000-0000-0000-0000-000000000000', email = 'test@example.com') {
   const now = Math.floor(Date.now() / 1000)
+  const accessToken = buildFakeJwt(userId, email, now + 3600)
   return {
-    access_token: 'test-access-token',
+    access_token: accessToken,
     refresh_token: 'test-refresh-token',
     token_type: 'bearer',
     expires_in: 3600,

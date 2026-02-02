@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
+import VersionHistory from '@/components/VersionHistory'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -16,6 +17,29 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [citeCopied, setCiteCopied] = useState(false)
   const [roles, setRoles] = useState<string[] | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchUserAndRoles() {
+      try {
+        const user = await authService.getUser()
+        if (user) setCurrentUserId(user.id)
+
+        const token = await authService.getAccessToken()
+        if (!token) return
+        const res = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (data?.success) {
+          setRoles(data?.data?.roles || null)
+        }
+      } catch (err) {
+        console.error('Failed to load user info:', err)
+      }
+    }
+    fetchUserAndRoles()
+  }, [])
 
   useEffect(() => {
     async function fetchArticle() {
@@ -52,23 +76,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         setIsLoading(false)
       }
     }
-    async function fetchRoles() {
-      try {
-        const token = await authService.getAccessToken()
-        if (!token) return
-        const res = await fetch('/api/v1/user/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (data?.success) {
-          setRoles(data?.data?.roles || null)
-        }
-      } catch (err) {
-        console.error('Failed to load roles:', err)
-      }
-    }
     fetchArticle()
-    fetchRoles()
   }, [id, initialArticle]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDownload(articleId: string) {
@@ -157,6 +165,8 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
   const sourceCodeReady = Boolean(sourceCodeUrl)
   const canPublish = Boolean(roles?.includes('editor') || roles?.includes('admin'))
   const isPublished = article?.status === 'published' || Boolean(article?.published_at)
+  const isAuthor = currentUserId === article.author_id
+  const canViewHistory = isAuthor || canPublish || roles?.includes('reviewer')
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -240,6 +250,14 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
               )}
             </div>
           </section>
+
+          {/* Version History (Authorized Only) */}
+          {canViewHistory && (
+            <section className="space-y-4">
+              <h2 className="text-xl font-bold text-slate-900">Version History</h2>
+              <VersionHistory manuscriptId={article.id} />
+            </section>
+          )}
         </div>
 
         {/* Sidebar (Right 1 Column) */}

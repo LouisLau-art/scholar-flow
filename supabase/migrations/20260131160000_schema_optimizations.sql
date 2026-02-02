@@ -2,8 +2,29 @@
 
 -- 1. 数据清理与字段合并 (user_profiles)
 -- 迁移数据：将旧字段的数据备份到新字段（仅当新字段为空时）
-UPDATE public.user_profiles SET full_name = name WHERE full_name IS NULL AND name IS NOT NULL;
-UPDATE public.user_profiles SET affiliation = institution WHERE affiliation IS NULL AND institution IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'user_profiles'
+          AND column_name = 'name'
+    ) THEN
+        EXECUTE 'UPDATE public.user_profiles SET full_name = name WHERE full_name IS NULL AND name IS NOT NULL;';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'user_profiles'
+          AND column_name = 'institution'
+    ) THEN
+        EXECUTE 'UPDATE public.user_profiles SET affiliation = institution WHERE affiliation IS NULL AND institution IS NOT NULL;';
+    END IF;
+END
+$$;
 
 -- 强制统一 research_interests 类型为 text[] (处理从文本转数组的逻辑)
 DO $$

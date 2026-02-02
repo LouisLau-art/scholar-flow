@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const playwrightPort = Number.parseInt(process.env.PLAYWRIGHT_PORT ?? process.env.PORT ?? '3000', 10);
+const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${playwrightPort}`;
+const shouldStartWebServer = process.env.PLAYWRIGHT_WEB_SERVER !== '0';
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -8,7 +12,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: playwrightBaseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -26,11 +30,14 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
-  // webServer disabled - assumes dev server is already running on port 3000
-  // webServer: {
-  //   command: 'npm run dev',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: true,
-  //   timeout: 120000,
-  // },
+  ...(shouldStartWebServer
+    ? {
+        webServer: {
+          command: `npm run dev -- --port ${playwrightPort}`,
+          url: playwrightBaseURL,
+          reuseExistingServer: true,
+          timeout: 120000,
+        },
+      }
+    : {}),
 });

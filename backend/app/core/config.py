@@ -45,6 +45,9 @@ class AppConfig:
 # Global Config Instance
 app_config = AppConfig.from_env()
 
+
+@dataclass(frozen=True)
+class SMTPConfig:
     """
     SMTP 配置（从环境变量读取）
 

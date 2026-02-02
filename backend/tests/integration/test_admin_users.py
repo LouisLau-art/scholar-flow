@@ -97,7 +97,7 @@ async def test_get_users_with_real_db(client: AsyncClient, auth_token, mock_admi
     profile_data = {
         "id": user_id,
         "email": test_email,
-        "name": "Real DB Test User",
+        "full_name": "Real DB Test User",
         "roles": ["reviewer"]
     }
     

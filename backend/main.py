@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # 在应用启动前加载环境变量
@@ -21,16 +22,25 @@ from app.api.v1 import (
     doi,
     cms,
 )
+from app.api.v1.endpoints import system
 from app.api.v1.admin import users as admin_users
 from app.api import oaipmh
 from app.core.middleware import ExceptionHandlerMiddleware
 from app.core.init_cms import ensure_cms_initialized
 from app.lib.api_client import supabase_admin
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 中文注释: CMS 初始化应容错（未迁移时不阻塞启动）
+    ensure_cms_initialized(supabase_admin)
+    yield
+
+
 app = FastAPI(
     title="ScholarFlow API",
     description="Academic workflow automation backend",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # === 中间件配置 ===
@@ -63,12 +73,8 @@ app.include_router(doi.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")
 app.include_router(oaipmh.router)
 app.include_router(cms.router, prefix="/api/v1")
+app.include_router(system.router, prefix="/api/v1")
 
-
-@app.on_event("startup")
-async def _startup_init_cms() -> None:
-    # 中文注释: CMS 初始化应容错（未迁移时不阻塞启动）
-    ensure_cms_initialized(supabase_admin)
 
 @app.get("/")
 async def root():

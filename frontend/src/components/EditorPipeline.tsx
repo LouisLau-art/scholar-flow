@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Users, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react'
+import { FileText, Users, CheckCircle2, ArrowRight, Loader2, RefreshCw, Clock } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 
@@ -10,10 +10,12 @@ type Manuscript = {
   title: string
   status?: string
   created_at?: string
+  updated_at?: string
   review_count?: number
+  version?: number
 }
 
-type PipelineStage = 'pending_quality' | 'under_review' | 'pending_decision' | 'published'
+type PipelineStage = 'pending_quality' | 'under_review' | 'pending_decision' | 'published' | 'resubmitted' | 'revision_requested'
 
 interface EditorPipelineProps {
   onAssign?: (manuscript: Manuscript) => void
@@ -68,11 +70,25 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
     )
   }
 
+  const renderSectionHeader = (title: string, count: number, filter: PipelineStage) => (
+    (activeFilter === filter || !activeFilter) && (
+      <div className="flex items-center justify-between mb-2 mt-6 first:mt-0">
+        <h4 className="text-md font-semibold text-slate-700 flex items-center gap-2">
+          {title}
+          <span className="bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">{count}</span>
+        </h4>
+      </div>
+    )
+  )
+
+  const hasData = (stage: string) => (pipelineData?.[stage] || []).length > 0
+  const getData = (stage: string) => (pipelineData?.[stage] || [])
+
   return (
     <div className="space-y-6" data-testid="editor-pipeline">
       <h2 className="text-2xl font-bold text-slate-900">Manuscript Pipeline</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* 待质检 */}
         <button
           type="button"
@@ -84,15 +100,33 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Pending Quality Check</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Pending Quality</h3>
             <FileText className="h-5 w-5 text-blue-600" />
           </div>
           <div className="text-3xl font-bold text-blue-600 mb-2">
-            {pipelineData?.pending_quality?.length || 0}
+            {getData('pending_quality').length}
           </div>
-          <div className="text-sm text-slate-500">
-            Manuscripts awaiting review
+          <div className="text-sm text-slate-500">New submissions</div>
+        </button>
+
+        {/* Resubmitted */}
+        <button
+          type="button"
+          onClick={() => handleFilterClick('resubmitted')}
+          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            activeFilter === 'resubmitted'
+              ? 'border-indigo-400 bg-indigo-50'
+              : 'border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/50'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Resubmitted</h3>
+            <RefreshCw className="h-5 w-5 text-indigo-600" />
           </div>
+          <div className="text-3xl font-bold text-indigo-600 mb-2">
+            {getData('resubmitted').length}
+          </div>
+          <div className="text-sm text-slate-500">Revisions received</div>
         </button>
 
         {/* 评审中 */}
@@ -107,14 +141,12 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Under Review</h3>
-            <Users className="h-5 w-5 text-yellow-600" />
+            <Users className="h-5 w-5 text-amber-600" />
           </div>
-          <div className="text-3xl font-bold text-yellow-600 mb-2">
-            {pipelineData?.under_review?.length || 0}
+          <div className="text-3xl font-bold text-amber-600 mb-2">
+            {getData('under_review').length}
           </div>
-          <div className="text-sm text-slate-500">
-            Manuscripts in peer review
-          </div>
+          <div className="text-sm text-slate-500">In peer review</div>
         </button>
 
         {/* 待录用 */}
@@ -132,11 +164,29 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <CheckCircle2 className="h-5 w-5 text-purple-600" />
           </div>
           <div className="text-3xl font-bold text-purple-600 mb-2">
-            {pipelineData?.pending_decision?.length || 0}
+            {getData('pending_decision').length}
           </div>
-          <div className="text-sm text-slate-500">
-            Manuscripts awaiting final decision
+          <div className="text-sm text-slate-500">Ready for decision</div>
+        </button>
+
+        {/* Revision Requested (Waiting) */}
+        <button
+          type="button"
+          onClick={() => handleFilterClick('revision_requested')}
+          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            activeFilter === 'revision_requested'
+              ? 'border-slate-400 bg-slate-50'
+              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Waiting for Author</h3>
+            <Clock className="h-5 w-5 text-slate-600" />
           </div>
+          <div className="text-3xl font-bold text-slate-600 mb-2">
+            {getData('revision_requested').length}
+          </div>
+          <div className="text-sm text-slate-500">Revision requested</div>
         </button>
 
         {/* 已发布 */}
@@ -151,14 +201,12 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Published</h3>
-            <ArrowRight className="h-5 w-5 text-green-600" />
+            <ArrowRight className="h-5 w-5 text-emerald-600" />
           </div>
-          <div className="text-3xl font-bold text-green-600 mb-2">
-            {pipelineData?.published?.length || 0}
+          <div className="text-3xl font-bold text-emerald-600 mb-2">
+            {getData('published').length}
           </div>
-          <div className="text-sm text-slate-500">
-            Manuscripts published this month
-          </div>
+          <div className="text-sm text-slate-500">Completed</div>
         </button>
       </div>
 
@@ -172,146 +220,136 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             </Button>
           )}
         </div>
-        <div className="space-y-4">
-          {activeFilter === 'pending_quality' && (pipelineData?.pending_quality || []).length === 0 && (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
-              No manuscripts in Pending Quality Check.
-            </div>
-          )}
-          {activeFilter === 'under_review' && (pipelineData?.under_review || []).length === 0 && (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
-              No manuscripts currently under review.
-            </div>
-          )}
-          {activeFilter === 'pending_decision' && (pipelineData?.pending_decision || []).length === 0 && (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
-              No manuscripts awaiting final decision.
-            </div>
-          )}
-          {activeFilter === 'published' && (pipelineData?.published || []).length === 0 && (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
-              No manuscripts published yet.
-            </div>
+        
+        <div className="space-y-2">
+          {/* Empty States */}
+          {activeFilter && !hasData(activeFilter) && (
+             <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
+               No manuscripts in {activeFilter.replace('_', ' ')}.
+             </div>
           )}
 
-          {!activeFilter && (pipelineData?.pending_quality || []).slice(0, 3).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">
-                  Submitted: {manuscript.created_at ? new Date(manuscript.created_at).toLocaleDateString() : '—'}
+          {/* Pending Quality */}
+          {hasData('pending_quality') && (!activeFilter || activeFilter === 'pending_quality') && (
+            <>
+              {renderSectionHeader('Pending Quality Check', getData('pending_quality').length, 'pending_quality')}
+              {getData('pending_quality').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">
+                      Submitted: {manuscript.created_at ? new Date(manuscript.created_at).toLocaleDateString() : '—'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">New</span>
+                    <Button size="sm" onClick={() => onAssign?.(manuscript)}>Assign Reviewers</Button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full">
-                  Pending QA
-                </span>
-                <Button size="sm" onClick={() => onAssign?.(manuscript)}>
-                  Assign Reviewers
-                </Button>
-              </div>
-            </div>
-          ))}
+              ))}
+            </>
+          )}
 
-          {!activeFilter && (pipelineData?.under_review || []).slice(0, 3).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">In review: {manuscript.review_count || 0} reviewers</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
-                  Reviewing
-                </span>
-                <Button variant="outline" size="sm" onClick={() => onDecide?.(manuscript)}>
-                  View Decision
-                </Button>
-              </div>
-            </div>
-          ))}
-          {!activeFilter && (pipelineData?.pending_decision || []).slice(0, 3).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">Awaiting final decision</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">
-                  Pending Decision
-                </span>
-                <Button size="sm" onClick={() => onDecide?.(manuscript)}>
-                  Make Decision
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          {activeFilter === 'under_review' && (pipelineData?.under_review || []).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">In review: {manuscript.review_count || 0} reviewers</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
-                  Reviewing
-                </span>
-                <Button variant="outline" size="sm" onClick={() => onDecide?.(manuscript)}>
-                  View Decision
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          {activeFilter === 'pending_decision' && (pipelineData?.pending_decision || []).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">Awaiting final decision</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">
-                  Pending Decision
-                </span>
-                <Button size="sm" onClick={() => onDecide?.(manuscript)}>
-                  Make Decision
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          {activeFilter === 'pending_quality' && (pipelineData?.pending_quality || []).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">
-                  Submitted: {manuscript.created_at ? new Date(manuscript.created_at).toLocaleDateString() : '—'}
+          {/* Resubmitted */}
+          {hasData('resubmitted') && (!activeFilter || activeFilter === 'resubmitted') && (
+            <>
+              {renderSectionHeader('Resubmitted Revisions', getData('resubmitted').length, 'resubmitted')}
+              {getData('resubmitted').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">
+                      Resubmitted: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
+                      {manuscript.version && ` (v${manuscript.version})`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full">Resubmitted</span>
+                    <Button size="sm" onClick={() => onAssign?.(manuscript)}>Manage Review</Button>
+                    <Button size="sm" variant="outline" onClick={() => onDecide?.(manuscript)}>Decide</Button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full">
-                  Pending QA
-                </span>
-                <Button size="sm" onClick={() => onAssign?.(manuscript)}>
-                  Assign Reviewers
-                </Button>
-              </div>
-            </div>
-          ))}
+              ))}
+            </>
+          )}
 
-          {activeFilter === 'published' && (pipelineData?.published || []).map((manuscript: any) => (
-            <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
-              <div>
-                <div className="font-medium text-slate-900">{manuscript.title}</div>
-                <div className="text-sm text-slate-500">Published</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">
-                  Published
-                </span>
-              </div>
-            </div>
-          ))}
+          {/* Under Review */}
+          {hasData('under_review') && (!activeFilter || activeFilter === 'under_review') && (
+            <>
+              {renderSectionHeader('Under Review', getData('under_review').length, 'under_review')}
+              {getData('under_review').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">Reviewers: {manuscript.review_count || 0}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-sm font-medium rounded-full">In Review</span>
+                    <Button size="sm" variant="ghost" onClick={() => onAssign?.(manuscript)}>Manage</Button>
+                    <Button size="sm" variant="outline" onClick={() => onDecide?.(manuscript)}>View Decision</Button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Pending Decision */}
+          {hasData('pending_decision') && (!activeFilter || activeFilter === 'pending_decision') && (
+            <>
+              {renderSectionHeader('Pending Decision', getData('pending_decision').length, 'pending_decision')}
+              {getData('pending_decision').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">Ready for decision</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">Action Req</span>
+                    <Button size="sm" onClick={() => onDecide?.(manuscript)}>Make Decision</Button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Revision Requested */}
+          {hasData('revision_requested') && (!activeFilter || activeFilter === 'revision_requested') && (
+            <>
+              {renderSectionHeader('Waiting for Author', getData('revision_requested').length, 'revision_requested')}
+              {getData('revision_requested').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-75">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">
+                      Requested: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">Waiting</span>
+                    <Button size="sm" variant="ghost" disabled>View Details</Button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Published */}
+          {hasData('published') && (!activeFilter || activeFilter === 'published') && (
+            <>
+              {renderSectionHeader('Published', getData('published').length, 'published')}
+              {getData('published').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">Published</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Published</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>

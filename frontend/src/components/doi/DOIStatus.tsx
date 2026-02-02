@@ -8,10 +8,10 @@ interface DOIStatusProps {
 
 export function DOIStatus({ status, className }: DOIStatusProps) {
   const config = {
-    pending: { label: 'Pending', icon: Clock, variant: 'secondary' as const },
+    pending: { label: 'Pending', icon: Clock, variant: 'secondary' as const, iconClass: '' },
     processing: { label: 'Processing', icon: Loader2, variant: 'default' as const, iconClass: 'animate-spin' },
-    completed: { label: 'Completed', icon: CheckCircle2, variant: 'success' as const }, // Assuming success variant exists or default
-    failed: { label: 'Failed', icon: AlertCircle, variant: 'destructive' as const },
+    completed: { label: 'Completed', icon: CheckCircle2, variant: 'secondary' as const, iconClass: '' }, 
+    failed: { label: 'Failed', icon: AlertCircle, variant: 'destructive' as const, iconClass: '' },
   }
 
   const { label, icon: Icon, variant, iconClass } = config[status] || config.pending

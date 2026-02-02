@@ -97,10 +97,11 @@ def db_connection():
     所以我们使用手动清理策略
     """
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
+    # 优先使用 service_role 以避免 RLS 影响真实数据库写入型集成测试。
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY")
 
     if not url or not key:
-        pytest.skip("SUPABASE_URL and SUPABASE_KEY must be set for integration tests")
+        pytest.skip("SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY) must be set for integration tests")
 
     client = create_client(url, key)
     yield client
