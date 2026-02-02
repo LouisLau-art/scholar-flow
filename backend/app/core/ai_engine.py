@@ -15,6 +15,10 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
     api_key = os.environ.get("OPENAI_API_KEY")
     base_url = os.environ.get("OPENAI_BASE_URL")
     model_id = os.environ.get("OPENAI_MODEL_ID", "doubao-seed-1-6-lite-251015")
+    try:
+        max_chars = int(os.environ.get("AI_PARSE_MAX_CHARS", "4000"))
+    except Exception:
+        max_chars = 4000
     
     if not api_key or not base_url:
         print("警告: 缺少 AI 配置，无法解析。")
@@ -22,6 +26,7 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
 
     try:
         client = OpenAI(api_key=api_key, base_url=base_url)
+        safe_content = content or ""
         
         prompt = f"""
         你是一个专业的学术助理。请从以下提供的论文文本中提取关键元数据。
@@ -32,8 +37,8 @@ async def parse_manuscript_metadata(content: str) -> Dict[str, Any]:
         - abstract: 论文摘要
         - authors: 作者姓名列表（字符串数组）
 
-        论文文本内容（前4000字符）：
-        {content[:4000]}
+        论文文本内容（前{max_chars}字符）：
+        {safe_content[:max_chars]}
         """
 
         response = client.chat.completions.create(

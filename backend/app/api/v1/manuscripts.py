@@ -7,6 +7,7 @@ from fastapi import (
     Body,
     Depends,
 )
+from fastapi.responses import JSONResponse
 from app.core.pdf_processor import extract_text_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -21,6 +22,8 @@ from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
 from uuid import uuid4, UUID
 import shutil
 import os
+import asyncio
+import tempfile
 
 router = APIRouter(tags=["Manuscripts"])
 
@@ -31,22 +34,46 @@ async def upload_manuscript(
     background_tasks: BackgroundTasks, file: UploadFile = File(...)
 ):
     """稿件上传与 AI 解析"""
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="仅支持 PDF 格式文件")
+    if not (file.filename or "").lower().endswith(".pdf"):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "仅支持 PDF 格式文件", "data": {"title": "", "abstract": "", "authors": []}},
+        )
 
     manuscript_id = uuid4()
-    temp_path = f"temp_{file.filename}"
+    temp_path = None
     try:
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        text = extract_text_from_pdf(temp_path)
-        metadata = await parse_manuscript_metadata(text)
-        background_tasks.add_task(plagiarism_check_worker, manuscript_id)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            temp_path = tmp.name
+            shutil.copyfileobj(file.file, tmp)
+
+        timeout_sec = float(os.environ.get("PDF_PARSE_TIMEOUT_SEC", "12"))
+        try:
+            text = await asyncio.wait_for(
+                asyncio.to_thread(extract_text_from_pdf, temp_path),
+                timeout=timeout_sec,
+            )
+        except asyncio.TimeoutError:
+            # 超时直接降级：允许用户手动填写 title/abstract
+            return {
+                "success": True,
+                "id": manuscript_id,
+                "data": {"title": "", "abstract": "", "authors": []},
+                "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
+            }
+
+        metadata = await parse_manuscript_metadata(text or "")
+        # 该接口仅用于前端预填元数据；查重应在正式创建稿件后触发。
+        # 为避免历史行为变化导致的依赖，这里保留 background task，但不影响解析结果。
+        background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
         return {"success": True, "id": manuscript_id, "data": metadata}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e), "data": {"title": "", "abstract": "", "authors": []}},
+        )
     finally:
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
 

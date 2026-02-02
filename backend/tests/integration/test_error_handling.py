@@ -21,4 +21,6 @@ async def test_upload_internal_error(client: AsyncClient):
             files={"file": ("test.pdf", b"%PDF-1.4 test", "application/pdf")},
         )
         assert response.status_code == 500
-        assert "boom" in response.json()["detail"]
+        payload = response.json()
+        assert payload["success"] is False
+        assert "boom" in payload["message"]
