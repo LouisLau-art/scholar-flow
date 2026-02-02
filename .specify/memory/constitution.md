@@ -13,8 +13,17 @@ Sync Impact Report:
 ### I. 胶水编程 (Glue Coding)
 核心理念是复用成熟开源组件。凡是能不写的就不写，优先复制使用经过社区检验的代码 (Copy & Paste)。尽量不修改原仓库代码，将其作为黑盒使用。自定义代码只负责组合、调用、封装和适配。
 
-### II. 测试驱动开发 (Test-First & Coverage)
-严格的测试覆盖率要求（后端 >80%，前端 >70%，核心逻辑 100%）。遵循测试金字塔（E2E -> Integration -> Unit）。新功能必须包含测试。
+### II. 测试与效率 (Test-First, Risk-Based & Coverage)
+我们坚持“可回归、可验证”的工程质量，但在日常开发中采用**分层/风险驱动**策略提升效率，避免每次改动都跑全量测试。
+
+- **覆盖率底线不变**：后端 >80%，前端 >70%，关键业务逻辑 100%。
+- **测试金字塔不变**：E2E -> Integration -> Unit。
+- **新功能必须有测试**：可以同 PR 提交（不强制每次先写完所有全量测试才开始实现），但合并前必须可回归。
+
+#### 推荐分层（提速默认方案）
+- **Tier 1（开发中，秒级/分钟级）**：只跑“相关/改动附近”的单测或单文件集成测试；必要时用 `-o addopts=` 跳过全局覆盖率门槛做快速回归。
+- **Tier 2（提 PR 前）**：跑后端 unit + 相关 integration + 前端 unit（Vitest），确保该 PR 的核心路径稳定。
+- **Tier 3（合并前/CI）**：跑全量（含覆盖率门槛与必要 E2E），例如 `./scripts/run-all-tests.sh`；主干永远保持绿。
 
 ### III. 安全优先 (Security First)
 所有敏感操作必须鉴权。绝不允许未认证访问用户数据。使用 Supabase JWT 验证。设计阶段即考虑安全（Design Security）。
@@ -41,4 +50,4 @@ Sync Impact Report:
 
 Constitution supersedes all other practices. Amendments require documentation and version bump. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-02
+**Version**: 1.1.0 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-02
