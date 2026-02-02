@@ -68,12 +68,21 @@ async def test_retry_plagiarism_check_adds_task():
 
 class _FakeSupabase:
     def __init__(
-        self, pipeline_data, reviewers_data, decision_data, raise_on_update=False
+        self,
+        pipeline_data,
+        reviewers_data,
+        decision_data,
+        raise_on_update=False,
+        *,
+        invoice_rows=None,
+        manuscript_single=None,
     ):
         self.pipeline_data = pipeline_data
         self.reviewers_data = reviewers_data
         self.decision_data = decision_data
         self.raise_on_update = raise_on_update
+        self.invoice_rows = invoice_rows or []
+        self.manuscript_single = manuscript_single or {"id": "1", "status": "approved"}
 
     def table(self, name):
         return _FakeQuery(self, name)
@@ -85,11 +94,16 @@ class _FakeQuery:
         self.name = name
         self._status = None
         self._update_payload = None
+        self._single = False
 
     def select(self, *_args, **_kwargs):
         return self
 
     def update(self, payload):
+        self._update_payload = payload
+        return self
+
+    def upsert(self, payload, *_args, **_kwargs):
         self._update_payload = payload
         return self
 
@@ -99,14 +113,25 @@ class _FakeQuery:
     def order(self, *_args, **_kwargs):
         return self
 
+    def limit(self, *_args, **_kwargs):
+        return self
+
     def eq(self, key, value):
         if key == "status":
             self._status = value
         return self
 
+    def single(self, *_args, **_kwargs):
+        self._single = True
+        return self
+
     def execute(self):
         if self.name == "user_profiles":
             return (None, self.parent.reviewers_data)
+        if self.name == "invoices":
+            return SimpleNamespace(data=self.parent.invoice_rows)
+        if self.name == "manuscripts" and self._single:
+            return SimpleNamespace(data=self.parent.manuscript_single)
         if self.name == "manuscripts" and self._update_payload is not None:
             if self.parent.raise_on_update:
                 raise RuntimeError("boom")
@@ -126,7 +151,7 @@ async def test_editor_pipeline_with_stubbed_supabase(monkeypatch):
     }
     fake = _FakeSupabase(pipeline_data, reviewers_data=[], decision_data=[])
 
-    monkeypatch.setattr(editor_api, "supabase", fake)
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     result = await editor_api.get_editor_pipeline(current_user={"id": "user"})
 
@@ -155,16 +180,17 @@ async def test_editor_submit_decision_accept(monkeypatch):
     fake = _FakeSupabase(
         pipeline_data={}, reviewers_data=[], decision_data=[{"id": "1"}]
     )
-    monkeypatch.setattr(editor_api, "supabase", fake)
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     result = await editor_api.submit_final_decision(
         current_user={"id": "user"},
         manuscript_id="1",
         decision="accept",
         comment="",
+        apc_amount=1500,
     )
 
-    assert result["data"]["status"] == "published"
+    assert result["data"]["status"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -172,7 +198,7 @@ async def test_editor_submit_decision_reject(monkeypatch):
     fake = _FakeSupabase(
         pipeline_data={}, reviewers_data=[], decision_data=[{"id": "1"}]
     )
-    monkeypatch.setattr(editor_api, "supabase", fake)
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     result = await editor_api.submit_final_decision(
         current_user={"id": "user"},
@@ -200,7 +226,7 @@ async def test_editor_submit_decision_invalid():
 @pytest.mark.asyncio
 async def test_editor_submit_decision_not_found(monkeypatch):
     fake = _FakeSupabase(pipeline_data={}, reviewers_data=[], decision_data=[])
-    monkeypatch.setattr(editor_api, "supabase", fake)
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     with pytest.raises(HTTPException) as exc:
         await editor_api.submit_final_decision(
@@ -208,6 +234,7 @@ async def test_editor_submit_decision_not_found(monkeypatch):
             manuscript_id="missing",
             decision="accept",
             comment="",
+            apc_amount=1500,
         )
 
     assert exc.value.status_code == 404
@@ -218,7 +245,7 @@ async def test_editor_submit_decision_exception(monkeypatch):
     fake = _FakeSupabase(
         pipeline_data={}, reviewers_data=[], decision_data=[], raise_on_update=True
     )
-    monkeypatch.setattr(editor_api, "supabase", fake)
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     with pytest.raises(HTTPException) as exc:
         await editor_api.submit_final_decision(
@@ -226,6 +253,7 @@ async def test_editor_submit_decision_exception(monkeypatch):
             manuscript_id="1",
             decision="accept",
             comment="",
+            apc_amount=1500,
         )
 
     assert exc.value.status_code == 500
@@ -265,16 +293,35 @@ def test_is_missing_column_error():
 @pytest.mark.asyncio
 async def test_editor_submit_decision_fallback_on_missing_column(monkeypatch):
     class _FallbackQuery:
-        def __init__(self, parent):
+        def __init__(self, parent, name: str):
             self.parent = parent
+            self.name = name
+            self._single = False
 
         def update(self, _payload):
+            return self
+
+        def upsert(self, _payload, *_args, **_kwargs):
+            return self
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def single(self, *_args, **_kwargs):
+            self._single = True
             return self
 
         def eq(self, *_args, **_kwargs):
             return self
 
+        def limit(self, *_args, **_kwargs):
+            return self
+
         def execute(self):
+            if self._single:
+                return SimpleNamespace(data={"author_id": "user", "title": "t"})
+            if self.name == "invoices":
+                return SimpleNamespace(data=[{"id": "inv-1"}])
             self.parent.calls += 1
             if self.parent.calls == 1:
                 raise RuntimeError('column "published_at" does not exist')
@@ -284,26 +331,39 @@ async def test_editor_submit_decision_fallback_on_missing_column(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def table(self, _name):
-            return _FallbackQuery(self)
+        def table(self, name):
+            return _FallbackQuery(self, name)
 
-    monkeypatch.setattr(editor_api, "supabase", _FallbackSupabase())
+    monkeypatch.setattr(editor_api, "supabase_admin", _FallbackSupabase())
 
     result = await editor_api.submit_final_decision(
         current_user={"id": "user"},
         manuscript_id="1",
         decision="accept",
         comment="",
+        apc_amount=1500,
     )
 
-    assert result["data"]["status"] == "published"
+    assert result["data"]["status"] == "approved"
 
 
 @pytest.mark.asyncio
 async def test_editor_publish_fallback_on_missing_column(monkeypatch):
     class _FallbackQuery:
-        def __init__(self, parent):
+        def __init__(self, parent, name: str):
             self.parent = parent
+            self.name = name
+            self._single = False
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def single(self, *_args, **_kwargs):
+            self._single = True
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
 
         def update(self, _payload):
             return self
@@ -312,6 +372,10 @@ async def test_editor_publish_fallback_on_missing_column(monkeypatch):
             return self
 
         def execute(self):
+            if self._single:
+                return SimpleNamespace(data={"id": "1", "status": "approved"})
+            if self.name == "invoices":
+                return SimpleNamespace(data=[{"amount": 0, "status": "unpaid"}])
             self.parent.calls += 1
             if self.parent.calls == 1:
                 raise RuntimeError('column "published_at" does not exist')
@@ -321,10 +385,10 @@ async def test_editor_publish_fallback_on_missing_column(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def table(self, _name):
-            return _FallbackQuery(self)
+        def table(self, name):
+            return _FallbackQuery(self, name)
 
-    monkeypatch.setattr(editor_api, "supabase", _FallbackSupabase())
+    monkeypatch.setattr(editor_api, "supabase_admin", _FallbackSupabase())
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "user"},

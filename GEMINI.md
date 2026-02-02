@@ -5,7 +5,7 @@
 本文档根据所有功能计划自动生成。最后更新时间：2026-01-31
 
 ## 当前技术栈
-- **前端**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
+- **前端**: TypeScript 5.x (Strict Mode), Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
 - **后端**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx (017-super-admin-management)
 - **数据库与认证**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x (017-super-admin-management)
 - **测试**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
@@ -223,3 +223,6 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **CI-like 一键测试**：`./scripts/run-all-tests.sh` 默认跑 `backend pytest` + `frontend vitest` + mocked E2E（`frontend/tests/e2e/specs/revision_flow.spec.ts`）。可用 `PLAYWRIGHT_PORT` 改端口，`E2E_SPEC` 指定单个 spec。若要跑全量 Playwright：`E2E_FULL=1 ./scripts/run-all-tests.sh`（脚本会尝试启动 `uvicorn main:app --port 8000`，可用 `BACKEND_PORT` 覆盖）。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 <!-- MANUAL ADDITIONS END -->
+
+## Recent Changes
+- 022-core-logic-hardening: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]

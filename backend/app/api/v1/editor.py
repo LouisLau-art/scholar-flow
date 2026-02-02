@@ -63,9 +63,12 @@ async def get_editor_pipeline(
     分栏：待质检、评审中、待录用、已发布
     """
     try:
+        # 中文注释: 这里使用 service_role 读取，避免启用 RLS 的云端环境导致 editor 看板空数据。
+        db = supabase_admin
+
         # 待质检 (submitted)
         pending_quality_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*")
             .eq("status", "submitted")
             .order("created_at", desc=True)
@@ -75,7 +78,7 @@ async def get_editor_pipeline(
 
         # 评审中 (under_review)
         under_review_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*, review_assignments(count)")
             .eq("status", "under_review")
             .order("created_at", desc=True)
@@ -115,7 +118,7 @@ async def get_editor_pipeline(
 
         # 待录用 (pending_decision)
         pending_decision_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*, review_assignments(count)")
             .eq("status", "pending_decision")
             .order("created_at", desc=True)
@@ -136,9 +139,28 @@ async def get_editor_pipeline(
                 del item["review_assignments"]
             pending_decision.append(item)
 
+        # 已录用 (approved) - 需要显示发文前的财务状态
+        approved_resp = (
+            db.table("manuscripts")
+            .select("*, invoices(amount,status)")
+            .eq("status", "approved")
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        approved_data = _extract_supabase_data(approved_resp) or []
+        approved = []
+        for item in approved_data:
+            invoices = item.get("invoices") or []
+            inv = invoices[0] if isinstance(invoices, list) and invoices else {}
+            item["invoice_amount"] = inv.get("amount")
+            item["invoice_status"] = inv.get("status")
+            if "invoices" in item:
+                del item["invoices"]
+            approved.append(item)
+
         # 已发布 (published)
         published_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*")
             .eq("status", "published")
             .order("created_at", desc=True)
@@ -148,7 +170,7 @@ async def get_editor_pipeline(
 
         # 待处理修订稿 (resubmitted) - 类似待质检，需 Editor 处理
         resubmitted_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*")
             .eq("status", "resubmitted")
             .order("updated_at", desc=True)
@@ -158,7 +180,7 @@ async def get_editor_pipeline(
 
         # 等待作者修改 (revision_requested) - 监控用
         revision_requested_resp = (
-            supabase.table("manuscripts")
+            db.table("manuscripts")
             .select("*")
             .eq("status", "revision_requested")
             .order("updated_at", desc=True)
@@ -174,6 +196,7 @@ async def get_editor_pipeline(
                 "under_review": under_review,
                 "revision_requested": revision_requested,  # New
                 "pending_decision": pending_decision,
+                "approved": approved,
                 "published": published,
             },
         }
@@ -363,6 +386,7 @@ async def submit_final_decision(
     manuscript_id: str = Body(..., embed=True),
     decision: str = Body(..., embed=True),
     comment: str = Body("", embed=True),
+    apc_amount: float | None = Body(None, embed=True),
 ):
     """
     提交最终录用或退回决策
@@ -375,13 +399,13 @@ async def submit_final_decision(
     try:
         # 更新稿件状态
         if decision == "accept":
-            # 录用：设置为已发布，生成DOI，记录发布时间
-            doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            update_data = {
-                "status": "published",
-                "published_at": datetime.now().isoformat(),
-                "doi": doi,
-            }
+            # 录用：仅进入“已录用/待发布”状态；发布必须通过 Financial Gate
+            if apc_amount is None:
+                raise HTTPException(status_code=400, detail="apc_amount is required for accept")
+            if apc_amount < 0:
+                raise HTTPException(status_code=400, detail="apc_amount must be >= 0")
+
+            update_data = {"status": "approved"}
         else:
             # 退回：设置为需要修改，添加拒绝理由
             update_data = {"status": "revision_required", "reject_comment": comment}
@@ -389,7 +413,7 @@ async def submit_final_decision(
         # 执行更新
         try:
             response = (
-                supabase.table("manuscripts")
+                supabase_admin.table("manuscripts")
                 .update(update_data)
                 .eq("id", manuscript_id)
                 .execute()
@@ -399,7 +423,7 @@ async def submit_final_decision(
             print(f"Decision update error: {error_text}")
             if _is_missing_column_error(error_text):
                 response = (
-                    supabase.table("manuscripts")
+                    supabase_admin.table("manuscripts")
                     .update({"status": update_data["status"]})
                     .eq("id", manuscript_id)
                     .execute()
@@ -410,7 +434,7 @@ async def submit_final_decision(
         error = _extract_supabase_error(response)
         if error and _is_missing_column_error(str(error)):
             response = (
-                supabase.table("manuscripts")
+                supabase_admin.table("manuscripts")
                 .update({"status": update_data["status"]})
                 .eq("id", manuscript_id)
                 .execute()
@@ -422,12 +446,29 @@ async def submit_final_decision(
         if len(data) == 0:
             raise HTTPException(status_code=404, detail="Manuscript not found")
 
+        # === Feature 022: APC 确认（录用时创建/更新 Invoice） ===
+        if decision == "accept":
+            invoice_status = "paid" if apc_amount == 0 else "unpaid"
+            invoice_payload = {
+                "manuscript_id": manuscript_id,
+                "amount": apc_amount,
+                "status": invoice_status,
+                "confirmed_at": datetime.now().isoformat() if invoice_status == "paid" else None,
+            }
+            try:
+                supabase_admin.table("invoices").upsert(
+                    invoice_payload, on_conflict="manuscript_id"
+                ).execute()
+            except Exception as e:
+                print(f"[Financial] Failed to upsert invoice: {e}")
+                raise HTTPException(status_code=500, detail="Failed to create invoice")
+
         # === 通知中心 (Feature 011) ===
         # 中文注释:
         # 1) 稿件决策变更属于核心状态变化：作者必须同时收到站内信 + 邮件（异步）。
         try:
             ms_res = (
-                supabase.table("manuscripts")
+                supabase_admin.table("manuscripts")
                 .select("author_id, title")
                 .eq("id", manuscript_id)
                 .single()
@@ -521,6 +562,47 @@ async def publish_manuscript_dev(
     2) 仍然需要 editor/admin 角色，避免普通作者误操作。
     """
     try:
+        ms = {}
+        try:
+            ms_resp = (
+                supabase_admin.table("manuscripts")
+                .select("id,status")
+                .eq("id", manuscript_id)
+                .single()
+                .execute()
+            )
+            ms = getattr(ms_resp, "data", None) or {}
+        except Exception:
+            ms = {}
+
+        invoice = None
+        try:
+            inv_resp = (
+                supabase_admin.table("invoices")
+                .select("amount,status")
+                .eq("manuscript_id", manuscript_id)
+                .limit(1)
+                .execute()
+            )
+            inv_data = getattr(inv_resp, "data", None) or []
+            invoice = inv_data[0] if inv_data else None
+        except Exception:
+            invoice = None
+
+        # CRITICAL: PAYMENT GATE CHECK
+        if invoice is None:
+            # 对已录用/待发布的稿件：必须存在 invoice 才允许发布，避免绕过 APC 流程
+            if (ms.get("status") or "").lower() in {"approved", "pending_payment"}:
+                raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
+        else:
+            try:
+                amount = float(invoice.get("amount") or 0)
+            except Exception:
+                amount = 0
+            status = (invoice.get("status") or "unpaid").lower()
+            if amount > 0 and status != "paid":
+                raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
+
         doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
         update_data = {
             "status": "published",
@@ -529,7 +611,7 @@ async def publish_manuscript_dev(
         }
         try:
             response = (
-                supabase.table("manuscripts")
+                supabase_admin.table("manuscripts")
                 .update(update_data)
                 .eq("id", manuscript_id)
                 .execute()
@@ -539,7 +621,7 @@ async def publish_manuscript_dev(
             print(f"Publish update error: {error_text}")
             if _is_missing_column_error(error_text):
                 response = (
-                    supabase.table("manuscripts")
+                    supabase_admin.table("manuscripts")
                     .update({"status": update_data["status"]})
                     .eq("id", manuscript_id)
                     .execute()
@@ -550,7 +632,7 @@ async def publish_manuscript_dev(
         error = _extract_supabase_error(response)
         if error and _is_missing_column_error(str(error)):
             response = (
-                supabase.table("manuscripts")
+                supabase_admin.table("manuscripts")
                 .update({"status": update_data["status"]})
                 .eq("id", manuscript_id)
                 .execute()

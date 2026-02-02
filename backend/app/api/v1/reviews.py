@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from uuid import UUID
-from typing import Dict
+from typing import Dict, Optional
 from postgrest.exceptions import APIError
 from datetime import datetime, timedelta, timezone
 import secrets
@@ -276,6 +276,8 @@ async def submit_review(
     assignment_id: UUID = Body(..., embed=True),
     scores: Dict[str, int] = Body(..., embed=True),  # {novelty: 5, rigor: 4, ...}
     comments: str = Body(..., embed=True),
+    confidential_comments_to_editor: str | None = Body(None, embed=True),
+    attachment_path: str | None = Body(None, embed=True),
 ):
     """
     提交结构化评审意见
@@ -284,7 +286,7 @@ async def submit_review(
         # 逻辑: 更新状态并存储分数
         assignment_res = (
             supabase.table("review_assignments")
-            .select("manuscript_id")
+            .select("manuscript_id, reviewer_id")
             .eq("id", str(assignment_id))
             .single()
             .execute()
@@ -295,6 +297,9 @@ async def submit_review(
             assignment_data = assignment_data[0] if assignment_data else None
         if assignment_data:
             manuscript_id = assignment_data.get("manuscript_id")
+            reviewer_id = assignment_data.get("reviewer_id")
+        else:
+            reviewer_id = None
 
         res = (
             supabase.table("review_assignments")
@@ -302,6 +307,52 @@ async def submit_review(
             .eq("id", str(assignment_id))
             .execute()
         )
+
+        # === Feature 022: Reviewer Privacy（双通道评论落库到 review_reports） ===
+        # 中文注释:
+        # - review_assignments 用于任务状态机；review_reports 用于对外展示（按角色过滤机密字段）。
+        if manuscript_id and reviewer_id:
+            overall_score = None
+            try:
+                vals = list((scores or {}).values())
+                overall_score = round(sum(vals) / max(len(vals), 1)) if vals else None
+            except Exception:
+                overall_score = None
+
+            rr_payload = {
+                "manuscript_id": str(manuscript_id),
+                "reviewer_id": str(reviewer_id),
+                "status": "completed",
+                "content": comments,
+                "score": overall_score,
+                "confidential_comments_to_editor": confidential_comments_to_editor,
+                "attachment_path": attachment_path,
+            }
+            try:
+                existing = (
+                    supabase_admin.table("review_reports")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("reviewer_id", str(reviewer_id))
+                    .limit(1)
+                    .execute()
+                )
+                existing_rows = getattr(existing, "data", None) or []
+                if existing_rows:
+                    supabase_admin.table("review_reports").update(rr_payload).eq(
+                        "id", existing_rows[0]["id"]
+                    ).execute()
+                else:
+                    supabase_admin.table("review_reports").insert(
+                        {
+                            **rr_payload,
+                            "token": None,
+                            "expiry_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+                        }
+                    ).execute()
+            except Exception as e:
+                # 中文注释: 不因 review_reports 失败阻塞 review_assignments 主流程
+                print(f"[Reviews] upsert review_reports failed (ignored): {e}")
 
         # 若全部评审完成，推动稿件进入待终审状态
         if manuscript_id:
@@ -322,3 +373,193 @@ async def submit_review(
         # 缺表时，给出可读提示，避免 500
         print(f"Review submit failed: {e}")
         return {"success": False, "message": "review_assignments table not found"}
+
+
+def _is_admin_email(email: Optional[str]) -> bool:
+    if not email:
+        return False
+    admins = [e.strip().lower() for e in (os.environ.get("ADMIN_EMAILS") or "").split(",") if e.strip()]
+    return email.strip().lower() in set(admins)
+
+
+@router.get("/reviews/token/{token}")
+async def get_review_by_token(token: str):
+    """
+    免登录审稿入口：通过 token 获取审稿任务与稿件信息
+
+    中文注释:
+    - 这是 Reviewer 无需登录的落地页能力；必须严格校验 token 有效性与过期时间。
+    """
+    try:
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, manuscript_id, reviewer_id, status, expiry_date")
+            .eq("token", token)
+            .single()
+            .execute()
+        )
+        rr = getattr(rr_resp, "data", None) or {}
+        if not rr:
+            raise HTTPException(status_code=404, detail="Review token not found")
+
+        expiry = rr.get("expiry_date")
+        # expiry_date 可能是字符串
+        try:
+            expiry_dt = (
+                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                if isinstance(expiry, str)
+                else expiry
+            )
+        except Exception:
+            expiry_dt = None
+        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Review token expired")
+
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,title,abstract,file_path,status")
+            .eq("id", rr["manuscript_id"])
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+
+        return {"success": True, "data": {"review_report": rr, "manuscript": ms}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Get review by token failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch review task")
+
+
+@router.post("/reviews/token/{token}/submit")
+async def submit_review_by_token(
+    token: str,
+    content: str = Form(...),
+    score: int = Form(...),
+    confidential_comments_to_editor: str | None = Form(None),
+    attachment: UploadFile | None = File(None),
+):
+    """
+    免登录审稿提交：支持双通道评论 + 机密附件
+    """
+    if not content or content.strip() == "":
+        raise HTTPException(status_code=400, detail="content is required")
+    if score < 1 or score > 5:
+        raise HTTPException(status_code=400, detail="score must be 1..5")
+
+    try:
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, manuscript_id, reviewer_id, status, expiry_date")
+            .eq("token", token)
+            .single()
+            .execute()
+        )
+        rr = getattr(rr_resp, "data", None) or {}
+        if not rr:
+            raise HTTPException(status_code=404, detail="Review token not found")
+
+        expiry = rr.get("expiry_date")
+        try:
+            expiry_dt = (
+                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                if isinstance(expiry, str)
+                else expiry
+            )
+        except Exception:
+            expiry_dt = None
+        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Review token expired")
+
+        attachment_path = None
+        if attachment is not None:
+            file_bytes = await attachment.read()
+            # 中文注释: 机密附件仅供编辑查看；存储路径不暴露给作者
+            safe_name = (attachment.filename or "attachment").replace("/", "_")
+            attachment_path = f"review_attachments/{rr['id']}/{safe_name}"
+            try:
+                supabase_admin.storage.from_("manuscripts").upload(
+                    attachment_path,
+                    file_bytes,
+                    {"content-type": attachment.content_type or "application/octet-stream"},
+                )
+            except Exception as e:
+                print(f"[Review Attachment] upload failed: {e}")
+                raise HTTPException(status_code=500, detail="Failed to upload attachment")
+
+        update_payload = {
+            "content": content,
+            "score": score,
+            "status": "completed",
+            "confidential_comments_to_editor": confidential_comments_to_editor,
+            "attachment_path": attachment_path,
+        }
+        supabase_admin.table("review_reports").update(update_payload).eq("id", rr["id"]).execute()
+
+        return {"success": True, "data": {"review_report_id": rr["id"]}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Submit review by token failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit review")
+
+
+@router.get("/reviews/feedback/{manuscript_id}")
+async def get_review_feedback_for_manuscript(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    获取某稿件的审稿反馈（按身份过滤机密字段）
+
+    中文注释:
+    - Author 只能看到公开字段（content/score）
+    - Editor/Admin 可以看到机密字段（confidential_comments_to_editor/attachment_path）
+    """
+    try:
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id, author_id")
+            .eq("id", str(manuscript_id))
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+        if not ms:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+
+        is_author = str(ms.get("author_id")) == str(current_user.get("id"))
+        is_editor = _is_admin_email(current_user.get("email"))
+        if not (is_author or is_editor):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        rr_resp = (
+            supabase_admin.table("review_reports")
+            .select("id, manuscript_id, reviewer_id, status, content, score, confidential_comments_to_editor, attachment_path")
+            .eq("manuscript_id", str(manuscript_id))
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = getattr(rr_resp, "data", None) or []
+
+        if is_author:
+            sanitized = []
+            for r in rows:
+                r2 = {
+                    "id": r.get("id"),
+                    "manuscript_id": r.get("manuscript_id"),
+                    "reviewer_id": r.get("reviewer_id"),
+                    "status": r.get("status"),
+                    "content": r.get("content"),
+                    "score": r.get("score"),
+                }
+                sanitized.append(r2)
+            return {"success": True, "data": sanitized}
+
+        return {"success": True, "data": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Fetch review feedback failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch review feedback")

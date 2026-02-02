@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { FileText, Users, CheckCircle2, ArrowRight, Loader2, RefreshCw, Clock } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 type Manuscript = {
   id: string
@@ -13,9 +14,18 @@ type Manuscript = {
   updated_at?: string
   review_count?: number
   version?: number
+  invoice_amount?: number | string | null
+  invoice_status?: string | null
 }
 
-type PipelineStage = 'pending_quality' | 'under_review' | 'pending_decision' | 'published' | 'resubmitted' | 'revision_requested'
+type PipelineStage =
+  | 'pending_quality'
+  | 'under_review'
+  | 'pending_decision'
+  | 'approved'
+  | 'published'
+  | 'resubmitted'
+  | 'revision_requested'
 
 interface EditorPipelineProps {
   onAssign?: (manuscript: Manuscript) => void
@@ -83,6 +93,48 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
 
   const hasData = (stage: string) => (pipelineData?.[stage] || []).length > 0
   const getData = (stage: string) => (pipelineData?.[stage] || [])
+
+  const handlePublish = async (manuscriptId: string) => {
+    const toastId = toast.loading('Publishing...')
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.', { id: toastId })
+        return
+      }
+      const response = await fetch('/api/v1/editor/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ manuscript_id: manuscriptId }),
+      })
+      const data = await response.json().catch(() => null)
+      if (response.status === 403) {
+        toast.error('Waiting for Payment.', { id: toastId })
+        return
+      }
+      if (!response.ok || !data?.success) {
+        toast.error(data?.detail || data?.message || 'Publish failed.', { id: toastId })
+        return
+      }
+      toast.success('Published.', { id: toastId })
+      setPipelineData((prev: any) => prev) // keep state shape
+      // 刷新数据
+      setIsLoading(true)
+      const freshToken = await authService.getAccessToken()
+      const freshRes = await fetch('/api/v1/editor/pipeline', {
+        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
+      })
+      const fresh = await freshRes.json()
+      if (fresh?.success) setPipelineData(fresh.data)
+    } catch (error) {
+      toast.error('Publish failed. Please try again.', { id: toastId })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6" data-testid="editor-pipeline">
@@ -167,6 +219,26 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             {getData('pending_decision').length}
           </div>
           <div className="text-sm text-slate-500">Ready for decision</div>
+        </button>
+
+        {/* Approved (Waiting for Payment / Ready to Publish) */}
+        <button
+          type="button"
+          onClick={() => handleFilterClick('approved')}
+          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            activeFilter === 'approved'
+              ? 'border-emerald-400 bg-emerald-50'
+              : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/50'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Approved</h3>
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div className="text-3xl font-bold text-emerald-600 mb-2">
+            {getData('approved').length}
+          </div>
+          <div className="text-sm text-slate-500">Waiting for payment / publish</div>
         </button>
 
         {/* Revision Requested (Waiting) */}
@@ -309,6 +381,43 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+            </>
+          )}
+
+          {/* Approved */}
+          {hasData('approved') && (!activeFilter || activeFilter === 'approved') && (
+            <>
+              {renderSectionHeader('Approved (Financial Gate)', getData('approved').length, 'approved')}
+              {getData('approved').slice(0, activeFilter ? undefined : 3).map((manuscript: Manuscript) => {
+                const amountRaw = manuscript.invoice_amount ?? 0
+                const amount = typeof amountRaw === 'string' ? Number.parseFloat(amountRaw) : Number(amountRaw)
+                const status = (manuscript.invoice_status ?? 'unpaid').toLowerCase()
+                const waitingPayment = (Number.isFinite(amount) ? amount : 0) > 0 && status !== 'paid'
+
+                return (
+                  <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                    <div>
+                      <div className="font-medium text-slate-900">{manuscript.title}</div>
+                      <div className="text-sm text-slate-500">
+                        {waitingPayment ? 'Waiting for Payment' : 'Ready to Publish'}
+                        {Number.isFinite(amount) ? ` • APC: $${amount}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Approved</span>
+                      <Button
+                        size="sm"
+                        disabled={waitingPayment}
+                        title={waitingPayment ? 'Waiting for Payment' : 'Publish'}
+                        onClick={() => handlePublish(manuscript.id)}
+                        data-testid="editor-publish"
+                      >
+                        Publish
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
             </>
           )}
 

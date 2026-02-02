@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 
 interface DecisionPanelProps {
   manuscriptId?: string
@@ -31,6 +32,7 @@ export default function DecisionPanel({
   const [decision, setDecision] = useState<'accept' | 'reject' | 'revision' | null>(null)
   const [revisionType, setRevisionType] = useState<'major' | 'minor' | null>(null)
   const [comment, setComment] = useState('')
+  const [apcAmount, setApcAmount] = useState<number>(1500)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
@@ -53,6 +55,13 @@ export default function DecisionPanel({
       }
     }
 
+    if (decision === 'accept') {
+      if (!Number.isFinite(apcAmount) || apcAmount < 0) {
+        toast.error('Please provide a valid APC amount (>= 0).')
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
       const token = await authService.getAccessToken()
@@ -69,6 +78,10 @@ export default function DecisionPanel({
         comment
       }
 
+      if (decision === 'accept') {
+        body.apc_amount = apcAmount
+      }
+
       if (decision === 'revision') {
         endpoint = '/api/v1/editor/revisions'
         body = {
@@ -76,7 +89,7 @@ export default function DecisionPanel({
           decision_type: revisionType,
           comment
         }
-      }
+          }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -101,7 +114,7 @@ export default function DecisionPanel({
         toast.success('Decision recorded successfully.')
         if (onSubmitted) onSubmitted()
       } else {
-        throw new Error(data.message || 'Submission failed')
+        throw new Error(data.detail || data.message || 'Submission failed')
       }
     } catch (error: any) {
       console.error('Failed to submit decision:', error)
@@ -191,11 +204,31 @@ export default function DecisionPanel({
                 }`}
               >
                 <RadioGroupItem id="decision-accept" value="accept" className="mt-1" />
-                <div className="space-y-1">
+                <div className="space-y-3 w-full">
                   <div className="text-sm font-semibold text-foreground">Accept for Publication</div>
                   <div className="text-xs text-muted-foreground">
                     The manuscript meets all standards.
                   </div>
+
+                  {decision === 'accept' && (
+                    <div className="mt-2 rounded-lg bg-white/60 p-3 border border-emerald-100">
+                      <Label htmlFor="apc-amount" className="text-xs font-semibold text-slate-700">
+                        Confirm APC Amount (USD)
+                      </Label>
+                      <Input
+                        id="apc-amount"
+                        type="number"
+                        min={0}
+                        step={50}
+                        value={String(apcAmount)}
+                        onChange={(e) => setApcAmount(Number(e.target.value))}
+                        className="mt-2"
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Publishing will be blocked until payment is received (Financial Gate).
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </Label>

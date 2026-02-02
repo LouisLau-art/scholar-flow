@@ -5,7 +5,7 @@
 Auto-generated from all feature plans. Last updated: 2026-01-31
 
 ## Active Technologies
-- **Frontend**: TypeScript 5.x, Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
+- **Frontend**: TypeScript 5.x (Strict Mode), Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
 - **Backend**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx (017-super-admin-management)
 - **Database & Auth**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x (017-super-admin-management)
 - **Testing**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
