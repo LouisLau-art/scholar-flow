@@ -208,7 +208,8 @@ async def get_manuscript_assignments(
     try:
         # 关联查询 user_profiles 获取审稿人名字
         res = (
-            supabase.table("review_assignments")
+            # 使用 service_role 读取，避免 RLS/权限导致编辑端看不到已指派数据
+            supabase_admin.table("review_assignments")
             .select(
                 "id, status, due_at, reviewer_id, round_number, user_profiles:reviewer_id(full_name, email)"
             )

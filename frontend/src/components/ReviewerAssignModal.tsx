@@ -47,12 +47,16 @@ export default function ReviewerAssignModal({
       const res = await fetch(`/api/v1/reviews/assignments/${manuscriptId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
-      const data = await res.json()
-      if (data.success) {
-        setExistingReviewers(data.data)
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.success) {
+        toast.error(data?.detail || data?.message || 'Failed to load current reviewers')
+        setExistingReviewers([])
+        return
       }
+      setExistingReviewers(data.data || [])
     } catch (e) {
       console.error("Failed to load existing reviewers", e)
+      toast.error('Failed to load current reviewers')
     } finally {
       setLoadingExisting(false)
     }
@@ -162,7 +166,24 @@ export default function ReviewerAssignModal({
     }
   }
 
+  // Derived state for quick lookup
+  const assignedIds = existingReviewers.map(r => r.reviewer_id)
+
+  const pinnedAssignedUsers: User[] = existingReviewers
+    .map((r) => ({
+      id: String(r.reviewer_id),
+      email: String(r.reviewer_email || ''),
+      full_name: (r.reviewer_name ? String(r.reviewer_name) : null) as any,
+      roles: ['reviewer'] as any,
+      created_at: '',
+      is_verified: true,
+    }))
+    .filter((u) => u.id && u.email)
+
   const toggleReviewer = (reviewerId: string) => {
+    // Prevent toggling if already assigned (though UI should disable it)
+    if (assignedIds.includes(reviewerId)) return
+
     setSelectedReviewers((prev) =>
       prev.includes(reviewerId)
         ? prev.filter((id) => id !== reviewerId)
@@ -171,6 +192,30 @@ export default function ReviewerAssignModal({
   }
 
   if (!isOpen) return null
+
+  const reviewerById = new Map(reviewers.map((r) => [r.id, r]))
+  const mergedList: User[] = [
+    // 置顶：已分配的审稿人（即便不在 reviewer pool 里也要显示）
+    ...pinnedAssignedUsers.map((u) => reviewerById.get(u.id) || u),
+    // 其余候选（去重）
+    ...reviewers.filter((r) => !assignedIds.includes(r.id)),
+  ]
+
+  const orderedReviewers: User[] = mergedList
+    .slice()
+    .sort((a, b) => {
+      const aAssigned = assignedIds.includes(a.id)
+      const bAssigned = assignedIds.includes(b.id)
+      if (aAssigned !== bAssigned) return aAssigned ? -1 : 1
+
+      const aSelected = selectedReviewers.includes(a.id)
+      const bSelected = selectedReviewers.includes(b.id)
+      if (aSelected !== bSelected) return aSelected ? -1 : 1
+
+      const aName = (a.full_name || a.email || '').toLowerCase()
+      const bName = (b.full_name || b.email || '').toLowerCase()
+      return aName.localeCompare(bName)
+    })
 
   return (
     <>
@@ -313,40 +358,54 @@ export default function ReviewerAssignModal({
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
-            ) : reviewers.length === 0 ? (
+            ) : orderedReviewers.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 No reviewers found. Invite a new one?
               </div>
             ) : (
-              <div className="space-y-2">
-                {reviewers.map((reviewer) => (
+              <div className="space-y-2" data-testid="reviewer-list">
+                {orderedReviewers.map((reviewer) => {
+                  const isAssigned = assignedIds.includes(reviewer.id)
+                  const isSelected = selectedReviewers.includes(reviewer.id)
+                  const showAsSelected = isAssigned || isSelected
+                  
+                  return (
                   <div
                     key={reviewer.id}
-                    onClick={() => toggleReviewer(reviewer.id)}
-                    className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all border ${
-                      selectedReviewers.includes(reviewer.id)
-                        ? 'bg-blue-50 border-blue-200 shadow-sm'
-                        : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
+                    data-testid={`reviewer-row-${reviewer.id}`}
+                    onClick={() => !isAssigned && toggleReviewer(reviewer.id)}
+                    className={`flex items-center justify-between p-3 rounded-lg transition-all border ${
+                      isAssigned 
+                        ? 'bg-blue-50 border-blue-200 shadow-sm cursor-not-allowed'
+                        : isSelected
+                          ? 'bg-blue-50 border-blue-200 shadow-sm cursor-pointer'
+                          : 'hover:bg-slate-50 border-transparent hover:border-slate-200 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                        selectedReviewers.includes(reviewer.id) ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                        showAsSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                       }`}>
                         {reviewer.full_name?.charAt(0) || reviewer.email.charAt(0)}
                       </div>
                       <div>
-                        <div className={`font-medium ${selectedReviewers.includes(reviewer.id) ? 'text-blue-900' : 'text-slate-900'}`}>
+                        <div className={`font-medium ${showAsSelected ? 'text-blue-900' : 'text-slate-900'}`}>
                           {reviewer.full_name || 'Unnamed'}
                         </div>
                         <div className="text-sm text-slate-500">{reviewer.email}</div>
                       </div>
                     </div>
-                    {selectedReviewers.includes(reviewer.id) && (
-                      <Check className="h-5 w-5 text-blue-600" />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {isAssigned && (
+                        <span className="text-xs font-semibold bg-slate-200 text-slate-700 px-2 py-1 rounded">
+                          Assigned
+                        </span>
+                      )}
+                      {showAsSelected && <Check className="h-5 w-5 text-blue-600" />}
+                    </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
