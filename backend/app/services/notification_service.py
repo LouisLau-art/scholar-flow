@@ -41,9 +41,11 @@ class NotificationService:
             # - 云端环境里可能存在“仅用于展示的 mock user_profiles”（不对应 auth.users）。
             # - notifications.user_id 有外键指向 auth.users(id)，因此对这类用户写通知会触发 23503。
             # - 该情况对主流程无影响，且会造成日志刷屏；这里静默忽略并返回 None。
-            if getattr(e, "code", None) == "23503" or getattr(e, "code", None) == 23503:
-                msg = (getattr(e, "message", "") or "").lower()
-                if "notifications_user_id_fkey" in msg or "foreign key" in msg:
+            # supabase/postgrest 的 APIError 在不同版本里字段不完全一致，这里尽量从字符串中兜底解析。
+            text = str(e).lower()
+            code = str(getattr(e, "code", "") or "").lower()
+            if "23503" in code or "23503" in text:
+                if "notifications_user_id_fkey" in text or "foreign key" in text:
                     return None
             print(f"[Notifications] 创建失败: {e}")
             return None

@@ -5,13 +5,42 @@ from app.core.roles import require_any_role
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from uuid import UUID
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
 from datetime import datetime, timedelta, timezone
 import secrets
 import os
 
 router = APIRouter(tags=["Reviews"])
+
+def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
+    """
+    判断 Supabase/PostgREST 返回的“表不存在/Schema cache 未更新”等错误。
+
+    中文注释:
+    - 早期开发阶段可能还没建表；但不要对所有异常都“模拟成功”，否则会掩盖外键/权限等真实问题。
+    """
+    if not isinstance(err, APIError):
+        return False
+    text = str(err).lower()
+    # 常见信号：
+    # - Postgres: 42P01 (undefined_table)
+    # - PostgREST: PGRST205 / "schema cache"
+    # - 直接报 "relation ... does not exist"
+    return (
+        "42p01" in text
+        or "pgrst205" in text
+        or "schema cache" in text
+        or f'"{relation.lower()}"' in text
+        and "does not exist" in text
+    )
+
+
+def _is_foreign_key_user_error(err: Exception, *, constraint: str) -> bool:
+    if not isinstance(err, APIError):
+        return False
+    text = str(err).lower()
+    return ("23503" in text or "foreign key" in text) and constraint.lower() in text
 
 
 # === 1. 分配审稿人 (Editor Task) ===
@@ -148,12 +177,25 @@ async def assign_reviewer(
             )
 
         return {"success": True, "data": res.data[0]}
-    except Exception:
-        # 如果表还没建，我们返回模拟成功以不阻塞开发
-        return {
-            "success": True,
-            "message": "模拟分配成功 (请确保创建了 review_assignments 表)",
-        }
+    except APIError as e:
+        # 中文注释:
+        # - reviewer_id 外键指向 auth.users(id)，如果前端列表里混入了“仅 user_profiles 的 mock reviewer”，这里会触发 23503。
+        if _is_foreign_key_user_error(e, constraint="review_assignments_reviewer_id_fkey"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "该审稿人账号不存在于 Supabase Auth（可能是 mock user_profiles）。"
+                    "请用「Invite New」创建真实账号，或运行 scripts/seed_mock_reviewers_auth.py 生成可指派 reviewer。"
+                ),
+            )
+        if _is_missing_relation_error(e, relation="review_assignments"):
+            raise HTTPException(
+                status_code=500,
+                detail="review_assignments 表不存在或 Schema cache 未更新（请先在云端 Supabase 创建/迁移该表）。",
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
 
 
 @router.delete("/reviews/assign/{assignment_id}")
@@ -293,7 +335,7 @@ async def get_manuscript_assignments(
         return {"success": True, "data": result}
     except Exception as e:
         print(f"Fetch assignments failed: {e}")
-        return {"success": True, "data": []}
+        raise HTTPException(status_code=500, detail="Failed to load reviewer assignments")
 
 
 # === 2. 获取我的审稿任务 (Reviewer Task) ===

@@ -22,16 +22,17 @@ export default function EditorDashboard() {
   const handleAssignReviewer = async (reviewerIds: string[]) => {
     if (!selectedManuscriptId) {
       toast.error('Please select a manuscript first.')
-      return
+      return false
     }
     const toastId = toast.loading(`Assigning ${reviewerIds.length} reviewer${reviewerIds.length === 1 ? '' : 's'}...`)
     try {
       const token = await authService.getAccessToken()
       if (!token) {
         toast.error('Please sign in again.', { id: toastId })
-        return
+        return false
       }
       let failures = 0
+      const failureMessages: string[] = []
       for (const reviewerId of reviewerIds) {
         const response = await fetch('/api/v1/reviews/assign', {
           method: 'POST',
@@ -44,21 +45,40 @@ export default function EditorDashboard() {
             reviewer_id: reviewerId,
           }),
         })
-        const data = await response.json()
-        if (!data?.success) {
+        const raw = await response.text().catch(() => '')
+        let data: any = null
+        try {
+          data = raw ? JSON.parse(raw) : null
+        } catch {
+          data = null
+        }
+        const ok = response.ok && data?.success !== false
+        if (!ok) {
           failures += 1
+          const msg =
+            data?.detail ||
+            data?.message ||
+            (typeof raw === 'string' && raw.trim() ? raw.trim() : '') ||
+            `HTTP ${response.status}`
+          failureMessages.push(msg)
         }
       }
       if (failures === 0) {
         toast.success('Reviewer assignment complete.', { id: toastId })
       } else {
-        toast.error(`Assigned with ${failures} failure(s).`, { id: toastId })
+        const first = failureMessages[0] || ''
+        toast.error(
+          first ? `Assigned with ${failures} failure(s): ${first}` : `Assigned with ${failures} failure(s).`,
+          { id: toastId }
+        )
       }
-      setIsAssignModalOpen(false)
+      if (failures === 0) setIsAssignModalOpen(false)
       setActiveTab('pipeline')
       setPipelineRefresh((prev) => prev + 1)
+      return failures === 0
     } catch (error) {
       toast.error('Assign failed. Please try again.', { id: toastId })
+      return false
     }
   }
 

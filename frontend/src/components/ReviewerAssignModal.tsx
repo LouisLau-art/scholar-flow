@@ -12,7 +12,7 @@ import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/m
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
-  onAssign: (reviewerIds: string[]) => void // 统一为多选
+  onAssign: (reviewerIds: string[]) => Promise<boolean> | boolean | void // 统一为多选；返回 false 表示不要自动关闭
   manuscriptId: string
 }
 
@@ -26,6 +26,7 @@ export default function ReviewerAssignModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // AI State
   const [aiLoading, setAiLoading] = useState(false)
@@ -38,6 +39,8 @@ export default function ReviewerAssignModal({
   // 019: Existing Reviewers State
   const [existingReviewers, setExistingReviewers] = useState<any[]>([])
   const [loadingExisting, setLoadingExisting] = useState(false)
+  const [pendingRemove, setPendingRemove] = useState<any | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   const fetchExistingReviewers = useCallback(async () => {
     if (!manuscriptId) return
@@ -63,8 +66,8 @@ export default function ReviewerAssignModal({
   }, [manuscriptId])
 
   const handleUnassign = async (assignmentId: string) => {
-    if (!confirm("Are you sure you want to remove this reviewer?")) return
     try {
+      setRemovingId(assignmentId)
       const token = await authService.getAccessToken()
       const res = await fetch(`/api/v1/reviews/assign/${assignmentId}`, {
         method: "DELETE",
@@ -74,10 +77,20 @@ export default function ReviewerAssignModal({
         toast.success("Reviewer removed")
         fetchExistingReviewers()
       } else {
-        toast.error("Failed to remove reviewer")
+        const text = await res.text().catch(() => '')
+        let detail = ''
+        try {
+          const j = JSON.parse(text || '{}')
+          detail = j?.detail || j?.message || ''
+        } catch {
+          detail = text
+        }
+        toast.error(detail || "Failed to remove reviewer")
       }
     } catch (e) {
       toast.error("Error removing reviewer")
+    } finally {
+      setRemovingId(null)
     }
   }
 
@@ -106,16 +119,25 @@ export default function ReviewerAssignModal({
       setSelectedReviewers([])
       setAiRecommendations([])
       setAiMessage(null)
+      setPendingRemove(null)
       fetchReviewers()
       fetchExistingReviewers()
     }
   }, [isOpen, fetchReviewers, fetchExistingReviewers])
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (selectedReviewers.length > 0) {
-      onAssign(selectedReviewers)
-      onClose()
-      setSelectedReviewers([])
+      setIsSubmitting(true)
+      try {
+        const ret = await Promise.resolve(onAssign(selectedReviewers) as any)
+        await fetchExistingReviewers()
+        setSelectedReviewers([])
+        if (ret !== false) {
+          onClose()
+        }
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -263,8 +285,9 @@ export default function ReviewerAssignModal({
                           {r.status}
                         </span>
                         <button
-                          onClick={() => handleUnassign(r.id)}
+                          onClick={() => setPendingRemove(r)}
                           className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                          data-testid={`reviewer-remove-${r.id}`}
                         >
                           Remove
                         </button>
@@ -419,15 +442,55 @@ export default function ReviewerAssignModal({
             </button>
             <button
               onClick={handleAssign}
-              disabled={selectedReviewers.length === 0}
+              disabled={selectedReviewers.length === 0 || isSubmitting}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
               data-testid="reviewer-assign"
             >
-               Assign {selectedReviewers.length || ''} Reviewer{selectedReviewers.length === 1 ? '' : 's'}
+               {isSubmitting ? 'Assigning...' : `Assign ${selectedReviewers.length || ''} Reviewer${selectedReviewers.length === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>
       </div>
+
+      {/* 自定义确认弹窗：替代浏览器 confirm() */}
+      {pendingRemove && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" data-testid="unassign-confirm">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPendingRemove(null)} />
+          <div className="relative w-full max-w-md rounded-xl bg-white shadow-2xl border border-slate-200 p-6">
+            <div className="text-base font-semibold text-slate-900">Remove reviewer?</div>
+            <div className="mt-2 text-sm text-slate-600">
+              This will remove the reviewer from the current manuscript.
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-sm font-medium text-slate-900">{pendingRemove.reviewer_name || 'Unknown'}</div>
+              <div className="text-xs text-slate-600">{pendingRemove.reviewer_email || ''}</div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRemove(null)}
+                className="px-4 py-2 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                data-testid="unassign-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const id = String(pendingRemove.id)
+                  setPendingRemove(null)
+                  await handleUnassign(id)
+                }}
+                disabled={removingId === String(pendingRemove.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                data-testid="unassign-confirm-remove"
+              >
+                {removingId === String(pendingRemove.id) ? 'Removing...' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <InviteReviewerDialog 
         isOpen={isInviteDialogOpen} 

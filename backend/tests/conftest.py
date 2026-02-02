@@ -3,7 +3,7 @@ import asyncio
 import pytest_asyncio
 import os
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient, ASGITransport
 from typing import AsyncGenerator
 from supabase import create_client
@@ -45,13 +45,14 @@ def generate_test_token(user_id: str = "00000000-0000-0000-0000-000000000000"):
     使用真实的Supabase JWT secret进行签名
     """
     secret = os.environ.get("SUPABASE_JWT_SECRET", "mock-secret-replace-later")
+    now = datetime.now(timezone.utc)
 
     payload = {
         "sub": user_id,
         "email": "test@example.com",
         "aud": "authenticated",
-        "exp": datetime.utcnow() + timedelta(hours=1),
-        "iat": datetime.utcnow(),
+        "exp": now + timedelta(hours=1),
+        "iat": now,
         "role": "authenticated"
     }
 
@@ -70,13 +71,14 @@ def expired_token():
     提供过期的认证令牌用于测试
     """
     secret = os.environ.get("SUPABASE_JWT_SECRET", "mock-secret-replace-later")
+    now = datetime.now(timezone.utc)
 
     payload = {
         "sub": "00000000-0000-0000-0000-000000000000",
         "email": "test@example.com",
         "aud": "authenticated",
-        "exp": datetime.utcnow() - timedelta(hours=1),  # 已过期
-        "iat": datetime.utcnow() - timedelta(hours=2),
+        "exp": now - timedelta(hours=1),  # 已过期
+        "iat": now - timedelta(hours=2),
         "role": "authenticated"
     }
 
