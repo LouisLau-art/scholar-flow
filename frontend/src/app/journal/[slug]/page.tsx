@@ -1,5 +1,4 @@
 import DOMPurify from 'isomorphic-dompurify'
-import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 
@@ -11,27 +10,32 @@ type PageData = {
   content?: string | null
 }
 
-function getBaseUrlFromHeaders(): string {
-  const h = headers()
-  const host = h.get('x-forwarded-host') ?? h.get('host')
-  const proto = h.get('x-forwarded-proto') ?? 'http'
-  if (!host) return 'http://localhost:3000'
-  return `${proto}://${host}`
+function getBackendOrigin(): string {
+  const raw =
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://127.0.0.1:8000'
+  return raw.replace(/\/$/, '')
 }
 
 async function fetchCmsPage(slug: string): Promise<PageData> {
-  const baseUrl = getBaseUrlFromHeaders()
-  const res = await fetch(`${baseUrl}/api/v1/cms/pages/${encodeURIComponent(slug)}`, {
-    next: { revalidate: 60 },
-  })
-  if (!res.ok) {
+  try {
+    const origin = getBackendOrigin()
+    const res = await fetch(`${origin}/api/v1/cms/pages/${encodeURIComponent(slug)}`, {
+      next: { revalidate: 60 },
+    })
+    if (!res.ok) {
+      notFound()
+    }
+    const body = await res.json()
+    if (!body?.success || !body?.data) {
+      notFound()
+    }
+    return body.data as PageData
+  } catch (error) {
+    console.error('Failed to load CMS page:', error)
     notFound()
   }
-  const body = await res.json()
-  if (!body?.success || !body?.data) {
-    notFound()
-  }
-  return body.data as PageData
 }
 
 export default async function JournalCmsPage({ params }: { params: { slug: string } }) {
@@ -51,4 +55,3 @@ export default async function JournalCmsPage({ params }: { params: { slug: strin
     </div>
   )
 }
-

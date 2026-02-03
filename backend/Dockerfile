@@ -29,13 +29,13 @@ ENV PATH="/home/user/.local/bin:$PATH"
 USER user
 
 # 复制依赖并安装
-# 注意：这里假设构建上下文是项目根目录，所以路径带 backend/
-COPY --chown=user:user backend/requirements.txt .
+# 注意：此 Dockerfile 位于 backend/ 目录下，假设构建上下文也是 backend/
+COPY --chown=user:user requirements.txt .
 # 增加 --prefer-binary 优先使用预编译包，避免不必要的编译
 RUN pip install --no-cache-dir --upgrade --prefer-binary -r requirements.txt
 
 # 复制后端代码
-COPY --chown=user:user backend/ .
+COPY --chown=user:user . .
 
 # 暴露端口
 EXPOSE 7860
