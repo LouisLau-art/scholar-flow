@@ -568,7 +568,7 @@ async def get_manuscript_versions(
     # 不，Service 使用 admin client，所以 API 层必须校验。
 
     if not is_author:
-        # Check roles
+        # Check roles + reviewer must be assigned to this manuscript
         try:
             profile_res = (
                 supabase.table("user_profiles")
@@ -577,15 +577,30 @@ async def get_manuscript_versions(
                 .single()
                 .execute()
             )
-            profile = getattr(profile_res, "data", {})
-            roles = profile.get("roles", [])
-            if (
-                "editor" not in roles
-                and "admin" not in roles
-                and "reviewer" not in roles
-            ):
-                raise HTTPException(status_code=403, detail="Access denied")
+            profile = getattr(profile_res, "data", {}) or {}
+            roles = set(profile.get("roles", []) or [])
         except Exception:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if roles.intersection({"editor", "admin"}):
+            pass
+        elif "reviewer" in roles:
+            try:
+                ra = (
+                    supabase_admin.table("review_assignments")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("reviewer_id", str(current_user["id"]))
+                    .limit(1)
+                    .execute()
+                )
+                if not getattr(ra, "data", None):
+                    raise HTTPException(status_code=403, detail="Access denied")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=403, detail="Access denied")
+        else:
             raise HTTPException(status_code=403, detail="Access denied")
 
     result = service.get_version_history(str(manuscript_id))

@@ -20,6 +20,7 @@ interface ReviewFeedback {
   score?: number | string | null
   comments_for_author?: string | null
   confidential_comments_to_editor?: string | null
+  attachment_path?: string | null
   created_at?: string | null
 }
 
@@ -51,6 +52,30 @@ export default function DecisionPanel({
 
   const [roles, setRoles] = useState<string[]>([])
   const [lastRevisionType, setLastRevisionType] = useState<'major' | 'minor' | null>(null)
+
+  const downloadReviewAttachment = async (reviewReportId: string) => {
+    const toastId = toast.loading('正在生成下载链接…')
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('未登录，请先登录', { id: toastId })
+        return
+      }
+      const res = await fetch(`/api/v1/reviews/reports/${encodeURIComponent(reviewReportId)}/attachment-signed`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => null)
+      const signedUrl = json?.data?.signed_url
+      if (!res.ok || !json?.success || !signedUrl) {
+        toast.error(json?.detail || json?.message || '生成下载链接失败', { id: toastId })
+        return
+      }
+      toast.success('下载链接已生成', { id: toastId })
+      window.open(String(signedUrl), '_blank')
+    } catch (e) {
+      toast.error('生成下载链接失败', { id: toastId })
+    }
+  }
 
   const getScoreNumber = (value: unknown): number | null => {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null
@@ -466,6 +491,7 @@ export default function DecisionPanel({
                 const completed = isReviewCompleted(r)
                 const scoreLabel = scoreNum !== null ? String(scoreNum) : completed ? 'N/A' : 'Pending'
                 const confidential = r.confidential_comments_to_editor || ''
+                const hasAttachment = Boolean((r.attachment_path || '').trim())
                 return (
                   <div
                     key={r.id || `${r.reviewer_id}-${idx}`}
@@ -485,6 +511,19 @@ export default function DecisionPanel({
                         {confidential.trim() ? confidential : completed ? '(none)' : '(not submitted yet)'}
                       </div>
                     </div>
+
+                    {hasAttachment ? (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+                        <div className="text-xs font-semibold text-slate-700">Annotated PDF</div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadReviewAttachment(String(r.id))}
+                        >
+                          Download
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 )
               })}

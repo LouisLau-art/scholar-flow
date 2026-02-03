@@ -36,6 +36,8 @@ function ReviewModal({
   onClose: () => void
   onSubmitted: () => void
 }) {
+  const [latestRevision, setLatestRevision] = useState<any>(null)
+  const [revisionLoading, setRevisionLoading] = useState(false)
   const [reviewData, setReviewData] = useState<ReviewData>({
     novelty: 3,
     rigor: 3,
@@ -44,6 +46,43 @@ function ReviewModal({
     confidentialCommentsToEditor: '',
     attachment: null,
   })
+
+  useEffect(() => {
+    let cancelled = false
+    const loadRevisionContext = async () => {
+      setLatestRevision(null)
+      if (!task?.manuscript_id) return
+      setRevisionLoading(true)
+      try {
+        const token = await authService.getAccessToken()
+        if (!token) return
+        const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(task.manuscript_id)}/versions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.success) return
+
+        const versions = Array.isArray(json?.data?.versions) ? json.data.versions : []
+        const revisions = Array.isArray(json?.data?.revisions) ? json.data.revisions : []
+        const latestVersion = versions.reduce((acc: any, cur: any) => {
+          if (!acc) return cur
+          if ((cur?.version_number ?? 0) > (acc?.version_number ?? 0)) return cur
+          return acc
+        }, null as any)
+        const verNum = Number(latestVersion?.version_number ?? 0)
+        if (verNum <= 1) return
+        const linked = revisions.find((r: any) => Number(r?.round_number ?? 0) === verNum - 1) || null
+        if (cancelled) return
+        setLatestRevision(linked)
+      } finally {
+        if (!cancelled) setRevisionLoading(false)
+      }
+    }
+    loadRevisionContext()
+    return () => {
+      cancelled = true
+    }
+  }, [task?.manuscript_id])
 
   const handleSubmit = async () => {
     if (!reviewData.commentsForAuthor.trim()) {
@@ -113,6 +152,37 @@ function ReviewModal({
             Submit your professional assessment for &quot;{task.manuscripts?.title}&quot;
           </p>
         </div>
+
+        {/* 复审上下文：大修/小修的编辑请求与作者回应（含图片） */}
+        {revisionLoading ? (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            正在加载修回上下文…
+          </div>
+        ) : latestRevision?.editor_comment || latestRevision?.response_letter ? (
+          <div className="mb-6 space-y-3">
+            {latestRevision?.editor_comment ? (
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  Editor Request{latestRevision?.decision_type ? ` (${String(latestRevision.decision_type)})` : ''}
+                </div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800">
+                  {latestRevision.editor_comment}
+                </div>
+              </div>
+            ) : null}
+            {latestRevision?.response_letter ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Author Response
+                </div>
+                <div
+                  className="mt-2 prose prose-sm max-w-none text-slate-700 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
+                  dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="py-2 space-y-6 sm:space-y-8">
           <div className="space-y-3">

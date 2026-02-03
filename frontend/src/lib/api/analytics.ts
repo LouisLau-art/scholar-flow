@@ -8,17 +8,12 @@
  * - 遵循章程: 禁止在页面组件中直接书写复杂的 API 请求逻辑
  */
 
-import { createClient } from '@supabase/supabase-js'
 import type {
   AnalyticsSummaryResponse,
   TrendsResponse,
   GeoResponse,
 } from '@/types'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { supabase } from '@/lib/supabase'
 
 // API 基础路径
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'

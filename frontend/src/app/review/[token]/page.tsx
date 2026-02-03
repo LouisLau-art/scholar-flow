@@ -8,9 +8,11 @@ import { FileUpload } from '@/components/FileUpload'
 function ReviewForm({
   token,
   manuscriptId,
+  onSubmitted,
 }: {
   token: string
   manuscriptId: string
+  onSubmitted?: () => void
 }) {
   const [score, setScore] = useState(5)
   const [commentsToAuthor, setCommentsToAuthor] = useState('')
@@ -51,6 +53,7 @@ function ReviewForm({
       setCommentsToAuthor('')
       setConfidentialComments('')
       setAttachment(null)
+      onSubmitted?.()
     } catch (err) {
       toast.error('Submission failed.', { id: toastId })
     } finally {
@@ -131,11 +134,15 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
   const [latestRevision, setLatestRevision] = useState<any>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null)
+  const [attachmentLoading, setAttachmentLoading] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     const loadData = async () => {
       setPdfUrl(null)
       setPdfLoading(true)
+      setAttachmentUrl(null)
       try {
         const [taskRes, pdfRes] = await Promise.all([
           fetch(`/api/v1/reviews/token/${params.token}`),
@@ -157,6 +164,20 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
         } else {
           setPdfUrl(null)
         }
+
+        // 已提交且有附件时：允许 reviewer 通过 token 下载自己上传的机密附件（可选）
+        try {
+          setAttachmentLoading(true)
+          const attRes = await fetch(`/api/v1/reviews/token/${params.token}/attachment-signed`)
+          const attJson = await attRes.json().catch(() => null)
+          if (attRes.ok && attJson?.success && attJson?.data?.signed_url) {
+            setAttachmentUrl(String(attJson.data.signed_url))
+          }
+        } catch {
+          // ignore
+        } finally {
+          setAttachmentLoading(false)
+        }
       } catch (e) {
         toast.error('Failed to load review task.')
       } finally {
@@ -165,7 +186,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
       }
     }
     loadData()
-  }, [params.token])
+  }, [params.token, reloadKey])
 
   if (isLoading) {
     return (
@@ -220,6 +241,26 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
           </section>
         )}
 
+        {attachmentUrl ? (
+          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Your Attachment</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  This is the annotated PDF you uploaded. Only you and Editors can access it.
+                </p>
+              </div>
+              <button
+                onClick={() => window.open(attachmentUrl, '_blank')}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                disabled={attachmentLoading}
+              >
+                Download
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-9 rounded-lg bg-white p-3 md:p-4 shadow-sm ring-1 ring-slate-200 min-h-[70vh] lg:min-h-[860px] lg:h-[calc(100dvh-200px)] overflow-hidden">
             {pdfLoading ? (
@@ -241,11 +282,26 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
           {/* ReviewForm 强制 key：切换稿件时彻底清空状态 */}
           {manuscript?.id ? (
             <div className="lg:col-span-3">
-              <ReviewForm key={manuscript.id} token={params.token} manuscriptId={manuscript.id} />
+              <ReviewForm
+                key={manuscript.id}
+                token={params.token}
+                manuscriptId={manuscript.id}
+                onSubmitted={() => {
+                  // 重新拉取，以刷新附件下载链接/状态
+                  setReloadKey((k) => k + 1)
+                }}
+              />
             </div>
           ) : (
             <div className="lg:col-span-3">
-              <ReviewForm key={params.token} token={params.token} manuscriptId={params.token} />
+              <ReviewForm
+                key={params.token}
+                token={params.token}
+                manuscriptId={params.token}
+                onSubmitted={() => {
+                  setReloadKey((k) => k + 1)
+                }}
+              />
             </div>
           )}
         </div>
