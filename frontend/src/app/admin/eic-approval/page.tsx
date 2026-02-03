@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ShieldCheck, Globe } from 'lucide-react'
+import SiteHeader from '@/components/layout/SiteHeader'
 
 export default function EICApprovalPage() {
   const [pendingItems, setPendingItems] = useState([
@@ -14,8 +15,9 @@ export default function EICApprovalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-4xl">
+    <div className="min-h-screen bg-slate-50">
+      <SiteHeader />
+      <div className="mx-auto max-w-4xl p-8">
         <header className="mb-12">
           <h1 className="font-serif text-4xl font-bold text-slate-900">Editor-in-Chief Approval</h1>
           <p className="mt-2 text-slate-600 text-lg font-medium">Final authority gate before publication.</p>

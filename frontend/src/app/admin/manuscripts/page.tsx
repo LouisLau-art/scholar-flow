@@ -1,5 +1,6 @@
 import { ApiClient } from '@/lib/api-client'
 import { FileText, CheckCircle, XCircle } from 'lucide-react'
+import SiteHeader from '@/components/layout/SiteHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,8 +12,9 @@ export default async function AdminManuscriptsPage() {
   const manuscripts = await ApiClient.getManuscripts()
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen bg-slate-50">
+      <SiteHeader />
+      <div className="mx-auto max-w-6xl p-8">
         <header className="mb-10">
           <h1 className="font-serif text-3xl font-bold text-slate-900">
             Manuscript Management

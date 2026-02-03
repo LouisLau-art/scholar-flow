@@ -1,4 +1,5 @@
 import SubmissionForm from '@/components/SubmissionForm'
+import SiteHeader from '@/components/layout/SiteHeader'
 
 export default function SubmitPage() {
   /**
@@ -6,8 +7,9 @@ export default function SubmitPage() {
    * 遵循章程：大标题衬线体，配色锁定为 slate-900，原子化设计
    */
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-4xl">
+    <div className="min-h-screen bg-slate-50">
+      <SiteHeader />
+      <div className="mx-auto max-w-4xl p-8">
         <header className="mb-12 border-b border-slate-200 pb-6">
           <h1 className="font-serif text-4xl font-bold text-slate-900">
             Submit Your Manuscript
