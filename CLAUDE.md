@@ -23,11 +23,12 @@
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
 - **AI 推荐模型缓存（本地 CPU）**：Matchmaking 使用 `sentence-transformers`（本地推理），首次可能从 Hugging Face 下载模型；`./start.sh` 默认将缓存放到 `./.cache/` 以便“下载一次后复用”，并默认设置 `HF_ENDPOINT=https://hf-mirror.com`（如需改回官方源可在环境变量里覆盖）。当本地已存在模型缓存时，`./start.sh` 会自动设置 `MATCHMAKING_LOCAL_FILES_ONLY=1`，彻底避免每次重启都发起 HF 网络请求。
 - **公开文章 PDF 预览**：`/articles/[id]` 不依赖前端直连 Storage（匿名会 400/权限不一致），统一走后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 返回 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 仅返回 `status='published'` 的稿件。
-- **部署（Vercel + Render）**：
+- **部署（Vercel + Render / Zeabur）**：
   - 前端 `/api/v1/*` 依赖 `frontend/next.config.mjs` rewrites；线上必须设置 `BACKEND_ORIGIN`（Render 后端基址），避免默认指向 `127.0.0.1:8000`。
   - 后端 CORS 允许列表来自 `FRONTEND_ORIGIN` / `FRONTEND_ORIGINS`（逗号分隔）；线上需设置为 Vercel 域名。
   - `./scripts/gen-deploy-env.sh` 会根据本地 `.env`、`backend/.env` 和 `frontend/.env.local` 生成 `deploy/render.env`、`deploy/vercel.env` 与 `deploy/railway.env`，便于快速粘贴到平台面板。
   - Render 绑卡麻烦时，可切换到 Railway（Root Directory 选 `backend`、Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`、环境变量与 Render 共用，建议 `GO_ENV=prod`）。
+  - Zeabur 可直接使用仓库根目录 `Dockerfile`（`python:3.14-slim`），也可用命令模式：Root Directory `backend` + Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
   - **修回等待**：需要作者修回使用 `status='revision_requested'`（作者在 `/submit-revision/[id]` 提交后进入 `resubmitted`）。

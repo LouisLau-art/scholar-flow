@@ -1,4 +1,4 @@
-# 部署指南（Vercel + Render/Railway，云端 Supabase）
+# 部署指南（Vercel + Render/Railway/Zeabur，云端 Supabase）
 
 本项目默认使用**云端 Supabase**（`mmvulyrfsorqdpdrzbkd`）作为数据库/鉴权/存储。
 
@@ -72,6 +72,26 @@ Railway 配置建议：
 - 运行 `./scripts/gen-deploy-env.sh` 后使用 `deploy/railway.env`（不要提交到 GitHub）
 
 ---
+
+## 1.6) Zeabur 部署（FastAPI）
+
+Zeabur 支持 **Dockerfile** 和 **命令模式** 两种方式，推荐优先用 Dockerfile。
+
+**A. Dockerfile 模式（推荐）**
+- 仓库根目录已提供 `Dockerfile`（`python:3.14-slim`），Zeabur 直接识别即可。
+- 访问地址使用 Zeabur 分配的公网域名（不要手动拼 `:8080`）。
+
+**B. 命令模式（可选）**
+- **Root Directory**: `backend`
+- **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+**C. 环境变量（同 Render）**
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `FRONTEND_ORIGIN`（Vercel 域名，必须带 `https://`）
+- `GO_ENV=prod`
+
+> Zeabur 的 `Private` 地址仅供同项目内部服务通信，对外访问必须使用 `Public` 域名。
 
 ## 2) 前端部署到 Vercel（Next.js 14 App Router）
 
