@@ -1,0 +1,41 @@
+name: Sync to Hugging Face Hub
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-hf.yml'
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install huggingface_hub
+
+      - name: Push to Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # 登录
+          huggingface-cli login --token $HF_TOKEN
+          
+          # 上传 backend 目录内容到 Space 根目录
+          # 使用 hf upload 命令，将 backend/ 下的所有内容传到 path_in_repo=.
+          huggingface-cli upload LouisShawn/scholarflow-api backend/ . --repo-type space --commit-message "Sync backend from GitHub: ${{ github.sha }}"
+          
+          # 单独上传 Dockerfile (因为它在 GitHub 的根目录下)
+          huggingface-cli upload LouisShawn/scholarflow-api Dockerfile Dockerfile --repo-type space --commit-message "Sync Dockerfile from GitHub: ${{ github.sha }}"
