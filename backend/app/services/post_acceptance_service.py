@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -67,7 +68,7 @@ def publish_manuscript(*, manuscript_id: str) -> dict[str, Any]:
 
     Gate:
     - Payment: amount>0 && status!=paid -> 403
-    - Production: final_pdf_path 为空 -> 400（若 schema 缺失则降级不拦）
+    - Production: (可选) final_pdf_path 为空 -> 400（若 schema 缺失则降级不拦）
     """
     ms = _load_manuscript_for_publish(manuscript_id)
     if not ms:
@@ -86,9 +87,17 @@ def publish_manuscript(*, manuscript_id: str) -> dict[str, Any]:
         if amount > 0 and status != "paid":
             raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
 
-    # Production gate：仅在 schema 存在时拦截
-    # - 若 final_pdf_path 字段不存在（未迁移），ms 不会带该 key，这里降级不拦截。
-    if "final_pdf_path" in ms:
+    # Production gate（默认关闭，MVP 提速）：
+    # - 仅当 PRODUCTION_GATE_ENABLED=1/true/yes 时启用
+    # - 且仅在 schema 存在时拦截（字段不存在则降级不拦截）
+    enabled = (os.getenv("PRODUCTION_GATE_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+    if enabled and "final_pdf_path" in ms:
         if not (ms.get("final_pdf_path") or "").strip():
             raise HTTPException(status_code=400, detail="Production PDF required.")
 
@@ -125,4 +134,3 @@ def publish_manuscript(*, manuscript_id: str) -> dict[str, Any]:
                 raise HTTPException(status_code=404, detail="Manuscript not found")
             return data[0]
         raise HTTPException(status_code=500, detail="Failed to publish manuscript")
-

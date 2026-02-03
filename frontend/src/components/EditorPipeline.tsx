@@ -444,19 +444,30 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Approved (Financial Gate)', getData('approved').length, 'approved')}
               {getData('approved').slice(0, activeFilter ? undefined : 3).map((manuscript: Manuscript) => {
-                const amountRaw = manuscript.invoice_amount ?? 0
-                const amount = typeof amountRaw === 'string' ? Number.parseFloat(amountRaw) : Number(amountRaw)
-                const status = (manuscript.invoice_status ?? 'unpaid').toLowerCase()
-                const waitingPayment = (Number.isFinite(amount) ? amount : 0) > 0 && status !== 'paid'
-                const hasFinalPdf = Boolean((manuscript.final_pdf_path || '').trim())
+                const amountRaw = manuscript.invoice_amount
+                const amountParsed = typeof amountRaw === 'string' ? Number.parseFloat(amountRaw) : Number(amountRaw)
+                const amount = Number.isFinite(amountParsed) ? amountParsed : 0
+                const invoiceStatusRaw = (manuscript.invoice_status ?? '').toString().trim()
+                const invoiceStatus = invoiceStatusRaw ? invoiceStatusRaw.toLowerCase() : 'unknown'
+                const invoiceMissing = amountRaw == null && !invoiceStatusRaw
+
+                const waitingPayment = !invoiceMissing && amount > 0 && invoiceStatus !== 'paid'
+                const isPaid = !invoiceMissing && (amount <= 0 || invoiceStatus === 'paid')
 
                 return (
                   <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                     <div>
                       <div className="font-medium text-slate-900">{manuscript.title}</div>
                       <div className="text-sm text-slate-500">
-                        {waitingPayment ? 'Waiting for Payment' : hasFinalPdf ? 'Ready to Publish' : 'Final PDF required'}
-                        {Number.isFinite(amount) ? ` • APC: $${amount}` : ''}
+                        {invoiceMissing
+                          ? 'Invoice missing (accept may not have saved APC)'
+                          : waitingPayment
+                            ? 'Waiting for Payment'
+                            : isPaid
+                              ? 'Paid'
+                              : 'Ready to Publish'}
+                        {!invoiceMissing ? ` • APC: $${amount}` : ''}
+                        {!invoiceMissing ? ` • Invoice: ${invoiceStatus}` : ''}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -481,8 +492,8 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                       )}
                       <Button
                         size="sm"
-                        disabled={waitingPayment || !hasFinalPdf}
-                        title={waitingPayment ? 'Waiting for Payment' : !hasFinalPdf ? 'Upload Final PDF first' : 'Publish'}
+                        disabled={waitingPayment}
+                        title={waitingPayment ? 'Waiting for Payment' : 'Publish'}
                         onClick={() => handlePublish(manuscript.id)}
                         data-testid="editor-publish"
                       >

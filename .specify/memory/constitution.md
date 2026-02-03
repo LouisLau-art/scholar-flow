@@ -51,7 +51,7 @@ Sync Impact Report:
   - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
   - Revision 必须进入 `status='revision_requested'`（等待作者修回）；作者提交修订后进入 `resubmitted`。
   - Accept 必须进入 `approved` 并写入 `invoices`；Publish 必须做 Payment Gate：`amount>0` 且 `status!=paid` 则禁止发布。
-  - Feature 024：Publish 必须同时做 Production Gate：`final_pdf_path` 为空则禁止发布；云端需执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql` 补齐字段（否则后端会降级/不可用）。
+  - Feature 024：Production Gate（`final_pdf_path`）**默认关闭以提速 MVP**；需要时可设置 `PRODUCTION_GATE_ENABLED=1` 启用（启用后 `final_pdf_path` 为空将禁止发布；云端可执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql` 补齐字段）。
   - MVP 允许人工确认到账：`POST /api/v1/editor/invoices/confirm` 将 invoice 标记为 `paid`。
   - 云端若存在旧数据 `status='revision_required'`，需执行 `supabase/migrations/20260203120000_status_cleanup.sql` 完成数据纠正。
 
@@ -89,4 +89,4 @@ Constitution supersedes all other practices. Amendments require documentation an
 ## 近期关键修复快照（2026-02-03）
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
 - Reviewer：补齐修回上下文展示与审稿附件下载；收紧版本历史接口 reviewer 权限。
-- Feature 024：新增 Production Final PDF 上传、发布双门禁（Payment + Production）、作者账单下载、首页 Latest Articles published-only。
+- Feature 024：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
