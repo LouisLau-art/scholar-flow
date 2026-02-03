@@ -7,10 +7,11 @@ Revision Service: 处理稿件修订工作流的核心业务逻辑
 3. 文件安全: 从不覆盖原始文件，始终创建新版本。
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
 from uuid import UUID
 from app.lib.api_client import supabase, supabase_admin
+from app.services.notification_service import NotificationService
 
 
 class RevisionService:
@@ -308,7 +309,7 @@ class RevisionService:
             return {"success": False, "error": f"Failed to update revision: {e}"}
 
         # 8. 更新稿件
-        manuscript_update = {
+        manuscript_update: dict = {
             "status": "resubmitted",
             "version": new_version,
             "file_path": new_file_path,
@@ -318,6 +319,89 @@ class RevisionService:
             manuscript_update["title"] = new_title
         if new_abstract:
             manuscript_update["abstract"] = new_abstract
+
+        # 9. 若上一轮为大修：自动发起二审（复用上一轮已完成的 reviewer 列表）
+        # 中文注释:
+        # - MVP 规则：major revision 的修回默认进入 under_review，并自动生成新一轮 review_assignments（round=new_version）。
+        # - minor revision 的修回保持 resubmitted，由 Editor 直接做终审即可。
+        created_re_review = False
+        try:
+            decision_type = str(pending_revision.get("decision_type") or "").strip().lower()
+        except Exception:
+            decision_type = ""
+
+        if decision_type == "major":
+            try:
+                prev = (
+                    self.read_client.table("review_assignments")
+                    .select("reviewer_id, status, round_number")
+                    .eq("manuscript_id", manuscript_id)
+                    .eq("round_number", current_version)
+                    .execute()
+                )
+                prev_rows = self._extract_data(prev) or []
+            except Exception as e:
+                print(f"[RevisionService] load previous review_assignments failed: {e}")
+                prev_rows = []
+
+            prev_reviewer_ids = sorted(
+                {
+                    str(r.get("reviewer_id"))
+                    for r in prev_rows
+                    if r.get("reviewer_id")
+                    and str(r.get("status") or "").lower() == "completed"
+                }
+            )
+
+            if prev_reviewer_ids:
+                due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+                for rid in prev_reviewer_ids:
+                    try:
+                        existing = (
+                            self.client.table("review_assignments")
+                            .select("id")
+                            .eq("manuscript_id", manuscript_id)
+                            .eq("reviewer_id", rid)
+                            .eq("round_number", new_version)
+                            .limit(1)
+                            .execute()
+                        )
+                        if self._extract_data(existing):
+                            continue
+                    except Exception:
+                        # 保守：查不到就尝试插入（由后端幂等/后续 UI 去重兜底）
+                        pass
+
+                    try:
+                        self.client.table("review_assignments").insert(
+                            {
+                                "manuscript_id": manuscript_id,
+                                "reviewer_id": rid,
+                                "status": "pending",
+                                "due_at": due_at,
+                                "round_number": new_version,
+                            }
+                        ).execute()
+                        created_re_review = True
+                    except Exception as e:
+                        print(f"[RevisionService] create re-review assignment failed: {e}")
+                        continue
+
+                    # 站内通知：提醒 reviewer 有新一轮复审
+                    try:
+                        title = str(manuscript.get("title") or "Manuscript")
+                        NotificationService().create_notification(
+                            user_id=str(rid),
+                            manuscript_id=str(manuscript_id),
+                            type="review_invite",
+                            title="Re-review Invitation",
+                            content=f"You have been invited to re-review '{title}'.",
+                        )
+                    except Exception as e:
+                        print(f"[RevisionService] create reviewer notification failed (ignored): {e}")
+
+                if created_re_review:
+                    manuscript_update["status"] = "under_review"
 
         try:
             self.client.table("manuscripts").update(manuscript_update).eq(
@@ -332,7 +416,7 @@ class RevisionService:
             "data": {
                 "new_version": new_version_record,
                 "revision_id": pending_revision["id"],
-                "manuscript_status": "resubmitted",
+                "manuscript_status": manuscript_update.get("status") or "resubmitted",
             },
         }
 

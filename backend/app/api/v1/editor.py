@@ -279,7 +279,7 @@ async def get_editor_pipeline(
 async def request_revision(
     request: RevisionCreate,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["editor", "admin"])),
     background_tasks: BackgroundTasks = None,
 ):
     """
@@ -290,6 +290,32 @@ async def request_revision(
     2. 调用 RevisionService 处理核心逻辑（创建快照、更新状态）。
     3. 触发通知给作者。
     """
+    # MVP 业务规则:
+    # - 上一轮如果是“小修”，Editor 不允许升级成“大修”；如确需升级，必须由 Admin 执行。
+    try:
+        roles = set((profile or {}).get("roles") or [])
+        if request.decision_type == "major" and "admin" not in roles:
+            latest = (
+                supabase_admin.table("revisions")
+                .select("decision_type, round_number")
+                .eq("manuscript_id", str(request.manuscript_id))
+                .order("round_number", desc=True)
+                .limit(1)
+                .execute()
+            )
+            latest_rows = getattr(latest, "data", None) or []
+            if latest_rows:
+                last_type = str(latest_rows[0].get("decision_type") or "").strip().lower()
+                if last_type == "minor":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="该稿件上一轮为小修，编辑无权升级为大修；如确需大修请用 Admin 账号操作。",
+                    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Revision] major-after-minor guard failed (ignored): {e}")
+
     service = RevisionService()
     result = service.create_revision_request(
         manuscript_id=str(request.manuscript_id),

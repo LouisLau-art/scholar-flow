@@ -49,6 +49,9 @@ export default function DecisionPanel({
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
 
+  const [roles, setRoles] = useState<string[]>([])
+  const [lastRevisionType, setLastRevisionType] = useState<'major' | 'minor' | null>(null)
+
   const getScoreNumber = (value: unknown): number | null => {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null
     if (typeof value === 'string') {
@@ -157,8 +160,75 @@ export default function DecisionPanel({
     }
   }, [manuscriptId])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadMeta() {
+      if (!manuscriptId) return
+      try {
+        const token = await authService.getAccessToken()
+        if (!token) return
+
+        // 1) 当前用户角色（用于 UI 权限控制）
+        const pRes = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const pRaw = await pRes.text().catch(() => '')
+        let pJson: any = null
+        try {
+          pJson = pRaw ? JSON.parse(pRaw) : null
+        } catch {
+          pJson = null
+        }
+        const nextRoles = (pJson?.data?.roles || pJson?.roles || []) as string[]
+        if (!cancelled) setRoles(Array.isArray(nextRoles) ? nextRoles : [])
+
+        // 2) 最新修订类型（用于“上轮小修后禁用大修”）
+        const hRes = await fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/versions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const hRaw = await hRes.text().catch(() => '')
+        let hJson: any = null
+        try {
+          hJson = hRaw ? JSON.parse(hRaw) : null
+        } catch {
+          hJson = null
+        }
+        const revisions = (hJson?.data?.revisions || []) as any[]
+        const latest = Array.isArray(revisions)
+          ? revisions.reduce((acc: any, cur: any) => {
+              if (!acc) return cur
+              if ((cur?.round_number ?? 0) > (acc?.round_number ?? 0)) return cur
+              return acc
+            }, null as any)
+          : null
+        const t = String(latest?.decision_type || '').toLowerCase()
+        if (!cancelled) setLastRevisionType(t === 'minor' || t === 'major' ? (t as any) : null)
+      } catch (e) {
+        // 不阻塞主流程：失败就不做 UI 限制
+        console.warn('[DecisionPanel] load meta failed (ignored):', e)
+        if (!cancelled) {
+          setRoles([])
+          setLastRevisionType(null)
+        }
+      }
+    }
+
+    loadMeta()
+    return () => {
+      cancelled = true
+    }
+  }, [manuscriptId])
+
   const completedCount = useMemo(() => reviews.filter(isReviewCompleted).length, [reviews])
   const canDecide = reviewsLoaded && !reviewsLoading && !reviewsError && completedCount > 0
+  const majorLocked = lastRevisionType === 'minor' && !(roles || []).includes('admin')
+
+  useEffect(() => {
+    if (majorLocked && revisionType === 'major') {
+      setRevisionType('minor')
+    }
+  }, [majorLocked, revisionType])
 
   const averageOverallScore = useMemo(() => {
     const scores = reviews
@@ -449,17 +519,27 @@ export default function DecisionPanel({
           <h4 className="text-sm font-medium text-foreground">Select Decision</h4>
           {!canDecide && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              请先加载并查看上方 Review Summary，且至少有 1 份审稿意见已提交后再做决定。
+              录用/拒稿需要至少 1 份已提交审稿意见；如需退修可直接选择 “Request Revision”。
             </div>
           )}
           <RadioGroup
             value={decision ?? ""}
-            onValueChange={(value) => setDecision(value as any)}
+            onValueChange={(value) => {
+              // 允许在没有新审稿意见时直接退修（revision）；但 accept/reject 仍要求至少 1 份已提交意见
+              if (!canDecide && value !== 'revision') {
+                toast.error('当前暂无可用审稿意见，暂不支持直接录用/拒稿；如需退修请选择“Request Revision”。')
+                return
+              }
+              setDecision(value as any)
+            }}
             className="grid grid-cols-1 gap-4"
-            disabled={!canDecide || isSubmitting}
+            disabled={isSubmitting}
           >
             {/* Accept */}
-            <Label htmlFor="decision-accept" className="cursor-pointer">
+            <Label
+              htmlFor="decision-accept"
+              className={!canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+            >
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                   decision === "accept"
@@ -531,10 +611,20 @@ export default function DecisionPanel({
                            <Label htmlFor="r-minor">Minor Revision</Label>
                          </div>
                          <div className="flex items-center space-x-2">
-                           <RadioGroupItem value="major" id="r-major" />
-                           <Label htmlFor="r-major">Major Revision</Label>
+                           <RadioGroupItem value="major" id="r-major" disabled={majorLocked} />
+                           <Label
+                             htmlFor="r-major"
+                             className={majorLocked ? 'opacity-60 cursor-not-allowed' : ''}
+                           >
+                             Major Revision
+                           </Label>
                          </div>
                       </RadioGroup>
+                      {majorLocked && (
+                        <div className="mt-2 text-xs text-amber-800">
+                          上一轮为小修：为避免流程反复，编辑无权升级为大修；如确需大修请用 Admin 账号操作。
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -542,7 +632,10 @@ export default function DecisionPanel({
             </Label>
 
             {/* Reject */}
-            <Label htmlFor="decision-reject" className="cursor-pointer">
+            <Label
+              htmlFor="decision-reject"
+              className={!canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+            >
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                   decision === "reject"
@@ -586,7 +679,12 @@ export default function DecisionPanel({
         {/* Submit Button */}
         <Button
           onClick={handleSubmit}
-          disabled={!canDecide || !decision || isSubmitting || (decision === 'revision' && (!revisionType || comment.trim().length < 10))}
+          disabled={
+            isSubmitting ||
+            !decision ||
+            (decision !== 'revision' && !canDecide) ||
+            (decision === 'revision' && (!revisionType || comment.trim().length < 10))
+          }
           className="w-full"
         >
           {isSubmitting ? (

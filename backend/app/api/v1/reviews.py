@@ -358,6 +358,7 @@ async def unassign_reviewer(
 @router.get("/reviews/assignments/{manuscript_id}")
 async def get_manuscript_assignments(
     manuscript_id: UUID,
+    round_number: int | None = None,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
 ):
@@ -376,6 +377,49 @@ async def get_manuscript_assignments(
             .execute()
         )
         assignments = res.data or []
+
+        # 中文注释:
+        # - UI 里的“Manage/Assign Reviewer”应默认聚焦在“当前轮次”。
+        # - 但如果当前轮次尚未创建任何指派（例如 resubmitted 但尚未二审分配），则回退到已有的最新轮次，
+        #   这样 Editor 至少能看到上一轮的 reviewer 与完成状态。
+        target_round: int | None = None
+        if round_number is not None:
+            target_round = int(round_number)
+        else:
+            ms_version: int | None = None
+            try:
+                ms = (
+                    supabase_admin.table("manuscripts")
+                    .select("version")
+                    .eq("id", str(manuscript_id))
+                    .single()
+                    .execute()
+                )
+                ms_version = int((getattr(ms, "data", None) or {}).get("version") or 1)
+            except Exception:
+                ms_version = None
+
+            if assignments:
+                try:
+                    max_round = max(int(a.get("round_number") or 1) for a in assignments)
+                except Exception:
+                    max_round = 1
+
+                if ms_version is not None and any(
+                    int(a.get("round_number") or 1) == int(ms_version) for a in assignments
+                ):
+                    target_round = int(ms_version)
+                else:
+                    target_round = int(max_round)
+            else:
+                target_round = ms_version
+
+        if target_round is not None and assignments:
+            assignments = [
+                a
+                for a in assignments
+                if int(a.get("round_number") or 1) == int(target_round)
+            ]
 
         # 中文注释:
         # - review_assignments.reviewer_id 外键指向 auth.users(id)，并不指向 public.user_profiles(id)
