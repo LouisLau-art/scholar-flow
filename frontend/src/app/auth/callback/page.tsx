@@ -25,11 +25,20 @@ export default function AuthCallbackPage() {
     async function run() {
       const next = searchParams.get('next') || '/dashboard'
       const code = searchParams.get('code')
+      const accessToken = searchParams.get('access_token')
+      const refreshToken = searchParams.get('refresh_token')
 
       try {
         // 1) PKCE flow: ?code=...
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) throw error
+        } else if (accessToken && refreshToken) {
+          // 1.5) Dev login / direct session: ?access_token=...&refresh_token=...
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
           if (error) throw error
         } else if (typeof window !== 'undefined' && window.location.hash) {
           // 2) Implicit flow fallback: #access_token=...&refresh_token=...
@@ -75,4 +84,3 @@ export default function AuthCallbackPage() {
     </div>
   )
 }
-

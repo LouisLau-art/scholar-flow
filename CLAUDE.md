@@ -20,7 +20,7 @@
 ## 关键环境假设（必须一致）
 - **Supabase 使用云端项目**（非本地 DB 作为默认）；迁移优先用 `supabase` CLI（`supabase login` / `supabase link` / `supabase db push --linked`），必要时可在 Dashboard 的 SQL Editor 手动执行迁移 SQL。
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
-- **AI 推荐模型缓存（本地 CPU）**：Matchmaking 使用 `sentence-transformers`（本地推理），首次可能从 Hugging Face 下载模型；`./start.sh` 默认将缓存放到 `./.cache/` 以便“下载一次后复用”。国内网络可选设置 `HF_ENDPOINT=https://hf-mirror.com`。
+- **AI 推荐模型缓存（本地 CPU）**：Matchmaking 使用 `sentence-transformers`（本地推理），首次可能从 Hugging Face 下载模型；`./start.sh` 默认将缓存放到 `./.cache/` 以便“下载一次后复用”，并默认设置 `HF_ENDPOINT=https://hf-mirror.com`（如需改回官方源可在环境变量里覆盖）。
 
 ## 项目结构
 

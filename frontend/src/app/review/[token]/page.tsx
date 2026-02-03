@@ -189,7 +189,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 min-h-[600px] lg:min-h-[70vh] overflow-hidden">
+          <div className="lg:col-span-2 rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 min-h-[800px] lg:h-[calc(100dvh-240px)] overflow-hidden">
             {pdfLoading ? (
               <div className="h-full flex items-center justify-center text-slate-500 font-medium">
                 Loading preview...

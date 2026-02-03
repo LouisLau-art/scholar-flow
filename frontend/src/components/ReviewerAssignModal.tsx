@@ -287,10 +287,6 @@ export default function ReviewerAssignModal({
       const bAssigned = assignedIds.includes(b.id)
       if (aAssigned !== bAssigned) return aAssigned ? -1 : 1
 
-      const aSelected = selectedReviewers.includes(a.id)
-      const bSelected = selectedReviewers.includes(b.id)
-      if (aSelected !== bSelected) return aSelected ? -1 : 1
-
       const aName = (a.full_name || a.email || '').toLowerCase()
       const bName = (b.full_name || b.email || '').toLowerCase()
       return aName.localeCompare(bName)

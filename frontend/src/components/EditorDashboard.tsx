@@ -155,7 +155,6 @@ export default function EditorDashboard() {
             {selectedManuscriptId ? (
               <DecisionPanel
                 manuscriptId={selectedManuscriptId}
-                reviewerScores={[]}
                 onSubmitted={() => {
                   setPipelineRefresh((prev) => prev + 1)
                   setActiveTab('pipeline')

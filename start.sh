@@ -31,8 +31,9 @@ fi
 # 1.5 Hugging Face / sentence-transformers 本地缓存（解决“每次推荐都去 HF 下载/很慢”）
 # 中文注释:
 # - 默认把缓存放到 repo 下的 .cache/，便于“下载一次、后续复用”，也方便你清理。
-# - 国内网络可选设置：HF_ENDPOINT=https://hf-mirror.com（只要在终端 export 或写入 .env 即可）。
+# - 国内网络默认启用 Hugging Face 镜像（可通过环境变量覆盖）。
 ROOT_DIR="$(pwd)"
+export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 export HF_HOME="${HF_HOME:-$ROOT_DIR/.cache/huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"

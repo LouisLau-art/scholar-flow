@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.api.v1 import (
+    auth,
     manuscripts,
     reviews,
     plagiarism,
@@ -79,6 +80,7 @@ app.add_middleware(
 app.add_middleware(ExceptionHandlerMiddleware)
 
 # === 路由注册 ===
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(manuscripts.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(plagiarism.router, prefix="/api/v1")

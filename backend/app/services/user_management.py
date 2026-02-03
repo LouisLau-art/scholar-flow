@@ -457,9 +457,15 @@ class UserManagementService:
             
             # 5. Send Notification (Email with Magic Link)
             print("-" * 50)
-            print(f"🔗 [REVIEWER INVITE GENERATED]")
+            print("🔗 [REVIEWER INVITE GENERATED]")
             print(f"📧 Recipient: {email}")
-            print(f"🌐 Magic Link: {magic_link}")
+            # 中文注释:
+            # - 本地开发时 Magic Link 往往不稳定，会极大阻碍测试。
+            # - GO_ENV=dev 时，直接打印 dev-login 链接（点击即可登录），避免依赖邮件/回调。
+            if (os.environ.get("GO_ENV") or "").strip().lower() == "dev":
+                print(f"🌐 Dev Login: http://localhost:3000/api/v1/auth/dev-login?email={email}")
+            else:
+                print(f"🌐 Magic Link: {magic_link}")
             print("-" * 50)
 
             try:

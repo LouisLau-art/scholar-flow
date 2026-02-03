@@ -133,6 +133,97 @@ async def get_manuscript_pdf_signed(
     return {"success": True, "data": {"signed_url": signed_url}}
 
 
+@router.get("/manuscripts/{manuscript_id}/reviews")
+async def get_manuscript_reviews(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    获取某稿件的审稿反馈（用于 Editor 决策页展示 Review Summary）。
+
+    中文注释:
+    - Author 只能看到公开字段（comments_for_author/content/score）
+    - Editor/Admin 可以看到机密字段（confidential_comments_to_editor/attachment_path）
+    """
+    user_id = str(current_user.get("id"))
+    roles = set((profile or {}).get("roles") or [])
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, author_id")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    is_author = str(ms.get("author_id") or "") == user_id
+    is_editor = bool(roles.intersection({"admin", "editor"}))
+    if not (is_author or is_editor):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    rr_resp = (
+        supabase_admin.table("review_reports")
+        .select(
+            "id, manuscript_id, reviewer_id, status, comments_for_author, content, score, confidential_comments_to_editor, attachment_path, created_at"
+        )
+        .eq("manuscript_id", str(manuscript_id))
+        .order("created_at", desc=True)
+        .execute()
+    )
+    rows = getattr(rr_resp, "data", None) or []
+
+    reviewer_ids = sorted({str(r.get("reviewer_id")) for r in rows if r.get("reviewer_id")})
+    profile_by_id: dict[str, dict] = {}
+    if reviewer_ids:
+        try:
+            pr = (
+                supabase_admin.table("user_profiles")
+                .select("id, full_name, email")
+                .in_("id", reviewer_ids)
+                .execute()
+            )
+            for p in (getattr(pr, "data", None) or []):
+                if p.get("id"):
+                    profile_by_id[str(p["id"])] = p
+        except Exception:
+            profile_by_id = {}
+
+    for r in rows:
+        rid = str(r.get("reviewer_id") or "")
+        p = profile_by_id.get(rid) or {}
+        r["reviewer_name"] = p.get("full_name")
+        r["reviewer_email"] = p.get("email")
+        if not r.get("comments_for_author") and r.get("content"):
+            r["comments_for_author"] = r.get("content")
+
+    if is_author:
+        sanitized = []
+        for r in rows:
+            public_text = r.get("comments_for_author") or r.get("content")
+            sanitized.append(
+                {
+                    "id": r.get("id"),
+                    "manuscript_id": r.get("manuscript_id"),
+                    "reviewer_id": r.get("reviewer_id"),
+                    "reviewer_name": r.get("reviewer_name"),
+                    "reviewer_email": r.get("reviewer_email"),
+                    "status": r.get("status"),
+                    # 兼容：旧页面读取 content
+                    "content": public_text,
+                    "comments_for_author": public_text,
+                    "score": r.get("score"),
+                    "created_at": r.get("created_at"),
+                }
+            )
+        return {"success": True, "data": sanitized}
+
+    return {"success": True, "data": rows}
+
+
 # === 1. 投稿 (User Story 1) ===
 @router.post("/manuscripts/upload")
 async def upload_manuscript(
