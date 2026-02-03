@@ -26,6 +26,8 @@
 - **部署（Vercel + Render）**：
   - 前端大量请求走相对路径 `/api/v1/*`，依赖 `frontend/next.config.mjs` rewrites；**线上必须设置 `BACKEND_ORIGIN` 指向 Render 后端**（否则会默认指向 `127.0.0.1:8000`）。
   - 后端 CORS 允许列表来自 `FRONTEND_ORIGIN` / `FRONTEND_ORIGINS`（逗号分隔）；线上需设置为 Vercel 域名。
+  - `./scripts/gen-deploy-env.sh` 会根据本地 `.env`、`backend/.env` 和 `frontend/.env.local` 生成 `deploy/render.env`、`deploy/vercel.env` 与 `deploy/railway.env`（都在 gitignore 里），方便快速粘贴到平台环境变量面板。
+  - 如果 Render 绑定信用卡流程太麻烦，可以直接用 Railway 作为“免卡”后端托管（Root Directory 同样选 `backend`、Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`、环境变量与 Render 共用，建议保持 `GO_ENV=prod`）。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
   - **修回等待**：需要作者修回使用 `status='revision_requested'`（作者在 `/submit-revision/[id]` 提交后进入 `resubmitted`）。

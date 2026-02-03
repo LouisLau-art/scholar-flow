@@ -51,6 +51,8 @@ Sync Impact Report:
 - **部署（Vercel + Render）**：
   - 前端大量请求使用相对路径 `/api/v1/*`，依赖 `frontend/next.config.mjs` rewrites；线上必须设置 `BACKEND_ORIGIN`（Render 后端基址），避免默认指向 `127.0.0.1:8000`。
   - 后端必须通过 `FRONTEND_ORIGIN` / `FRONTEND_ORIGINS` 控制 CORS 白名单；生产环境严禁只放开 `localhost`。
+  - `./scripts/gen-deploy-env.sh` 会根据本地 `.env`、`backend/.env` 与 `frontend/.env.local` 生成 `deploy/render.env`、`deploy/vercel.env` 与 `deploy/railway.env`，便于快速填入各平台环境变量。
+  - Render 绑卡麻烦时，可改用 Railway 作为“免卡”后端托管（Root Directory `backend`、Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`、环境变量同 Render，建议保持 `GO_ENV=prod`）。
 - **前端认证一致性（经验教训）**：凡是需要读取登录态的浏览器端 API 调用，必须复用项目统一的 Supabase Browser Client（可读 cookie session），避免出现“页面已登录但 API 认为未登录”的割裂。
 - **MVP 状态机与财务门禁（强约束）**：
   - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
