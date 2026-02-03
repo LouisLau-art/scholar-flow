@@ -32,6 +32,7 @@ htmlcov/
 *.swp
 .vscode/
 .idea/
+.cache/
 
 # Local scratch files (do not commit)
 /Text File.txt

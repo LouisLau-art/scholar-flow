@@ -28,6 +28,20 @@ if [ -f backend/.env ]; then
   set +a
 fi
 
+# 1.5 Hugging Face / sentence-transformers 本地缓存（解决“每次推荐都去 HF 下载/很慢”）
+# 中文注释:
+# - 默认把缓存放到 repo 下的 .cache/，便于“下载一次、后续复用”，也方便你清理。
+# - 国内网络可选设置：HF_ENDPOINT=https://hf-mirror.com（只要在终端 export 或写入 .env 即可）。
+ROOT_DIR="$(pwd)"
+export HF_HOME="${HF_HOME:-$ROOT_DIR/.cache/huggingface}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
+export SENTENCE_TRANSFORMERS_HOME="${SENTENCE_TRANSFORMERS_HOME:-$HF_HOME/sentence-transformers}"
+mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$TRANSFORMERS_CACHE" "$SENTENCE_TRANSFORMERS_HOME" 2>/dev/null || true
+
+# 可选：启动后端时后台预热模型，避免 Editor 第一次点“Assign Reviewer”卡 20s+（默认开启）
+export MATCHMAKING_WARMUP="${MATCHMAKING_WARMUP:-1}"
+
 # 2. 清理旧进程 (防止端口冲突)
 echo "🧹 Cleaning up old processes..."
 pkill -f "uvicorn main:app" || true

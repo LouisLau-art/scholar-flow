@@ -1,6 +1,8 @@
 import hashlib
+import os
 import threading
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 
 
@@ -32,7 +34,27 @@ def _load_sentence_transformer(model_name: str):
     with _MODEL_LOCK:
         from sentence_transformers import SentenceTransformer  # 延迟 import，避免测试环境强制拉起依赖
 
-        return SentenceTransformer(model_name)
+        cache_folder = os.environ.get("SENTENCE_TRANSFORMERS_HOME") or os.environ.get("HF_HOME")
+        local_only = (os.environ.get("MATCHMAKING_LOCAL_FILES_ONLY") or "").strip().lower() in {"1", "true", "yes", "on"}
+        if local_only:
+            # 兼容 huggingface-hub 的离线模式（避免每次启动都触发网络请求）
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+        # 统一把 cache_folder 目录建好，避免某些环境下权限/不存在导致 fallback 到临时目录
+        if cache_folder:
+            try:
+                Path(cache_folder).mkdir(parents=True, exist_ok=True)
+            except Exception:
+                cache_folder = None
+
+        # SentenceTransformer 在不同版本的参数名可能略有差异，做一次兼容兜底
+        try:
+            return SentenceTransformer(model_name, cache_folder=cache_folder, local_files_only=local_only)
+        except TypeError:
+            try:
+                return SentenceTransformer(model_name, cache_folder=cache_folder)
+            except TypeError:
+                return SentenceTransformer(model_name)
 
 
 def embed_text(text: str, model_name: str) -> List[float]:
@@ -48,4 +70,3 @@ def embed_text(text: str, model_name: str) -> List[float]:
     vectors = model.encode([text or ""], normalize_embeddings=True)
     vec = vectors[0].tolist()
     return vec
-

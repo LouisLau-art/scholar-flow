@@ -1,3 +1,5 @@
+import asyncio
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -33,6 +35,26 @@ from app.lib.api_client import supabase_admin
 async def lifespan(app: FastAPI):
     # 中文注释: CMS 初始化应容错（未迁移时不阻塞启动）
     ensure_cms_initialized(supabase_admin)
+
+    # 中文注释:
+    # - 审稿人 AI 推荐（sentence-transformers）首次加载可能触发模型下载，导致 Editor 点击“Assign Reviewer”时卡很久。
+    # - 这里提供一个“后台预热”选项：不阻塞启动，异步把模型拉到本地缓存并完成一次 encode。
+    # - 开关：MATCHMAKING_WARMUP=1（默认关闭）。
+    warmup = (os.environ.get("MATCHMAKING_WARMUP") or "0").strip().lower() in {"1", "true", "yes", "on"}
+    if warmup:
+
+        async def _warmup():
+            try:
+                from app.core.config import MatchmakingConfig
+                from app.core.ml import embed_text
+
+                cfg = MatchmakingConfig.from_env()
+                await asyncio.to_thread(embed_text, "warmup", cfg.model_name)
+                print(f"[matchmaking] warmup done: model={cfg.model_name}")
+            except Exception as e:
+                print(f"[matchmaking] warmup failed: {e}")
+
+        asyncio.create_task(_warmup())
     yield
 
 
