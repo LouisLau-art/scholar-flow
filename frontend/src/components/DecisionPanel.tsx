@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import { CheckCircle2, AlertCircle, FileText, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import VersionHistory from '@/components/VersionHistory'
 
 interface ReviewFeedback {
   id: string
@@ -43,6 +44,10 @@ export default function DecisionPanel({
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsLoaded, setReviewsLoaded] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   const getScoreNumber = (value: unknown): number | null => {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null
@@ -110,6 +115,43 @@ export default function DecisionPanel({
     }
 
     load()
+    return () => {
+      cancelled = true
+    }
+  }, [manuscriptId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPdf() {
+      if (!manuscriptId) return
+      setPdfLoading(true)
+      setPdfError(null)
+      setPdfUrl(null)
+      try {
+        const token = await authService.getAccessToken()
+        if (!token) throw new Error('Please sign in again.')
+        const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/pdf-signed`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const json = await res.json().catch(() => null)
+        const signed = json?.data?.signed_url
+        if (!res.ok || !json?.success || !signed) {
+          const msg = json?.detail || json?.message || `HTTP ${res.status}`
+          throw new Error(msg)
+        }
+        if (cancelled) return
+        setPdfUrl(String(signed))
+      } catch (e: any) {
+        if (cancelled) return
+        setPdfError(e?.message || 'Failed to load PDF preview')
+        setPdfUrl(null)
+      } finally {
+        if (!cancelled) setPdfLoading(false)
+      }
+    }
+
+    loadPdf()
     return () => {
       cancelled = true
     }
@@ -252,6 +294,57 @@ export default function DecisionPanel({
       </CardHeader>
 
       <CardContent className="space-y-6">
+        {/* Manuscript Preview + Version/Revision Details */}
+        {manuscriptId && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-slate-500" />
+                  <h4 className="text-sm font-medium text-foreground">Latest Manuscript PDF</h4>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!pdfUrl}
+                  onClick={() => {
+                    if (pdfUrl) window.open(pdfUrl, '_blank')
+                  }}
+                >
+                  Open in New Tab
+                </Button>
+              </div>
+
+              {pdfError ? (
+                <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  PDF preview unavailable: {pdfError}
+                </div>
+              ) : null}
+
+              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 overflow-hidden min-h-[640px] h-[calc(100dvh-360px)]">
+                {pdfLoading ? (
+                  <div className="h-full flex items-center justify-center text-slate-500 font-medium">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading preview…
+                  </div>
+                ) : pdfUrl ? (
+                  <iframe src={pdfUrl} className="w-full h-full border-0" title="PDF Preview" />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 font-medium">
+                    No PDF available for preview.
+                  </div>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-slate-400">Preview links expire in 10 minutes.</p>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-foreground mb-2">Revision & Version History</h4>
+              <VersionHistory manuscriptId={manuscriptId} />
+            </div>
+          </div>
+        )}
+
         {/* Review Summary (must show before decision) */}
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">

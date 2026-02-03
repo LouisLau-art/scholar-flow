@@ -37,3 +37,11 @@ htmlcov/
 # Local scratch files (do not commit)
 /Text File.txt
 /apple-touch-icon.png
+
+# Local dev artifacts (do not commit)
+/academic_paper_*.pdf
+/test_manuscript_copy_*.pdf
+/generate_academic_pdfs.py
+/scripts/check_interests.py
+/scripts/seed_reviewer_interests.py
+/QWEN.md

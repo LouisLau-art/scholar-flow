@@ -128,6 +128,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
   const [isLoading, setIsLoading] = useState(true)
   const [manuscript, setManuscript] = useState<any>(null)
   const [reviewReport, setReviewReport] = useState<any>(null)
+  const [latestRevision, setLatestRevision] = useState<any>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
 
@@ -148,6 +149,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
         }
         setReviewReport(json.data.review_report)
         setManuscript(json.data.manuscript)
+        setLatestRevision(json.data.latest_revision || null)
 
         const pdfJson = await pdfRes.json().catch(() => null)
         if (pdfRes.ok && pdfJson?.success && pdfJson?.data?.signed_url) {
@@ -187,6 +189,36 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
             </p>
           )}
         </header>
+
+        {(latestRevision?.editor_comment || latestRevision?.response_letter) && (
+          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Revision Context</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              If you are re-reviewing a revised manuscript, the editor request and author response are shown below.
+            </p>
+
+            {latestRevision?.editor_comment ? (
+              <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  Editor Request{latestRevision?.decision_type ? ` (${String(latestRevision.decision_type)})` : ''}
+                </div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{latestRevision.editor_comment}</div>
+              </div>
+            ) : null}
+
+            {latestRevision?.response_letter ? (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Author Response
+                </div>
+                <div
+                  className="mt-2 prose prose-sm max-w-none text-slate-700 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
+                  dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
+                />
+              </div>
+            ) : null}
+          </section>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-9 rounded-lg bg-white p-3 md:p-4 shadow-sm ring-1 ring-slate-200 min-h-[70vh] lg:min-h-[860px] lg:h-[calc(100dvh-200px)] overflow-hidden">

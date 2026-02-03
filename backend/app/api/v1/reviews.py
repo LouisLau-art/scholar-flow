@@ -700,7 +700,23 @@ async def get_review_by_token(token: str):
         )
         ms = getattr(ms_resp, "data", None) or {}
 
-        return {"success": True, "data": {"review_report": rr, "manuscript": ms}}
+        # 最新修订信息（用于二审/复审时给 reviewer 展示作者 response letter）
+        latest_revision = None
+        try:
+            rev_resp = (
+                supabase_admin.table("revisions")
+                .select("id, round_number, decision_type, editor_comment, response_letter, status, submitted_at, created_at")
+                .eq("manuscript_id", rr["manuscript_id"])
+                .order("round_number", desc=True)
+                .limit(1)
+                .execute()
+            )
+            revs = getattr(rev_resp, "data", None) or []
+            latest_revision = revs[0] if revs else None
+        except Exception:
+            latest_revision = None
+
+        return {"success": True, "data": {"review_report": rr, "manuscript": ms, "latest_revision": latest_revision}}
     except HTTPException:
         raise
     except Exception as e:

@@ -134,6 +134,94 @@ async def get_manuscript_pdf_signed(
     return {"success": True, "data": {"signed_url": signed_url}}
 
 
+@router.get("/manuscripts/{manuscript_id}/versions/{version_number}/pdf-signed")
+async def get_manuscript_version_pdf_signed(
+    manuscript_id: UUID,
+    version_number: int,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    返回指定版本 PDF 的 signed URL（用于历史版本下载/预览）。
+
+    中文注释:
+    - 前端下载/预览历史版本时，不应直接依赖 Storage public/RLS。
+    - 统一通过后端（service_role）生成 signed URL，避免权限与跨域问题。
+    """
+    if version_number <= 0:
+        raise HTTPException(status_code=422, detail="version_number must be >= 1")
+
+    user_id = str(current_user["id"])
+    roles = set((profile or {}).get("roles") or [])
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, author_id")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    allowed = False
+    if roles.intersection({"admin", "editor"}):
+        allowed = True
+    elif str(ms.get("author_id") or "") == user_id:
+        allowed = True
+    else:
+        # Reviewer：被分配 reviewer 可见
+        try:
+            ra = (
+                supabase_admin.table("review_assignments")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .eq("reviewer_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if getattr(ra, "data", None):
+                allowed = True
+        except Exception:
+            allowed = False
+
+        # 兼容：免登录 token 模式可能只写了 review_reports
+        if not allowed:
+            try:
+                rr = (
+                    supabase_admin.table("review_reports")
+                    .select("id")
+                    .eq("manuscript_id", str(manuscript_id))
+                    .eq("reviewer_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
+                if getattr(rr, "data", None):
+                    allowed = True
+            except Exception:
+                pass
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="No permission to access this manuscript version PDF")
+
+    ver_resp = (
+        supabase_admin.table("manuscript_versions")
+        .select("file_path")
+        .eq("manuscript_id", str(manuscript_id))
+        .eq("version_number", version_number)
+        .single()
+        .execute()
+    )
+    ver = getattr(ver_resp, "data", None) or {}
+    file_path = ver.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Manuscript version PDF not found")
+
+    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
 @router.get("/manuscripts/{manuscript_id}/reviews")
 async def get_manuscript_reviews(
     manuscript_id: UUID,

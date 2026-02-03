@@ -5,7 +5,6 @@ import { authService } from '@/services/auth'
 import { Loader2, FileText, Download, MessageSquare, History, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 interface VersionHistoryProps {
@@ -29,6 +28,16 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
         const result = await res.json()
         if (result.success) {
           setData(result.data)
+          const versions = Array.isArray(result.data?.versions) ? result.data.versions : []
+          // 默认展开最新的修回（v2+），方便 Editor 直接看到 response letter（含图片）
+          const latest = versions.reduce((acc: any, cur: any) => {
+            if (!acc) return cur
+            if ((cur?.version_number ?? 0) > (acc?.version_number ?? 0)) return cur
+            return acc
+          }, null as any)
+          if (latest && (latest.version_number ?? 0) > 1 && latest.id) {
+            setExpandedRevision(String(latest.id))
+          }
         }
       } catch (err) {
         console.error('Failed to fetch history:', err)
@@ -39,17 +48,23 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
     fetchData()
   }, [manuscriptId])
 
-  const handleDownload = async (filePath: string, versionNum: number) => {
+  const handleDownload = async (versionNum: number) => {
     try {
-      const { data, error } = await supabase.storage
-        .from('manuscripts')
-        .createSignedUrl(filePath, 60 * 5)
-      
-      if (error || !data?.signedUrl) {
-        toast.error('Failed to generate download link')
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.')
         return
       }
-      window.open(data.signedUrl, '_blank')
+      const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/versions/${encodeURIComponent(String(versionNum))}/pdf-signed`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => null)
+      const signedUrl = json?.data?.signed_url
+      if (!res.ok || !json?.success || !signedUrl) {
+        toast.error(json?.detail || json?.message || 'Failed to generate download link')
+        return
+      }
+      window.open(String(signedUrl), '_blank')
     } catch (e) {
       toast.error('Download error')
     }
@@ -111,7 +126,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => handleDownload(version.file_path, version.version_number)}
+                    onClick={() => handleDownload(version.version_number)}
                     className="gap-2 h-8"
                   >
                     <Download className="h-3 w-3" /> PDF
@@ -141,7 +156,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <p className="font-semibold text-slate-700 mb-1 text-xs uppercase tracking-wide">Author Response</p>
                             <div 
-                              className="prose prose-sm max-w-none text-slate-600"
+                              className="prose prose-sm max-w-none text-slate-600 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
                               dangerouslySetInnerHTML={{ __html: revision.response_letter }} 
                             />
                           </div>
