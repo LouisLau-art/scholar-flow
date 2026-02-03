@@ -26,6 +26,16 @@ function getUserFromSupabaseSessionCookie(req: NextRequest): { id: string; email
 }
 
 export async function middleware(req: NextRequest) {
+  // 0) Favicon 兜底
+  // 中文注释:
+  // - 某些 Next.js 版本/缓存状态下，/favicon.ico 偶发返回 500（且没有明显错误栈）。
+  // - 这里直接把 /favicon.ico rewrite 到我们自定义的 /favicon.svg，避免影响正文流程。
+  if (req.nextUrl.pathname === '/favicon.ico') {
+    const url = req.nextUrl.clone()
+    url.pathname = '/favicon.svg'
+    return NextResponse.rewrite(url)
+  }
+
   // 1. 初始化响应
   // 我们必须创建一个初始响应，因为 cookie 操作需要修改这个响应对象
   let res = NextResponse.next({
@@ -137,6 +147,7 @@ export const config = {
     '/admin/:path*',
     '/submit/:path*',
     '/editor/:path*',
+    '/favicon.ico',
     // 也可以匹配所有，然后在逻辑里排除，但显式匹配受保护路径性能更好
   ],
 }

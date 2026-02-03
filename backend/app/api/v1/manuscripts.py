@@ -884,6 +884,7 @@ async def get_article_detail(id: UUID):
             supabase.table("manuscripts")
             .select("*")
             .eq("id", str(id))
+            .eq("status", "published")
             .single()
             .execute()
         )
@@ -923,6 +924,35 @@ async def get_article_detail(id: UUID):
     except Exception as e:
         print(f"文章详情查询失败: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch article detail")
+
+
+@router.get("/manuscripts/articles/{id}/pdf-signed")
+async def get_published_article_pdf_signed(id: UUID):
+    """
+    公开文章页 PDF 预览：返回 published 稿件的 signed URL。
+
+    中文注释:
+    - 文章页通常不要求登录；前端 iframe 无法携带 Authorization header。
+    - 因此这里使用 service_role（supabase_admin）为已 published 的稿件生成 signedUrl。
+    - 严格限制为 published，避免任何未发表稿件被匿名访问。
+    """
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id,status,file_path")
+        .eq("id", str(id))
+        .eq("status", "published")
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Article not found")
+    file_path = ms.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Article PDF not found")
+
+    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
 
 
 @router.patch("/manuscripts/{manuscript_id}")

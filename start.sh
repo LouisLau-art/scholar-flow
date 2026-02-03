@@ -40,6 +40,17 @@ export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
 export SENTENCE_TRANSFORMERS_HOME="${SENTENCE_TRANSFORMERS_HOME:-$HF_HOME/sentence-transformers}"
 mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$TRANSFORMERS_CACHE" "$SENTENCE_TRANSFORMERS_HOME" 2>/dev/null || true
 
+# 1.6 如果模型已缓存，则默认进入“只读本地缓存”模式（避免每次重启都发起 HF HEAD/GET）
+# 中文注释:
+# - huggingface-hub 即使命中本地缓存，也会默认联网做 etag/metadata 检查。
+# - 我们在“已存在 snapshots”的情况下自动设置 MATCHMAKING_LOCAL_FILES_ONLY=1，
+#   后端会进一步设置 HF_HUB_OFFLINE=1，从而彻底不走网络。
+MODEL_DIR="$SENTENCE_TRANSFORMERS_HOME/models--sentence-transformers--all-MiniLM-L6-v2"
+if [ -d "$MODEL_DIR/snapshots" ] && [ "$(ls -1 "$MODEL_DIR/snapshots" 2>/dev/null | wc -l)" -gt 0 ]; then
+  export MATCHMAKING_LOCAL_FILES_ONLY="${MATCHMAKING_LOCAL_FILES_ONLY:-1}"
+fi
+export HF_HUB_DISABLE_TELEMETRY="${HF_HUB_DISABLE_TELEMETRY:-1}"
+
 # 可选：启动后端时后台预热模型，避免 Editor 第一次点“Assign Reviewer”卡 20s+（默认开启）
 export MATCHMAKING_WARMUP="${MATCHMAKING_WARMUP:-1}"
 

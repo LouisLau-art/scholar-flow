@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import VersionHistory from '@/components/VersionHistory'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { authService } from '@/services/auth'
 
@@ -48,11 +47,16 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         // Even if we have initial article, we might need to fetch signed URL if not provided
         const initialPath = initialArticle.final_pdf_path || initialArticle.file_path
         if (initialPath && !previewUrl) {
-             const { data, error } = await supabase.storage
-              .from('manuscripts')
-              .createSignedUrl(initialPath, 60 * 5)
-            if (!error) {
-              setPreviewUrl(data?.signedUrl ?? null)
+            try {
+              const res = await fetch(
+                `/api/v1/manuscripts/articles/${encodeURIComponent(String(initialArticle.id))}/pdf-signed`
+              )
+              const result = await res.json().catch(() => null)
+              if (res.ok && result?.success && result?.data?.signed_url) {
+                setPreviewUrl(String(result.data.signed_url))
+              }
+            } catch (e) {
+              console.error('Failed to load signed PDF url:', e)
             }
         }
         return
@@ -63,14 +67,16 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         const result = await res.json()
         if (result.success) {
           setArticle(result.data)
-          const path = result.data?.final_pdf_path || result.data?.file_path
-          if (path) {
-            const { data, error } = await supabase.storage
-              .from('manuscripts')
-              .createSignedUrl(path, 60 * 5)
-            if (!error) {
-              setPreviewUrl(data?.signedUrl ?? null)
+          try {
+            const pdfRes = await fetch(
+              `/api/v1/manuscripts/articles/${encodeURIComponent(String(result.data?.id ?? id))}/pdf-signed`
+            )
+            const pdfJson = await pdfRes.json().catch(() => null)
+            if (pdfRes.ok && pdfJson?.success && pdfJson?.data?.signed_url) {
+              setPreviewUrl(String(pdfJson.data.signed_url))
             }
+          } catch (e) {
+            console.error('Failed to load signed PDF url:', e)
           }
         }
       } catch (err) {
@@ -84,11 +90,6 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
   async function handleDownload(articleId: string) {
     try {
-      const path = article?.final_pdf_path || article?.file_path
-      if (!path) {
-        console.error("No file attached to this article")
-        return
-      }
       // 调用下载统计API
       const res = await fetch(`/api/v1/stats/download/${articleId}`, {
         method: "POST",
@@ -101,14 +102,14 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         console.error("Failed to record download");
       }
 
-      const { data, error } = await supabase.storage
-        .from('manuscripts')
-        .createSignedUrl(path, 60 * 5)
-      if (error || !data?.signedUrl) {
+      const pdfRes = await fetch(`/api/v1/manuscripts/articles/${encodeURIComponent(String(articleId))}/pdf-signed`)
+      const pdfJson = await pdfRes.json().catch(() => null)
+      const signedUrl = pdfJson?.data?.signed_url
+      if (!pdfRes.ok || !signedUrl) {
         console.error("Failed to create download URL");
         return
       }
-      window.open(data.signedUrl, "_blank");
+      window.open(String(signedUrl), "_blank");
     } catch (error) {
       console.error("Download error:", error);
     }
