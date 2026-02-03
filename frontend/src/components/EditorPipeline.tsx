@@ -5,6 +5,7 @@ import { FileText, Users, CheckCircle2, ArrowRight, Loader2, RefreshCw, Clock } 
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import ProductionUploadDialog from '@/components/ProductionUploadDialog'
 
 type Manuscript = {
   id: string
@@ -16,6 +17,7 @@ type Manuscript = {
   version?: number
   invoice_amount?: number | string | null
   invoice_status?: string | null
+  final_pdf_path?: string | null
 }
 
 type PipelineStage =
@@ -116,6 +118,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
       const data = await response.json().catch(() => null)
       if (response.status === 403) {
         toast.error('Waiting for Payment.', { id: toastId })
+        return
+      }
+      if (response.status === 400) {
+        toast.error(data?.detail || 'Production PDF required.', { id: toastId })
         return
       }
       if (!response.ok || !data?.success) {
@@ -442,18 +448,27 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 const amount = typeof amountRaw === 'string' ? Number.parseFloat(amountRaw) : Number(amountRaw)
                 const status = (manuscript.invoice_status ?? 'unpaid').toLowerCase()
                 const waitingPayment = (Number.isFinite(amount) ? amount : 0) > 0 && status !== 'paid'
+                const hasFinalPdf = Boolean((manuscript.final_pdf_path || '').trim())
 
                 return (
                   <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                     <div>
                       <div className="font-medium text-slate-900">{manuscript.title}</div>
                       <div className="text-sm text-slate-500">
-                        {waitingPayment ? 'Waiting for Payment' : 'Ready to Publish'}
+                        {waitingPayment ? 'Waiting for Payment' : hasFinalPdf ? 'Ready to Publish' : 'Final PDF required'}
                         {Number.isFinite(amount) ? ` • APC: $${amount}` : ''}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Approved</span>
+                      <ProductionUploadDialog
+                        manuscriptId={manuscript.id}
+                        manuscriptTitle={manuscript.title}
+                        onUploaded={() => {
+                          setIsLoading(true)
+                          reloadPipeline().finally(() => setIsLoading(false))
+                        }}
+                      />
                       {waitingPayment && (
                         <Button
                           size="sm"
@@ -466,8 +481,8 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                       )}
                       <Button
                         size="sm"
-                        disabled={waitingPayment}
-                        title={waitingPayment ? 'Waiting for Payment' : 'Publish'}
+                        disabled={waitingPayment || !hasFinalPdf}
+                        title={waitingPayment ? 'Waiting for Payment' : !hasFinalPdf ? 'Upload Final PDF first' : 'Publish'}
                         onClick={() => handlePublish(manuscript.id)}
                         data-testid="editor-publish"
                       >

@@ -13,7 +13,7 @@ async def test_not_found_route(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_upload_internal_error(client: AsyncClient):
     """验证上传流程内部异常返回 500"""
-    with patch("app.api.v1.manuscripts.extract_text_from_pdf", return_value="text"), \
+    with patch("app.api.v1.manuscripts.extract_text_and_layout_from_pdf", return_value=("text", [])), \
          patch("app.api.v1.manuscripts.parse_manuscript_metadata", side_effect=Exception("boom")), \
          patch("app.api.v1.manuscripts.plagiarism_check_worker", return_value=None):
         response = await client.post(

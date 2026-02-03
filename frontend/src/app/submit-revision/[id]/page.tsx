@@ -173,10 +173,10 @@ export default function SubmitRevisionPage() {
            {revisionRequest && (
              <Card className="border-amber-200 bg-amber-50">
                <CardHeader>
-                 <CardTitle className="text-amber-900 flex items-center gap-2">
-                   <AlertCircle className="h-5 w-5" />
-                   Editor's Request ({revisionRequest.decision_type} revision)
-                 </CardTitle>
+	                 <CardTitle className="text-amber-900 flex items-center gap-2">
+	                   <AlertCircle className="h-5 w-5" />
+	                   Editor&apos;s Request ({revisionRequest.decision_type} revision)
+	                 </CardTitle>
                </CardHeader>
                <CardContent>
                  <div className="prose prose-sm text-amber-900">
@@ -230,9 +230,9 @@ export default function SubmitRevisionPage() {
                {/* Response Letter */}
                <div className="space-y-3">
                  <Label className="text-base">Response Letter</Label>
-                 <p className="text-sm text-slate-500">
-                   Please describe the changes you have made and address the editor's comments point-by-point.
-                 </p>
+	                 <p className="text-sm text-slate-500">
+	                   Please describe the changes you have made and address the editor&apos;s comments point-by-point.
+	                 </p>
                <TiptapEditor 
                    value={responseLetter}
                    onChange={setResponseLetter}

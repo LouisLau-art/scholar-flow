@@ -143,7 +143,8 @@ async def test_editor_publish_methods(client: AsyncClient, auth_token: str, monk
     with patch("app.lib.api_client.supabase", mock), \
          patch("app.lib.api_client.supabase_admin", mock), \
          patch("app.api.v1.editor.supabase", mock), \
-         patch("app.api.v1.editor.supabase_admin", mock):
+         patch("app.api.v1.editor.supabase_admin", mock), \
+         patch("app.services.post_acceptance_service.supabase_admin", mock):
         get_resp = await client.get("/api/v1/editor/publish", headers=headers)
         assert get_resp.status_code == 405
 

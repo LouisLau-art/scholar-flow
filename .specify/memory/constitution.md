@@ -46,10 +46,12 @@ Sync Impact Report:
   - **成本/耗时约束**：严禁在上传链路引入远程大模型网络调用；必须截断页数与字符数，保证上传响应可预测。
 - **日志（可观测性）**：`./start.sh` 必须同时满足“终端实时可见 + 文件持久化”，默认输出到 `logs/backend.log` 与 `logs/frontend.log`（最新别名）。
 - **AI 推荐模型缓存（性能）**：Matchmaking（审稿人推荐）使用 `sentence-transformers` 本地 CPU 推理；首次启动可能需要下载模型，必须启用本地缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
+- **前端认证一致性（经验教训）**：凡是需要读取登录态的浏览器端 API 调用，必须复用项目统一的 Supabase Browser Client（可读 cookie session），避免出现“页面已登录但 API 认为未登录”的割裂。
 - **MVP 状态机与财务门禁（强约束）**：
   - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
   - Revision 必须进入 `status='revision_requested'`（等待作者修回）；作者提交修订后进入 `resubmitted`。
   - Accept 必须进入 `approved` 并写入 `invoices`；Publish 必须做 Payment Gate：`amount>0` 且 `status!=paid` 则禁止发布。
+  - Feature 024：Publish 必须同时做 Production Gate：`final_pdf_path` 为空则禁止发布；云端需执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql` 补齐字段（否则后端会降级/不可用）。
   - MVP 允许人工确认到账：`POST /api/v1/editor/invoices/confirm` 将 invoice 标记为 `paid`。
   - 云端若存在旧数据 `status='revision_required'`，需执行 `supabase/migrations/20260203120000_status_cleanup.sql` 完成数据纠正。
 
@@ -62,7 +64,7 @@ Sync Impact Report:
 - **数据库全量 RLS**：MVP 主要依赖后端 API 鉴权 + `service_role` 访问；不要求对 `manuscripts/review_assignments/review_reports` 全量补齐 RLS（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：可保留 schema/占位字段，但不做真实注册与异步任务闭环。
 - **查重（iThenticate/mock）**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不阻塞上传/修订链路。
-- **账单 PDF 生成与存储闭环**：MVP 只要求 Payment Gate 逻辑可用；`pdf_url`/账单下载、支付渠道、对账自动化留后。
+ - **账单 PDF 存储闭环**：MVP 允许后端“即时生成 PDF 下载”（不做 `pdf_url` 持久化）；支付渠道、对账自动化留后。
 - **通知群发（给所有 editor/admin）**：为避免 mock 用户导致的 409 日志刷屏，MVP 禁止对“所有 editor”群发通知；改为只通知稿件 `owner_id/editor_id`（或仅作者自通知）。
 - **修订 Response Letter 图片上传到 Storage**：MVP 不做图片入库/权限/RLS；改为前端把图片压缩后以 Data URL 直接嵌入富文本（有限制体积）。
 - **“论文详情/Response Letter”的长期可扩展富媒体**：MVP 允许简化实现（文本/少量内嵌图片），不追求可迁移、可检索、可复用的媒体资产体系。
@@ -82,3 +84,8 @@ Sync Impact Report:
 Constitution supersedes all other practices. Amendments require documentation and version bump. 若使用 PR 流程，则 PR 必须验证符合本宪法原则。
 
 **Version**: 1.1.0 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-02
+
+## 近期关键修复快照（2026-02-03）
+- Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
+- Reviewer：补齐修回上下文展示与审稿附件下载；收紧版本历史接口 reviewer 权限。
+- Feature 024：新增 Production Final PDF 上传、发布双门禁（Payment + Production）、作者账单下载、首页 Latest Articles published-only。

@@ -79,7 +79,8 @@ async function updateProfile(data: Partial<User>): Promise<User> {
       errorMessage = String(errorMessage)
     }
 
-    throw new Error(errorMessage)
+    const message = typeof errorMessage === 'string' ? errorMessage : String(errorMessage)
+    throw new Error(message)
   }
 
   const result = await res.json()

@@ -8,6 +8,7 @@ from app.services.notification_service import NotificationService
 from app.models.revision import RevisionCreate, RevisionRequestResponse
 from app.services.revision_service import RevisionService
 from datetime import timezone
+from app.services.post_acceptance_service import publish_manuscript
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -49,6 +50,7 @@ def _is_missing_column_error(error_text: str) -> bool:
     return (
         "column" in lowered
         or "published_at" in lowered
+        or "final_pdf_path" in lowered
         or "reject_comment" in lowered
         or "doi" in lowered
     )
@@ -659,97 +661,76 @@ async def publish_manuscript_dev(
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: str = Body(..., embed=True),
+    background_tasks: BackgroundTasks = None,
 ):
     """
-    快捷发布：将稿件直接设置为 published。
+    Feature 024: 发布（Post-Acceptance Pipeline）
 
     中文注释:
-    1) 用于演示/测试，让公开搜索（published-only）能快速看到结果。
-    2) 仍然需要 editor/admin 角色，避免普通作者误操作。
+    - 仍然需要 editor/admin 角色，避免普通作者误操作。
+    - 门禁显性化：Payment Gate + Production Gate（final_pdf_path）。
     """
     try:
-        ms = {}
+        published = publish_manuscript(manuscript_id=manuscript_id)
+
+        # Feature 024: 发布通知（站内信 + 邮件，失败不影响主流程）
         try:
-            ms_resp = (
+            ms_res = (
                 supabase_admin.table("manuscripts")
-                .select("id,status")
+                .select("author_id, title")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
             )
-            ms = getattr(ms_resp, "data", None) or {}
-        except Exception:
-            ms = {}
+            ms = getattr(ms_res, "data", None) or {}
+            author_id = ms.get("author_id")
+            title = ms.get("title") or "Manuscript"
 
-        invoice = None
-        try:
-            inv_resp = (
-                supabase_admin.table("invoices")
-                .select("amount,status")
-                .eq("manuscript_id", manuscript_id)
-                .limit(1)
-                .execute()
-            )
-            inv_data = getattr(inv_resp, "data", None) or []
-            invoice = inv_data[0] if inv_data else None
-        except Exception:
-            invoice = None
-
-        # CRITICAL: PAYMENT GATE CHECK
-        if invoice is None:
-            # 对已录用/待发布的稿件：必须存在 invoice 才允许发布，避免绕过 APC 流程
-            if (ms.get("status") or "").lower() in {"approved", "pending_payment"}:
-                raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
-        else:
-            try:
-                amount = float(invoice.get("amount") or 0)
-            except Exception:
-                amount = 0
-            status = (invoice.get("status") or "unpaid").lower()
-            if amount > 0 and status != "paid":
-                raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
-
-        doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        update_data = {
-            "status": "published",
-            "published_at": datetime.now().isoformat(),
-            "doi": doi,
-        }
-        try:
-            response = (
-                supabase_admin.table("manuscripts")
-                .update(update_data)
-                .eq("id", manuscript_id)
-                .execute()
-            )
-        except Exception as e:
-            error_text = str(e)
-            print(f"Publish update error: {error_text}")
-            if _is_missing_column_error(error_text):
-                response = (
-                    supabase_admin.table("manuscripts")
-                    .update({"status": update_data["status"]})
-                    .eq("id", manuscript_id)
-                    .execute()
+            if author_id:
+                NotificationService().create_notification(
+                    user_id=str(author_id),
+                    manuscript_id=manuscript_id,
+                    type="system",
+                    title="Article Published",
+                    content=f"Your article '{title}' has been published.",
+                    action_url=f"/articles/{manuscript_id}",
                 )
-            else:
-                raise
 
-        error = _extract_supabase_error(response)
-        if error and _is_missing_column_error(str(error)):
-            response = (
-                supabase_admin.table("manuscripts")
-                .update({"status": update_data["status"]})
-                .eq("id", manuscript_id)
-                .execute()
-            )
-        elif error:
-            raise HTTPException(status_code=500, detail="Failed to publish manuscript")
+                if background_tasks is not None:
+                    try:
+                        prof = (
+                            supabase_admin.table("user_profiles")
+                            .select("email, full_name")
+                            .eq("id", str(author_id))
+                            .single()
+                            .execute()
+                        )
+                        pdata = getattr(prof, "data", None) or {}
+                        author_email = pdata.get("email")
+                        author_name = pdata.get("full_name") or (author_email.split("@")[0] if author_email else "Author")
+                    except Exception:
+                        author_email = None
+                        author_name = "Author"
 
-        data = _extract_supabase_data(response) or []
-        if not data:
-            raise HTTPException(status_code=404, detail="Manuscript not found")
-        return {"success": True, "data": data[0]}
+                    if author_email:
+                        email_service = EmailService()
+                        background_tasks.add_task(
+                            email_service.send_template_email,
+                            to_email=author_email,
+                            subject="Your article has been published",
+                            template_name="published.html",
+                            context={
+                                "subject": "Your article has been published",
+                                "recipient_name": author_name,
+                                "manuscript_title": title,
+                                "manuscript_id": manuscript_id,
+                                "doi": published.get("doi"),
+                            },
+                        )
+        except Exception as e:
+            print(f"[Publish] notify author failed (ignored): {e}")
+
+        return {"success": True, "data": published}
     except HTTPException:
         raise
     except Exception as e:

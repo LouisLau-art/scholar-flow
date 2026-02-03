@@ -6,8 +6,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 pdfplumber
-weasyprint
-openai
+reportlab
 bleach>=6.1.0
 supabase>=2.0.0
 pytest>=8.0.0

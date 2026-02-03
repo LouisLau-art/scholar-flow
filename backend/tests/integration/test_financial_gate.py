@@ -26,6 +26,19 @@ def _cleanup_financial_artifacts(db, manuscript_id: str) -> None:
         pass
 
 
+def _maybe_set_final_pdf_path(db, manuscript_id: str) -> None:
+    """
+    Feature 024: Production Gate（final_pdf_path）
+    - 若云端 schema 未迁移则忽略；若已迁移则设置一个占位路径用于发布门禁通过。
+    """
+    try:
+        db.table("manuscripts").update({"final_pdf_path": f"production/{manuscript_id}/final.pdf"}).eq(
+            "id", manuscript_id
+        ).execute()
+    except Exception:
+        pass
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_financial_gate_blocks_unpaid_publish(
@@ -94,6 +107,9 @@ async def test_financial_gate_blocks_unpaid_publish(
         supabase_admin_client.table("invoices").update(
             {"status": "paid", "confirmed_at": datetime.now(timezone.utc).isoformat()}
         ).eq("manuscript_id", manuscript_id).execute()
+
+        # 3.5) Feature 024: Ensure production file present (if schema exists)
+        _maybe_set_final_pdf_path(supabase_admin_client, manuscript_id)
 
         # 4) Publish should succeed
         res3 = await client.post(

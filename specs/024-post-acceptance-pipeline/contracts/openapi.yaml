@@ -1,0 +1,130 @@
+openapi: 3.0.0
+info:
+  title: Post-Acceptance Pipeline API
+  version: 1.0.0
+paths:
+  /manuscripts/{id}/invoice:
+    get:
+      summary: Download Invoice PDF
+      description: Returns the PDF file for the manuscript's invoice.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Invoice PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Invoice not found
+  
+  /invoices/{id}/pay:
+    post:
+      summary: Mark Invoice as Paid (Admin/Editor)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '403':
+          description: Forbidden
+  
+  /manuscripts/{id}/production-file:
+    post:
+      summary: Upload Production PDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  final_pdf_path:
+                    type: string
+  
+  /manuscripts/{id}/publish:
+    post:
+      summary: Publish Manuscript
+      description: Publishes the manuscript if all gates (payment, production file) are met.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Manuscript published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manuscript'
+        '400':
+          description: Gates not met (Unpaid or No PDF)
+
+components:
+  schemas:
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        manuscript_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, cancelled]
+        created_at:
+          type: string
+          format: date-time
+    Manuscript:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        doi:
+          type: string

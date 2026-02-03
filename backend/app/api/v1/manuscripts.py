@@ -8,7 +8,7 @@ from fastapi import (
     Form,
     Depends,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -22,6 +22,8 @@ from app.services.revision_service import RevisionService
 from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
 from app.core.roles import require_any_role, get_current_profile
 from app.services.owner_binding_service import get_profile_for_owner, validate_internal_owner_id
+from app.core.invoice_generator import build_invoice_pdf_bytes
+from app.services.post_acceptance_service import publish_manuscript as publish_manuscript_post_acceptance
 from uuid import uuid4, UUID
 import shutil
 import os
@@ -132,6 +134,138 @@ async def get_manuscript_pdf_signed(
 
     signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
     return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.get("/manuscripts/{manuscript_id}/invoice")
+async def download_invoice_pdf(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 024: 下载账单 PDF（Author / Editor / Admin）
+
+    中文注释:
+    - PDF 即时生成（ReportLab），避免存储/权限复杂度。
+    """
+    user_id = str(current_user["id"])
+    roles = set((profile or {}).get("roles") or [])
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, author_id, title")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    if not (roles.intersection({"admin", "editor"}) or str(ms.get("author_id") or "") == user_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    inv_resp = (
+        supabase_admin.table("invoices")
+        .select("id, amount")
+        .eq("manuscript_id", str(manuscript_id))
+        .limit(1)
+        .execute()
+    )
+    inv_rows = getattr(inv_resp, "data", None) or []
+    if not inv_rows:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    inv = inv_rows[0]
+
+    try:
+        amount = float(inv.get("amount") or 0)
+    except Exception:
+        amount = 0.0
+
+    pdf_bytes = build_invoice_pdf_bytes(
+        invoice_id=UUID(str(inv.get("id"))),
+        manuscript_title=str(ms.get("title") or "Manuscript"),
+        amount=float(amount),
+    )
+    if not pdf_bytes:
+        raise HTTPException(status_code=500, detail="Failed to generate invoice pdf")
+
+    filename = f"invoice-{manuscript_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+    )
+
+
+@router.post("/manuscripts/{manuscript_id}/production-file")
+async def upload_production_file(
+    manuscript_id: UUID,
+    file: UploadFile = File(...),
+    _current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 024: 上传最终排版 PDF（Production File）
+    """
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="仅支持 PDF 格式文件")
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id,status")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    if (ms.get("status") or "").lower() != "approved":
+        raise HTTPException(status_code=400, detail="Only approved manuscripts can upload production file")
+
+    safe_name = (file.filename or "final.pdf").replace("/", "_").replace("\\", "_")
+    ts = int(time.time())
+    path = f"production/{manuscript_id}/{ts}-{safe_name}"
+
+    try:
+        content = await file.read()
+        supabase_admin.storage.from_("manuscripts").upload(
+            path, content, {"content-type": "application/pdf"}
+        )
+    except Exception as e:
+        print(f"[Production] upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload production file")
+
+    try:
+        supabase_admin.table("manuscripts").update({"final_pdf_path": path}).eq(
+            "id", str(manuscript_id)
+        ).execute()
+    except Exception as e:
+        err = str(e)
+        print(f"[Production] update final_pdf_path failed: {err}")
+        if "final_pdf_path" in err.lower() and "column" in err.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="Database schema missing final_pdf_path. Please apply migrations for Feature 024.",
+            )
+        raise HTTPException(status_code=500, detail="Failed to update production file path")
+
+    return {"success": True, "data": {"final_pdf_path": path}}
+
+
+@router.post("/manuscripts/{manuscript_id}/publish")
+async def publish_manuscript_endpoint(
+    manuscript_id: UUID,
+    _current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 024: REST 形式发布端点（与 /api/v1/editor/publish 等价）
+    """
+    published = publish_manuscript_post_acceptance(manuscript_id=str(manuscript_id))
+    return {"success": True, "data": published}
 
 
 @router.get("/manuscripts/{manuscript_id}/versions/{version_number}/pdf-signed")
@@ -692,6 +826,46 @@ async def public_search(q: str, mode: str = "articles"):
     except Exception as e:
         print(f"搜索异常: {str(e)}")
         return {"success": False, "results": []}
+
+
+@router.get("/manuscripts/published/latest")
+async def get_latest_published_articles(limit: int = 6):
+    """
+    Feature 024: 首页“Latest Articles”数据源（仅 published，按 published_at 倒序）
+    """
+    try:
+        n = max(1, min(int(limit), 50))
+    except Exception:
+        n = 6
+
+    try:
+        # 优先按 published_at 排序；若环境缺列，则退化为 created_at
+        try:
+            resp = (
+                supabase.table("manuscripts")
+                .select("id,title,abstract,doi,published_at,journal_id")
+                .eq("status", "published")
+                .order("published_at", desc=True)
+                .limit(n)
+                .execute()
+            )
+        except Exception as e:
+            if "published_at" in str(e).lower():
+                resp = (
+                    supabase.table("manuscripts")
+                    .select("id,title,abstract,doi,created_at,journal_id")
+                    .eq("status", "published")
+                    .order("created_at", desc=True)
+                    .limit(n)
+                    .execute()
+                )
+            else:
+                raise
+
+        return {"success": True, "data": getattr(resp, "data", None) or []}
+    except Exception as e:
+        print(f"[LatestArticles] 查询失败: {e}")
+        return {"success": False, "data": []}
 
 
 # === 4. 详情查询 ===

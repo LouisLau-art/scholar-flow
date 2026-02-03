@@ -4,6 +4,7 @@ import SiteHeader from '@/components/layout/SiteHeader'
 import HeroSection from '@/components/home/HeroSection'
 import JournalCarousel from '@/components/home/JournalCarousel'
 import HomeDiscoveryBlocks from '@/components/home/HomeDiscoveryBlocks'
+import LatestArticles from '@/components/home/LatestArticles'
 import Link from 'next/link'
 import { FileText, Settings, ShieldCheck, DollarSign, ChevronRight } from 'lucide-react'
 
@@ -58,6 +59,7 @@ export default function HomePage() {
 
         <JournalCarousel />
         <HomeDiscoveryBlocks />
+        <LatestArticles />
 
         {/* Branding Footer Section */}
         <section className="py-20 border-t border-slate-100">

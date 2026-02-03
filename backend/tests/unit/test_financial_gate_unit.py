@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.v1 import editor as editor_api
+from app.services import post_acceptance_service
 
 
 class _FakeStorageBucket:
@@ -70,7 +71,7 @@ async def test_publish_blocks_when_invoice_unpaid(monkeypatch):
         manuscript={"id": "m-1", "status": "approved"},
         invoices=[{"amount": 100, "status": "unpaid"}],
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
 
     with pytest.raises(HTTPException) as exc:
         await editor_api.publish_manuscript_dev(
@@ -85,11 +86,11 @@ async def test_publish_blocks_when_invoice_unpaid(monkeypatch):
 @pytest.mark.asyncio
 async def test_publish_allows_when_invoice_paid(monkeypatch):
     fake = _FakeSupabaseAdmin(
-        manuscript={"id": "m-1", "status": "approved"},
+        manuscript={"id": "m-1", "status": "approved", "final_pdf_path": "production/m-1/final.pdf"},
         invoices=[{"amount": 100, "status": "paid"}],
         update_result=[{"id": "m-1", "status": "published"}],
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
@@ -107,7 +108,7 @@ async def test_publish_blocks_when_invoice_missing_for_approved(monkeypatch):
         manuscript={"id": "m-1", "status": "approved"},
         invoices=[],
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
 
     with pytest.raises(HTTPException) as exc:
         await editor_api.publish_manuscript_dev(
@@ -152,7 +153,7 @@ async def test_publish_allows_when_invoice_missing_for_non_approved(monkeypatch)
         invoices=[],
         update_result=[{"id": "m-1", "status": "published"}],
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
@@ -166,11 +167,11 @@ async def test_publish_allows_when_invoice_missing_for_non_approved(monkeypatch)
 @pytest.mark.asyncio
 async def test_publish_allows_when_invoice_amount_not_numeric(monkeypatch):
     fake = _FakeSupabaseAdmin(
-        manuscript={"id": "m-1", "status": "approved"},
+        manuscript={"id": "m-1", "status": "approved", "final_pdf_path": "production/m-1/final.pdf"},
         invoices=[{"amount": "not-a-number", "status": "unpaid"}],
         update_result=[{"id": "m-1", "status": "published"}],
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
@@ -179,3 +180,21 @@ async def test_publish_allows_when_invoice_amount_not_numeric(monkeypatch):
     )
     assert result["success"] is True
     assert result["data"]["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_publish_blocks_when_final_pdf_missing(monkeypatch):
+    fake = _FakeSupabaseAdmin(
+        manuscript={"id": "m-1", "status": "approved", "final_pdf_path": ""},
+        invoices=[{"amount": 100, "status": "paid"}],
+        update_result=[{"id": "m-1", "status": "published"}],
+    )
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", fake)
+
+    with pytest.raises(HTTPException) as exc:
+        await editor_api.publish_manuscript_dev(
+            current_user={"id": "u-1"},
+            _profile={"roles": ["editor"]},
+            manuscript_id="m-1",
+        )
+    assert exc.value.status_code == 400

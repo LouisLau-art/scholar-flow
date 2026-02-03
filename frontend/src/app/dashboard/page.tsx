@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard, Shield } from 'lucide-react'
 import Link from 'next/link'
@@ -10,8 +10,10 @@ import EditorDashboard from "@/components/EditorDashboard"
 import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
 import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const [stats, setStats] = useState<any>(null)
@@ -190,6 +192,39 @@ export default function DashboardPage() {
                                   Submit Revision
                                 </Link>
                               )}
+                              {item.status === 'approved' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async (e) => {
+                                    e.preventDefault()
+                                    const toastId = toast.loading('Generating invoice…')
+                                    try {
+                                      const token = await authService.getAccessToken()
+                                      if (!token) {
+                                        toast.error('Please sign in again.', { id: toastId })
+                                        return
+                                      }
+                                      const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(item.id)}/invoice`, {
+                                        headers: { Authorization: `Bearer ${token}` },
+                                      })
+                                      if (!res.ok) {
+                                        const msg = await res.text().catch(() => '')
+                                        toast.error(msg || 'Invoice not available.', { id: toastId })
+                                        return
+                                      }
+                                      const blob = await res.blob()
+                                      const url = window.URL.createObjectURL(blob)
+                                      window.open(url, '_blank')
+                                      toast.success('Invoice ready.', { id: toastId })
+                                    } catch (err) {
+                                      toast.error('Failed to download invoice.', { id: toastId })
+                                    }
+                                  }}
+                                >
+                                  Download Invoice
+                                </Button>
+                              )}
                               <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
                                 <ArrowRight className="h-5 w-5" />
                               </Link>
@@ -224,5 +259,19 @@ export default function DashboardPage() {
         </Tabs>
       </main>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <DashboardPageContent />
+    </Suspense>
   )
 }

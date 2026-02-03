@@ -13,7 +13,6 @@ class ResizeObserver {
   disconnect() {}
 }
 
-// @ts-expect-error jsdom 环境缺失该 API，测试环境注入即可
 globalThis.ResizeObserver = ResizeObserver
 
 vi.mock('next/navigation', () => ({

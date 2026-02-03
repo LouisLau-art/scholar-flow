@@ -209,7 +209,7 @@ async def test_editor_submit_decision_reject(monkeypatch):
         comment="needs work",
     )
 
-    assert result["data"]["status"] == "revision_required"
+    assert result["data"]["status"] == "rejected"
 
 
 @pytest.mark.asyncio
@@ -390,7 +390,9 @@ async def test_editor_publish_fallback_on_missing_column(monkeypatch):
         def table(self, name):
             return _FallbackQuery(self, name)
 
-    monkeypatch.setattr(editor_api, "supabase_admin", _FallbackSupabase())
+    from app.services import post_acceptance_service
+
+    monkeypatch.setattr(post_acceptance_service, "supabase_admin", _FallbackSupabase())
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "user"},

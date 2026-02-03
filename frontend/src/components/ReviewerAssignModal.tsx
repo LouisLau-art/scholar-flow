@@ -280,8 +280,6 @@ export default function ReviewerAssignModal({
     )
   }
 
-  if (!isOpen) return null
-
   const orderedReviewers: User[] = useMemo(() => {
     const assignedSet = new Set(assignedIds)
     const reviewerById = new Map(reviewers.map((r) => [r.id, r]))
@@ -303,6 +301,8 @@ export default function ReviewerAssignModal({
       return aName.localeCompare(bName)
     })
   }, [assignedIds, pinnedAssignedUsers, reviewers])
+
+  if (!isOpen) return null
 
   const currentOwnerLabel = (() => {
     if (!ownerId) return 'Unassigned'

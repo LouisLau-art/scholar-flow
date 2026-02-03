@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -15,7 +15,7 @@ function parseHashParams(hash: string): Record<string, string> {
   return out
 }
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -82,5 +82,22 @@ export default function AuthCallbackPage() {
         <p className="mt-2 text-sm text-slate-500">正在完成登录回调与会话建立，请稍候。</p>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8 text-center max-w-md w-full">
+            <div className="font-serif text-2xl font-bold text-slate-900">Signing you in…</div>
+            <p className="mt-2 text-sm text-slate-500">正在加载登录回调页面…</p>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackContent />
+    </Suspense>
   )
 }

@@ -17,6 +17,7 @@ from app.api.v1 import (
     stats,
     public,
     editor,
+    invoices,
     coverage,
     notifications,
     internal,
@@ -88,6 +89,7 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(stats.router, prefix="/api/v1")
 app.include_router(public.router, prefix="/api/v1")
 app.include_router(editor.router, prefix="/api/v1")
+app.include_router(invoices.router, prefix="/api/v1")
 app.include_router(coverage.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
