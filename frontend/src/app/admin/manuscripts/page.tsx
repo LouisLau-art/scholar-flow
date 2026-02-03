@@ -1,6 +1,8 @@
 import { ApiClient } from '@/lib/api-client'
 import { FileText, CheckCircle, XCircle } from 'lucide-react'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminManuscriptsPage() {
   /**
    * 编辑管理后台列表页 (Server Component)
