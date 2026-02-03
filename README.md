@@ -1,228 +1,116 @@
-# ScholarFlow
+# 🎓 ScholarFlow
 
-学术稿件管理系统 - 基于 Next.js 和 FastAPI 的全栈应用
+<div align="center">
 
-## 项目概览
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Backend Status](https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/spaces/LouisShawn/scholarflow-api)
+[![Frontend Status](https://img.shields.io/badge/Frontend-Vercel-000000?logo=vercel)](https://scholarflow.vercel.app)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python)](https://www.python.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
 
-ScholarFlow 是一个现代化的学术稿件提交和审稿管理系统，支持作者提交稿件、编辑分配审稿人、审稿人审阅稿件等功能。
+**A Modern, AI-Powered Academic Publishing Workflow System**
+<br/>
+*Streamlining the submission, review, and publication process for the open science era.*
 
-## 技术栈
+[Live Demo](https://scholarflow.vercel.app) · [Report Bug](https://github.com/LouisLau-art/scholar-flow/issues) · [Request Feature](https://github.com/LouisLau-art/scholar-flow/issues)
 
-### 前端
-- **框架**: Next.js 14.2 (App Router)
-- **语言**: TypeScript 5.x
-- **UI 库**: React 18.x, Shadcn UI, Tailwind CSS 3.4
-- **状态管理**: React Hooks
-- **测试**: Vitest (单元测试), Playwright (E2E 测试)
+</div>
 
-### 后端
-- **框架**: FastAPI 0.115+
-- **语言**: Python 3.14+
-- **数据验证**: Pydantic v2
-- **测试**: pytest, pytest-cov
+---
 
-### 基础设施
-- **数据库**: Supabase (PostgreSQL)
-- **认证**: Supabase Auth (JWT)
-- **存储**: Supabase Storage
-- **SDK**: Supabase-js v2.x, Supabase-py v2.x
+## 📖 Introduction
 
-### AI/ML
-- **OpenAI SDK**: GPT-4o (内容分析)
-- **scikit-learn**: TF-IDF 相似度匹配
+**ScholarFlow** is an open-source editorial management system designed to modernize the academic publishing lifecycle. It replaces legacy, clunky interfaces with a sleek, responsive UI and integrates local AI capabilities to assist editors in matchmaking and quality control.
 
-## 项目结构
+Built with a "Glue Coding" philosophy, it leverages best-in-class open source components to deliver a robust enterprise-grade solution.
 
-```
-scholar-flow/
-├── backend/              # FastAPI 后端
-│   ├── app/
-│   │   ├── api/v1/      # API 路由
-│   │   ├── core/        # 业务逻辑
-│   │   ├── models/      # Pydantic 模型
-│   │   └── services/    # 第三方集成
-│   ├── tests/           # pytest 测试
-│   └── requirements.txt
-├── frontend/            # Next.js 前端
-│   ├── src/
-│   │   ├── app/         # Next.js App Router
-│   │   ├── components/  # UI 组件
-│   │   ├── lib/         # API 客户端
-│   │   └── types/       # TypeScript 类型
-│   ├── tests/           # Vitest + Playwright
-│   └── package.json
-├── scripts/             # 工具脚本
-├── specs/               # 功能规范文档
-└── .specify/            # 规格驱动开发模板
-```
+## ✨ Key Features
 
-## 快速开始
+- **🤖 AI-Assisted Matchmaking**: Local TF-IDF & Semantic Search (via `sentence-transformers`) to recommend the best reviewers without sending data to third-party APIs.
+- **📝 Modern Submission Portal**: Drag-and-drop PDF parsing, auto-extraction of metadata, and real-time validation.
+- **🔄 Dynamic Editorial Workflow**: 
+  - Status Machine: `Submitted` -> `Under Review` -> `Revision` -> `Decision`.
+  - Financial Gate: Integrated invoicing and payment tracking before publication.
+- **🔒 Secure & Scalable**:
+  - **Auth**: Enterprise-ready authentication via Supabase (JWT).
+  - **RBAC**: Strict Role-Based Access Control (Author, Reviewer, Editor, Admin).
+- **📊 Analytics Dashboard**: Real-time insights into submission rates, acceptance ratios, and turnaround times.
 
-### 前置要求
+## 🛠️ Tech Stack
 
-- **操作系统**: Arch Linux (推荐)
-- **Python**: 3.14+
-- **Node.js**: 20.x
-- **Supabase**: 已配置项目
+### Frontend (User Interface)
+- **Framework**: [Next.js 14](https://nextjs.org/) (App Router, TypeScript)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Shadcn UI](https://ui.shadcn.com/)
+- **State Management**: React Hooks + Server Actions
+- **Deployment**: Vercel
 
-### 安装依赖
+### Backend (API & Logic)
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.14)
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
+- **AI/ML Engine**: 
+  - `sentence-transformers` (Local Inference)
+  - `scikit-learn` (TF-IDF)
+  - `pyroaring` (High-performance bitmap indexing)
+- **Deployment**: Hugging Face Spaces (Docker Container)
 
-```bash
-# 后端依赖
-cd backend
-pip install -r requirements.txt --break-system-packages
+## 🚀 Getting Started
 
-# 前端依赖
-cd ../frontend
-pnpm install
-```
+### Prerequisites
+- Python 3.10+
+- Node.js 20+
+- Docker (Optional, for local containerization)
 
-### 配置环境变量
+### Installation
 
-```bash
-# 复制环境变量模板
-cp .env.example .env
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/LouisLau-art/scholar-flow.git
+   cd scholar-flow
+   ```
 
-# 编辑 .env 文件，填入 Supabase 配置
-```
+2. **Backend Setup**
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   
+   # Set up .env
+   cp .env.example .env
+   # (Fill in your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+   
+   uvicorn main:app --reload
+   ```
 
-### 启动开发服务器
+3. **Frontend Setup**
+   ```bash
+   cd frontend
+   npm install
+   
+   # Set up .env.local
+   echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+   
+   npm run dev
+   ```
 
-```bash
-# 使用提供的启动脚本
-./start.sh
+## 🐳 Deployment Architecture
 
-# 或分别启动
-cd backend && uvicorn main:app --reload --port 8000 &
-cd frontend && pnpm dev
-```
+The system uses a **Hybrid Cloud Deployment** strategy to optimize for cost and performance:
 
-### 访问应用
+1.  **Frontend**: Deployed on **Vercel** (Global Edge Network) for lightning-fast UI delivery.
+2.  **Backend**: Deployed on **Hugging Face Spaces** (Docker) to leverage free compute for AI models (`sentence-transformers`) that require significant memory and system libraries (like `gcc` for `pyroaring`).
+3.  **Database**: Hosted on **Supabase** (Managed PostgreSQL) for reliability and real-time capabilities.
 
-- **前端**: http://localhost:3000
-- **后端 API**: http://localhost:8000
-- **API 文档**: http://localhost:8000/docs
+## 🤝 Contributing
 
-## 测试
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-### 运行所有测试
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-```bash
-./scripts/run-all-tests.sh
-```
+## 📄 License
 
-### 后端测试
-
-```bash
-cd backend
-pytest                          # 运行所有测试
-pytest --cov=src --cov-report=html  # 生成覆盖率报告
-```
-
-### 前端测试
-
-```bash
-cd frontend
-npm run test                    # 单元测试
-npm run test:coverage           # 单元测试 + 覆盖率
-npm run test:e2e                # E2E 测试
-```
-
-## 开发指南
-
-### 规格驱动开发
-
-本项目采用规格驱动开发（Spec-Driven Development）方法论：
-
-```bash
-/speckit.specify    # 创建或更新功能规范
-/speckit.plan       # 生成实施计划
-
-/speckit.tasks      # 生成任务列表
-/speckit.implement  # 执行实施计划
-```
-
-### 项目宪法
-
-项目遵循 [ScholarFlow Constitution](.specify/memory/constitution.md) v2.0.0，包含以下核心原则：
-
-1. **规格驱动开发**: 所有功能开发前必须有完整的 spec.md 和 plan.md
-2. **测试先行**: 功能必须按可独立测试的 User Stories 拆分
-3. **阶段门控**: 严格遵守研究 -> 设计 -> 基础搭建 -> 功能实现的顺序
-4. **架构简约**: 最小化复杂度，核心业务门禁清晰可见
-5. **可观测性**: 所有 User Story 必须包含异常处理、结构化日志
-
-### 安全与认证
-
-- 所有敏感操作必须要求身份验证
-- 使用 Supabase JWT 令牌进行身份验证
-- 实现基于角色的访问控制（RBAC）
-- 使用真实的用户 ID，不使用硬编码或模拟数据
-
-### API 开发规范
-
-- API 优先设计：实现前定义 OpenAPI/Swagger 规范
-- 使用一致的路径模式（除非必要，否则不使用尾部斜杠）
-- 始终对 API 进行版本控制（例如 `/api/v1/`）
-- 实现统一的错误处理中间件
-
-### 测试策略
-
-- 测试所有 HTTP 方法（GET、POST、PUT、DELETE）
-- 确保前后端 API 路径完全一致
-- 测试有效/缺失/无效 token 的场景
-- 测试错误情况，不仅仅是 happy path
-- 使用真实的数据库连接进行集成测试
-
-## 功能模块
-
-| 模块 | 状态 | 描述 |
-|------|------|------|
-| 001-core-workflow | ✅ 完成 | 核心工作流 - 稿件提交、审稿流程 |
-| 002-plagiarism-check | ✅ 完成 | 抄袭检测 - TF-IDF 相似度匹配 |
-| 003-portal-redesign | ✅ 完成 | 门户重设计 |
-| 004-content-ecosystem | ✅ 完成 | 内容生态系统 - 公共门户和 PDF 阅读器 |
-| 005-system-integrity-and-auth | ✅ 完成 | 系统完整性与认证 |
-| 006-quality-assurance-suite | ✅ 完成 | 质量保证套件 |
-| 007-reviewer-workspace | ✅ 完成 | 审稿人工作区 |
-| 008-editor-command-center | ✅ 完成 | 编辑指挥中心 |
-| 009-test-coverage | 🚧 进行中 | 测试覆盖 - 提升测试覆盖率 |
-
-## 开发环境
-
-### Arch Linux 特定配置
-
-本项目开发环境锁定为 **Arch Linux**：
-
-- **包管理优先级**: `pacman` > `paru` > `pip`/`pnpm`
-- **用户权限**: `paru` 必须使用用户 `louis` 执行
-- **Python 安装**: 使用 `--break-system-packages` 参数
-- **Docker**: 必须配置国内镜像源
-
-### Git 工作流
-
-```bash
-# 每个原子化任务完成后立即提交
-git add .
-git commit -m "feat: [brief description]"
-git push
-```
-
-## 文档
-
-- [项目宪法](.specify/memory/constitution.md) - 最高指导原则
-- [开发指南](GEMINI.md) - 详细开发指南
-- [经验教训](LESSONS_LEARNED.md) - 项目经验总结
-- [Claude 配置](CLAUDE.md) - Claude Code 配置
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 联系方式
-
-如有问题，请通过 GitHub Issues 联系。
+Distributed under the MIT License. See `LICENSE` for more information.
