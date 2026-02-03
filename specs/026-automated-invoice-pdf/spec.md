@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "开启 Feature 026: 自动化 PDF 账单引擎..."
 
+## Clarifications
+
+### Session 2026-02-03 (Auto-Resolved per User Instruction)
+
+- Q: What event triggers invoice PDF generation? → A: When the manuscript is accepted (status becomes `approved`).
+- Q: What is the invoice number format? → A: Human-readable `INV-{YYYY}-{invoice_id_short}` (stable, unique).
+- Q: How is regeneration handled? → A: Regenerate replaces the existing invoice document while keeping the same invoice record and payment status.
+- Q: Where does “Bank Details” come from? → A: System-configured payment instructions (single journal-level configuration for MVP).
+- Q: How is invoice download secured? → A: Authenticated download for the manuscript author and internal roles only (no public access).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Automatic Invoice Generation (Priority: P1)
@@ -63,7 +73,7 @@ As an Editor/Admin, I want to regenerate the invoice document if invoice details
 ### Functional Requirements
 
 - **FR-001**: System MUST automatically generate an invoice document when a manuscript is accepted.
-- **FR-002**: System MUST assign a unique invoice identifier (Invoice Number) for each invoice record.
+- **FR-002**: System MUST assign a unique, stable, human-readable invoice identifier (Invoice Number) for each invoice record (format: `INV-{YYYY}-{invoice_id_short}`).
 - **FR-003**: The invoice document MUST include: Invoice Number, Issue Date, Author Name, Manuscript ID, Amount, and Bank Details.
 - **FR-004**: System MUST store the invoice document durably and maintain a stable reference to it on the invoice record.
 - **FR-005**: Authors MUST be able to download their own invoice document from the app UI.
@@ -83,7 +93,7 @@ As an Editor/Admin, I want to regenerate the invoice document if invoice details
 
 - The product already has a concept of “manuscript accepted” that is recorded reliably (no manual backfills required for MVP testing).
 - An invoice amount exists at acceptance time (either configured default or editor-confirmed) and becomes the source of truth for the invoice document.
-- Bank details/payment instructions are provided by the journal/business side and can be updated without changing historical payment status.
+- Bank details/payment instructions are provided by the journal/business side (system-level configuration for MVP) and can be updated without changing historical payment status.
 
 ### Dependencies
 
