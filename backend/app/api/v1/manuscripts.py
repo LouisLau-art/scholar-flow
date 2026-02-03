@@ -174,7 +174,7 @@ async def get_manuscript_reviews(
         .order("created_at", desc=True)
         .execute()
     )
-    rows = getattr(rr_resp, "data", None) or []
+    rows: list[dict] = getattr(rr_resp, "data", None) or []
 
     reviewer_ids = sorted({str(r.get("reviewer_id")) for r in rows if r.get("reviewer_id")})
     profile_by_id: dict[str, dict] = {}
@@ -199,6 +199,43 @@ async def get_manuscript_reviews(
         r["reviewer_email"] = p.get("email")
         if not r.get("comments_for_author") and r.get("content"):
             r["comments_for_author"] = r.get("content")
+
+    # 中文注释:
+    # - 历史上可能出现“重复邀请/重复指派”导致同一 reviewer 多条 review_reports（其中部分未提交）。
+    # - Editor 决策页应优先展示“已完成/有内容”的那条，避免出现 Score N/A 的误导。
+    def _parse_dt(value: object) -> datetime | None:
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str):
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _row_rank(r: dict) -> tuple[int, int, int, datetime]:
+        status = str(r.get("status") or "").strip().lower()
+        is_completed = 1 if status in {"completed", "done", "submitted"} else 0
+        has_score = 1 if r.get("score") is not None else 0
+        public_text = str(r.get("comments_for_author") or r.get("content") or "").strip()
+        has_public = 1 if public_text else 0
+        dt = _parse_dt(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
+        return (is_completed, has_score, has_public, dt)
+
+    best_by_reviewer: dict[str, dict] = {}
+    others: list[dict] = []
+    for r in rows:
+        rid = str(r.get("reviewer_id") or "").strip()
+        if not rid:
+            others.append(r)
+            continue
+        prev = best_by_reviewer.get(rid)
+        if prev is None or _row_rank(r) > _row_rank(prev):
+            best_by_reviewer[rid] = r
+
+    deduped = list(best_by_reviewer.values())
+    deduped.sort(key=lambda r: _parse_dt(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    rows = deduped + others
 
     if is_author:
         sanitized = []

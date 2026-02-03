@@ -174,9 +174,9 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-12 border-b border-slate-200 pb-6">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-8">
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-8 border-b border-slate-200 pb-6">
           <h1 className="font-serif text-4xl font-bold text-slate-900">
             Review Manuscript
           </h1>
@@ -188,8 +188,8 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
           )}
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 min-h-[800px] lg:h-[calc(100dvh-240px)] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-9 rounded-lg bg-white p-3 md:p-4 shadow-sm ring-1 ring-slate-200 min-h-[70vh] lg:min-h-[860px] lg:h-[calc(100dvh-200px)] overflow-hidden">
             {pdfLoading ? (
               <div className="h-full flex items-center justify-center text-slate-500 font-medium">
                 Loading preview...
@@ -208,9 +208,13 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
 
           {/* ReviewForm 强制 key：切换稿件时彻底清空状态 */}
           {manuscript?.id ? (
-            <ReviewForm key={manuscript.id} token={params.token} manuscriptId={manuscript.id} />
+            <div className="lg:col-span-3">
+              <ReviewForm key={manuscript.id} token={params.token} manuscriptId={manuscript.id} />
+            </div>
           ) : (
-            <ReviewForm key={params.token} token={params.token} manuscriptId={params.token} />
+            <div className="lg:col-span-3">
+              <ReviewForm key={params.token} token={params.token} manuscriptId={params.token} />
+            </div>
           )}
         </div>
       </div>

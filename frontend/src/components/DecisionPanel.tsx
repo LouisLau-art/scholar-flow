@@ -16,7 +16,7 @@ interface ReviewFeedback {
   reviewer_name?: string | null
   reviewer_email?: string | null
   status?: string | null
-  score?: number | null
+  score?: number | string | null
   comments_for_author?: string | null
   confidential_comments_to_editor?: string | null
   created_at?: string | null
@@ -43,6 +43,24 @@ export default function DecisionPanel({
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsLoaded, setReviewsLoaded] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+
+  const getScoreNumber = (value: unknown): number | null => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (typeof value === 'string') {
+      const n = Number(value)
+      return Number.isFinite(n) ? n : null
+    }
+    return null
+  }
+
+  const isReviewCompleted = (r: ReviewFeedback): boolean => {
+    const status = String(r.status || '').toLowerCase()
+    if (status === 'completed' || status === 'submitted' || status === 'done') return true
+    if (getScoreNumber(r.score) !== null) return true
+    if ((r.comments_for_author || '').trim()) return true
+    if ((r.confidential_comments_to_editor || '').trim()) return true
+    return false
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -97,10 +115,13 @@ export default function DecisionPanel({
     }
   }, [manuscriptId])
 
-  const canDecide = reviewsLoaded && !reviewsLoading && !reviewsError
+  const completedCount = useMemo(() => reviews.filter(isReviewCompleted).length, [reviews])
+  const canDecide = reviewsLoaded && !reviewsLoading && !reviewsError && completedCount > 0
 
   const averageOverallScore = useMemo(() => {
-    const scores = reviews.map((r) => r.score).filter((s): s is number => Number.isFinite(s as any))
+    const scores = reviews
+      .map((r) => getScoreNumber(r.score))
+      .filter((s): s is number => typeof s === 'number' && Number.isFinite(s))
     if (!scores.length) return 0
     return scores.reduce((sum, s) => sum + s, 0) / scores.length
   }, [reviews])
@@ -250,12 +271,18 @@ export default function DecisionPanel({
             <div className="mt-3 text-sm text-slate-600">
               No reviews found for this manuscript yet.
             </div>
+          ) : reviewsLoaded && completedCount === 0 ? (
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Reviews are assigned, but none has been submitted yet. Please wait for at least one completed review before making a decision.
+            </div>
           ) : (
             <div className="mt-3 space-y-3">
               {reviews.map((r, idx) => {
                 const displayName =
                   r.reviewer_name || r.reviewer_email || r.reviewer_id || `Reviewer ${idx + 1}`
-                const scoreLabel = Number.isFinite(r.score as any) ? String(r.score) : 'N/A'
+                const scoreNum = getScoreNumber(r.score)
+                const completed = isReviewCompleted(r)
+                const scoreLabel = scoreNum !== null ? String(scoreNum) : completed ? 'N/A' : 'Pending'
                 const confidential = r.confidential_comments_to_editor || ''
                 return (
                   <div
@@ -273,7 +300,7 @@ export default function DecisionPanel({
                         Confidential Comments to the Editor
                       </div>
                       <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                        {confidential.trim() ? confidential : '(none)'}
+                        {confidential.trim() ? confidential : completed ? '(none)' : '(not submitted yet)'}
                       </div>
                     </div>
                   </div>
@@ -290,13 +317,13 @@ export default function DecisionPanel({
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Average Overall Score:</span>
                 <span className="text-lg font-semibold text-primary">
-                  {averageOverallScore.toFixed(1)}
+                  {completedCount > 0 ? averageOverallScore.toFixed(1) : 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Number of Reviews:</span>
                 <span className="text-lg font-semibold text-primary">
-                  {reviews.length}
+                  {reviews.length} (submitted {completedCount})
                 </span>
               </div>
             </div>
@@ -310,7 +337,7 @@ export default function DecisionPanel({
           <h4 className="text-sm font-medium text-foreground">Select Decision</h4>
           {!canDecide && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              请先加载并查看上方 Review Summary 后再做决定。
+              请先加载并查看上方 Review Summary，且至少有 1 份审稿意见已提交后再做决定。
             </div>
           )}
           <RadioGroup
