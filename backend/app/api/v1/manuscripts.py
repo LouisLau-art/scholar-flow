@@ -36,9 +36,30 @@ from typing import Optional
 
 router = APIRouter(tags=["Manuscripts"])
 
+_PUBLISHED_AT_SUPPORTED: bool | None = None
+
 def _is_truthy_env(name: str, default: str = "0") -> bool:
     v = (os.environ.get(name, default) or "").strip().lower()
     return v in {"1", "true", "yes", "on"}
+
+def _is_missing_column_error(error_text: str) -> bool:
+    if not error_text:
+        return False
+    lowered = error_text.lower()
+    return (
+        "column" in lowered
+        or "published_at" in lowered
+        or "final_pdf_path" in lowered
+        or "doi" in lowered
+        or "reject_comment" in lowered
+    )
+
+def _is_postgrest_single_no_rows_error(error_text: str) -> bool:
+    if not error_text:
+        return False
+    lowered = error_text.lower()
+    # PostgREST: `.single()` 在 0 行时会报 406，并带 PGRST116（Cannot coerce ... 0 rows）
+    return "pgrst116" in lowered or "cannot coerce the result to a single json object" in lowered or "0 rows" in lowered
 
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
     """
@@ -842,6 +863,9 @@ async def get_latest_published_articles(limit: int = 6):
     """
     Feature 024: 首页“Latest Articles”数据源（仅 published，按 published_at 倒序）
     """
+    # 中文注释：部分云端环境可能尚未应用 Feature 024 的 schema（例如缺少 published_at）。
+    # 为避免每次请求都触发一次 400（噪声 + 多一次网络请求），这里做一次性能力探测并缓存结果。
+    global _PUBLISHED_AT_SUPPORTED
     try:
         n = max(1, min(int(limit), 50))
     except Exception:
@@ -849,27 +873,39 @@ async def get_latest_published_articles(limit: int = 6):
 
     try:
         # 优先按 published_at 排序；若环境缺列，则退化为 created_at
-        try:
+        if _PUBLISHED_AT_SUPPORTED is False:
             resp = (
                 supabase.table("manuscripts")
-                .select("id,title,abstract,doi,published_at,journal_id")
+                .select("id,title,abstract,doi,created_at,journal_id")
                 .eq("status", "published")
-                .order("published_at", desc=True)
+                .order("created_at", desc=True)
                 .limit(n)
                 .execute()
             )
-        except Exception as e:
-            if "published_at" in str(e).lower():
+        else:
+            try:
                 resp = (
                     supabase.table("manuscripts")
-                    .select("id,title,abstract,doi,created_at,journal_id")
+                    .select("id,title,abstract,doi,published_at,journal_id")
                     .eq("status", "published")
-                    .order("created_at", desc=True)
+                    .order("published_at", desc=True)
                     .limit(n)
                     .execute()
                 )
-            else:
-                raise
+                _PUBLISHED_AT_SUPPORTED = True
+            except Exception as e:
+                if _is_missing_column_error(str(e)):
+                    _PUBLISHED_AT_SUPPORTED = False
+                    resp = (
+                        supabase.table("manuscripts")
+                        .select("id,title,abstract,doi,created_at,journal_id")
+                        .eq("status", "published")
+                        .order("created_at", desc=True)
+                        .limit(n)
+                        .execute()
+                    )
+                else:
+                    raise
 
         return {"success": True, "data": getattr(resp, "data", None) or []}
     except Exception as e:
@@ -881,15 +917,22 @@ async def get_latest_published_articles(limit: int = 6):
 @router.get("/manuscripts/articles/{id}")
 async def get_article_detail(id: UUID):
     try:
-        manuscript_response = (
-            supabase.table("manuscripts")
-            .select("*")
-            .eq("id", str(id))
-            .eq("status", "published")
-            .single()
-            .execute()
-        )
-        manuscript = manuscript_response.data
+        try:
+            manuscript_response = (
+                supabase.table("manuscripts")
+                .select("*")
+                .eq("id", str(id))
+                .eq("status", "published")
+                .single()
+                .execute()
+            )
+            manuscript = manuscript_response.data
+        except Exception as e:
+            # 中文注释：PostgREST 的 .single() 在 0 行时会抛 406（PGRST116）。
+            # 这里应返回 404，而不是 500（避免前端误判为系统故障）。
+            if _is_postgrest_single_no_rows_error(str(e)):
+                raise HTTPException(status_code=404, detail="Article not found")
+            raise
         if not manuscript:
             raise HTTPException(status_code=404, detail="Article not found")
 
@@ -937,15 +980,20 @@ async def get_published_article_pdf_signed(id: UUID):
     - 因此这里使用 service_role（supabase_admin）为已 published 的稿件生成 signedUrl。
     - 严格限制为 published，避免任何未发表稿件被匿名访问。
     """
-    ms_resp = (
-        supabase_admin.table("manuscripts")
-        .select("id,status,file_path")
-        .eq("id", str(id))
-        .eq("status", "published")
-        .single()
-        .execute()
-    )
-    ms = getattr(ms_resp, "data", None) or {}
+    try:
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,status,file_path")
+            .eq("id", str(id))
+            .eq("status", "published")
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+    except Exception as e:
+        if _is_postgrest_single_no_rows_error(str(e)):
+            raise HTTPException(status_code=404, detail="Article not found")
+        raise
     if not ms:
         raise HTTPException(status_code=404, detail="Article not found")
     file_path = ms.get("file_path")
@@ -964,15 +1012,20 @@ async def get_published_article_pdf(id: UUID):
     - MVP 允许用 redirect 方式提供 PDF 下载。
     - signed URL 有有效期；若需要长期稳定 URL，可在未来把 published 文件迁到 public bucket 或配置 public read policy。
     """
-    ms_resp = (
-        supabase_admin.table("manuscripts")
-        .select("id,status,file_path")
-        .eq("id", str(id))
-        .eq("status", "published")
-        .single()
-        .execute()
-    )
-    ms = getattr(ms_resp, "data", None) or {}
+    try:
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,status,file_path")
+            .eq("id", str(id))
+            .eq("status", "published")
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+    except Exception as e:
+        if _is_postgrest_single_no_rows_error(str(e)):
+            raise HTTPException(status_code=404, detail="Article not found")
+        raise
     if not ms:
         raise HTTPException(status_code=404, detail="Article not found")
     file_path = ms.get("file_path")
