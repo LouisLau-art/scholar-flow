@@ -45,7 +45,8 @@ Sync Impact Report:
   - **元数据抽取是本地解析**：`backend/app/core/ai_engine.py` 优先使用 PDF 版面信息（字号/位置）+ 轻量规则/正则提取 title/abstract/authors（无 HTTP、无远程大模型依赖；可用 `PDF_LAYOUT_MAX_PAGES` / `PDF_LAYOUT_MAX_LINES` 调整版面扫描范围）。
   - **成本/耗时约束**：严禁在上传链路引入远程大模型网络调用；必须截断页数与字符数，保证上传响应可预测。
 - **日志（可观测性）**：`./start.sh` 必须同时满足“终端实时可见 + 文件持久化”，默认输出到 `logs/backend.log` 与 `logs/frontend.log`（最新别名）。
-- **AI 推荐模型缓存（性能）**：Matchmaking（审稿人推荐）使用 `sentence-transformers` 本地 CPU 推理；首次启动可能需要下载模型，必须启用本地缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
+- **AI 推荐模型缓存（性能）**：Matchmaking（审稿人推荐）使用 `sentence-transformers` 本地 CPU 推理；首次启动可能需要下载模型，必须启用本地缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。当本地已存在模型缓存时，`./start.sh` 会自动设置 `MATCHMAKING_LOCAL_FILES_ONLY=1`（后端会启用 `HF_HUB_OFFLINE=1`），彻底避免“命中缓存但仍走网络”。
+- **公开文章 PDF 预览（MVP 约定）**：公开页 `/articles/[id]` 不允许前端匿名直接调用 Storage `sign`（会 400/权限不一致），必须通过后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 获取 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 必须仅返回 `status='published'` 的稿件。
 - **前端认证一致性（经验教训）**：凡是需要读取登录态的浏览器端 API 调用，必须复用项目统一的 Supabase Browser Client（可读 cookie session），避免出现“页面已登录但 API 认为未登录”的割裂。
 - **MVP 状态机与财务门禁（强约束）**：
   - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
