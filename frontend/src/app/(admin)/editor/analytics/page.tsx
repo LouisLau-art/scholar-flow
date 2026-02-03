@@ -28,7 +28,8 @@ import { ExportButton } from '@/components/analytics/ExportButton'
 import QueryProvider from '@/components/providers/QueryProvider'
 import SiteHeader from '@/components/layout/SiteHeader'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { BarChart3, ArrowLeft } from 'lucide-react'
 
 function AnalyticsDashboardContent() {
@@ -91,12 +92,13 @@ function AnalyticsDashboardContent() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button asChild variant="outline" className="gap-2">
-            <Link href="/dashboard?tab=editor">
-              <ArrowLeft className="h-4 w-4" />
-              返回编辑台
-            </Link>
-          </Button>
+          <Link
+            href="/dashboard?tab=editor"
+            className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            返回编辑台
+          </Link>
           <ExportButton />
         </div>
       </div>
