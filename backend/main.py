@@ -67,11 +67,44 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _parse_frontend_origins() -> list[str]:
+    """
+    解析允许跨域的前端 Origins。
+
+    中文注释:
+    - 本地默认: http://localhost:3000
+    - 生产/预发: 通过 FRONTEND_ORIGIN 或 FRONTEND_ORIGINS 注入（逗号分隔）
+    """
+    origins: list[str] = []
+
+    single = (os.environ.get("FRONTEND_ORIGIN") or "").strip()
+    if single:
+        origins.append(single.rstrip("/"))
+
+    many = (os.environ.get("FRONTEND_ORIGINS") or "").strip()
+    if many:
+        for part in many.split(","):
+            o = (part or "").strip().rstrip("/")
+            if o:
+                origins.append(o)
+
+    if not origins:
+        origins = ["http://localhost:3000"]
+
+    # 去重保持顺序
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for o in origins:
+        if o not in seen:
+            seen.add(o)
+            deduped.append(o)
+    return deduped
+
 # === 中间件配置 ===
 # 1. 跨域资源共享 (CORS) - 允许前端访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # 前端默认端口
+    allow_origins=_parse_frontend_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -16,7 +16,10 @@ import type {
 import { supabase } from '@/lib/supabase'
 
 // API 基础路径
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// 中文注释:
+// - 统一使用相对路径 `/api/v1/*`，依赖 Next.js rewrites 代理到后端。
+// - 这样在本地（:3000 -> :8000）和 Vercel（-> Render）都不需要改业务代码。
+const API_BASE = ''
 
 /**
  * 获取当前用户的 JWT token

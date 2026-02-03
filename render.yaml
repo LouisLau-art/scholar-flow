@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: scholarflow-backend
+    env: python
+    rootDir: backend
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: GO_ENV
+        value: prod
+      - key: PLAGIARISM_CHECK_ENABLED
+        value: "0"
+      - key: PRODUCTION_GATE_ENABLED
+        value: "0"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false

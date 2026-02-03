@@ -2,11 +2,19 @@ import ArticleClient from './ArticleClient'
 import { generateCitationMetadata } from '@/lib/metadata/citation'
 import { Metadata } from 'next'
 
+function getBackendOrigin(): string {
+  const raw =
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://127.0.0.1:8000'
+  return raw.replace(/\/$/, '')
+}
+
 // Helper to fetch article data on server
 async function getArticle(id: string) {
   try {
-    // Assuming backend is reachable at 127.0.0.1:8000 from the nextjs server container/process
-    const res = await fetch(`http://127.0.0.1:8000/api/v1/manuscripts/articles/${id}`, { cache: 'no-store' })
+    const origin = getBackendOrigin()
+    const res = await fetch(`${origin}/api/v1/manuscripts/articles/${encodeURIComponent(id)}`, { cache: 'no-store' })
     if (!res.ok) return null
     const json = await res.json()
     return json.success ? json.data : null
@@ -37,7 +45,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     publicationDate: article.published_at ? new Date(article.published_at).toISOString().split('T')[0] : '',
     journalTitle: article.journals?.title || 'Scholar Flow Journal',
     doi: article.doi || '',
-    pdfUrl: article.file_path ? `https://scholarflow.com/api/v1/manuscripts/${article.id}/pdf` : undefined, // Placeholder URL
+    // 中文注释: MVP 阶段不在 metadata 里承诺稳定可长期访问的 PDF URL（Storage 通常为私有 + signed url）。
+    // 若未来要支持 Google Scholar 更好抓取，可增加一个稳定的公开 PDF 入口（例如 /api/v1/manuscripts/articles/{id}/pdf）。
+    pdfUrl: undefined,
     abstract: article.abstract,
   }
 

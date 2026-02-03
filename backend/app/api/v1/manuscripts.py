@@ -9,6 +9,7 @@ from fastapi import (
     Depends,
 )
 from fastapi.responses import JSONResponse, Response
+from starlette.responses import RedirectResponse
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -953,6 +954,35 @@ async def get_published_article_pdf_signed(id: UUID):
 
     signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
     return {"success": True, "data": {"signed_url": signed_url}}
+
+@router.get("/manuscripts/articles/{id}/pdf")
+async def get_published_article_pdf(id: UUID):
+    """
+    公开文章页 PDF 下载入口：302 重定向到 signed URL。
+
+    中文注释:
+    - MVP 允许用 redirect 方式提供 PDF 下载。
+    - signed URL 有有效期；若需要长期稳定 URL，可在未来把 published 文件迁到 public bucket 或配置 public read policy。
+    """
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id,status,file_path")
+        .eq("id", str(id))
+        .eq("status", "published")
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    if not ms:
+        raise HTTPException(status_code=404, detail="Article not found")
+    file_path = ms.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Article PDF not found")
+
+    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    resp = RedirectResponse(url=signed_url, status_code=302)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.patch("/manuscripts/{manuscript_id}")
