@@ -44,6 +44,7 @@
 - **DOI/Crossref 真对接**：保留 schema/占位即可，不做真实注册与异步任务闭环。
 - **查重**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不进入关键链路。
 - **账单 PDF 存储闭环**：MVP 允许“即时生成账单 PDF 下载”（不做 `pdf_url` 持久化）；支付渠道后置。
+- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor Pipeline 的 `approved` 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
 - **通知群发**：MVP 禁止给所有 editor/admin 群发通知（会引发云端 mock 用户导致的 409 日志刷屏）；仅通知 `owner_id/editor_id` 或作者本人。
 - **修订 Response Letter 图片上传**：MVP 不做上传到 Storage；改为前端压缩后以 Data URL 内嵌（有体积限制）。
 

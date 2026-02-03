@@ -72,7 +72,8 @@ Sync Impact Report:
 - **数据库全量 RLS**：MVP 主要依赖后端 API 鉴权 + `service_role` 访问；不要求对 `manuscripts/review_assignments/review_reports` 全量补齐 RLS（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：可保留 schema/占位字段，但不做真实注册与异步任务闭环。
 - **查重（iThenticate/mock）**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不阻塞上传/修订链路。
- - **账单 PDF 存储闭环**：MVP 允许后端“即时生成 PDF 下载”（不做 `pdf_url` 持久化）；支付渠道、对账自动化留后。
+- **账单 PDF 存储闭环**：MVP 允许后端“即时生成 PDF 下载”（不做 `pdf_url` 持久化）；支付渠道、对账自动化留后。
+- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor Pipeline 的 `approved` 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
 - **通知群发（给所有 editor/admin）**：为避免 mock 用户导致的 409 日志刷屏，MVP 禁止对“所有 editor”群发通知；改为只通知稿件 `owner_id/editor_id`（或仅作者自通知）。
 - **修订 Response Letter 图片上传到 Storage**：MVP 不做图片入库/权限/RLS；改为前端把图片压缩后以 Data URL 直接嵌入富文本（有限制体积）。
 - **“论文详情/Response Letter”的长期可扩展富媒体**：MVP 允许简化实现（文本/少量内嵌图片），不追求可迁移、可检索、可复用的媒体资产体系。
