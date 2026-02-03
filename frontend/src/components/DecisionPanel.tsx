@@ -170,25 +170,28 @@ export default function DecisionPanel({
 
   const handleSubmit = async () => {
     if (!decision || !manuscriptId) return
-    if (!canDecide) {
+    // 中文注释:
+    // - accept/reject：避免“盲做决定”，至少需要 1 份已完成审稿意见
+    // - revision：允许在 resubmitted 等阶段直接退修（不强制有新审稿意见）
+    if (decision !== 'revision' && !canDecide) {
       toast.error('请先加载并查看审稿意见后再做决定。')
       return
     }
 
     if (decision === 'revision') {
       if (!revisionType) {
-        toast.error('Please select a revision type (Major or Minor).')
+        toast.error('请选择修订类型（大修 / 小修）。')
         return
       }
       if (!comment || comment.trim().length < 10) {
-        toast.error('Please provide detailed comments for revision (min 10 chars).')
+        toast.error('请填写更详细的退修说明（至少 10 个字符）。')
         return
       }
     }
 
     if (decision === 'accept') {
       if (!Number.isFinite(apcAmount) || apcAmount < 0) {
-        toast.error('Please provide a valid APC amount (>= 0).')
+        toast.error('请填写正确的 APC 金额（>= 0）。')
         return
       }
     }
@@ -231,25 +234,41 @@ export default function DecisionPanel({
         body: JSON.stringify(body)
       })
 
-      const data = await response.json()
+      const raw = await response.text().catch(() => '')
+      let data: any = null
+      try {
+        data = raw ? JSON.parse(raw) : null
+      } catch {
+        data = null
+      }
 
       if (response.ok && data.success) {
         setSubmitSuccess(true)
         if (decision === 'revision') {
-          setSuccessMessage(`Revision requested (${revisionType}).`)
+          setSuccessMessage(`已发起退修（${revisionType === 'major' ? '大修' : '小修'}）。`)
         } else if (decision === 'accept') {
-          setSuccessMessage('Manuscript accepted for publication.')
+          setSuccessMessage('稿件已录用（进入财务门禁阶段）。')
         } else {
-          setSuccessMessage('Manuscript rejected.')
+          setSuccessMessage('稿件已拒稿。')
         }
-        toast.success('Decision recorded successfully.')
+        toast.success('操作已保存。')
         if (onSubmitted) onSubmitted()
       } else {
-        throw new Error(data.detail || data.message || 'Submission failed')
+        const serverMsg =
+          data?.detail ||
+          data?.message ||
+          (typeof raw === 'string' && raw.trim() ? raw.trim() : '') ||
+          `HTTP ${response.status}`
+
+        // 更友好的用户提示（保留 console error 方便排查）
+        if (typeof serverMsg === 'string' && serverMsg.includes("Cannot request revision for manuscript")) {
+          throw new Error('当前稿件状态暂不支持退修操作，请刷新页面后重试。')
+        }
+        throw new Error(serverMsg || '提交失败')
       }
     } catch (error: any) {
       console.error('Failed to submit decision:', error)
-      toast.error(error.message || 'Failed to submit decision. Please try again.')
+      toast.error(error.message || '提交失败，请稍后重试。')
     } finally {
       setIsSubmitting(false)
     }
@@ -262,7 +281,7 @@ export default function DecisionPanel({
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
             <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
-          <h3 className="mb-2 text-xl font-semibold text-foreground">Success!</h3>
+          <h3 className="mb-2 text-xl font-semibold text-foreground">成功</h3>
           <p className="mb-6 text-sm text-muted-foreground">
             {successMessage}
           </p>

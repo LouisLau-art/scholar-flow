@@ -235,6 +235,82 @@ async def test_happy_path_revision_loop(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_editor_can_request_revision_from_resubmitted(
+    client: AsyncClient,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    """
+    场景：作者修回 (resubmitted) 后，Editor 仍可“再退回一轮修订”（大修/小修）。
+
+    目标：
+    - /api/v1/editor/revisions 在 resubmitted 状态可用
+    - round_number 正确递增（已有 round 1 -> 新建 round 2）
+    - manuscripts.status 推进到 revision_requested
+    """
+
+    editor = make_user(email="editor_resubmitted@example.com")
+    set_admin_emails([editor.email])
+
+    author = make_user(email="author_resubmitted@example.com")
+
+    manuscript_id = str(uuid4())
+    v2_path = f"{manuscript_id}/v2_resubmitted.pdf"
+    _require_revision_schema(supabase_admin_client)
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="resubmitted",
+        version=2,
+        file_path=v2_path,
+        title="Resubmitted Manuscript",
+    )
+
+    try:
+        # 先模拟历史上已经有一轮修订（round 1 已提交）
+        supabase_admin_client.table("revisions").insert(
+            {
+                "manuscript_id": manuscript_id,
+                "round_number": 1,
+                "decision_type": "major",
+                "editor_comment": "Round 1 comment",
+                "status": "submitted",
+                "response_letter": "Round 1 response",
+            }
+        ).execute()
+
+        # Editor 再退回小修（round 2）
+        res = await client.post(
+            "/api/v1/editor/revisions",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "manuscript_id": manuscript_id,
+                "decision_type": "minor",
+                "comment": "Please make minor fixes.",
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["success"] is True
+        assert body["data"]["round_number"] == 2
+        assert body["data"]["status"] == "pending"
+
+        ms = (
+            supabase_admin_client.table("manuscripts")
+            .select("status")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert ms["status"] == "revision_requested"
+    finally:
+        _cleanup_revision_artifacts(supabase_admin_client, manuscript_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_rbac_enforcement(
     client: AsyncClient,
     supabase_admin_client,

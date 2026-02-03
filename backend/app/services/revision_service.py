@@ -117,7 +117,7 @@ class RevisionService:
         Editor 请求修订 (User Story 1)
 
         中文注释:
-        1. 验证稿件状态是否允许请求修订（under_review / pending_decision）
+        1. 验证稿件状态是否允许请求修订（under_review / pending_decision / resubmitted）
         2. 创建当前版本的快照（manuscript_version）
         3. 创建 revision 记录
         4. 更新稿件状态为 revision_requested
@@ -130,7 +130,9 @@ class RevisionService:
             return {"success": False, "error": "Manuscript not found"}
 
         current_status = manuscript.get("status", "")
-        allowed_statuses = ["under_review", "pending_decision"]
+        # 中文注释:
+        # - resubmitted：作者修回后，Editor 可能仍需“再退回一轮小修/大修”，MVP 允许此操作。
+        allowed_statuses = ["under_review", "pending_decision", "resubmitted"]
         if current_status not in allowed_statuses:
             return {
                 "success": False,
