@@ -40,6 +40,7 @@ Sync Impact Report:
 - **Backend**: Python, FastAPI, Pydantic.
 - **Database/Auth**: Supabase (PostgreSQL).
 - **Environment Assumptions**: Cloud Supabase as default.
+- **密钥管理（强约束）**：真实密钥只放本地/CI/平台 Secrets；仓库只保留模板（`.env.example` / `backend/.env.example` / `frontend/.env.local.example`）。严禁提交 `SUPABASE_SERVICE_ROLE_KEY` 等敏感信息；如误提交必须立即轮换密钥。
 - **AI 解析（重要事实）**：
   - **PDF 文本提取是本地库**（`pdfplumber`，仅前几页 + 字符截断）。
   - **元数据抽取是本地解析**：`backend/app/core/ai_engine.py` 优先使用 PDF 版面信息（字号/位置）+ 轻量规则/正则提取 title/abstract/authors（无 HTTP、无远程大模型依赖；可用 `PDF_LAYOUT_MAX_PAGES` / `PDF_LAYOUT_MAX_LINES` 调整版面扫描范围）。

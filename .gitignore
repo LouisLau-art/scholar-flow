@@ -5,6 +5,8 @@ build/
 .next/
 *.log
 .env*
+!.env*.example
+!.env.example
 
 # Python
 __pycache__/
@@ -37,6 +39,10 @@ htmlcov/
 # Local scratch files (do not commit)
 /Text File.txt
 /apple-touch-icon.png
+
+# Local deploy env files (do not commit)
+/deploy/*.env
+/deploy/*.env.*
 
 # Local dev artifacts (do not commit)
 /academic_paper_*.pdf

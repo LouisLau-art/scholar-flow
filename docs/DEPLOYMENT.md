@@ -17,6 +17,14 @@
 3. **后端生产环境必须关闭 dev-login**
    - Render 上设置：`GO_ENV=prod`（或任何非 `dev` 值）
 
+4. **环境变量模板（推荐）**
+   - 本仓库提供可复制模板（不含任何密钥）：
+     - `.env.example`（root）
+     - `backend/.env.example`
+     - `frontend/.env.local.example`
+   - 本地开发：复制为对应的 `.env` / `backend/.env` / `frontend/.env.local`
+   - 部署：把同名变量填到 Vercel / Render 的环境变量面板
+
 ---
 
 ## 1) 后端部署到 Render（FastAPI）
