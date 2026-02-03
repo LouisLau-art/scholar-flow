@@ -25,6 +25,13 @@
    - 本地开发：复制为对应的 `.env` / `backend/.env` / `frontend/.env.local`
    - 部署：把同名变量填到 Vercel / Render 的环境变量面板
 
+5. **一键生成可导入的 `.env` 文件（推荐）**
+   - 你本地填好 `.env` / `backend/.env` / `frontend/.env.local` 后执行：
+     - `./scripts/gen-deploy-env.sh`
+   - 会生成（已 gitignore，不会提交）：
+     - `deploy/render.env`（Render 导入）
+     - `deploy/vercel.env`（Vercel 导入）
+
 ---
 
 ## 1) 后端部署到 Render（FastAPI）
