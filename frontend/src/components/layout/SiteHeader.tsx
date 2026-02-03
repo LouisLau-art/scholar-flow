@@ -2,16 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Search, Menu, X, ChevronDown, User as UserIcon, Globe } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { getCmsMenu } from '@/services/cms'
 import { useProfile } from '@/hooks/useProfile'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export default function SiteHeader() {
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   
   // Use React Query for profile data (handles caching & updates)
   const { profile } = useProfile()
@@ -68,6 +75,16 @@ export default function SiteHeader() {
     window.location.href = '/' // Force reload to clear query cache
   }
 
+  const handleSearch = () => {
+    const q = searchQuery.trim()
+    setIsSearchOpen(false)
+    if (!q) {
+      router.push('/search')
+      return
+    }
+    router.push(`/search?q=${encodeURIComponent(q)}`)
+  }
+
   // Display Name: Full Name > Email > "User"
   const displayName = profile?.full_name || profile?.email || 'User'
   const displayAvatar = profile?.avatar_url
@@ -111,7 +128,12 @@ export default function SiteHeader() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-6">
-            <button className="hidden sm:block text-slate-400 hover:text-white transition-colors">
+            <button
+              type="button"
+              aria-label="Search"
+              onClick={() => setIsSearchOpen(true)}
+              className="hidden sm:block text-slate-400 hover:text-white transition-colors"
+            >
               <Search className="h-5 w-5" />
             </button>
             <div className="h-6 w-px bg-slate-800 hidden sm:block" />
@@ -166,6 +188,37 @@ export default function SiteHeader() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>搜索</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              autoFocus
+              value={searchQuery}
+              placeholder="输入关键词（标题 / 摘要 / DOI）"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearch()
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsSearchOpen(false)}
+              >
+                取消
+              </Button>
+              <Button type="button" onClick={handleSearch}>
+                搜索
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Mega Menu */}
       {isMegaMenuOpen && (

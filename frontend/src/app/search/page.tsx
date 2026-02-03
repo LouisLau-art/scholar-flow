@@ -14,7 +14,7 @@ function SearchContent() {
   const mode = searchParams.get('mode')
   const [results, setResults] = useState<any[]>([])
   const [fallback, setFallback] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     async function doSearch() {
@@ -22,9 +22,11 @@ function SearchContent() {
       setResults([])
       setFallback([])
       try {
+        const q = (query || '').trim()
+        if (!q) return
         const currentMode = mode || 'articles'
         const res = await fetch(
-          `/api/v1/manuscripts/search?q=${encodeURIComponent(query || '')}&mode=${currentMode}`,
+          `/api/v1/manuscripts/search?q=${encodeURIComponent(q)}&mode=${currentMode}`,
         )
         const data = await res.json()
         if (data.success) setResults(data.results || [])
@@ -69,7 +71,14 @@ function SearchContent() {
         setIsLoading(false)
       }
     }
-    if (query) doSearch()
+    const q = (query || '').trim()
+    if (!q) {
+      setIsLoading(false)
+      setResults([])
+      setFallback([])
+      return
+    }
+    doSearch()
   }, [query, mode])
 
   const currentMode = mode || 'articles'
@@ -109,15 +118,37 @@ function SearchContent() {
         <header className="mb-12 border-b border-slate-200 pb-8">
           <h1 className="text-3xl font-serif font-bold text-slate-900 flex items-center gap-4">
             <SearchIcon className="h-8 w-8 text-blue-600" />
-            Search Results for &quot;{query}&quot;
+            {((query || '').trim() ? (
+              <>Search Results for &quot;{query}&quot;</>
+            ) : (
+              <>Search</>
+            ))}
           </h1>
-          <p className="mt-2 text-slate-500 font-medium">Showing top results in {currentMode}</p>
+          <p className="mt-2 text-slate-500 font-medium">
+            {((query || '').trim()
+              ? `Showing top results in ${currentMode}`
+              : '请输入关键词后回车搜索（例如：title / DOI）')}
+          </p>
         </header>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-40">
             <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
             <p className="text-slate-400 font-medium tracking-widest uppercase text-xs">Aggregating Global Research...</p>
+          </div>
+        ) : !((query || '').trim()) ? (
+          <div className="bg-white rounded-3xl border border-slate-100 p-10">
+            <div className="max-w-xl space-y-4">
+              <p className="text-slate-700 font-semibold">快速开始</p>
+              <p className="text-sm text-slate-500">
+                点击右上角搜索按钮，或在地址栏使用 <span className="font-mono">/search?q=关键词</span>。
+              </p>
+              <div className="flex flex-wrap gap-2 text-sm">
+                <Link href="/search?q=doi" className="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200">doi</Link>
+                <Link href="/search?q=energy" className="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200">energy</Link>
+                <Link href="/search?q=review" className="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200">review</Link>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
