@@ -245,14 +245,22 @@ async def upload_production_file(
     except Exception as e:
         err = str(e)
         print(f"[Production] update final_pdf_path failed: {err}")
-        if "final_pdf_path" in err.lower() and "column" in err.lower():
-            raise HTTPException(
-                status_code=500,
-                detail="Database schema missing final_pdf_path. Please apply migrations for Feature 024.",
-            )
+        lowered = err.lower()
+        if "final_pdf_path" in lowered and ("column" in lowered or "schema cache" in lowered):
+            # MVP 提速：Production Gate 默认关闭；字段缺失时允许“只上传、不落库”
+            if _is_truthy_env("PRODUCTION_GATE_ENABLED", "0"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Database schema missing final_pdf_path. Please apply migrations for Feature 024.",
+                )
+            return {
+                "success": True,
+                "data": {"final_pdf_path": path, "persisted": False},
+                "warning": "final_pdf_path column missing; uploaded file is not linked to manuscript (MVP mode).",
+            }
         raise HTTPException(status_code=500, detail="Failed to update production file path")
 
-    return {"success": True, "data": {"final_pdf_path": path}}
+    return {"success": True, "data": {"final_pdf_path": path, "persisted": True}}
 
 
 @router.post("/manuscripts/{manuscript_id}/publish")

@@ -210,8 +210,14 @@ async def get_editor_pipeline(
         approved_data = _extract_supabase_data(approved_resp) or []
         approved = []
         for item in approved_data:
-            invoices = item.get("invoices") or []
-            inv = invoices[0] if isinstance(invoices, list) and invoices else {}
+            invoices = item.get("invoices")
+            # PostgREST 1:1 关联可能返回 dict（而不是 list）
+            if isinstance(invoices, dict):
+                inv = invoices
+            elif isinstance(invoices, list):
+                inv = invoices[0] if invoices else {}
+            else:
+                inv = {}
             item["invoice_amount"] = inv.get("amount")
             item["invoice_status"] = inv.get("status")
             if "invoices" in item:
