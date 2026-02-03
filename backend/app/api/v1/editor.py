@@ -532,6 +532,17 @@ async def submit_final_decision(
                 print(f"[Financial] Failed to upsert invoice: {e}")
                 raise HTTPException(status_code=500, detail="Failed to create invoice")
 
+        # === MVP: 决策后取消未完成的审稿任务（避免 Reviewer 继续看到该稿件）===
+        # 中文注释:
+        # - MVP 允许 Editor 在 under_review 阶段直接做 accept/reject（不强制等到 pending_decision）。
+        # - 若存在未提交的 reviewer，应该将其 assignment 标记为 cancelled，避免 Reviewer 端继续显示任务。
+        try:
+            supabase_admin.table("review_assignments").update({"status": "cancelled"}).eq(
+                "manuscript_id", manuscript_id
+            ).eq("status", "pending").execute()
+        except Exception as e:
+            print(f"[Decision] cancel pending review_assignments failed (ignored): {e}")
+
         # === 通知中心 (Feature 011) ===
         # 中文注释:
         # 1) 稿件决策变更属于核心状态变化：作者必须同时收到站内信 + 邮件（异步）。

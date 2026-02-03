@@ -181,6 +181,17 @@ class RevisionService:
                 "error": f"Failed to update manuscript status: {e}",
             }
 
+        # 6. 取消未完成的审稿任务（避免 Reviewer 继续看到该稿件）
+        # 中文注释:
+        # - MVP 允许 Editor “不等所有 reviewer 回应就直接做决定/退修”。
+        # - 一旦进入 revision_requested，未完成的 review_assignments 应视为作废。
+        try:
+            self.client.table("review_assignments").update({"status": "cancelled"}).eq(
+                "manuscript_id", manuscript_id
+            ).eq("status", "pending").execute()
+        except Exception as e:
+            print(f"[RevisionService] cancel pending review_assignments failed (ignored): {e}")
+
         return {
             "success": True,
             "data": {

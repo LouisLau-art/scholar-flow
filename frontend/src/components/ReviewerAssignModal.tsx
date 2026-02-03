@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, Search, Users, Check, UserPlus } from 'lucide-react'
 import { InviteReviewerDialog } from '@/components/admin/InviteReviewerDialog'
 import { adminUserService } from '@/services/admin/userService'
@@ -246,18 +246,28 @@ export default function ReviewerAssignModal({
   }
 
   // Derived state for quick lookup
-  const assignedIds = existingReviewers.map(r => r.reviewer_id)
+  const assignedIds = useMemo(
+    () =>
+      (existingReviewers || [])
+        .map((r) => String(r?.reviewer_id || '').trim())
+        .filter(Boolean),
+    [existingReviewers]
+  )
 
-  const pinnedAssignedUsers: User[] = existingReviewers
-    .map((r) => ({
-      id: String(r.reviewer_id),
-      email: String(r.reviewer_email || ''),
-      full_name: (r.reviewer_name ? String(r.reviewer_name) : null) as any,
-      roles: ['reviewer'] as any,
-      created_at: '',
-      is_verified: true,
-    }))
-    .filter((u) => u.id && u.email)
+  const pinnedAssignedUsers: User[] = useMemo(
+    () =>
+      (existingReviewers || [])
+        .map((r) => ({
+          id: String(r?.reviewer_id || '').trim(),
+          email: String(r?.reviewer_email || '').trim(),
+          full_name: (r?.reviewer_name ? String(r.reviewer_name) : null) as any,
+          roles: ['reviewer'] as any,
+          created_at: '',
+          is_verified: true,
+        }))
+        .filter((u) => u.id && u.email),
+    [existingReviewers]
+  )
 
   const toggleReviewer = (reviewerId: string) => {
     // Prevent toggling if already assigned (though UI should disable it)
@@ -272,25 +282,27 @@ export default function ReviewerAssignModal({
 
   if (!isOpen) return null
 
-  const reviewerById = new Map(reviewers.map((r) => [r.id, r]))
-  const mergedList: User[] = [
-    // 置顶：已分配的审稿人（即便不在 reviewer pool 里也要显示）
-    ...pinnedAssignedUsers.map((u) => reviewerById.get(u.id) || u),
-    // 其余候选（去重）
-    ...reviewers.filter((r) => !assignedIds.includes(r.id)),
-  ]
+  const orderedReviewers: User[] = useMemo(() => {
+    const assignedSet = new Set(assignedIds)
+    const reviewerById = new Map(reviewers.map((r) => [r.id, r]))
+    const mergedList: User[] = [
+      // 置顶：已分配的审稿人（即便不在 reviewer pool 里也要显示）
+      ...pinnedAssignedUsers.map((u) => reviewerById.get(u.id) || u),
+      // 其余候选（去重）
+      ...reviewers.filter((r) => !assignedSet.has(r.id)),
+    ]
 
-  const orderedReviewers: User[] = mergedList
-    .slice()
-    .sort((a, b) => {
-      const aAssigned = assignedIds.includes(a.id)
-      const bAssigned = assignedIds.includes(b.id)
+    // 重要：排序只应由“数据变化”触发，避免在 onSelect/checked 改变时导致列表跳动
+    return mergedList.slice().sort((a, b) => {
+      const aAssigned = assignedSet.has(a.id)
+      const bAssigned = assignedSet.has(b.id)
       if (aAssigned !== bAssigned) return aAssigned ? -1 : 1
 
       const aName = (a.full_name || a.email || '').toLowerCase()
       const bName = (b.full_name || b.email || '').toLowerCase()
       return aName.localeCompare(bName)
     })
+  }, [assignedIds, pinnedAssignedUsers, reviewers])
 
   const currentOwnerLabel = (() => {
     if (!ownerId) return 'Unassigned'
