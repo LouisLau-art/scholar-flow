@@ -10,6 +10,7 @@
 
 生成文件：
 - `deploy/render.env`：给 Render（后端）
+- `deploy/railway.env`：给 Railway（后端，Render 替代方案）
 - `deploy/vercel.env`：给 Vercel（前端）
 
 注意：

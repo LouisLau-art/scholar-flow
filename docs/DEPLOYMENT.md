@@ -1,4 +1,4 @@
-# 部署指南（Vercel + Render，云端 Supabase）
+# 部署指南（Vercel + Render/Railway，云端 Supabase）
 
 本项目默认使用**云端 Supabase**（`mmvulyrfsorqdpdrzbkd`）作为数据库/鉴权/存储。
 
@@ -56,6 +56,20 @@
 - `MATCHMAKING_WARMUP=1`（可选：后端启动后异步预热 embedding 模型，避免 editor 第一次点“AI 推荐”卡顿）
 
 > 说明：如果 Render 没有挂载持久化磁盘，HuggingFace 模型缓存可能在每次重新部署后需要重新下载；这是平台行为，不是代码 bug。
+
+---
+
+## 1.5) Render 的免信用卡替代：Railway（FastAPI，MVP 推荐）
+
+如果 Render 强制绑卡，你可以用 Railway 作为后端托管（通常更“省事儿”）。
+
+Railway 配置建议：
+- 连接 GitHub 仓库后，**Root Directory 选择 `backend`**
+- Start Command：`uvicorn main:app --host 0.0.0.0 --port $PORT`
+- 环境变量：同 Render（至少 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `FRONTEND_ORIGIN` / `GO_ENV=prod`）
+
+生成可粘贴的 Railway env：
+- 运行 `./scripts/gen-deploy-env.sh` 后使用 `deploy/railway.env`（不要提交到 GitHub）
 
 ---
 
