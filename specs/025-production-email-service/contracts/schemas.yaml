@@ -1,0 +1,37 @@
+components:
+  schemas:
+    EmailLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipient:
+          type: string
+          format: email
+        subject:
+          type: string
+        template_name:
+          type: string
+        status:
+          type: string
+          enum: [sent, failed]
+        provider_id:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        retry_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - recipient
+        - subject
+        - template_name
+        - status
+        - retry_count
+        - created_at

@@ -350,8 +350,30 @@ async def request_revision(
                 content=f"Editor has requested a {request.decision_type} revision for '{title}'.",
             )
 
-            # TODO (T024): 异步发送邮件
-            # if background_tasks: ...
+            # Feature 025: Send Email
+            if background_tasks:
+                try:
+                    prof = supabase_admin.table("user_profiles").select("email, full_name").eq("id", str(author_id)).single().execute()
+                    pdata = getattr(prof, "data", None) or {}
+                    author_email = pdata.get("email")
+                    recipient_name = pdata.get("full_name") or "Author"
+                    
+                    if author_email:
+                        from app.core.mail import email_service
+                        background_tasks.add_task(
+                            email_service.send_email_background,
+                            to_email=author_email,
+                            subject="Revision Requested",
+                            template_name="status_update.html",
+                            context={
+                                "recipient_name": recipient_name,
+                                "manuscript_title": title,
+                                "decision_label": f"{request.decision_type.capitalize()} Revision Requested",
+                                "comment": request.comment or "Please check the portal for details.",
+                            }
+                        )
+                except Exception as e:
+                    print(f"[Email] Failed to send revision email: {e}")
 
     except Exception as e:
         print(f"[Notifications] Failed to send revision notification: {e}")
@@ -626,24 +648,40 @@ async def submit_final_decision(
                 author_email = None
 
             if author_email and background_tasks is not None:
-                email_service = EmailService()
+                from app.core.mail import email_service
+                # 1. Decision Email
                 background_tasks.add_task(
-                    email_service.send_template_email,
+                    email_service.send_email_background,
                     to_email=author_email,
                     subject=decision_title,
-                    template_name="decision.html",
+                    template_name="status_update.html",
                     context={
-                        "subject": decision_title,
                         "recipient_name": author_email.split("@")[0]
                         .replace(".", " ")
                         .title(),
                         "manuscript_title": manuscript_title,
-                        "manuscript_id": manuscript_id,
-                        "decision_title": decision_title,
                         "decision_label": decision_label,
                         "comment": comment or "",
                     },
                 )
+
+                # 2. Invoice Email (Feature 025)
+                if decision == "accept" and apc_amount and apc_amount > 0:
+                    frontend_base_url = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+                    invoice_link = f"{frontend_base_url}/dashboard"
+                    
+                    background_tasks.add_task(
+                        email_service.send_email_background,
+                        to_email=author_email,
+                        subject="Invoice Generated",
+                        template_name="invoice.html",
+                        context={
+                            "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                            "manuscript_title": manuscript_title,
+                            "amount": f"{apc_amount:,.2f}",
+                            "link": invoice_link
+                        }
+                    )
 
         return {
             "success": True,
@@ -719,17 +757,15 @@ async def publish_manuscript_dev(
                         author_name = "Author"
 
                     if author_email:
-                        email_service = EmailService()
+                        from app.core.mail import email_service
                         background_tasks.add_task(
-                            email_service.send_template_email,
+                            email_service.send_email_background,
                             to_email=author_email,
                             subject="Your article has been published",
                             template_name="published.html",
                             context={
-                                "subject": "Your article has been published",
                                 "recipient_name": author_name,
                                 "manuscript_title": title,
-                                "manuscript_id": manuscript_id,
                                 "doi": published.get("doi"),
                             },
                         )

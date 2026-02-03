@@ -54,6 +54,8 @@
 - `PLAGIARISM_CHECK_ENABLED=0`（MVP 默认关闭查重）
 - `PRODUCTION_GATE_ENABLED=0`（MVP 默认只做 Payment Gate；若要强制 production final PDF 才能发布，设为 `1` 并确保云端已执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）
 - `MATCHMAKING_WARMUP=1`（可选：后端启动后异步预热 embedding 模型，避免 editor 第一次点“AI 推荐”卡顿）
+- `RESEND_API_KEY`（可选）：Resend API Key（不填则回退到 mock 模式，只记录日志）
+- `EMAIL_SENDER`（可选）：默认 `ScholarFlow <onboarding@resend.dev>`
 
 > 说明：如果 Render 没有挂载持久化磁盘，HuggingFace 模型缓存可能在每次重新部署后需要重新下载；这是平台行为，不是代码 bug。
 

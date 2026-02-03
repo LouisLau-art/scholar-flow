@@ -227,7 +227,9 @@ async def assign_reviewer(
             reviewer_email = None
 
         if reviewer_email:
-            token = secrets.token_urlsafe(32)
+            # Feature 025: Use signed tokens
+            from app.core.mail import email_service
+            token = email_service.create_token(reviewer_email, salt="review-invite")
             expiry_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
             try:
                 supabase_admin.table("review_reports").insert(
@@ -247,21 +249,15 @@ async def assign_reviewer(
                 "FRONTEND_BASE_URL", "http://localhost:3000"
             ).rstrip("/")
             review_url = f"{frontend_base_url}/review/{token}"
-            email_service = EmailService()
+            
             background_tasks.add_task(
-                email_service.send_template_email,
+                email_service.send_email_background,
                 to_email=reviewer_email,
                 subject="Invitation to Review",
-                template_name="review_invite.html",
+                template_name="reviewer_invite.html",
                 context={
-                    "subject": "Invitation to Review",
-                    "recipient_name": reviewer_email.split("@")[0]
-                    .replace(".", " ")
-                    .title(),
+                    "link": review_url,
                     "manuscript_title": manuscript_title,
-                    "manuscript_id": str(manuscript_id),
-                    "due_at": due_at,
-                    "review_url": review_url,
                 },
             )
 

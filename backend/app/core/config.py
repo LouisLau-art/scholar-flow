@@ -196,3 +196,24 @@ class CrossrefConfig:
             journal_title=journal_title,
             journal_issn=journal_issn,
         )
+
+
+@dataclass(frozen=True)
+class ResendConfig:
+    """
+    Resend API Configuration (Feature 025 - Production Email)
+    """
+    api_key: str
+    sender: str
+
+    @staticmethod
+    def from_env() -> Optional["ResendConfig"]:
+        api_key = (os.environ.get("RESEND_API_KEY") or "").strip()
+        if not api_key:
+            return None
+        
+        sender = (
+            os.environ.get("EMAIL_SENDER") or "ScholarFlow <onboarding@resend.dev>"
+        ).strip()
+        
+        return ResendConfig(api_key=api_key, sender=sender)
