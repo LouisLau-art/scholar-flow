@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowLeft, DollarSign, CheckCircle2, RotateCcw, FileText } from 'lucide-react'
+import SiteHeader from '@/components/layout/SiteHeader'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,8 +40,9 @@ export default function FinanceDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-5xl">
+    <div className="min-h-screen bg-slate-50">
+      <SiteHeader />
+      <div className="mx-auto max-w-5xl p-8">
         <header className="mb-10 border-b border-slate-200 pb-6">
           <div className="flex items-center justify-between gap-4">
             <button
