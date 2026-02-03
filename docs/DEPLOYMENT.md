@@ -55,13 +55,13 @@
 本项目大量前端请求使用相对路径 `/api/v1/...`，依赖 `frontend/next.config.mjs` 的 rewrites。
 因此 **Vercel 必须设置 `BACKEND_ORIGIN`**（否则会默认指向本地 `127.0.0.1:8000` 而失败）。
 
-### B. Vercel 环境变量（必填）
+### C. Vercel 环境变量（必填）
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `BACKEND_ORIGIN`：你的 Render 后端基址，例如 `https://scholarflow-backend.onrender.com`
 
-### C. Vercel 环境变量（可选）
+### D. Vercel 环境变量（可选）
 
 - `APP_ENV=production` / `staging`（若你启用了 staging banner 逻辑）
 
