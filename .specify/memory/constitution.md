@@ -53,6 +53,24 @@ Sync Impact Report:
   - MVP 允许人工确认到账：`POST /api/v1/editor/invoices/confirm` 将 invoice 标记为 `paid`。
   - 云端若存在旧数据 `status='revision_required'`，需执行 `supabase/migrations/20260203120000_status_cleanup.sql` 完成数据纠正。
 
+## MVP 范围与延期清单（必须显式）
+
+为保证“尽快上线/尽快验证业务闭环”，以下能力在 **MVP 阶段明确延期/降级**。任何 Agent 在实现相关需求时必须遵循本清单，避免返工与复杂度失控。
+
+### 已延期/降级的能力
+- **Magic Link（生产级）**：本地不稳定，MVP 默认使用 reviewer token 页面 + `dev-login` 辅助测试；生产级 Magic Link 稳定性留到后续迭代。
+- **数据库全量 RLS**：MVP 主要依赖后端 API 鉴权 + `service_role` 访问；不要求对 `manuscripts/review_assignments/review_reports` 全量补齐 RLS（但前端严禁持有 `service_role key`）。
+- **DOI/Crossref 真对接**：可保留 schema/占位字段，但不做真实注册与异步任务闭环。
+- **查重（iThenticate/mock）**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不阻塞上传/修订链路。
+- **账单 PDF 生成与存储闭环**：MVP 只要求 Payment Gate 逻辑可用；`pdf_url`/账单下载、支付渠道、对账自动化留后。
+- **通知群发（给所有 editor/admin）**：为避免 mock 用户导致的 409 日志刷屏，MVP 禁止对“所有 editor”群发通知；改为只通知稿件 `owner_id/editor_id`（或仅作者自通知）。
+- **修订 Response Letter 图片上传到 Storage**：MVP 不做图片入库/权限/RLS；改为前端把图片压缩后以 Data URL 直接嵌入富文本（有限制体积）。
+- **“论文详情/Response Letter”的长期可扩展富媒体**：MVP 允许简化实现（文本/少量内嵌图片），不追求可迁移、可检索、可复用的媒体资产体系。
+
+### 仍然必须保证的底线
+- **安全底线**：敏感读写必须鉴权；`service_role` 永不下发到前端；Storage 访问默认走后端 signed URL。
+- **门禁底线**：`approved` → `published` 必须通过 Payment Gate；MVP 可人工 `Mark Paid`。
+
 ## Development Workflow
 
 - **单人开发提速（默认模式）**：本项目当前为“单人 + 单机 + 单目录”开发，默认不走 PR / review / auto-merge 流程；直接在工作分支小步提交并 `git push` 同步到 GitHub 作为备份与回滚点。

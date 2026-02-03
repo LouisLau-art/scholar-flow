@@ -28,6 +28,15 @@
   - **人工确认到账（MVP）**：Editor 在 Pipeline 的 Approved 卡片上可点 `Mark Paid`，调用 `POST /api/v1/editor/invoices/confirm` 把 invoice 标记为 `paid` 后才能发布。
   - **云端数据清理**：若云端存在 `status='revision_required'` 的旧数据，需要在 Supabase Dashboard 的 SQL Editor 执行 `supabase/migrations/20260203120000_status_cleanup.sql`（或直接跑其中的 `update public.manuscripts ...`）以迁移到 `rejected`。
 
+## MVP 已砍/延期清单（提速约束，三份文档需一致）
+- **Magic Link（生产级）**：MVP 不做稳定化；本地默认用 reviewer token 页面 + `dev-login` 测试。
+- **全量 RLS**：MVP 主要靠后端鉴权 + `service_role`；不强制把 `manuscripts/review_assignments/review_reports` 的 RLS 全补齐（但前端严禁持有 `service_role key`）。
+- **DOI/Crossref 真对接**：保留 schema/占位即可，不做真实注册与异步任务闭环。
+- **查重**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不进入关键链路。
+- **账单 PDF 存储/下载闭环**：MVP 只保留 Payment Gate + 人工确认到账；PDF/支付渠道后置。
+- **通知群发**：MVP 禁止给所有 editor/admin 群发通知（会引发云端 mock 用户导致的 409 日志刷屏）；仅通知 `owner_id/editor_id` 或作者本人。
+- **修订 Response Letter 图片上传**：MVP 不做上传到 Storage；改为前端压缩后以 Data URL 内嵌（有体积限制）。
+
 ## 项目结构
 
 ```text
