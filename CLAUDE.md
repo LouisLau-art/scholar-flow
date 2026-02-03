@@ -21,6 +21,12 @@
 - **Supabase 使用云端项目**（非本地 DB 作为默认）；迁移优先用 `supabase` CLI（`supabase login` / `supabase link` / `supabase db push --linked`），必要时可在 Dashboard 的 SQL Editor 手动执行迁移 SQL。
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
 - **AI 推荐模型缓存（本地 CPU）**：Matchmaking 使用 `sentence-transformers`（本地推理），首次可能从 Hugging Face 下载模型；`./start.sh` 默认将缓存放到 `./.cache/` 以便“下载一次后复用”，并默认设置 `HF_ENDPOINT=https://hf-mirror.com`（如需改回官方源可在环境变量里覆盖）。
+- **MVP 状态机与财务门禁（重要约定）**：
+  - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
+  - **修回等待**：需要作者修回使用 `status='revision_requested'`（作者在 `/submit-revision/[id]` 提交后进入 `resubmitted`）。
+  - **录用与门禁**：录用进入 `approved` 并创建/更新 `invoices`；**Publish 必须通过 Payment Gate**（`amount>0` 且 `status!=paid` 时禁止发布）。
+  - **人工确认到账（MVP）**：Editor 在 Pipeline 的 Approved 卡片上可点 `Mark Paid`，调用 `POST /api/v1/editor/invoices/confirm` 把 invoice 标记为 `paid` 后才能发布。
+  - **云端数据清理**：若云端存在 `status='revision_required'` 的旧数据，需要在 Supabase Dashboard 的 SQL Editor 执行 `supabase/migrations/20260203120000_status_cleanup.sql`（或直接跑其中的 `update public.manuscripts ...`）以迁移到 `rejected`。
 
 ## 项目结构
 

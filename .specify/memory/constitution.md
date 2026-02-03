@@ -46,6 +46,12 @@ Sync Impact Report:
   - **成本/耗时约束**：严禁在上传链路引入远程大模型网络调用；必须截断页数与字符数，保证上传响应可预测。
 - **日志（可观测性）**：`./start.sh` 必须同时满足“终端实时可见 + 文件持久化”，默认输出到 `logs/backend.log` 与 `logs/frontend.log`（最新别名）。
 - **AI 推荐模型缓存（性能）**：Matchmaking（审稿人推荐）使用 `sentence-transformers` 本地 CPU 推理；首次启动可能需要下载模型，必须启用本地缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
+- **MVP 状态机与财务门禁（强约束）**：
+  - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
+  - Revision 必须进入 `status='revision_requested'`（等待作者修回）；作者提交修订后进入 `resubmitted`。
+  - Accept 必须进入 `approved` 并写入 `invoices`；Publish 必须做 Payment Gate：`amount>0` 且 `status!=paid` 则禁止发布。
+  - MVP 允许人工确认到账：`POST /api/v1/editor/invoices/confirm` 将 invoice 标记为 `paid`。
+  - 云端若存在旧数据 `status='revision_required'`，需执行 `supabase/migrations/20260203120000_status_cleanup.sql` 完成数据纠正。
 
 ## Development Workflow
 
