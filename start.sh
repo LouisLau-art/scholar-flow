@@ -47,6 +47,15 @@ export MATCHMAKING_WARMUP="${MATCHMAKING_WARMUP:-1}"
 echo "🧹 Cleaning up old processes..."
 pkill -f "uvicorn main:app" || true
 pkill -f "next dev" || true
+pkill -f "pnpm dev" || true
+
+# 2.2 清理 Next.js dev 缓存（避免切分支/合并后 .next 里残留导致 404 / MODULE_NOT_FOUND）
+# 默认开启：宁可多花几秒重建，也避免出现大量“_next/static 404 / Cannot find module './xxx.js' / favicon 500”
+export CLEAN_FRONTEND_NEXT_CACHE="${CLEAN_FRONTEND_NEXT_CACHE:-1}"
+if [ "$CLEAN_FRONTEND_NEXT_CACHE" = "1" ]; then
+  echo "🧽 Cleaning Next.js cache (frontend/.next)..."
+  rm -rf frontend/.next 2>/dev/null || true
+fi
 
 # 2.5 准备日志目录与文件（每次启动生成独立文件，并让 logs/backend.log 指向“最新一次”）
 mkdir -p logs
