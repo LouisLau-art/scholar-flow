@@ -5,6 +5,7 @@ from fastapi import (
     BackgroundTasks,
     HTTPException,
     Body,
+    Form,
     Depends,
 )
 from fastapi.responses import JSONResponse
@@ -341,7 +342,7 @@ async def upload_manuscript(
 async def submit_revision(
     manuscript_id: UUID,
     background_tasks: BackgroundTasks,
-    response_letter: str = Body(..., embed=True),
+    response_letter: str = Form(...),
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
 ):
@@ -424,26 +425,24 @@ async def submit_revision(
             content=f"Your revision for '{manuscript.get('title')}' has been submitted.",
         )
 
-        # 通知 Editor (需查找 KPI Owner 或所有 Editor)
-        # 简单起见，通知所有 Editor
-        try:
-            editors_res = (
-                supabase_admin.table("user_profiles")
-                .select("id, roles")
-                .or_("roles.cs.{editor},roles.cs.{admin}")
-                .execute()
+        # 通知 Editor（MVP：只通知稿件归属人/编辑，避免给所有 editor 群发且减少云端 mock 用户导致的 409）
+        recipients: set[str] = set()
+        owner_id = manuscript.get("owner_id") or manuscript.get("kpi_owner_id")
+        editor_id = manuscript.get("editor_id")
+        if owner_id:
+            recipients.add(str(owner_id))
+        if editor_id:
+            recipients.add(str(editor_id))
+        recipients.discard(str(current_user["id"]))
+
+        for uid in sorted(recipients):
+            notification_service.create_notification(
+                user_id=uid,
+                manuscript_id=str(manuscript_id),
+                type="system",
+                title="Revision Received",
+                content=f"A revision for '{manuscript.get('title')}' has been submitted.",
             )
-            editors = getattr(editors_res, "data", None) or []
-            for editor in editors:
-                notification_service.create_notification(
-                    user_id=editor["id"],
-                    manuscript_id=str(manuscript_id),
-                    type="system",
-                    title="Revision Received",
-                    content=f"A revision for '{manuscript.get('title')}' has been submitted.",
-                )
-        except Exception:
-            pass
 
     except Exception as e:
         print(f"[Notifications] Failed to send revision notification: {e}")
@@ -727,28 +726,10 @@ async def create_manuscript(
                 content=f"Your manuscript '{manuscript.title}' has been successfully submitted.",
             )
 
-            # 尝试通知编辑（若 user_profiles 存在）
-            try:
-                editors_res = (
-                    supabase_admin.table("user_profiles")
-                    .select("id, roles")
-                    .or_("roles.cs.{editor},roles.cs.{admin}")
-                    .execute()
-                )
-                editors = getattr(editors_res, "data", None) or []
-                for editor_profile in editors:
-                    editor_id = editor_profile.get("id")
-                    if not editor_id:
-                        continue
-                    notification_service.create_notification(
-                        user_id=str(editor_id),
-                        manuscript_id=str(manuscript_id),
-                        type="system",
-                        title="New Submission",
-                        content=f"A new manuscript '{manuscript.title}' is awaiting editorial action.",
-                    )
-            except Exception as e:
-                print(f"[Notifications] 查询编辑列表失败（降级忽略）: {e}")
+            # MVP：不再给“所有编辑”群发通知。
+            # 中文注释:
+            # - Editor Pipeline 本身就能看到 submitted 列表；
+            # - 云端可能存在 mock user_profiles（不对应 auth.users），群发会导致大量 409(外键冲突) 日志刷屏。
 
             # 异步发送邮件（失败不影响主流程）
             try:

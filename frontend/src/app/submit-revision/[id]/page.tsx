@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import TiptapEditor from '@/components/cms/TiptapEditor'
 import { Loader2, Upload, FileText, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
+import { compressImage } from '@/lib/image-utils'
 
 export default function SubmitRevisionPage() {
   const params = useParams()
@@ -24,6 +25,7 @@ export default function SubmitRevisionPage() {
   
   const [responseLetter, setResponseLetter] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [isEmbeddingImage, setIsEmbeddingImage] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -110,6 +112,33 @@ export default function SubmitRevisionPage() {
       toast.error(error.message || 'Submission failed')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const embedImageAsDataUrl = async (file: File): Promise<string> => {
+    if (!file.type.startsWith('image/')) {
+      throw new Error('请选择图片文件')
+    }
+    setIsEmbeddingImage(true)
+    try {
+      // MVP：不走后端存储，直接压缩后以 Data URL 嵌入 response letter（仅用于内部流转）
+      const compressed = await compressImage(file, 1200, 1200, 0.82)
+      const maxBytes = 900 * 1024 // 控制体积，避免 HTML/DB 过大
+      if (compressed.size > maxBytes) {
+        throw new Error('图片过大（已压缩仍 > 900KB），请裁剪后再试')
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(new Error('读取图片失败'))
+        reader.readAsDataURL(compressed)
+      })
+      if (!dataUrl.startsWith('data:image/')) {
+        throw new Error('图片格式不支持')
+      }
+      return dataUrl
+    } finally {
+      setIsEmbeddingImage(false)
     }
   }
 
@@ -204,12 +233,14 @@ export default function SubmitRevisionPage() {
                  <p className="text-sm text-slate-500">
                    Please describe the changes you have made and address the editor's comments point-by-point.
                  </p>
-                 <TiptapEditor 
+               <TiptapEditor 
                    value={responseLetter}
                    onChange={setResponseLetter}
-                   onUploadImage={async () => {
-                     toast.error('Image upload is not supported in response letters.')
-                     return ''
+                   onUploadImage={async (img) => {
+                     if (isEmbeddingImage) {
+                       toast.message('图片处理中，请稍候…')
+                     }
+                     return await embedImageAsDataUrl(img)
                    }}
                  />
                </div>
