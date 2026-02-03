@@ -7,6 +7,7 @@ from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from app.models.revision import RevisionCreate, RevisionRequestResponse
 from app.services.revision_service import RevisionService
+from datetime import timezone
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -245,6 +246,16 @@ async def get_editor_pipeline(
         )
         revision_requested = _extract_supabase_data(revision_requested_resp) or []
 
+        # 已拒稿 (rejected) - 终态归档
+        rejected_resp = (
+            db.table("manuscripts")
+            .select("*")
+            .eq("status", "rejected")
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        rejected = _extract_supabase_data(rejected_resp) or []
+
         return {
             "success": True,
             "data": {
@@ -255,6 +266,7 @@ async def get_editor_pipeline(
                 "pending_decision": pending_decision,
                 "approved": approved,
                 "published": published,
+                "rejected": rejected,
             },
         }
 
@@ -464,8 +476,8 @@ async def submit_final_decision(
 
             update_data = {"status": "approved"}
         else:
-            # 退回：设置为需要修改，添加拒绝理由
-            update_data = {"status": "revision_required", "reject_comment": comment}
+            # 拒稿：进入 rejected 终态（修回请走 /editor/revisions）
+            update_data = {"status": "rejected", "reject_comment": comment}
 
         # 执行更新
         try:
@@ -539,11 +551,11 @@ async def submit_final_decision(
             manuscript_title = "Manuscript"
 
         if author_id:
-            decision_label = "Accepted" if decision == "accept" else "Revision Required"
+            decision_label = "Accepted" if decision == "accept" else "Rejected"
             decision_title = (
                 "Editorial Decision"
                 if decision == "accept"
-                else "Editorial Decision: Revision Required"
+                else "Editorial Decision: Rejected"
             )
 
             NotificationService().create_notification(
@@ -708,6 +720,47 @@ async def publish_manuscript_dev(
         raise HTTPException(status_code=500, detail="Failed to publish manuscript")
 
 
+@router.post("/invoices/confirm")
+async def confirm_invoice_paid(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    manuscript_id: str = Body(..., embed=True),
+):
+    """
+    MVP：财务确认到账（把 invoices.status 置为 paid）。
+
+    中文注释:
+    - 支付渠道/自动对账后续再做；MVP 先提供一个“人工确认到账”入口。
+    - Publish 时会做 Payment Gate 检查：amount>0 且 status!=paid -> 禁止发布。
+    """
+    try:
+        inv_resp = (
+            supabase_admin.table("invoices")
+            .select("id, amount, status")
+            .eq("manuscript_id", manuscript_id)
+            .limit(1)
+            .execute()
+        )
+        inv_rows = getattr(inv_resp, "data", None) or []
+        if not inv_rows:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        inv = inv_rows[0]
+
+        supabase_admin.table("invoices").update(
+            {"status": "paid", "confirmed_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", inv["id"]).execute()
+
+        return {
+            "success": True,
+            "data": {"invoice_id": inv["id"], "manuscript_id": manuscript_id, "status": "paid"},
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Financial] confirm invoice failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to confirm invoice")
+
+
 # 测试端点 - 不需要身份验证
 @router.get("/test/pipeline")
 async def get_editor_pipeline_test():
@@ -798,7 +851,7 @@ async def submit_final_decision_test(
         doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
         status = "published"
     else:
-        status = "revision_required"
+        status = "rejected"
 
     return {
         "success": True,

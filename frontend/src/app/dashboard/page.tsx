@@ -76,7 +76,7 @@ export default function DashboardPage() {
     { label: 'Total Submissions', value: stats?.total_submissions, icon: FileText, color: 'text-blue-600' },
     { label: 'Published', value: stats?.published, icon: CheckCircle, color: 'text-emerald-600' },
     { label: 'Under Review', value: stats?.under_review, icon: Clock, color: 'text-amber-600' },
-    { label: 'Revision Required', value: stats?.revision_required, icon: AlertCircle, color: 'text-rose-600' },
+    { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-slate-600' },
   ]
 
   const canSeeReviewer = Boolean(roles?.includes('reviewer') || roles?.includes('admin'))

@@ -26,6 +26,7 @@ type PipelineStage =
   | 'published'
   | 'resubmitted'
   | 'revision_requested'
+  | 'rejected'
 
 interface EditorPipelineProps {
   onAssign?: (manuscript: Manuscript) => void
@@ -39,17 +40,19 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
   const [activeFilter, setActiveFilter] = useState<PipelineStage | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
 
+  const reloadPipeline = async () => {
+    const token = await authService.getAccessToken()
+    const response = await fetch('/api/v1/editor/pipeline', {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    const data = await response.json()
+    if (data.success) setPipelineData(data.data)
+  }
+
   useEffect(() => {
     async function fetchPipelineData() {
       try {
-        const token = await authService.getAccessToken()
-        const response = await fetch('/api/v1/editor/pipeline', {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
-        const data = await response.json()
-        if (data.success) {
-          setPipelineData(data.data)
-        }
+        await reloadPipeline()
       } catch (error) {
         console.error('Failed to fetch pipeline data:', error)
       } finally {
@@ -123,14 +126,40 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
       setPipelineData((prev: any) => prev) // keep state shape
       // 刷新数据
       setIsLoading(true)
-      const freshToken = await authService.getAccessToken()
-      const freshRes = await fetch('/api/v1/editor/pipeline', {
-        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
-      })
-      const fresh = await freshRes.json()
-      if (fresh?.success) setPipelineData(fresh.data)
+      await reloadPipeline()
     } catch (error) {
       toast.error('Publish failed. Please try again.', { id: toastId })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleConfirmPayment = async (manuscriptId: string) => {
+    const toastId = toast.loading('Confirming payment...')
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.', { id: toastId })
+        return
+      }
+      const response = await fetch('/api/v1/editor/invoices/confirm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ manuscript_id: manuscriptId }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.success) {
+        toast.error(data?.detail || data?.message || 'Confirm payment failed.', { id: toastId })
+        return
+      }
+      toast.success('Payment confirmed.', { id: toastId })
+      setIsLoading(true)
+      await reloadPipeline()
+    } catch {
+      toast.error('Confirm payment failed. Please try again.', { id: toastId })
     } finally {
       setIsLoading(false)
     }
@@ -280,6 +309,26 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           </div>
           <div className="text-sm text-slate-500">Completed</div>
         </button>
+
+        {/* 已拒稿 */}
+        <button
+          type="button"
+          onClick={() => handleFilterClick('rejected')}
+          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            activeFilter === 'rejected'
+              ? 'border-rose-400 bg-rose-50'
+              : 'border-slate-200 hover:border-rose-200 hover:bg-rose-50/50'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Rejected</h3>
+            <FileText className="h-5 w-5 text-rose-600" />
+          </div>
+          <div className="text-3xl font-bold text-rose-600 mb-2">
+            {getData('rejected').length}
+          </div>
+          <div className="text-sm text-slate-500">Archived</div>
+        </button>
       </div>
 
       {/* 详细列表 */}
@@ -405,6 +454,16 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Approved</span>
+                      {waitingPayment && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleConfirmPayment(manuscript.id)}
+                          data-testid="editor-confirm-payment"
+                        >
+                          Mark Paid
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         disabled={waitingPayment}
@@ -454,6 +513,26 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Published</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Rejected */}
+          {hasData('rejected') && (!activeFilter || activeFilter === 'rejected') && (
+            <>
+              {renderSectionHeader('Rejected', getData('rejected').length, 'rejected')}
+              {getData('rejected').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-80">
+                  <div>
+                    <div className="font-medium text-slate-900">{manuscript.title}</div>
+                    <div className="text-sm text-slate-500">
+                      Rejected: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-rose-100 text-rose-700 text-sm font-medium rounded-full">Rejected</span>
                   </div>
                 </div>
               ))}
