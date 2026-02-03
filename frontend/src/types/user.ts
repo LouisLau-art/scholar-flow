@@ -9,6 +9,14 @@ export interface User {
   roles: UserRole[];
   created_at: string;
   is_verified: boolean;
+  
+  // Feature 018 Additions
+  title?: string | null;
+  affiliation?: string | null;
+  orcid_id?: string | null;
+  google_scholar_url?: string | null;
+  avatar_url?: string | null;
+  research_interests?: string[];
 }
 
 // Alias for single user response

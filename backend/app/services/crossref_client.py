@@ -105,12 +105,17 @@ class CrossrefClient:
                     contributor_role="author",
                     sequence=sequence,
                 )
-                etree.SubElement(person_name, "given_name").text = author.get(
-                    "first_name", ""
-                )
-                etree.SubElement(person_name, "surname").text = author.get(
-                    "last_name", ""
-                )
+                # Intelligent name splitting fallback
+                given_name = author.get("first_name", "")
+                surname = author.get("last_name", "")
+                
+                if not given_name and not surname and author.get("full_name"):
+                    parts = author["full_name"].strip().split(" ", 1)
+                    given_name = parts[0]
+                    surname = parts[1] if len(parts) > 1 else ""
+
+                etree.SubElement(person_name, "given_name").text = given_name
+                etree.SubElement(person_name, "surname").text = surname
                 if author.get("affiliation"):
                     affiliations = etree.SubElement(person_name, "affiliations")
                     etree.SubElement(affiliations, "institution").text = author[

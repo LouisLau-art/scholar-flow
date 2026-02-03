@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class OAIPMHVerb(str, Enum):
@@ -36,5 +36,4 @@ class OAIPMHRequest(BaseModel):
     set: Optional[str] = None
     resumptionToken: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

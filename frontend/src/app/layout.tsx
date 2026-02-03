@@ -4,6 +4,9 @@ import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Toast from '@/components/Toast'
 import SiteFooter from '@/components/layout/SiteFooter'
+import QueryProvider from '@/components/providers/QueryProvider'
+
+import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -63,20 +66,6 @@ export const metadata: Metadata = {
       bing: 'bing-verification-code',
     },
   },
-  
-  // Favicon and icons
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
-    apple: '/apple-touch-icon.png',
-    other: [
-      {
-        rel: 'icon',
-        url: '/favicon-32x32.png',
-        sizes: '32x32',
-      },
-    ],
-  },
 }
 
 export default function RootLayout({
@@ -88,7 +77,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ErrorBoundary>
-          {children}
+          <QueryProvider>
+            <EnvironmentProvider>
+              {children}
+            </EnvironmentProvider>
+          </QueryProvider>
         </ErrorBoundary>
         <SiteFooter />
         <Toast />

@@ -1,0 +1,150 @@
+openapi: 3.0.0
+info:
+  title: ScholarFlow API - Core Logic Hardening
+  version: 1.0.0
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+paths:
+  /api/v1/reviews/token/{token}:
+    get:
+      summary: Get review task by token (no-login)
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Review task + manuscript metadata
+        404:
+          description: Token not found
+        410:
+          description: Token expired
+
+  /api/v1/reviews/token/{token}/submit:
+    post:
+      summary: Submit review by token (Dual Channel + Confidential Attachment)
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [content, score]
+              properties:
+                content:
+                  type: string
+                  description: Public comments to the author (required)
+                score:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                confidential_comments_to_editor:
+                  type: string
+                  description: Confidential comments to editor (optional)
+                attachment:
+                  type: string
+                  format: binary
+                  description: Confidential attachment (optional)
+      responses:
+        200:
+          description: Review submitted successfully
+        400:
+          description: Validation error (e.g., missing content or score out of range)
+        404:
+          description: Token not found
+        410:
+          description: Token expired
+
+  /api/v1/reviews/feedback/{manuscript_id}:
+    get:
+      summary: Get review feedback for a manuscript (sanitized for authors)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: manuscript_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Feedback list (author view excludes confidential fields)
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+        404:
+          description: Manuscript not found
+
+  /api/v1/editor/decision:
+    post:
+      summary: Submit editorial decision (Accept + APC)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                manuscript_id:
+                  type: string
+                  format: uuid
+                decision:
+                  type: string
+                  enum: [accept, reject, revision]
+                apc_amount:
+                  type: number
+                  description: Confirmed APC amount (required for 'accept')
+      responses:
+        200:
+          description: Decision recorded and Invoice created/updated
+        400:
+          description: Validation error (e.g., apc_amount missing for accept)
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+
+  /api/v1/editor/publish:
+    post:
+      summary: Publish manuscript (Financial Gate)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                manuscript_id:
+                  type: string
+                  format: uuid
+      responses:
+        200:
+          description: Manuscript published
+        401:
+          description: Unauthorized
+        403:
+          description: Payment Required (Financial Gate Block)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Payment Required: Invoice is unpaid."

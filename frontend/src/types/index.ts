@@ -19,6 +19,8 @@ export interface Manuscript {
   author_id: string;
   editor_id?: string;
   status: ManuscriptStatus;
+  owner_id?: string;
+  // backward-compatible
   kpi_owner_id?: string;
   created_at: string;
   updated_at: string;
@@ -50,6 +52,7 @@ export interface Notification {
   id: string
   user_id: string
   manuscript_id?: string | null
+  action_url?: string | null
   type: NotificationType
   title: string
   content: string

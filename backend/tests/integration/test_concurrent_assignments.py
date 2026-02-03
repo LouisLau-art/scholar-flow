@@ -5,33 +5,98 @@ from unittest.mock import MagicMock, patch
 
 # === 并发请求: 审稿分配 ===
 
-def _mock_supabase_with_side_effect(responses):
-    mock = MagicMock()
-    mock.table.return_value = mock
-    mock.select.return_value = mock
-    mock.eq.return_value = mock
-    mock.single.return_value = mock
-    mock.insert.return_value = mock
-    mock.execute.side_effect = responses
-    return mock
+class _FakeResp:
+    def __init__(self, data=None, count=None):
+        self.data = data
+        self.count = count
+
+
+class _FakeQuery:
+    def __init__(self, table_name: str):
+        self._table = table_name
+        self._op = None
+        self._payload = None
+        self._filters = {}
+        self._single = False
+
+    # Chain builders
+    def select(self, *_args, **_kwargs):
+        self._op = "select"
+        return self
+
+    def insert(self, payload):
+        self._op = "insert"
+        self._payload = payload
+        return self
+
+    def update(self, payload):
+        self._op = "update"
+        self._payload = payload
+        return self
+
+    def delete(self):
+        self._op = "delete"
+        return self
+
+    def eq(self, key, value):
+        self._filters[key] = value
+        return self
+
+    def in_(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def single(self):
+        self._single = True
+        return self
+
+    def execute(self):
+        # manuscripts: 返回 author_id/version/file_path/owner_id，避免触发校验失败
+        if self._table == "manuscripts" and self._op == "select":
+            return _FakeResp(
+                {
+                    "author_id": "author-1",
+                    "title": "t",
+                    "version": 1,
+                    "owner_id": None,
+                    "file_path": "mock/ms.pdf",
+                }
+            )
+
+        # review_assignments: 幂等检查返回空；insert 返回一条记录
+        if self._table == "review_assignments":
+            if self._op == "select":
+                return _FakeResp([])
+            if self._op == "insert":
+                rid = (self._payload or {}).get("reviewer_id", "r")
+                return _FakeResp([{"id": f"assign-{rid}", "status": "pending"}])
+            if self._op in {"update", "delete"}:
+                return _FakeResp([])
+
+        # user_profiles / review_reports / notifications：不关心具体返回
+        if self._op == "select" and self._single:
+            return _FakeResp({"email": "reviewer@example.com"})
+        return _FakeResp([])
+
+
+class _FakeSupabase:
+    def table(self, name: str):
+        return _FakeQuery(name)
 
 @pytest.mark.asyncio
 async def test_concurrent_reviewer_assignments(client: AsyncClient, auth_token: str, monkeypatch):
     """验证并发分配审稿人不会导致异常"""
     monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
-    responses = []
-    # 每个请求需要 2 次 execute: select -> insert
-    for idx in range(5):
-        select_resp = MagicMock()
-        select_resp.data = {"author_id": "author-1"}
-        insert_resp = MagicMock()
-        insert_resp.data = [{"id": f"assign-{idx}", "status": "pending"}]
-        responses.extend([select_resp, insert_resp])
+    fake = _FakeSupabase()
 
-    mock = _mock_supabase_with_side_effect(responses)
-
-    with patch("app.lib.api_client.supabase", mock), \
-         patch("app.api.v1.reviews.supabase", mock):
+    with patch("app.api.v1.reviews.supabase", fake), \
+         patch("app.api.v1.reviews.supabase_admin", fake), \
+         patch("app.api.v1.reviews.NotificationService.create_notification", MagicMock(return_value=None)):
         async def assign(i: int):
             return await client.post(
                 "/api/v1/reviews/assign",

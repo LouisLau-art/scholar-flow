@@ -12,6 +12,41 @@ def _env_bool(key: str, default: bool) -> bool:
 
 
 @dataclass(frozen=True)
+class AppConfig:
+    """
+    Application Environment Config (Feature 019)
+    """
+    env: str  # 'development', 'staging', 'production'
+    is_staging: bool
+    supabase_url: str
+    supabase_key: str
+
+    @staticmethod
+    def from_env() -> "AppConfig":
+        env = (os.environ.get("APP_ENV") or "development").strip().lower()
+        is_staging = env == "staging"
+        
+        # In Staging mode, we expect dedicated DB variables if provided, 
+        # otherwise fallback to standard SUPABASE_URL but allow logic differentiation.
+        # Feature 019 requirement: Separate DB for Staging.
+        # We can either use a separate env var STAGING_SUPABASE_URL or just swap SUPABASE_URL at the platform level (Vercel/Docker).
+        # Assuming platform-level swap for simplicity, so we just read SUPABASE_URL.
+        
+        supabase_url = (os.environ.get("SUPABASE_URL") or "").strip()
+        supabase_key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+
+        return AppConfig(
+            env=env,
+            is_staging=is_staging,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key
+        )
+
+# Global Config Instance
+app_config = AppConfig.from_env()
+
+
+@dataclass(frozen=True)
 class SMTPConfig:
     """
     SMTP 配置（从环境变量读取）

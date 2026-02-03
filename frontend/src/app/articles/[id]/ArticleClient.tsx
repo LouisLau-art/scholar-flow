@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
+import VersionHistory from '@/components/VersionHistory'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -16,15 +17,40 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [citeCopied, setCiteCopied] = useState(false)
   const [roles, setRoles] = useState<string[] | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchUserAndRoles() {
+      try {
+        const session = await authService.getSession()
+        const user = session?.user
+        if (user) setCurrentUserId(user.id)
+
+        const token = await authService.getAccessToken()
+        if (!token) return
+        const res = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (data?.success) {
+          setRoles(data?.data?.roles || null)
+        }
+      } catch (err) {
+        console.error('Failed to load user info:', err)
+      }
+    }
+    fetchUserAndRoles()
+  }, [])
 
   useEffect(() => {
     async function fetchArticle() {
       if (initialArticle) {
         // Even if we have initial article, we might need to fetch signed URL if not provided
-        if (initialArticle.file_path && !previewUrl) {
+        const initialPath = initialArticle.final_pdf_path || initialArticle.file_path
+        if (initialPath && !previewUrl) {
              const { data, error } = await supabase.storage
               .from('manuscripts')
-              .createSignedUrl(initialArticle.file_path, 60 * 5)
+              .createSignedUrl(initialPath, 60 * 5)
             if (!error) {
               setPreviewUrl(data?.signedUrl ?? null)
             }
@@ -37,10 +63,11 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         const result = await res.json()
         if (result.success) {
           setArticle(result.data)
-          if (result.data?.file_path) {
+          const path = result.data?.final_pdf_path || result.data?.file_path
+          if (path) {
             const { data, error } = await supabase.storage
               .from('manuscripts')
-              .createSignedUrl(result.data.file_path, 60 * 5)
+              .createSignedUrl(path, 60 * 5)
             if (!error) {
               setPreviewUrl(data?.signedUrl ?? null)
             }
@@ -52,28 +79,13 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         setIsLoading(false)
       }
     }
-    async function fetchRoles() {
-      try {
-        const token = await authService.getAccessToken()
-        if (!token) return
-        const res = await fetch('/api/v1/user/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (data?.success) {
-          setRoles(data?.data?.roles || null)
-        }
-      } catch (err) {
-        console.error('Failed to load roles:', err)
-      }
-    }
     fetchArticle()
-    fetchRoles()
   }, [id, initialArticle]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDownload(articleId: string) {
     try {
-      if (!article?.file_path) {
+      const path = article?.final_pdf_path || article?.file_path
+      if (!path) {
         console.error("No file attached to this article")
         return
       }
@@ -91,7 +103,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
       const { data, error } = await supabase.storage
         .from('manuscripts')
-        .createSignedUrl(article.file_path, 60 * 5)
+        .createSignedUrl(path, 60 * 5)
       if (error || !data?.signedUrl) {
         console.error("Failed to create download URL");
         return
@@ -150,13 +162,15 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
   if (!article) return <div>Article not found.</div>
 
-  const hasFile = Boolean(article?.file_path)
+  const hasFile = Boolean(article?.final_pdf_path || article?.file_path)
   const datasetUrl = article?.dataset_url
   const sourceCodeUrl = article?.source_code_url
   const datasetReady = Boolean(datasetUrl)
   const sourceCodeReady = Boolean(sourceCodeUrl)
   const canPublish = Boolean(roles?.includes('editor') || roles?.includes('admin'))
   const isPublished = article?.status === 'published' || Boolean(article?.published_at)
+  const isAuthor = currentUserId === article.author_id
+  const canViewHistory = isAuthor || canPublish || roles?.includes('reviewer')
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -240,6 +254,14 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
               )}
             </div>
           </section>
+
+          {/* Version History (Authorized Only) */}
+          {canViewHistory && (
+            <section className="space-y-4">
+              <h2 className="text-xl font-bold text-slate-900">Version History</h2>
+              <VersionHistory manuscriptId={article.id} />
+            </section>
+          )}
         </div>
 
         {/* Sidebar (Right 1 Column) */}

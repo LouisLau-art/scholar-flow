@@ -35,10 +35,19 @@ class DublinCoreMapper:
                 # Format: "Last, First" or "Name"
                 first = author.get("first_name", "")
                 last = author.get("last_name", "")
+                full = author.get("full_name", "")
+                
                 if first and last:
                     creator.text = f"{last}, {first}"
+                elif full:
+                    # Try to split full name to "Last, First" if possible
+                    parts = full.strip().split(" ", 1)
+                    if len(parts) > 1:
+                        creator.text = f"{parts[1]}, {parts[0]}"
+                    else:
+                        creator.text = full
                 else:
-                    creator.text = first or last or "Unknown"
+                    creator.text = "Unknown"
 
         # Subject (Keywords)
         # Assuming keywords are in article data (not explicitly in my data model but common)

@@ -51,52 +51,52 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-          <h3 className="font-bold text-lg text-slate-900">Invite New Member</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+      <div className="w-full max-w-md bg-background rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-border">
+        <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
+          <h3 className="font-bold text-lg text-foreground">Invite New Member</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             ✕
           </button>
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="bg-blue-50 p-3 rounded-md border border-blue-100 mb-4 flex items-start gap-3">
-            <Mail className="h-5 w-5 text-blue-600 mt-0.5" />
-            <p className="text-sm text-blue-800">
+          <div className="bg-primary/5 p-3 rounded-md border border-primary/10 mb-4 flex items-start gap-3">
+            <Mail className="h-5 w-5 text-primary mt-0.5" />
+            <p className="text-sm text-primary/80">
               An account will be created and an email notification with login credentials will be sent to the user.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email Address <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-foreground mb-1">Email Address <span className="text-destructive">*</span></label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-input bg-background py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="colleague@example.com"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-foreground mb-1">Full Name <span className="text-destructive">*</span></label>
             <input
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-input bg-background py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="John Doe"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Role <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-foreground mb-1">Role <span className="text-destructive">*</span></label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-input bg-background py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="editor">Editor</option>
               <option value="reviewer">Reviewer</option>
@@ -105,7 +105,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-md">
+            <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
               <AlertTriangle className="h-4 w-4" />
               {error}
             </div>
@@ -115,7 +115,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="px-4 py-2 text-sm font-medium text-foreground bg-background border border-input rounded-md hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={isSubmitting}
             >
               Cancel
@@ -123,7 +123,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
               Send Invitation

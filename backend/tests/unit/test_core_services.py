@@ -1,5 +1,4 @@
 import logging
-from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -10,54 +9,8 @@ from app.services import editorial_service, publishing_service
 
 
 @pytest.mark.asyncio
-async def test_parse_manuscript_metadata_missing_env(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
-    assert result == {"title": "", "abstract": "", "authors": []}
-
-
-@pytest.mark.asyncio
-async def test_parse_manuscript_metadata_parses_json(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
-
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            content = '```json {"title":"T","abstract":"A","authors":["X"]} ```'
-
-            self.chat = SimpleNamespace(
-                completions=SimpleNamespace(
-                    create=lambda *a, **k: SimpleNamespace(
-                        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-                    )
-                )
-            )
-
-    monkeypatch.setattr(ai_engine, "OpenAI", DummyClient)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
-    assert result["title"] == "T"
-    assert result["abstract"] == "A"
-    assert result["authors"] == ["X"]
-
-
-@pytest.mark.asyncio
-async def test_parse_manuscript_metadata_handles_error(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
-
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr(ai_engine, "OpenAI", DummyClient)
-
-    result = await ai_engine.parse_manuscript_metadata("content")
-
+async def test_parse_manuscript_metadata_local_parser_returns_empty_for_blank():
+    result = await ai_engine.parse_manuscript_metadata("")
     assert result == {"title": "", "abstract": "", "authors": []}
 
 
@@ -139,21 +92,21 @@ async def test_publish_manuscript_success():
 @pytest.mark.asyncio
 async def test_process_quality_check_passed():
     manuscript_id = UUID(int=2)
-    kpi_owner_id = UUID(int=3)
+    owner_id = UUID(int=3)
 
-    result = await editorial_service.process_quality_check(manuscript_id, True, kpi_owner_id)
+    result = await editorial_service.process_quality_check(manuscript_id, True, owner_id)
 
     assert result["status"] == "under_review"
-    assert result["kpi_owner_id"] == kpi_owner_id
+    assert result["owner_id"] == owner_id
 
 
 @pytest.mark.asyncio
 async def test_process_quality_check_failed_with_notes():
     manuscript_id = UUID(int=4)
-    kpi_owner_id = UUID(int=5)
+    owner_id = UUID(int=5)
 
     result = await editorial_service.process_quality_check(
-        manuscript_id, False, kpi_owner_id, revision_notes="Need fixes"
+        manuscript_id, False, owner_id, revision_notes="Need fixes"
     )
 
     assert result["status"] == "returned_for_revision"

@@ -1,9 +1,20 @@
-from fastapi import APIRouter, BackgroundTasks
+import os
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from app.models.plagiarism import PlagiarismRetryRequest
 from app.core.plagiarism_worker import plagiarism_check_worker
 from uuid import UUID
 
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
+
+def _is_truthy_env(name: str, default: str = "0") -> bool:
+    v = (os.environ.get(name, default) or "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
+def _require_plagiarism_enabled() -> None:
+    # 当前查重实现为 Mock（CrossrefClient 直接返回固定相似度），默认关闭以提速。
+    if not _is_truthy_env("PLAGIARISM_CHECK_ENABLED", "0"):
+        raise HTTPException(status_code=503, detail="Plagiarism check is disabled (PLAGIARISM_CHECK_ENABLED=0)")
 
 @router.get("/report/{report_id}/download")
 async def get_report_download_url(report_id: UUID):
@@ -29,6 +40,7 @@ async def retry_plagiarism_check(
     1. 显性逻辑: 仅在状态为 failed 时允许重试。
     2. 幂等性校验: 重置重试计数并重新将任务推入后台队列。
     """
+    _require_plagiarism_enabled()
     manuscript_id = request.manuscript_id
     
     # 实际应查询数据库校验状态

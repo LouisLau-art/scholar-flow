@@ -30,7 +30,7 @@ async def get_users(
     per_page: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
     role: Optional[str] = None,
-    _admin: dict = Depends(admin_only),
+    _auth: dict = Depends(editor_or_admin),
     service: UserManagementService = Depends(get_user_management_service)
 ):
     """

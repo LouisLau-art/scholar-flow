@@ -1,15 +1,24 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { adminUserService } from '@/services/admin/userService';
+import { authService } from '@/services/auth';
 import { UserTable } from '@/components/admin/UserTable';
 import { UserFilters } from '@/components/admin/UserFilters';
 import { UserRoleDialog } from '@/components/admin/UserRoleDialog';
 import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
 import { User, UserRole } from '@/types/user';
 import { toast } from 'sonner';
+import { Loader2, ShieldAlert } from 'lucide-react';
 
 export default function UserManagementPage() {
+  const router = useRouter();
+  // Auth State
+  const [verifyingRole, setVerifyingRole] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Data State
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,15 +34,48 @@ export default function UserManagementPage() {
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
+  // 1. Security Check: Verify Admin Role on Mount
+  useEffect(() => {
+    async function checkAdminAccess() {
+      try {
+        const session = await authService.getSession();
+        if (!session?.user) {
+          router.replace('/login');
+          return;
+        }
+
+        // Fetch user profile to get roles
+        const profile = await authService.getUserProfile();
+        const roles = profile?.roles || [];
+        
+        if (!roles.includes('admin')) {
+          toast.error('Access Denied: You do not have permission to view this page.');
+          router.replace('/dashboard'); // Redirect unauthorized users
+        } else {
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        router.replace('/dashboard');
+      } finally {
+        setVerifyingRole(false);
+      }
+    }
+    checkAdminAccess();
+  }, [router]);
+
+  // 2. Data Fetching (Only if Admin)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
-      setPage(1); // Reset page on search change
+      setPage(1); 
     }, 500);
     return () => clearTimeout(timer);
   }, [search]);
 
   const fetchUsers = useCallback(async () => {
+    if (!isAdmin) return; // Stop fetching if not admin
+
     setLoading(true);
     try {
       const response = await adminUserService.getUsers(page, 10, debouncedSearch, role);
@@ -41,16 +83,21 @@ export default function UserManagementPage() {
       setTotal(response.pagination.total);
     } catch (error) {
       console.error('Failed to fetch users:', error);
-      toast.error('Failed to load users. Please try again.');
+      // Don't toast here if it's a 403, as the initial check should handle it.
+      // But for robust UX, we can check status.
+      toast.error('Failed to load users.');
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, role]);
+  }, [page, debouncedSearch, role, isAdmin]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    if (isAdmin) {
+      fetchUsers();
+    }
+  }, [fetchUsers, isAdmin]);
 
+  // 3. Actions
   const handleRoleChange = (newRole: string) => {
     setRole(newRole);
     setPage(1);
@@ -65,10 +112,10 @@ export default function UserManagementPage() {
     try {
       await adminUserService.updateUserRole(userId, { new_role: newRole, reason });
       toast.success('User role updated successfully');
-      fetchUsers(); // Refresh list
+      fetchUsers(); 
     } catch (error) {
       console.error('Update failed:', error);
-      throw error; // Let dialog handle the error display
+      throw error;
     }
   };
 
@@ -76,13 +123,34 @@ export default function UserManagementPage() {
     try {
       await adminUserService.createUser({ email, full_name: fullName, role });
       toast.success('Invitation sent successfully!');
-      fetchUsers(); // Refresh list
+      fetchUsers(); 
     } catch (error) {
       console.error('Invite failed:', error);
-      throw error;
+      throw error; 
     }
   };
 
+  // 4. Render Loading or Access Denied state
+  if (verifyingRole) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+        <p className="text-slate-500 font-medium">Verifying access privileges...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+        <ShieldAlert className="h-12 w-12 text-red-500" />
+        <h1 className="text-xl font-bold text-slate-900">Access Denied</h1>
+        <p className="text-slate-500">Redirecting you to dashboard...</p>
+      </div>
+    );
+  }
+
+  // 5. Render Admin Page
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">

@@ -9,10 +9,21 @@ echo "🧪 运行所有测试"
 echo "==============="
 echo ""
 
-# 检查环境变量
-if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
-    echo "⚠️  警告: SUPABASE_URL 和 SUPABASE_KEY 未设置"
-    echo "    集成测试将跳过"
+# 尝试加载根目录 .env（仅在未设置关键变量时），便于本地一键跑通
+if [ -z "${SUPABASE_URL:-}" ] && [ -f ".env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ".env"
+    set +a
+fi
+
+if [ -z "${SUPABASE_URL:-}" ]; then
+    echo "⚠️  警告: SUPABASE_URL 未设置（部分真实 DB 集成测试可能跳过）"
+    echo ""
+fi
+
+if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ] && [ -z "${SUPABASE_KEY:-}" ] && [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+    echo "⚠️  警告: SUPABASE_SERVICE_ROLE_KEY/SUPABASE_KEY/SUPABASE_ANON_KEY 均未设置（部分真实 DB 集成测试可能跳过）"
     echo ""
 fi
 
@@ -28,7 +39,7 @@ fi
 
 # 运行测试
 echo "🧪 执行 pytest..."
-pytest -v --tb=short --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+CI=1 pytest -v --tb=short --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 
 cd ..
 
@@ -46,6 +57,40 @@ fi
 # 运行测试
 echo "🧪 执行 Vitest..."
 npm run test:run
+
+echo ""
+echo "3️⃣  运行前端 E2E 测试（Playwright/Chromium）..."
+echo "-----------------------------------------------"
+# 默认用 3001，避免本地常见的 3000 端口冲突；可通过 PLAYWRIGHT_PORT 覆盖
+export PLAYWRIGHT_PORT="${PLAYWRIGHT_PORT:-3001}"
+
+# 默认只跑“可脱离真实后端”的 mocked E2E（更接近 CI 可重复性）。
+# 若你希望跑全量 E2E（可能依赖后端 HTTP 服务 / 真实 Supabase），设置 E2E_FULL=1。
+E2E_FULL="${E2E_FULL:-0}"
+E2E_SPEC="${E2E_SPEC:-tests/e2e/specs/revision_flow.spec.ts}"
+
+if [ "$E2E_FULL" = "1" ]; then
+    echo "ℹ️  E2E_FULL=1：尝试启动后端 (127.0.0.1:${BACKEND_PORT:-8000}) 并运行全量 Playwright 用例"
+
+    BACKEND_PORT="${BACKEND_PORT:-8000}"
+    if python3 -c "import uvicorn" 2>/dev/null; then
+        (
+            cd ../backend
+            uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/scholarflow-backend-e2e.log 2>&1 &
+            echo $! > /tmp/scholarflow-backend-e2e.pid
+        )
+        BACKEND_PID="$(cat /tmp/scholarflow-backend-e2e.pid)"
+        trap 'kill -TERM "$BACKEND_PID" 2>/dev/null || true' EXIT
+    else
+        echo "❌ 未检测到 uvicorn，无法自动启动后端；请手动启动后再重试：cd backend && uvicorn main:app --port ${BACKEND_PORT:-8000}"
+        exit 1
+    fi
+
+    CI=1 npx playwright test --project=chromium
+else
+    echo "ℹ️  默认仅跑：$E2E_SPEC（mocked backend，不需要 8000 后端服务）"
+    CI=1 npx playwright test "$E2E_SPEC" --project=chromium
+fi
 
 cd ..
 

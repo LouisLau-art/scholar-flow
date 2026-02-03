@@ -22,7 +22,8 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
         total = len(rows)
         published = sum(1 for r in rows if r.get("status") == "published")
         under_review = sum(1 for r in rows if r.get("status") == "under_review")
-        revision_required = sum(1 for r in rows if r.get("status") == "revision_required")
+        revision_requested = sum(1 for r in rows if r.get("status") == "revision_requested")
+        rejected = sum(1 for r in rows if r.get("status") == "rejected")
 
         return {
             "success": True,
@@ -30,7 +31,11 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
                 "total_submissions": total,
                 "published": published,
                 "under_review": under_review,
-                "revision_required": revision_required
+                # MVP：等待作者修回
+                "revision_requested": revision_requested,
+                # 兼容旧前端字段（曾错误使用 revision_required 表示拒稿/退修）
+                "revision_required": revision_requested,
+                "rejected": rejected,
             }
         }
     except Exception as e:
@@ -41,7 +46,9 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
                 "total_submissions": 0,
                 "published": 0,
                 "under_review": 0,
-                "revision_required": 0
+                "revision_requested": 0,
+                "revision_required": 0,
+                "rejected": 0,
             }
         }
 

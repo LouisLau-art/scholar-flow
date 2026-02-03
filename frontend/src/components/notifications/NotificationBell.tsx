@@ -5,6 +5,7 @@ import type { Notification } from '@/types'
 import { supabase, subscribeToNotifications } from '@/lib/supabase'
 import { BellIcon } from '@/components/icons/BellIcon'
 import { NotificationList } from './NotificationList'
+import { authService } from '@/services/auth'
 
 type Props = {
   isAuthenticated: boolean
@@ -73,6 +74,18 @@ export function NotificationBell({ isAuthenticated }: Props) {
 
   const markRead = async (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
+    try {
+      const token = await authService.getAccessToken()
+      if (token) {
+        await fetch(`/api/v1/notifications/${id}/read`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        return
+      }
+    } catch {
+      // fall through
+    }
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)
   }
 
@@ -121,4 +134,3 @@ export function NotificationBell({ isAuthenticated }: Props) {
     </div>
   )
 }
-

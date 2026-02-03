@@ -5,6 +5,15 @@ import { vi } from 'vitest'
 // 中文注释:
 // 1. Mock Next.js 路由，防止在测试环境中报错。
 // 2. Mock Supabase 客户端。
+// 3. Polyfill 浏览器 API（例如 ResizeObserver），避免 Radix UI 在 jsdom 下崩溃。
+
+class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+globalThis.ResizeObserver = ResizeObserver
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({

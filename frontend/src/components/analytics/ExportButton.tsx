@@ -21,10 +21,13 @@ interface ExportButtonProps {
 }
 
 export function ExportButton({ className }: ExportButtonProps) {
-  const [isExporting, setIsExporting] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<'xlsx' | 'csv' | null>(
+    null,
+  )
 
   const handleExport = async (format: 'xlsx' | 'csv') => {
-    setIsExporting(true)
+    if (exportingFormat) return
+    setExportingFormat(format)
 
     try {
       const blob = await AnalyticsApi.exportReport(format)
@@ -50,7 +53,7 @@ export function ExportButton({ className }: ExportButtonProps) {
         description: error instanceof Error ? error.message : '请稍后重试',
       })
     } finally {
-      setIsExporting(false)
+      setExportingFormat(null)
     }
   }
 
@@ -60,19 +63,19 @@ export function ExportButton({ className }: ExportButtonProps) {
         variant="outline"
         size="sm"
         onClick={() => handleExport('xlsx')}
-        disabled={isExporting}
+        disabled={exportingFormat !== null}
       >
         <FileSpreadsheet className="h-4 w-4 mr-2" />
-        {isExporting ? '导出中...' : 'Excel'}
+        {exportingFormat === 'xlsx' ? '导出中...' : 'Excel'}
       </Button>
       <Button
         variant="outline"
         size="sm"
         onClick={() => handleExport('csv')}
-        disabled={isExporting}
+        disabled={exportingFormat !== null}
       >
         <FileText className="h-4 w-4 mr-2" />
-        {isExporting ? '导出中...' : 'CSV'}
+        {exportingFormat === 'csv' ? '导出中...' : 'CSV'}
       </Button>
     </div>
   )

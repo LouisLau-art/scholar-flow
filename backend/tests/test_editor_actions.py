@@ -71,7 +71,7 @@ class TestEditorAPI:
         data = response.json()
         assert data["success"] == True
         assert data["data"]["decision"] == "reject"
-        assert data["data"]["status"] == "revision_required"
+        assert data["data"]["status"] == "rejected"
 
     def test_invalid_decision_type(self, client):
         """T003: 测试无效决策类型"""

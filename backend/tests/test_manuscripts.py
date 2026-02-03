@@ -229,15 +229,17 @@ async def test_quality_check_endpoint_calls_service(client: AsyncClient):
     manuscript_id = uuid4()
     expected = {"manuscript_id": str(manuscript_id), "passed": True}
 
-    async def fake_quality_check(_manuscript_id, passed, _kpi_owner_id):
+    async def fake_quality_check(_manuscript_id, passed, _owner_id):
         return {"manuscript_id": str(_manuscript_id), "passed": passed}
 
-    with patch("app.api.v1.manuscripts.process_quality_check", fake_quality_check):
+    with patch("app.api.v1.manuscripts.process_quality_check", fake_quality_check), patch(
+        "app.api.v1.manuscripts.validate_internal_owner_id", lambda _id: {}
+    ):
         response = await client.post(
             f"/api/v1/manuscripts/{manuscript_id}/quality-check",
             json={
                 "passed": True,
-                "kpi_owner_id": "00000000-0000-0000-0000-000000000000",
+                "owner_id": "00000000-0000-0000-0000-000000000000",
             },
         )
 

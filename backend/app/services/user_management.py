@@ -91,9 +91,9 @@ class UserManagementService:
                 # roles is a text array, we use overlap or contains
                 query = query.contains("roles", [role])
             
-            # Searching by email or name
+            # Searching by email or full_name
             if search:
-                query = query.or_(f"email.ilike.%{search}%,name.ilike.%{search}%")
+                query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
             
             # Pagination
             offset = (page - 1) * per_page
@@ -110,7 +110,7 @@ class UserManagementService:
                 users.append({
                     "id": item["id"],
                     "email": item.get("email"),
-                    "full_name": item.get("name"),
+                    "full_name": item.get("full_name"),
                     "roles": item.get("roles", []),
                     "created_at": item.get("created_at"),
                     "is_verified": True # In user_profiles, we assume they exist. 
@@ -205,7 +205,7 @@ class UserManagementService:
             return {
                 "id": updated_profile["id"],
                 "email": updated_profile.get("email"),
-                "full_name": updated_profile.get("name"),
+                "full_name": updated_profile.get("full_name"),
                 "roles": updated_profile.get("roles", []),
                 "created_at": updated_profile.get("created_at"),
                 "is_verified": True
@@ -295,7 +295,7 @@ class UserManagementService:
             profile_data = {
                 "id": user_id,
                 "email": email,
-                "name": full_name,
+                "full_name": full_name,
                 "roles": [role],
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
@@ -311,8 +311,13 @@ class UserManagementService:
             )
             
             # 5. Send Notification (T086)
-            # Integrate with Feature 011 (mocked for now as I don't see the email service code easily here)
-            # I will just log it for T086.
+            print("-" * 50)
+            print(f"🚀 [INTERNAL USER CREATED]")
+            print(f"📧 Email: {email}")
+            print(f"🔑 Temp Password: {temp_password}")
+            print(f"🎭 Role: {role}")
+            print("-" * 50)
+
             self.log_email_notification(
                 recipient_email=email,
                 notification_type="account_created",
@@ -362,59 +367,116 @@ class UserManagementService:
             # So user must exist.
             
             # Step 2a: Create user (shadow account)
-            import secrets
-            import string
-            alphabet = string.ascii_letters + string.digits
-            temp_password = ''.join(secrets.choice(alphabet) for i in range(12))
-            
-            user_response = self.admin_client.auth.admin.create_user({
-                "email": email,
-                "password": temp_password,
-                "email_confirm": True,
-                "user_metadata": {"full_name": full_name}
-            })
-            
-            new_user = user_response.user
-            if not new_user:
-                raise Exception("Failed to create shadow user")
-            
-            user_id = new_user.id
-            
-            # Step 2b: Generate link
+            user_id = None
+            try:
+                import secrets
+                import string
+                alphabet = string.ascii_letters + string.digits
+                temp_password = ''.join(secrets.choice(alphabet) for i in range(12))
+                
+                user_response = self.admin_client.auth.admin.create_user({
+                    "email": email,
+                    "password": temp_password,
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": full_name}
+                })
+
+                if not getattr(user_response, "user", None):
+                    # 中文注释: create_user 没抛异常但返回无 user，视为失败（避免误判为“已存在用户”）。
+                    raise Exception("Failed to create shadow user")
+
+                user_id = user_response.user.id
+            except Exception as create_err:
+                # Only treat as "already exists" when the error indicates duplication.
+                msg = str(create_err).lower()
+                if "already exists" not in msg and "already registered" not in msg:
+                    raise
+
+            if not user_id:
+                # Fallback 2: Use Auth Admin API to list users and find by email
+                # This is the most reliable way to get the ID of an existing user
+                try:
+                    # Supabase-py list_users() returns a list of users
+                    auth_users_res = self.admin_client.auth.admin.list_users()
+                    # auth_users_res is a list or contains a users attribute depending on version
+                    users_list = getattr(auth_users_res, "users", auth_users_res)
+                    if not isinstance(users_list, list):
+                        # Some versions return an object with a users list
+                        users_list = auth_users_res
+                    
+                    for u in users_list:
+                        if u.email.lower() == email.lower():
+                            user_id = u.id
+                            break
+                except Exception as list_err:
+                    print(f"Failed to list users for ID retrieval: {list_err}")
+
+            if not user_id:
+                 # CRITICAL: If we still don't have user_id, we cannot return a valid UserResponse.
+                 # This happens if the user exists in Auth but we can't find them in the list.
+                 raise Exception(f"User '{email}' already exists but ID retrieval failed. Please check Auth dashboard.")
+
+            # Step 2b: Generate link (works for existing users too)
             link_res = self.admin_client.auth.admin.generate_link({
                 "type": "magiclink",
                 "email": email
             })
-            magic_link = link_res.properties.get("action_link")
+            props = getattr(link_res, "properties", None)
+            if isinstance(props, dict):
+                magic_link = props.get("action_link")
+            else:
+                magic_link = getattr(props, "action_link", None)
             
             # 3. Create/Update user_profiles
-            profile_data = {
-                "id": user_id,
-                "email": email,
-                "name": full_name,
-                "roles": ["reviewer"], # Default to reviewer
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            self.admin_client.table("user_profiles").upsert(profile_data).execute()
+            if user_id:
+                # Also update Auth metadata to ensure consistency
+                try:
+                    self.admin_client.auth.admin.update_user_by_id(
+                        user_id, 
+                        {"user_metadata": {"full_name": full_name}}
+                    )
+                except Exception as meta_err:
+                    print(f"Failed to update auth metadata: {meta_err}")
+
+                profile_data = {
+                    "id": user_id,
+                    "email": email,
+                    "full_name": full_name,
+                    "roles": ["reviewer"], # Default to reviewer
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                self.admin_client.table("user_profiles").upsert(profile_data).execute()
             
-            # 4. Audit Log
-            self.log_account_creation(
-                created_user_id=UUID(user_id),
-                created_by=invited_by,
-                initial_role="reviewer"
-            )
+                # 4. Audit Log
+                self.log_account_creation(
+                    created_user_id=UUID(user_id),
+                    created_by=invited_by,
+                    initial_role="reviewer"
+                )
             
             # 5. Send Notification (Email with Magic Link)
-            # Log the link for now (In real prod, send email)
-            # WARNING: Logging magic link is sensitive. In prod we mask it. 
-            # For this feature, we log that we sent it.
-            self.log_email_notification(
-                recipient_email=email,
-                notification_type="reviewer_invite",
-                status="sent",
-                error_message=f"Magic Link generated (hidden)" 
-            )
+            print("-" * 50)
+            print("🔗 [REVIEWER INVITE GENERATED]")
+            print(f"📧 Recipient: {email}")
+            # 中文注释:
+            # - 本地开发时 Magic Link 往往不稳定，会极大阻碍测试。
+            # - GO_ENV=dev 时，直接打印 dev-login 链接（点击即可登录），避免依赖邮件/回调。
+            if (os.environ.get("GO_ENV") or "").strip().lower() == "dev":
+                print(f"🌐 Dev Login: http://localhost:3000/api/v1/auth/dev-login?email={email}")
+            else:
+                print(f"🌐 Magic Link: {magic_link}")
+            print("-" * 50)
+
+            try:
+                self.log_email_notification(
+                    recipient_email=email,
+                    notification_type="reviewer_invite",
+                    status="sent",
+                    error_message=f"Magic Link generated (logged to console)" 
+                )
+            except Exception as log_err:
+                print(f"WARNING: Failed to log email notification: {log_err}")
             
             return {
                 "id": user_id,

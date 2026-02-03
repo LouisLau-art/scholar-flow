@@ -22,6 +22,15 @@ export const authService = {
     const session = await authService.getSession()
     return session?.access_token ?? null
   },
+  async getUserProfile(): Promise<any> {
+    const token = await authService.getAccessToken()
+    if (!token) return null
+    const res = await fetch('/api/v1/user/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const result = await res.json()
+    return result.success ? result.data : null
+  },
   async signOut(): Promise<void> {
     await supabase.auth.signOut()
     cacheToken(null)

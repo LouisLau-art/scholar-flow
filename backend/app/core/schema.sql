@@ -10,7 +10,7 @@ CREATE TABLE manuscripts (
     author_id UUID REFERENCES auth.users(id),
     editor_id UUID REFERENCES auth.users(id),
     status TEXT DEFAULT 'draft',
-    kpi_owner_id UUID REFERENCES auth.users(id),
+    owner_id UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -46,9 +46,9 @@ CREATE TABLE invoices (
 -- 4. KPI 统计辅助视图
 CREATE VIEW editor_kpi_stats AS
 SELECT 
-    kpi_owner_id,
+    owner_id,
     COUNT(*) as processed_count,
     AVG(EXTRACT(EPOCH FROM (updated_at - created_at))/3600) as avg_process_hours
 FROM manuscripts
 WHERE status != 'draft'
-GROUP BY kpi_owner_id;
+GROUP BY owner_id;

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard, Shield } from 'lucide-react'
 import Link from 'next/link'
@@ -9,13 +9,23 @@ import ReviewerDashboard from "@/components/ReviewerDashboard"
 import EditorDashboard from "@/components/EditorDashboard"
 import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
+import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 
-export default function DashboardPage() {
+function DashboardPageContent() {
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [roles, setRoles] = useState<string[] | null>(null)
   const [rolesLoading, setRolesLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'author' | 'reviewer' | 'editor' | 'admin'>(() => {
+    const tab = tabParam
+    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') return tab
+    return 'author'
+  })
 
   useEffect(() => {
     async function fetchStats() {
@@ -68,7 +78,7 @@ export default function DashboardPage() {
     { label: 'Total Submissions', value: stats?.total_submissions, icon: FileText, color: 'text-blue-600' },
     { label: 'Published', value: stats?.published, icon: CheckCircle, color: 'text-emerald-600' },
     { label: 'Under Review', value: stats?.under_review, icon: Clock, color: 'text-amber-600' },
-    { label: 'Revision Required', value: stats?.revision_required, icon: AlertCircle, color: 'text-rose-600' },
+    { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-slate-600' },
   ]
 
   const canSeeReviewer = Boolean(roles?.includes('reviewer') || roles?.includes('admin'))
@@ -76,12 +86,28 @@ export default function DashboardPage() {
   const canSeeAdmin = Boolean(roles?.includes('admin'))
   const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
 
+  // 支持 /dashboard?tab=reviewer 之类的深链
+  useEffect(() => {
+    const tab = tabParam
+    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') {
+      setActiveTab(tab)
+    }
+  }, [tabParam])
+
+  // 若 URL 指向无权限 tab，则回退到 author
+  useEffect(() => {
+    if (rolesLoading) return
+    if (activeTab === 'admin' && !canSeeAdmin) setActiveTab('author')
+    if (activeTab === 'editor' && !canSeeEditor) setActiveTab('author')
+    if (activeTab === 'reviewer' && !canSeeReviewer) setActiveTab('author')
+  }, [rolesLoading, activeTab, canSeeAdmin, canSeeEditor, canSeeReviewer])
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <SiteHeader />
 
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12 sm:px-6 lg:px-8">
-        <Tabs defaultValue="author" className="space-y-10">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             <div>
               <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Dashboard</h1>
@@ -157,9 +183,52 @@ export default function DashboardPage() {
                                 </p>
                               </div>
                             </div>
-                            <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
-                              <ArrowRight className="h-5 w-5" />
-                            </Link>
+                            <div className="flex items-center gap-3">
+                              {item.status === 'revision_requested' && (
+                                <Link
+                                  href={`/submit-revision/${item.id}`}
+                                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                                >
+                                  Submit Revision
+                                </Link>
+                              )}
+                              {item.status === 'approved' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async (e) => {
+                                    e.preventDefault()
+                                    const toastId = toast.loading('Generating invoice…')
+                                    try {
+                                      const token = await authService.getAccessToken()
+                                      if (!token) {
+                                        toast.error('Please sign in again.', { id: toastId })
+                                        return
+                                      }
+                                      const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(item.id)}/invoice`, {
+                                        headers: { Authorization: `Bearer ${token}` },
+                                      })
+                                      if (!res.ok) {
+                                        const msg = await res.text().catch(() => '')
+                                        toast.error(msg || 'Invoice not available.', { id: toastId })
+                                        return
+                                      }
+                                      const blob = await res.blob()
+                                      const url = window.URL.createObjectURL(blob)
+                                      window.open(url, '_blank')
+                                      toast.success('Invoice ready.', { id: toastId })
+                                    } catch (err) {
+                                      toast.error('Failed to download invoice.', { id: toastId })
+                                    }
+                                  }}
+                                >
+                                  Download Invoice
+                                </Button>
+                              )}
+                              <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                                <ArrowRight className="h-5 w-5" />
+                              </Link>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -190,5 +259,19 @@ export default function DashboardPage() {
         </Tabs>
       </main>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <DashboardPageContent />
+    </Suspense>
   )
 }
