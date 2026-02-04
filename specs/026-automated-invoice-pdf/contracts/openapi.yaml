@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: ScholarFlow - Invoice PDF (Feature 026)
+  version: 0.1.0
+
+servers:
+  - url: /api/v1
+
+components:
+  securitySchemes:
+    SupabaseJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required: [detail]
+    SignedUrlResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+              format: uuid
+            signed_url:
+              type: string
+            expires_in:
+              type: integer
+          required: [invoice_id, signed_url, expires_in]
+      required: [success, data]
+
+paths:
+  /invoices/{invoice_id}/pdf-signed:
+    get:
+      summary: Get a signed URL for invoice PDF
+      description: Returns a short-lived signed URL for the invoice PDF. Authorized for invoice owner (author) and internal roles.
+      security:
+        - SupabaseJWT: []
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Signed URL returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedUrlResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Invoice or PDF not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /invoices/{invoice_id}/pdf/regenerate:
+    post:
+      summary: Regenerate invoice PDF
+      description: Regenerates the invoice PDF and replaces the stored document. Does not change payment status.
+      security:
+        - SupabaseJWT: []
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Regeneration accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      invoice_id:
+                        type: string
+                        format: uuid
+                      pdf_path:
+                        type: string
+                        nullable: true
+                      pdf_generated_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      pdf_error:
+                        type: string
+                        nullable: true
+                    required: [invoice_id]
+                required: [success, data]
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden (non-internal)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

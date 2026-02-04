@@ -202,7 +202,7 @@ async def get_editor_pipeline(
         # 已录用 (approved) - 需要显示发文前的财务状态
         approved_resp = (
             db.table("manuscripts")
-            .select("*, invoices(amount,status)")
+            .select("*, invoices(id,amount,status)")
             .eq("status", "approved")
             .order("updated_at", desc=True)
             .execute()
@@ -220,6 +220,7 @@ async def get_editor_pipeline(
                 inv = {}
             item["invoice_amount"] = inv.get("amount")
             item["invoice_status"] = inv.get("status")
+            item["invoice_id"] = inv.get("id")
             if "invoices" in item:
                 del item["invoices"]
             approved.append(item)
@@ -580,13 +581,48 @@ async def submit_final_decision(
                 "status": invoice_status,
                 "confirmed_at": datetime.now().isoformat() if invoice_status == "paid" else None,
             }
+            invoice_id: str | None = None
             try:
-                supabase_admin.table("invoices").upsert(
+                inv_upsert = supabase_admin.table("invoices").upsert(
                     invoice_payload, on_conflict="manuscript_id"
                 ).execute()
+                inv_rows = getattr(inv_upsert, "data", None) or []
+                if inv_rows:
+                    invoice_id = (inv_rows[0] or {}).get("id")
             except Exception as e:
                 print(f"[Financial] Failed to upsert invoice: {e}")
                 raise HTTPException(status_code=500, detail="Failed to create invoice")
+
+            # === Feature 026: 自动生成并持久化 Invoice PDF（后台任务） ===
+            # 中文注释:
+            # - 不阻塞 editor 决策接口，避免 WeasyPrint 生成耗时影响 UX。
+            # - 再次录用/重复点击应保持幂等（invoice_id 不变；PDF 覆盖同一路径）。
+            if background_tasks is not None:
+                try:
+                    if not invoice_id:
+                        inv_q = (
+                            supabase_admin.table("invoices")
+                            .select("id")
+                            .eq("manuscript_id", manuscript_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        inv_q_rows = getattr(inv_q, "data", None) or []
+                        invoice_id = (inv_q_rows[0] or {}).get("id") if inv_q_rows else None
+
+                    if invoice_id:
+                        from uuid import UUID
+
+                        from app.services.invoice_pdf_service import (
+                            generate_and_store_invoice_pdf,
+                        )
+
+                        background_tasks.add_task(
+                            generate_and_store_invoice_pdf,
+                            invoice_id=UUID(str(invoice_id)),
+                        )
+                except Exception as e:
+                    print(f"[InvoicePDF] enqueue failed (ignored): {e}")
 
         # === MVP: 决策后取消未完成的审稿任务（避免 Reviewer 继续看到该稿件）===
         # 中文注释:

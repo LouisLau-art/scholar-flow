@@ -15,6 +15,7 @@ type Manuscript = {
   updated_at?: string
   review_count?: number
   version?: number
+  invoice_id?: string | null
   invoice_amount?: number | string | null
   invoice_status?: string | null
   final_pdf_path?: string | null
@@ -166,6 +167,33 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
       await reloadPipeline()
     } catch {
       toast.error('Confirm payment failed. Please try again.', { id: toastId })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRegenerateInvoicePdf = async (invoiceId: string) => {
+    const toastId = toast.loading('Regenerating invoice PDF...')
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error('Please sign in again.', { id: toastId })
+        return
+      }
+      const response = await fetch(`/api/v1/invoices/${encodeURIComponent(invoiceId)}/pdf/regenerate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.success) {
+        toast.error(data?.detail || data?.message || 'Regenerate failed.', { id: toastId })
+        return
+      }
+      toast.success('Invoice PDF regenerated.', { id: toastId })
+      setIsLoading(true)
+      await reloadPipeline()
+    } catch {
+      toast.error('Regenerate failed. Please try again.', { id: toastId })
     } finally {
       setIsLoading(false)
     }
@@ -480,6 +508,15 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                           reloadPipeline().finally(() => setIsLoading(false))
                         }}
                       />
+                      {manuscript.invoice_id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRegenerateInvoicePdf(manuscript.invoice_id as string)}
+                        >
+                          Regenerate Invoice
+                        </Button>
+                      )}
                       {waitingPayment && (
                         <Button
                           size="sm"

@@ -209,7 +209,13 @@ function DashboardPageContent() {
                                         headers: { Authorization: `Bearer ${token}` },
                                       })
                                       if (!res.ok) {
-                                        const msg = await res.text().catch(() => '')
+                                        let msg = ''
+                                        try {
+                                          const j = await res.json()
+                                          msg = (j?.detail || j?.message || '').toString()
+                                        } catch {
+                                          msg = await res.text().catch(() => '')
+                                        }
                                         toast.error(msg || 'Invoice not available.', { id: toastId })
                                         return
                                       }

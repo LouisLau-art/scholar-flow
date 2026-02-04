@@ -59,6 +59,7 @@ Sync Impact Report:
   - Reject 必须进入终态 `status='rejected'`（禁止使用历史遗留的 `revision_required`）。
   - Revision 必须进入 `status='revision_requested'`（等待作者修回）；作者提交修订后进入 `resubmitted`。
   - Accept 必须进入 `approved` 并写入 `invoices`；Publish 必须做 Payment Gate：`amount>0` 且 `status!=paid` 则禁止发布。
+  - Feature 026：录用后必须生成并持久化 **Invoice PDF**（WeasyPrint + Storage `invoices` bucket），并回填 `invoices.pdf_path` 等字段供作者/编辑下载。
   - Feature 024：Production Gate（`final_pdf_path`）**默认关闭以提速 MVP**；需要时可设置 `PRODUCTION_GATE_ENABLED=1` 启用（启用后 `final_pdf_path` 为空将禁止发布；云端可执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql` 补齐字段）。
   - MVP 允许人工确认到账：`POST /api/v1/editor/invoices/confirm` 将 invoice 标记为 `paid`。
   - 云端若存在旧数据 `status='revision_required'`，需执行 `supabase/migrations/20260203120000_status_cleanup.sql` 完成数据纠正。
@@ -72,7 +73,6 @@ Sync Impact Report:
 - **数据库全量 RLS**：MVP 主要依赖后端 API 鉴权 + `service_role` 访问；不要求对 `manuscripts/review_assignments/review_reports` 全量补齐 RLS（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：可保留 schema/占位字段，但不做真实注册与异步任务闭环。
 - **查重（iThenticate/mock）**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不阻塞上传/修订链路。
-- **账单 PDF 存储闭环**：MVP 允许后端“即时生成 PDF 下载”（不做 `pdf_url` 持久化）；支付渠道、对账自动化留后。
 - **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor Pipeline 的 `approved` 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
 - **通知群发（给所有 editor/admin）**：为避免 mock 用户导致的 409 日志刷屏，MVP 禁止对“所有 editor”群发通知；改为只通知稿件 `owner_id/editor_id`（或仅作者自通知）。
 - **修订 Response Letter 图片上传到 Storage**：MVP 不做图片入库/权限/RLS；改为前端把图片压缩后以 Data URL 直接嵌入富文本（有限制体积）。
@@ -93,7 +93,7 @@ Sync Impact Report:
 
 Constitution supersedes all other practices. Amendments require documentation and version bump. 若使用 PR 流程，则 PR 必须验证符合本宪法原则。
 
-**Version**: 1.1.0 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-02
+**Version**: 1.1.1 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-04
 
 ## 近期关键修复快照（2026-02-03）
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
