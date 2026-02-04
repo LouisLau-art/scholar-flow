@@ -25,6 +25,10 @@ htmlcov/
 *.html
 !backend/app/core/templates/*.html
 
+# Playwright
+/frontend/test-results/
+/frontend/playwright-report/
+
 # Supabase
 .supabase/
 .supabase.toml
@@ -48,6 +52,7 @@ htmlcov/
 # Local dev artifacts (do not commit)
 /academic_paper_*.pdf
 /test_manuscript_copy_*.pdf
+/期刊系统整理20260204.pdf
 /generate_academic_pdfs.py
 /scripts/check_interests.py
 /scripts/seed_reviewer_interests.py

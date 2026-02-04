@@ -13,6 +13,34 @@ from app.services.editorial_service import EditorialService
 from app.models.manuscript import normalize_status
 from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
+from pydantic import BaseModel, Field
+
+
+def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
+    """
+    生成 Supabase Storage signed URL（Editor/Admin 详情页使用）。
+
+    中文注释:
+    - 详情页的 iframe / 新标签页打开通常不携带 Authorization header；
+    - 因此后端统一生成短期 signed URL。
+    - 若签名失败，返回 None（不阻断页面加载）。
+    """
+    path = (file_path or "").strip()
+    if not path:
+        return None
+    try:
+        signed = supabase_admin.storage.from_(bucket).create_signed_url(path, expires_in)
+        return (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+    except Exception as e:
+        print(f"[SignedURL] create_signed_url failed: bucket={bucket} path={path} err={e}")
+        return None
+
+
+class InvoiceInfoUpdatePayload(BaseModel):
+    authors: str | None = None
+    affiliation: str | None = None
+    apc_amount: float | None = Field(default=None, ge=0)
+    funding_info: str | None = None
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -179,6 +207,78 @@ async def get_editor_manuscript_detail(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
+    # 票据/支付状态（容错：没有 invoice 也不应 500）
+    invoice = None
+    try:
+        inv_resp = (
+            supabase_admin.table("invoices")
+            .select("id,manuscript_id,amount,status,confirmed_at,invoice_number,pdf_path,pdf_generated_at,pdf_error")
+            .eq("manuscript_id", id)
+            .single()
+            .execute()
+        )
+        invoice = getattr(inv_resp, "data", None) or None
+    except Exception:
+        invoice = None
+    ms["invoice"] = invoice
+
+    # 文件签名（原稿 PDF + 审稿附件）
+    file_path = str(ms.get("file_path") or "").strip()
+    ms["signed_files"] = {
+        "original_manuscript": {
+            "bucket": "manuscripts",
+            "path": file_path or None,
+            "signed_url": _get_signed_url("manuscripts", file_path) if file_path else None,
+        },
+        "peer_review_reports": [],
+    }
+    try:
+        rr = (
+            supabase_admin.table("review_reports")
+            .select("id,reviewer_id,attachment_path,created_at,status")
+            .eq("manuscript_id", id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = getattr(rr, "data", None) or []
+        reviewer_ids = sorted({str(r.get("reviewer_id")) for r in rows if r.get("reviewer_id")})
+        reviewer_map: dict[str, dict] = {}
+        if reviewer_ids:
+            try:
+                pr = (
+                    supabase_admin.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", reviewer_ids)
+                    .execute()
+                )
+                for p in (getattr(pr, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        reviewer_map[pid] = p
+            except Exception:
+                reviewer_map = {}
+        for r in rows:
+            path = str(r.get("attachment_path") or "").strip()
+            if not path:
+                continue
+            rid = str(r.get("reviewer_id") or "")
+            prof = reviewer_map.get(rid) or {}
+            ms["signed_files"]["peer_review_reports"].append(
+                {
+                    "review_report_id": r.get("id"),
+                    "reviewer_id": r.get("reviewer_id"),
+                    "reviewer_name": prof.get("full_name"),
+                    "reviewer_email": prof.get("email"),
+                    "status": r.get("status"),
+                    "created_at": r.get("created_at"),
+                    "bucket": "review-attachments",
+                    "path": path,
+                    "signed_url": _get_signed_url("review-attachments", path),
+                }
+            )
+    except Exception as e:
+        print(f"[SignedFiles] load review attachments failed (ignored): {e}")
+
     profile_ids: list[str] = []
     if ms.get("owner_id"):
         profile_ids.append(str(ms["owner_id"]))
@@ -242,7 +342,7 @@ async def patch_manuscript_status(
 @router.put("/manuscripts/{id}/invoice-info")
 async def put_manuscript_invoice_info(
     id: str,
-    payload: dict = Body(...),
+    payload: InvoiceInfoUpdatePayload,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
 ):
@@ -251,10 +351,10 @@ async def put_manuscript_invoice_info(
     """
     updated = EditorialService().update_invoice_info(
         manuscript_id=id,
-        authors=payload.get("authors"),
-        affiliation=payload.get("affiliation"),
-        apc_amount=payload.get("apc_amount"),
-        funding_info=payload.get("funding_info"),
+        authors=payload.authors,
+        affiliation=payload.affiliation,
+        apc_amount=payload.apc_amount,
+        funding_info=payload.funding_info,
         changed_by=str(current_user.get("id")),
     )
     return {"success": True, "data": updated}

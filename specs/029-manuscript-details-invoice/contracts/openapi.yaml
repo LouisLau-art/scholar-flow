@@ -1,0 +1,38 @@
+openapi: 3.0.0
+info:
+  title: Manuscript Details and Invoice API
+  version: 1.0.0
+paths:
+  /api/v1/editor/manuscripts/{id}:
+    get:
+      summary: Get detailed manuscript info including files and invoice metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Full manuscript details
+  /api/v1/editor/manuscripts/{id}/invoice-info:
+    put:
+      summary: Update invoice/APC metadata and log the change
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authors, affiliation, apc_amount]
+              properties:
+                authors: { type: string }
+                affiliation: { type: string }
+                apc_amount: { type: number }
+                funding_info: { type: string }
+      responses:
+        '200':
+          description: Metadata updated successfully

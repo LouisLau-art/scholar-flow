@@ -17,6 +17,7 @@ class StatusTransition:
     to_status: str
     changed_by: str | None
     comment: str | None
+    payload: dict[str, Any] | None
     created_at: str
 
 
@@ -39,20 +40,59 @@ class EditorialService:
         """
         写入 status_transition_logs（若云端未应用该迁移，失败则降级忽略）。
         """
-        try:
-            self.client.table("status_transition_logs").insert(
-                {
-                    "manuscript_id": manuscript_id,
-                    "from_status": log.from_status,
-                    "to_status": log.to_status,
-                    "comment": log.comment,
-                    "changed_by": log.changed_by,
-                    "created_at": log.created_at,
-                }
-            ).execute()
-        except Exception as e:
-            # 中文注释: 迁移未跑/列缺失时，不应阻断主流程（MVP 提速）。
-            print(f"[Workflow] transition log insert failed (ignored): {e}")
+        base_row: dict[str, Any] = {
+            "manuscript_id": manuscript_id,
+            "from_status": log.from_status,
+            "to_status": log.to_status,
+            "comment": log.comment,
+            "changed_by": log.changed_by,
+            "created_at": log.created_at,
+        }
+
+        def _try_insert(row: dict[str, Any]) -> None:
+            self.client.table("status_transition_logs").insert(row).execute()
+
+        payload = log.payload
+        candidates: list[dict[str, Any]] = []
+
+        # 1) 原始写入（含 changed_by + payload）
+        row1 = dict(base_row)
+        if payload is not None:
+            row1["payload"] = payload
+        candidates.append(row1)
+
+        # 2) 若 payload 列不存在，则去掉 payload 再写一次
+        row2 = dict(base_row)
+        candidates.append(row2)
+
+        # 3) 若 changed_by 外键约束失败（测试 token / dev bypass 可能出现），用 changed_by=NULL 降级写入。
+        if log.changed_by:
+            downgraded_payload = dict(payload) if isinstance(payload, dict) else {}
+            downgraded_payload.setdefault("changed_by_raw", log.changed_by)
+
+            row3 = dict(base_row)
+            row3["changed_by"] = None
+            if downgraded_payload:
+                row3["payload"] = downgraded_payload
+            candidates.append(row3)
+
+            # 4) 同上，但去掉 payload（防止 payload 列不存在）
+            row4 = dict(base_row)
+            row4["changed_by"] = None
+            candidates.append(row4)
+
+        last_err: Exception | None = None
+        for row in candidates:
+            try:
+                _try_insert(row)
+                return
+            except Exception as e:
+                last_err = e
+                continue
+
+        # 中文注释: 迁移未跑/权限不足/外键约束等问题，不应阻断主流程（MVP 提速）。
+        if last_err is not None:
+            print(f"[Workflow] transition log insert failed (ignored): {last_err}")
 
     def get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
         try:
@@ -132,6 +172,7 @@ class EditorialService:
                 to_status=to_norm,
                 changed_by=changed_by,
                 comment=comment,
+                payload=None,
                 created_at=now,
             ),
             manuscript_id=manuscript_id,
@@ -149,10 +190,12 @@ class EditorialService:
         changed_by: str | None,
     ) -> dict[str, Any]:
         ms = self.get_manuscript(manuscript_id)
+        before_meta: dict[str, Any] = {}
         meta: dict[str, Any] = {}
         try:
             raw_meta = ms.get("invoice_metadata") or {}
             if isinstance(raw_meta, dict):
+                before_meta = dict(raw_meta)
                 meta = dict(raw_meta)
         except Exception:
             meta = {}
@@ -191,6 +234,11 @@ class EditorialService:
                 to_status=str(ms.get("status") or ""),
                 changed_by=changed_by,
                 comment="invoice_metadata updated",
+                payload={
+                    "action": "update_invoice_info",
+                    "before": before_meta,
+                    "after": meta,
+                },
                 created_at=now,
             ),
             manuscript_id=manuscript_id,
