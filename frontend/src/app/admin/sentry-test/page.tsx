@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/nextjs'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import SiteHeader from '@/components/layout/SiteHeader'
 
 export default function SentryTestPage() {
   const [loading, setLoading] = useState(false)
@@ -60,37 +61,40 @@ export default function SentryTestPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
-      <h1 className="text-2xl font-semibold">Sentry 测试页</h1>
-      <p className="text-sm text-muted-foreground">
-        用于 UAT 验证：前端异常、服务端异常、Replay/Tracing 是否正常上报。
-      </p>
-      <p className="text-xs text-muted-foreground">
-        DSN: {dsnConfigured ? 'configured' : 'missing（请在 Vercel 配 NEXT_PUBLIC_SENTRY_DSN）'}
-      </p>
-      {dsnSummary ? (
-        <p className="text-xs text-muted-foreground">
-          DSN Host: {dsnSummary.host} / Project: {dsnSummary.projectId}
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <SiteHeader />
+      <main className="flex-1 mx-auto max-w-3xl w-full space-y-4 px-4 py-10 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-semibold">Sentry 测试页</h1>
+        <p className="text-sm text-muted-foreground">
+          用于 UAT 验证：前端异常、服务端异常、Replay/Tracing 是否正常上报。
         </p>
-      ) : null}
-      {lastEventId ? (
-        <p className="text-xs text-muted-foreground">Last client EventId: {lastEventId}</p>
-      ) : null}
-      {lastServerEventId ? (
-        <p className="text-xs text-muted-foreground">Last server EventId: {lastServerEventId}</p>
-      ) : null}
+        <p className="text-xs text-muted-foreground">
+          DSN: {dsnConfigured ? 'configured' : 'missing（请在 Vercel 配 NEXT_PUBLIC_SENTRY_DSN）'}
+        </p>
+        {dsnSummary ? (
+          <p className="text-xs text-muted-foreground">
+            DSN Host: {dsnSummary.host} / Project: {dsnSummary.projectId}
+          </p>
+        ) : null}
+        {lastEventId ? (
+          <p className="text-xs text-muted-foreground">Last client EventId: {lastEventId}</p>
+        ) : null}
+        {lastServerEventId ? (
+          <p className="text-xs text-muted-foreground">Last server EventId: {lastServerEventId}</p>
+        ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={handleCaptureMessage} variant="secondary">
-          发送测试消息（前端）
-        </Button>
-        <Button onClick={handleTriggerServerError} variant="secondary" disabled={loading}>
-          {loading ? '触发中...' : '触发服务端异常（Next）'}
-        </Button>
-        <Button onClick={handleThrowError} variant="destructive">
-          直接抛异常（前端）
-        </Button>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={handleCaptureMessage} variant="secondary">
+            发送测试消息（前端）
+          </Button>
+          <Button onClick={handleTriggerServerError} variant="secondary" disabled={loading}>
+            {loading ? '触发中...' : '触发服务端异常（Next）'}
+          </Button>
+          <Button onClick={handleThrowError} variant="destructive">
+            直接抛异常（前端）
+          </Button>
+        </div>
+      </main>
     </div>
   )
 }

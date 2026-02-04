@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminUserService } from '@/services/admin/userService';
 import { authService } from '@/services/auth';
@@ -11,6 +11,8 @@ import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
 import { User, UserRole } from '@/types/user';
 import { toast } from 'sonner';
 import { Loader2, ShieldAlert } from 'lucide-react';
+import SiteHeader from '@/components/layout/SiteHeader';
+import { Button } from '@/components/ui/button';
 
 export default function UserManagementPage() {
   const router = useRouter();
@@ -130,75 +132,81 @@ export default function UserManagementPage() {
     }
   };
 
+  let content: ReactNode;
+
   // 4. Render Loading or Access Denied state
   if (verifyingRole) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+    content = (
+      <div className="flex flex-1 w-full items-center justify-center flex-col gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
         <p className="text-slate-500 font-medium">Verifying access privileges...</p>
       </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center flex-col gap-4 bg-slate-50">
+    )
+  } else if (!isAdmin) {
+    content = (
+      <div className="flex flex-1 w-full items-center justify-center flex-col gap-4">
         <ShieldAlert className="h-12 w-12 text-red-500" />
         <h1 className="text-xl font-bold text-slate-900">Access Denied</h1>
         <p className="text-slate-500">Redirecting you to dashboard...</p>
       </div>
+    )
+  } else {
+    // 5. Render Admin Page
+    content = (
+      <div className="w-full">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Manage user accounts, roles, and permissions.
+            </p>
+          </div>
+          <Button onClick={() => setIsInviteDialogOpen(true)}>
+            Invite Member
+          </Button>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+          <UserFilters
+            search={search}
+            role={role}
+            onSearchChange={setSearch}
+            onRoleChange={handleRoleChange}
+          />
+
+          <UserTable
+            users={users}
+            isLoading={loading}
+            page={page}
+            perPage={10}
+            total={total}
+            onPageChange={setPage}
+            onEdit={handleEditClick}
+          />
+        </div>
+
+        <UserRoleDialog
+          isOpen={isRoleDialogOpen}
+          onClose={() => setIsRoleDialogOpen(false)}
+          onConfirm={handleRoleUpdate}
+          user={selectedUser}
+        />
+
+        <CreateUserDialog
+          isOpen={isInviteDialogOpen}
+          onClose={() => setIsInviteDialogOpen(false)}
+          onConfirm={handleInviteUser}
+        />
+      </div>
     );
   }
 
-  // 5. Render Admin Page
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Manage user accounts, roles, and permissions.
-          </p>
-        </div>
-        <button 
-          onClick={() => setIsInviteDialogOpen(true)}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        >
-          Invite Member
-        </button>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <UserFilters 
-          search={search} 
-          role={role} 
-          onSearchChange={setSearch} 
-          onRoleChange={handleRoleChange} 
-        />
-        
-        <UserTable 
-          users={users} 
-          isLoading={loading} 
-          page={page} 
-          perPage={10} 
-          total={total} 
-          onPageChange={setPage} 
-          onEdit={handleEditClick}
-        />
-      </div>
-
-      <UserRoleDialog 
-        isOpen={isRoleDialogOpen} 
-        onClose={() => setIsRoleDialogOpen(false)} 
-        onConfirm={handleRoleUpdate}
-        user={selectedUser}
-      />
-
-      <CreateUserDialog 
-        isOpen={isInviteDialogOpen} 
-        onClose={() => setIsInviteDialogOpen(false)} 
-        onConfirm={handleInviteUser}
-      />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <SiteHeader />
+      <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-10 sm:px-6 lg:px-8">
+        {content}
+      </main>
     </div>
   );
 }
