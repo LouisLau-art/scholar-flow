@@ -9,8 +9,7 @@ Revision Service: 处理稿件修订工作流的核心业务逻辑
 
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
-from uuid import UUID
-from app.lib.api_client import supabase, supabase_admin
+from app.lib.api_client import supabase_admin
 from app.services.notification_service import NotificationService
 
 

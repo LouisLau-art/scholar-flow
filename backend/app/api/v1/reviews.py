@@ -2,13 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, Up
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
-from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
 from datetime import datetime, timedelta, timezone
-import secrets
 import os
 
 router = APIRouter(tags=["Reviews"])

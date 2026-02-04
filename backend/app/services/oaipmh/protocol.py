@@ -117,7 +117,7 @@ class OAIPMHProtocol:
         try:
             parts = request.identifier.split(":")
             article_id = parts[-1]
-        except:
+        except Exception:
             self.error(
                 root, OAIErrorCode.ID_DOES_NOT_EXIST, "Invalid identifier format"
             )

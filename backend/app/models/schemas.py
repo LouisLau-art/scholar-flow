@@ -3,8 +3,6 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
-from app.models.reviews import ReviewReport
-from app.models.invoices import Invoice
 
 # === 核心业务实体模型 (Pydantic v2) ===
 

@@ -128,8 +128,6 @@ class MatchmakingService:
         - 只允许服务端（service role）写入 reviewer_embeddings。
         - 通过 source_text_hash 做幂等，避免重复向量化。
         """
-
-        config = self._config
         try:
             profile = (
                 self._db.table("user_profiles")
@@ -284,4 +282,3 @@ class MatchmakingService:
             rows = getattr(resp, "data", None) or []
 
         return {str(r.get("id")): r for r in rows if r.get("id")}
-

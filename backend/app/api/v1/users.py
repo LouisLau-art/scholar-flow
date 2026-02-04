@@ -1,7 +1,5 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.core.auth_utils import get_current_user, security
 from app.core.roles import get_current_profile

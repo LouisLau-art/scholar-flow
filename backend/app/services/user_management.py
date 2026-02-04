@@ -3,7 +3,6 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
-from pydantic import EmailStr
 
 class UserManagementService:
     """
@@ -312,7 +311,7 @@ class UserManagementService:
             
             # 5. Send Notification (T086)
             print("-" * 50)
-            print(f"🚀 [INTERNAL USER CREATED]")
+            print("🚀 [INTERNAL USER CREATED]")
             print(f"📧 Email: {email}")
             print(f"🔑 Temp Password: {temp_password}")
             print(f"🎭 Role: {role}")
@@ -473,7 +472,7 @@ class UserManagementService:
                     recipient_email=email,
                     notification_type="reviewer_invite",
                     status="sent",
-                    error_message=f"Magic Link generated (logged to console)" 
+                    error_message="Magic Link generated (logged to console)",
                 )
             except Exception as log_err:
                 print(f"WARNING: Failed to log email notification: {log_err}")

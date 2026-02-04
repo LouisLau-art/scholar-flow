@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response as FastAPIResponse
-from app.models.oaipmh import OAIPMHRequest, OAIPMHVerb
+from app.models.oaipmh import OAIPMHRequest
 from app.services.oaipmh.protocol import OAIPMHProtocol
 from typing import Optional
 from datetime import datetime
@@ -43,26 +43,6 @@ async def handle_oaipmh_request(
         until = form_data.get("until")
         set = form_data.get("set")
         resumptionToken = form_data.get("resumptionToken")
-
-    # Map string verb to Enum
-    try:
-        verb_enum = OAIPMHVerb(verb) if verb else None
-    except ValueError:
-        # Let protocol handle bad verb
-        # We need to construct request even with invalid verb to return badVerb error XML
-        # But OAIPMHRequest model requires valid Enum.
-        # So we might need to handle validation error or relax model.
-        # Actually OAIPMHRequest uses Enum, so it will fail validation if constructed directly.
-        # We'll pass raw strings to protocol if we modify protocol to accept them,
-        # OR handle validation error here and return OAI error.
-        # Protocol.handle_request expects OAIPMHRequest.
-        # If verb is invalid, we can't create OAIPMHRequest easily if it enforces Enum.
-        pass
-
-    # Actually, better to catch validation error or manually construct request object
-    # that protocol can handle.
-    # For simplicity, if verb is missing or invalid, we pass None/Invalid and Protocol handles it?
-    # No, Pydantic will error.
 
     # Let's try to construct request.
     try:
