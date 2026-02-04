@@ -42,7 +42,7 @@ export default function ManuscriptsProcessPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
+      <main className="mx-auto max-w-[1600px] px-4 py-10 sm:px-8 lg:px-10 space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">

@@ -38,18 +38,18 @@ export function ManuscriptTable({
   onOwnerBound?: () => void
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden" data-testid="editor-process-table">
+    <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto" data-testid="editor-process-table">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-[220px]">Manuscript ID</TableHead>
-            <TableHead>Journal</TableHead>
-            <TableHead>Submitted</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Updated</TableHead>
-            <TableHead>Assign Editor</TableHead>
-            <TableHead>Owner</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+          <TableRow className="bg-slate-50/50">
+            <TableHead className="w-[200px] whitespace-nowrap">Manuscript ID</TableHead>
+            <TableHead className="whitespace-nowrap">Journal</TableHead>
+            <TableHead className="whitespace-nowrap">Submitted</TableHead>
+            <TableHead className="whitespace-nowrap">Status</TableHead>
+            <TableHead className="whitespace-nowrap">Updated</TableHead>
+            <TableHead className="whitespace-nowrap">Assign Editor</TableHead>
+            <TableHead className="whitespace-nowrap">Owner</TableHead>
+            <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -63,31 +63,33 @@ export function ManuscriptTable({
             rows.map((r) => {
               const status = r.status || ''
               return (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">
+                <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                  <TableCell className="font-mono text-[10px] sm:text-xs">
                     <Link
                       href={`/editor/manuscript/${r.id}`}
-                      className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600"
+                      className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600 font-medium"
                     >
-                      <span className="truncate max-w-[180px]">{r.id}</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <span className="truncate max-w-[150px]">{r.id}</span>
+                      <ArrowRight className="h-3 w-3" />
                     </Link>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-700">
+                  <TableCell className="text-sm text-slate-700 whitespace-nowrap">
                     {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-700">{fmt(r.created_at)}</TableCell>
+                  <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.created_at)}</TableCell>
                   <TableCell>
-                    <Badge className={`border ${getStatusBadgeClass(status)}`}>{getStatusLabel(status)}</Badge>
+                    <Badge variant="outline" className={getStatusBadgeClass(status)}>
+                      {getStatusLabel(status)}
+                    </Badge>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-700">{fmt(r.updated_at)}</TableCell>
-                  <TableCell className="text-sm text-slate-700">
+                  <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.updated_at)}</TableCell>
+                  <TableCell className="text-sm text-slate-700 font-medium">
                     {r.editor?.full_name || r.editor?.email || '—'}
                   </TableCell>
                   <TableCell className="text-sm text-slate-700">
                     <div className="flex items-center gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate">{r.owner?.full_name || r.owner?.email || '—'}</div>
+                      <div className="min-w-[100px] max-w-[150px] truncate font-medium">
+                        {r.owner?.full_name || r.owner?.email || '—'}
                       </div>
                       <BindingOwnerDropdown
                         manuscriptId={r.id}
@@ -98,12 +100,12 @@ export function ManuscriptTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" className="gap-2" onClick={() => onAssign?.(r)}>
-                        <Users className="h-4 w-4" />
+                      <Button size="sm" variant="outline" className="h-8 gap-2 border-slate-200 text-slate-700 hover:bg-slate-100" onClick={() => onAssign?.(r)}>
+                        <Users className="h-3.5 w-3.5" />
                         Assign
                       </Button>
-                      <Button size="sm" className="gap-2" onClick={() => onDecide?.(r)}>
-                        <Gavel className="h-4 w-4" />
+                      <Button size="sm" className="h-8 gap-2 bg-slate-900 hover:bg-slate-800" onClick={() => onDecide?.(r)}>
+                        <Gavel className="h-3.5 w-3.5" />
                         Decide
                       </Button>
                     </div>

@@ -55,7 +55,7 @@ export function getStatusBadgeClass(status: ManuscriptStatus): string {
       return 'bg-blue-50 text-blue-700 border-blue-200'
     case 'decision':
     case 'decision_done':
-      return 'bg-amber-50 text-amber-800 border-amber-200'
+      return 'bg-amber-100 text-amber-900 border-amber-200'
     case 'major_revision':
     case 'minor_revision':
     case 'resubmitted':
@@ -66,7 +66,7 @@ export function getStatusBadgeClass(status: ManuscriptStatus): string {
     case 'proofreading':
       return 'bg-emerald-50 text-emerald-800 border-emerald-200'
     case 'published':
-      return 'bg-emerald-600 text-white border-emerald-700'
+      return 'bg-indigo-100 text-indigo-700 border-indigo-200'
     case 'rejected':
       return 'bg-rose-50 text-rose-700 border-rose-200'
     default:
