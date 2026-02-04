@@ -102,16 +102,28 @@ def init_sentry() -> bool:
 
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    integrations: list[object] = [FastApiIntegration()]
+
+    # 中文注释:
+    # - 我们的后端目前主要通过 Supabase PostgREST/httpx 访问数据库，并未使用 SQLAlchemy ORM。
+    # - 但 Feature 027 期望在“如果项目未来引入 SQLAlchemy”时能自动获得 DB 异常监控。
+    # - 因此这里做可选启用：仅当环境里安装了 sqlalchemy 时，才挂载 SqlalchemyIntegration。
+    try:
+        import sqlalchemy  # noqa: F401
+
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+        integrations.append(SqlalchemyIntegration())
+    except Exception:
+        # 零崩溃原则：缺失 SQLAlchemy 不应导致 Sentry 整体不可用
+        pass
 
     sentry_sdk.init(
         dsn=cfg.dsn,
         environment=cfg.environment,
         traces_sample_rate=cfg.traces_sample_rate,
-        integrations=[
-            FastApiIntegration(),
-            SqlalchemyIntegration(),
-        ],
+        integrations=integrations,
         send_default_pii=False,
         with_locals=False,
         before_send=_before_send,
