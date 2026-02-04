@@ -9,6 +9,10 @@
 - 优先使用 Supabase CLI：`supabase db push --linked`
 - 若 CLI 不可用：到 Supabase Dashboard → SQL Editor 执行本 feature 对应 migration（实现阶段会新增）。
 
+本 Feature 026 对应 migration：
+- `supabase/migrations/20260204120000_invoice_pdf_fields.sql`
+- `supabase/migrations/20260204121000_invoices_bucket.sql`
+
 ### 1.2 创建 Storage Bucket：`invoices`
 
 **建议**：私有桶（`public=false`），下载走后端 `signed_url`。
@@ -19,11 +23,12 @@
 
 ## 2) 后端环境变量（示例）
 
-实现阶段会新增/复用以下配置（名称以实现为准）：
+实现阶段新增/复用以下配置：
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`（仅后端）
 - `INVOICE_PAYMENT_INSTRUCTIONS`（银行信息/收款信息，英文多行文本）
+- `INVOICE_SIGNED_URL_EXPIRES_IN`（Invoice PDF signed URL 过期时间，秒，默认 `600`）
 
 ## 3) 本地验证流程（MVP）
 
@@ -39,4 +44,3 @@
 - 下载返回 404：通常是 invoice 记录存在但 `pdf_path` 为空（生成失败/尚未完成）。
 - 生成失败：检查后端日志中 WeasyPrint 相关错误；容器环境通常缺少 Cairo/Pango/字体依赖。
 - 权限 403：确认当前用户是该稿件作者或拥有 `editor/admin` 角色；并确认后端未把 signed URL 下发给未授权用户。
-

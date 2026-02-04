@@ -217,3 +217,37 @@ class ResendConfig:
         ).strip()
         
         return ResendConfig(api_key=api_key, sender=sender)
+
+
+@dataclass(frozen=True)
+class InvoiceConfig:
+    """
+    Invoice PDF 配置（Feature 026）
+
+    中文注释:
+    - 账单 PDF 需要展示“Bank Details / Payment Instructions”，该信息来自环境变量（期刊级配置）。
+    - PDF 下载默认返回 signed URL（短期有效），过期时间也通过环境变量控制。
+    """
+
+    payment_instructions: str
+    signed_url_expires_in: int
+
+    @staticmethod
+    def from_env() -> "InvoiceConfig":
+        payment_instructions = (
+            os.environ.get("INVOICE_PAYMENT_INSTRUCTIONS")
+            or "Bank Details:\nAccount Name: ScholarFlow\nAccount Number: (TBD)\nBank: (TBD)\nSWIFT: (TBD)"
+        ).strip()
+
+        expires_raw = (os.environ.get("INVOICE_SIGNED_URL_EXPIRES_IN") or "600").strip()
+        try:
+            expires_in = int(expires_raw)
+        except ValueError:
+            expires_in = 600
+        if expires_in <= 0:
+            expires_in = 600
+
+        return InvoiceConfig(
+            payment_instructions=payment_instructions,
+            signed_url_expires_in=expires_in,
+        )

@@ -9,7 +9,7 @@ from fastapi import (
     Depends,
 )
 from fastapi.responses import JSONResponse, Response
-from starlette.responses import RedirectResponse
+import httpx
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -23,7 +23,10 @@ from app.services.revision_service import RevisionService
 from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
 from app.core.roles import require_any_role, get_current_profile
 from app.services.owner_binding_service import get_profile_for_owner, validate_internal_owner_id
-from app.core.invoice_generator import build_invoice_pdf_bytes
+from app.services.invoice_pdf_service import (
+    generate_and_store_invoice_pdf,
+    get_invoice_pdf_signed_url,
+)
 from app.services.post_acceptance_service import publish_manuscript as publish_manuscript_post_acceptance
 from uuid import uuid4, UUID
 import shutil
@@ -99,6 +102,7 @@ async def get_manuscript_pdf_signed(
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
+    is_internal = bool(roles.intersection({"admin", "editor"}))
 
     ms_resp = (
         supabase_admin.table("manuscripts")
@@ -168,7 +172,7 @@ async def download_invoice_pdf(
     Feature 024: 下载账单 PDF（Author / Editor / Admin）
 
     中文注释:
-    - PDF 即时生成（ReportLab），避免存储/权限复杂度。
+    - Feature 026：账单 PDF 使用 WeasyPrint 生成并持久化到 Storage `invoices`，此处作为兼容入口提供下载。
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
@@ -189,7 +193,7 @@ async def download_invoice_pdf(
 
     inv_resp = (
         supabase_admin.table("invoices")
-        .select("id, amount")
+        .select("id, amount, pdf_path, pdf_error")
         .eq("manuscript_id", str(manuscript_id))
         .limit(1)
         .execute()
@@ -199,18 +203,46 @@ async def download_invoice_pdf(
         raise HTTPException(status_code=404, detail="Invoice not found")
     inv = inv_rows[0]
 
-    try:
-        amount = float(inv.get("amount") or 0)
-    except Exception:
-        amount = 0.0
+    invoice_id = UUID(str(inv.get("id")))
+    pdf_path = (inv.get("pdf_path") or "").strip()
+    pdf_error = (inv.get("pdf_error") or "").strip()
 
-    pdf_bytes = build_invoice_pdf_bytes(
-        invoice_id=UUID(str(inv.get("id"))),
-        manuscript_title=str(ms.get("title") or "Manuscript"),
-        amount=float(amount),
-    )
-    if not pdf_bytes:
-        raise HTTPException(status_code=500, detail="Failed to generate invoice pdf")
+    # 若尚未生成或上次失败，则同步触发一次生成（作者点击下载时体验更直观）
+    if (not pdf_path) or pdf_error:
+        res = generate_and_store_invoice_pdf(invoice_id=invoice_id)
+        if res.pdf_error:
+            print(f"[InvoicePDF] generate failed for manuscript={manuscript_id}: {res.pdf_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Failed to generate invoice pdf: {res.pdf_error}"
+                    if is_internal
+                    else "Invoice PDF generation failed. Please retry later."
+                ),
+            )
+
+    try:
+        signed_url, _expires_in = get_invoice_pdf_signed_url(invoice_id=invoice_id)
+    except Exception as e:
+        print(f"[InvoicePDF] signed url failed for invoice={invoice_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Invoice not available: {e}" if is_internal else "Invoice not available. Please retry later."),
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(signed_url)
+            if r.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to download invoice pdf from storage (status={r.status_code})",
+                )
+            pdf_bytes = bytes(r.content or b"")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to download invoice pdf: {e}")
 
     filename = f"invoice-{manuscript_id}.pdf"
     return Response(

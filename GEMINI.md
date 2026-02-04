@@ -30,6 +30,7 @@
     - **环境变量**: 在 HF Settings 填入 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_ORIGIN` (Vercel 域名)。
     - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
+- **Invoice PDF（Feature 026）**：后端需配置 `INVOICE_PAYMENT_INSTRUCTIONS` / `INVOICE_SIGNED_URL_EXPIRES_IN`，并确保云端已应用 `supabase/migrations/20260204120000_invoice_pdf_fields.sql` 与 `supabase/migrations/20260204121000_invoices_bucket.sql`。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
   - **修回等待**：需要作者修回使用 `status='revision_requested'`（作者在 `/submit-revision/[id]` 提交后进入 `resubmitted`）。
@@ -272,8 +273,6 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 ## Recent Changes
 - 026-automated-invoice-pdf: Added Python 3.14+ + FastAPI, Pydantic v2, Supabase-py v2.x, Jinja2, WeasyPrint
 - 025-production-email-service: Added Python 3.14+ (Backend) + `resend` (Email SDK), `fastapi.BackgroundTasks` (Async dispatch), `tenacity` (Retry logic), `jinja2` (Templating), `itsdangerous` (Secure tokens).
-- 022-core-logic-hardening: Implemented Financial Gate (payment check), APC Confirmation, and Reviewer Privacy (Dual Comments & Confidential Attachments). Updates to Editor Dashboard and Review Submission flow.
 
 ## Active Technologies
-- Python 3.14+ + FastAPI, Pydantic v2, Supabase-py v2.x, Jinja2, WeasyPrint (026-automated-invoice-pdf)
 - Supabase (PostgreSQL + Storage) (026-automated-invoice-pdf)
