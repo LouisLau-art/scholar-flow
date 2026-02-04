@@ -21,7 +21,7 @@
 - **Supabase 使用云端项目**（非本地 DB 作为默认）；迁移优先用 `supabase` CLI（`supabase login` / `supabase link` / `supabase db push --linked`），必要时可在 Dashboard 的 SQL Editor 手动执行迁移 SQL。
 - **环境变量与密钥**：真实密钥只放本地/CI/平台 Secrets；仓库只保留模板（`.env.example` / `backend/.env.example` / `frontend/.env.local.example`），严禁提交 `SUPABASE_SERVICE_ROLE_KEY` 等敏感信息。
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
-- **AI 推荐模型缓存（本地 CPU）**：Matchmaking 使用 `sentence-transformers`（本地推理），首次可能从 Hugging Face 下载模型；`./start.sh` 默认将缓存放到 `./.cache/` 以便“下载一次后复用”，并默认设置 `HF_ENDPOINT=https://hf-mirror.com`（如需改回官方源可在环境变量里覆盖）。当本地已存在模型缓存时，`./start.sh` 会自动设置 `MATCHMAKING_LOCAL_FILES_ONLY=1`，彻底避免每次重启都发起 HF 网络请求。
+- **AI 推荐模型（本地 CPU，部署友好）**：Matchmaking 默认使用纯 Python 的 hash-embedding（`backend/app/core/ml.py`），避免 `sentence-transformers/torch` 导致部署构建过慢或失败；如需更智能的语义匹配，可在“本地/专用环境”额外安装 `sentence-transformers`，系统会自动启用并可配置缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`，配合 `MATCHMAKING_LOCAL_FILES_ONLY=1` 强制离线）。`./start.sh` 仍会默认设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
 - **公开文章 PDF 预览**：`/articles/[id]` 不依赖前端直连 Storage（匿名会 400/权限不一致），统一走后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 返回 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 仅返回 `status='published'` 的稿件。
 - **部署架构（Vercel + Hugging Face Spaces）**：
   - **Frontend**: 部署于 **Vercel**。需设置 `NEXT_PUBLIC_API_URL` 指向 HF Space 地址（无尾部斜杠）。
