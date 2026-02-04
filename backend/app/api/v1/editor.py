@@ -3,12 +3,12 @@ from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from datetime import datetime
-from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from app.models.revision import RevisionCreate, RevisionRequestResponse
 from app.services.revision_service import RevisionService
 from datetime import timezone
 from app.services.post_acceptance_service import publish_manuscript
+import os
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -944,7 +944,6 @@ async def submit_final_decision_test(
 
     # Mock响应
     if decision == "accept":
-        doi = f"10.1234/sf.{datetime.now().strftime('%Y%m%d%H%M%S')}"
         status = "published"
     else:
         status = "rejected"

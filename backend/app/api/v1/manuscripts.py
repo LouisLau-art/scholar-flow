@@ -8,7 +8,7 @@ from fastapi import (
     Form,
     Depends,
 )
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, RedirectResponse
 import httpx
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
@@ -102,7 +102,6 @@ async def get_manuscript_pdf_signed(
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
-    is_internal = bool(roles.intersection({"admin", "editor"}))
 
     ms_resp = (
         supabase_admin.table("manuscripts")
@@ -176,6 +175,7 @@ async def download_invoice_pdf(
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
+    is_internal = bool(roles.intersection({"admin", "editor"}))
 
     ms_resp = (
         supabase_admin.table("manuscripts")
@@ -671,7 +671,7 @@ async def submit_revision(
     try:
         file_content = await file.read()
         # 使用 service_role client 上传以确保权限
-        res = supabase_admin.storage.from_("manuscripts").upload(
+        supabase_admin.storage.from_("manuscripts").upload(
             file_path, file_content, {"content-type": "application/pdf"}
         )
         # supabase-py upload 返回结果可能包含 path/Key
