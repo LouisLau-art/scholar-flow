@@ -15,10 +15,12 @@ class UserProfile(BaseModel):
     avatar_url: Optional[str] = None
     affiliation: Optional[str] = None
     title: Optional[str] = None
+    homepage_url: Optional[str] = None
     orcid_id: Optional[str] = None
     google_scholar_url: Optional[str] = None
     research_interests: List[str] = Field(default_factory=list)
     roles: List[str] = Field(default_factory=lambda: ["author"])
+    is_reviewer_active: Optional[bool] = True
     created_at: datetime
     updated_at: datetime
 

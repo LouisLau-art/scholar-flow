@@ -75,4 +75,45 @@ export const EditorApi = {
     })
     return res.json()
   },
+
+  // Feature 030: Reviewer Library
+  async addReviewerToLibrary(payload: {
+    email: string
+    full_name: string
+    title: string
+    affiliation?: string
+    homepage_url?: string
+    research_interests?: string[]
+  }) {
+    const res = await authedFetch('/api/v1/editor/reviewer-library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async searchReviewerLibrary(query?: string, limit: number = 50) {
+    const params = new URLSearchParams()
+    if (query) params.set('query', query)
+    params.set('limit', String(limit))
+    const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
+    return res.json()
+  },
+
+  async updateReviewerLibraryItem(reviewerId: string, payload: Record<string, any>) {
+    const res = await authedFetch(`/api/v1/editor/reviewer-library/${encodeURIComponent(reviewerId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async deactivateReviewerLibraryItem(reviewerId: string) {
+    const res = await authedFetch(`/api/v1/editor/reviewer-library/${encodeURIComponent(reviewerId)}`, {
+      method: 'DELETE',
+    })
+    return res.json()
+  },
 }

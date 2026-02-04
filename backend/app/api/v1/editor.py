@@ -14,6 +14,8 @@ from app.models.manuscript import normalize_status
 from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
 from pydantic import BaseModel, Field
+from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
+from app.services.reviewer_service import ReviewerService
 
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
@@ -441,6 +443,108 @@ async def list_internal_staff(
     except Exception as e:
         print(f"[OwnerBinding] 获取内部员工列表失败: {e}")
         raise HTTPException(status_code=500, detail="Failed to load internal staff")
+
+
+# ----------------------------
+# Feature 030: Reviewer Library
+# ----------------------------
+
+
+@router.post("/reviewer-library", status_code=201)
+async def add_reviewer_to_library(
+    payload: ReviewerCreate,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    User Story 1:
+    - 将潜在审稿人加入“审稿人库”
+    - 立即创建/关联 auth.users + public.user_profiles
+    - **不发送邮件**
+    """
+    try:
+        data = ReviewerService().add_to_library(payload)
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        print(f"[ReviewerLibrary] add failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add reviewer")
+
+
+@router.get("/reviewer-library")
+async def search_reviewer_library(
+    query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
+    limit: int = Query(50, ge=1, le=200),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    User Story 2:
+    - 从审稿人库搜索审稿人（仅返回 active reviewer）
+    """
+    try:
+        rows = ReviewerService().search(query=query, limit=limit)
+        return {"success": True, "data": rows}
+    except Exception as e:
+        print(f"[ReviewerLibrary] search failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to search reviewer library")
+
+
+@router.get("/reviewer-library/{id}")
+async def get_reviewer_library_item(
+    id: str,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    User Story 3:
+    - 获取审稿人库条目的完整信息
+    """
+    try:
+        data = ReviewerService().get_reviewer(UUID(id))
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"[ReviewerLibrary] get failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load reviewer")
+
+
+@router.put("/reviewer-library/{id}")
+async def update_reviewer_library_item(
+    id: str,
+    payload: ReviewerUpdate,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    User Story 3:
+    - 更新审稿人库条目的元数据（title/homepage/interests 等）
+    """
+    try:
+        data = ReviewerService().update_reviewer(UUID(id), payload)
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"[ReviewerLibrary] update failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update reviewer")
+
+
+@router.delete("/reviewer-library/{id}")
+async def deactivate_reviewer_library_item(
+    id: str,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    User Story 1:
+    - 从审稿人库移除（软删除：is_reviewer_active=false）
+    """
+    try:
+        data = ReviewerService().deactivate(UUID(id))
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"[ReviewerLibrary] deactivate failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to remove reviewer")
 
 
 @router.get("/journals")

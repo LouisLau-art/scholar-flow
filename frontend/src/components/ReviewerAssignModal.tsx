@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { X, Search, Users, Check, UserPlus } from 'lucide-react'
-import { InviteReviewerDialog } from '@/components/admin/InviteReviewerDialog'
-import { adminUserService } from '@/services/admin/userService'
 import { authService } from '@/services/auth'
 import { toast } from 'sonner'
 import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
+import { EditorApi } from '@/services/editorApi'
+import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
 
 type StaffProfile = {
   id: string
@@ -40,8 +40,8 @@ export default function ReviewerAssignModal({
   const [aiRecommendations, setAiRecommendations] = useState<ReviewerRecommendation[]>([])
   const [aiMessage, setAiMessage] = useState<string | null>(null)
 
-  // Invite Dialog
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
+  // Add to Library Dialog（仅录入，不发邮件）
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   // 019: Existing Reviewers State
   const [existingReviewers, setExistingReviewers] = useState<any[]>([])
@@ -147,14 +147,9 @@ export default function ReviewerAssignModal({
   const fetchReviewers = useCallback(async () => {
     setIsLoading(true)
     try {
-      // 017: 使用 Admin API 获取审稿人列表 (分页, 搜索)
-      const response = await adminUserService.getUsers(1, 100, searchTerm, 'reviewer')
-      // Filter out already assigned reviewers
-      // Ideally backend handles this, but client-side filter is ok for small lists
-      // We rely on existingReviewers state which might not be ready yet if fetched in parallel.
-      // But let's just show all, and maybe disable selection if already assigned? 
-      // Or just filter.
-      setReviewers(response.data)
+      const payload = await EditorApi.searchReviewerLibrary(searchTerm, 120)
+      if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
+      setReviewers((payload.data || []) as User[])
     } catch (error) {
       console.error('Failed to fetch reviewers:', error)
       toast.error('Failed to load reviewers')
@@ -228,22 +223,7 @@ export default function ReviewerAssignModal({
     toggleReviewer(reviewerId)
   }
 
-  // 017: 邀请外部人员逻辑
-  const handleInviteConfirm = async (email: string, fullName: string) => {
-    try {
-      await adminUserService.inviteReviewer({
-        email,
-        full_name: fullName,
-        manuscript_id: manuscriptId
-      })
-      toast.success('Reviewer invited successfully!')
-      fetchReviewers()
-      setIsInviteDialogOpen(false)
-    } catch (error) {
-      console.error('Invite failed:', error)
-      throw error // Let dialog handle error
-    }
-  }
+  // Feature 030: “添加审稿人”与“指派审稿人”解耦：这里仅允许从 Reviewer Library 选取并指派。
 
   // Derived state for quick lookup
   const assignedIds = useMemo(
@@ -290,16 +270,10 @@ export default function ReviewerAssignModal({
       ...reviewers.filter((r) => !assignedSet.has(r.id)),
     ]
 
-    // 重要：排序只应由“数据变化”触发，避免在 onSelect/checked 改变时导致列表跳动
-    return mergedList.slice().sort((a, b) => {
-      const aAssigned = assignedSet.has(a.id)
-      const bAssigned = assignedSet.has(b.id)
-      if (aAssigned !== bAssigned) return aAssigned ? -1 : 1
-
-      const aName = (a.full_name || a.email || '').toLowerCase()
-      const bName = (b.full_name || b.email || '').toLowerCase()
-      return aName.localeCompare(bName)
-    })
+    // 重要：避免在 onSelect/checked 改变时重排（列表不跳动）。
+    // - 已分配的审稿人固定置顶
+    // - 其余候选保持后端返回顺序
+    return mergedList
   }, [assignedIds, pinnedAssignedUsers, reviewers])
 
   if (!isOpen) return null
@@ -554,11 +528,11 @@ export default function ReviewerAssignModal({
                 />
               </div>
               <button
-                onClick={() => setIsInviteDialogOpen(true)}
+                onClick={() => setIsAddDialogOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium"
               >
                 <UserPlus className="h-4 w-4" />
-                Invite New
+                Add to Library
               </button>
             </div>
 
@@ -568,7 +542,7 @@ export default function ReviewerAssignModal({
               </div>
             ) : orderedReviewers.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
-                No reviewers found. Invite a new one?
+                No reviewers found. Add one to the library?
               </div>
             ) : (
               <div className="space-y-2" data-testid="reviewer-list">
@@ -677,10 +651,11 @@ export default function ReviewerAssignModal({
         </div>
       )}
 
-      <InviteReviewerDialog 
-        isOpen={isInviteDialogOpen} 
-        onClose={() => setIsInviteDialogOpen(false)} 
-        onConfirm={handleInviteConfirm}
+      <AddReviewerModal
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        mode="create"
+        onSaved={() => fetchReviewers()}
       />
     </>
   )
