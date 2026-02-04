@@ -2,21 +2,41 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import Link from 'next/link'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
-import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
-import { getStatusBadgeClass, getStatusLabel } from '@/lib/statusStyles'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2, FileText, Pencil } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { ManuscriptDetailsHeader } from '@/components/editor/ManuscriptDetailsHeader'
+import { FileSectionGroup, type FileSection } from '@/components/editor/FileSectionGroup'
+import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
+import { InvoiceInfoSection } from '@/components/editor/InvoiceInfoSection'
+import VersionHistory from '@/components/VersionHistory'
+import { getStatusLabel } from '@/lib/statusStyles'
 
-type ManuscriptDetail = any
+type ManuscriptDetail = {
+  id: string
+  title?: string | null
+  abstract?: string | null
+  status?: string | null
+  updated_at?: string | null
+  owner?: { full_name?: string | null; email?: string | null } | null
+  editor?: { full_name?: string | null; email?: string | null } | null
+  invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
+  invoice?: { status?: string | null; amount?: number | string | null } | null
+  signed_files?: {
+    original_manuscript?: { signed_url?: string | null; path?: string | null }
+    peer_review_reports?: Array<{
+      review_report_id: string
+      reviewer_name?: string | null
+      reviewer_email?: string | null
+      reviewer_id?: string | null
+      signed_url?: string | null
+      path?: string | null
+    }>
+  }
+}
 
 function allowedNext(status: string): string[] {
   const s = (status || '').toLowerCase()
@@ -39,14 +59,15 @@ export default function EditorManuscriptDetailPage() {
 
   const [loading, setLoading] = useState(true)
   const [ms, setMs] = useState<ManuscriptDetail | null>(null)
-  const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState<string | null>(null)
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
-  const [invAuthors, setInvAuthors] = useState('')
-  const [invAffiliation, setInvAffiliation] = useState('')
-  const [invApc, setInvApc] = useState('')
-  const [invFunding, setInvFunding] = useState('')
+  const [invoiceForm, setInvoiceForm] = useState<InvoiceInfoForm>({
+    authors: '',
+    affiliation: '',
+    apcAmount: '',
+    fundingInfo: '',
+  })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
 
   async function load() {
@@ -57,15 +78,13 @@ export default function EditorManuscriptDetailPage() {
       const detail = detailRes.data
       setMs(detail)
 
-      const pdf = await fetch(`/api/v1/manuscripts/${id}/pdf-signed`).then((r) => r.json())
-      if (pdf?.success) setPdfSignedUrl(pdf.data?.signed_url || null)
-      else setPdfSignedUrl(null)
-
       const meta = (detail?.invoice_metadata as any) || {}
-      setInvAuthors(String(meta.authors || ''))
-      setInvAffiliation(String(meta.affiliation || ''))
-      setInvApc(meta.apc_amount != null ? String(meta.apc_amount) : '')
-      setInvFunding(String(meta.funding_info || ''))
+      setInvoiceForm({
+        authors: String(meta.authors || ''),
+        affiliation: String(meta.affiliation || ''),
+        apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
+        fundingInfo: String(meta.funding_info || ''),
+      })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
@@ -82,6 +101,38 @@ export default function EditorManuscriptDetailPage() {
 
   const status = String(ms?.status || '')
   const nextStatuses = useMemo(() => allowedNext(status), [status])
+  const pdfSignedUrl = ms?.signed_files?.original_manuscript?.signed_url || null
+
+  const documentSections = useMemo((): FileSection[] => {
+    const originalPath = ms?.signed_files?.original_manuscript?.path || ''
+    const originalHref = ms?.signed_files?.original_manuscript?.signed_url || null
+    const originalItems = originalHref
+      ? [
+          {
+            id: 'original_pdf',
+            label: 'Current Manuscript PDF',
+            href: originalHref,
+            meta: originalPath ? `Storage: ${originalPath}` : null,
+          },
+        ]
+      : []
+
+    const peer = Array.isArray(ms?.signed_files?.peer_review_reports) ? ms?.signed_files?.peer_review_reports : []
+    const peerItems = peer
+      .filter((r) => !!r?.signed_url)
+      .map((r) => ({
+        id: String(r.review_report_id),
+        label: `${r.reviewer_name || r.reviewer_email || r.reviewer_id || 'Reviewer'} — Annotated PDF`,
+        href: r.signed_url || undefined,
+        meta: r.path ? `Storage: ${r.path}` : null,
+      }))
+
+    return [
+      { title: 'Cover Letter', items: [], emptyText: 'Not uploaded (MVP placeholder).' },
+      { title: 'Original Manuscript', items: originalItems, emptyText: 'PDF not available.' },
+      { title: 'Peer Review Reports (Word/PDF)', items: peerItems, emptyText: 'No peer review attachments.' },
+    ]
+  }, [ms])
 
   if (loading) {
     return (
@@ -107,23 +158,7 @@ export default function EditorManuscriptDetailPage() {
     <div className="min-h-screen bg-slate-50">
       <SiteHeader />
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-serif font-bold text-slate-900 tracking-tight">
-                Manuscript Details
-              </h1>
-              <p className="mt-1 font-mono text-xs text-slate-400">{id}</p>
-            </div>
-          </div>
-          <Link href="/dashboard?tab=editor" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
-            <ArrowLeft className="h-4 w-4" />
-            返回编辑台
-          </Link>
-        </div>
+        <ManuscriptDetailsHeader ms={ms as any} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-8 space-y-6">
@@ -150,52 +185,34 @@ export default function EditorManuscriptDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            <FileSectionGroup title="Documents" sections={documentSections} />
+
+            <VersionHistory manuscriptId={id} />
           </div>
 
           <div className="lg:col-span-4 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Metadata</CardTitle>
+                <CardTitle className="text-lg">Workflow</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Status</span>
-                  <Badge className={`border ${getStatusBadgeClass(status)}`}>{getStatusLabel(status)}</Badge>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Owner</span>
-                  <span className="text-slate-900 text-right">
-                    {ms.owner?.full_name || ms.owner?.email || '—'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Assign Editor</span>
-                  <span className="text-slate-900 text-right">
-                    {ms.editor?.full_name || ms.editor?.email || '—'}
-                  </span>
+                  <span className="text-slate-500">Current Status</span>
+                  <span className="text-slate-900">{getStatusLabel(status)}</span>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="flex-row items-center justify-between">
-                <CardTitle className="text-lg">Invoice Info</CardTitle>
-                <Button size="sm" variant="outline" className="gap-2" onClick={() => setInvoiceOpen(true)}>
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="text-slate-500">Authors</div>
-                <div className="text-slate-900">{invAuthors || '—'}</div>
-                <div className="text-slate-500 pt-2">Affiliation</div>
-                <div className="text-slate-900">{invAffiliation || '—'}</div>
-                <div className="text-slate-500 pt-2">APC Amount</div>
-                <div className="text-slate-900">{invApc || '—'}</div>
-                <div className="text-slate-500 pt-2">Funding Info</div>
-                <div className="text-slate-900 whitespace-pre-wrap">{invFunding || '—'}</div>
-              </CardContent>
-            </Card>
+            <InvoiceInfoSection
+              info={{
+                authors: invoiceForm.authors,
+                affiliation: invoiceForm.affiliation,
+                apcAmount: invoiceForm.apcAmount,
+                fundingInfo: invoiceForm.fundingInfo,
+              }}
+              onEdit={() => setInvoiceOpen(true)}
+            />
 
             <Card>
               <CardHeader>
@@ -236,55 +253,33 @@ export default function EditorManuscriptDetailPage() {
         </div>
       </main>
 
-      <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Edit Invoice Info</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="Authors" value={invAuthors} onChange={(e) => setInvAuthors(e.target.value)} />
-            <Input placeholder="Affiliation" value={invAffiliation} onChange={(e) => setInvAffiliation(e.target.value)} />
-            <Input placeholder="APC Amount" value={invApc} onChange={(e) => setInvApc(e.target.value)} />
-            <Textarea
-              placeholder="Funding Info"
-              value={invFunding}
-              onChange={(e) => setInvFunding(e.target.value)}
-            />
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setInvoiceOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={invoiceSaving}
-                onClick={async () => {
-                  try {
-                    setInvoiceSaving(true)
-                    const apc = invApc.trim() ? Number(invApc) : undefined
-                    const res = await EditorApi.updateInvoiceInfo(id, {
-                      authors: invAuthors || undefined,
-                      affiliation: invAffiliation || undefined,
-                      apc_amount: Number.isFinite(apc as number) ? (apc as number) : undefined,
-                      funding_info: invFunding || undefined,
-                    })
-                    if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
-                    toast.success('Invoice info updated')
-                    setInvoiceOpen(false)
-                    await load()
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Save failed')
-                  } finally {
-                    setInvoiceSaving(false)
-                  }
-                }}
-              >
-                {invoiceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <InvoiceInfoModal
+        open={invoiceOpen}
+        onOpenChange={setInvoiceOpen}
+        form={invoiceForm}
+        onChange={(patch) => setInvoiceForm((prev) => ({ ...prev, ...patch }))}
+        saving={invoiceSaving}
+        onSave={async () => {
+          try {
+            setInvoiceSaving(true)
+            const apc = invoiceForm.apcAmount.trim() ? Number(invoiceForm.apcAmount) : undefined
+            const res = await EditorApi.updateInvoiceInfo(id, {
+              authors: invoiceForm.authors || undefined,
+              affiliation: invoiceForm.affiliation || undefined,
+              apc_amount: Number.isFinite(apc as number) ? (apc as number) : undefined,
+              funding_info: invoiceForm.fundingInfo || undefined,
+            })
+            if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
+            toast.success('Invoice info updated')
+            setInvoiceOpen(false)
+            await load()
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Save failed')
+          } finally {
+            setInvoiceSaving(false)
+          }
+        }}
+      />
     </div>
   )
 }

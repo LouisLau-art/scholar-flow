@@ -84,3 +84,45 @@ def test_update_status_allows_skip_when_admin(supabase_admin):
     out = svc.update_status(manuscript_id="m1", to_status="published", changed_by="u1", allow_skip=True)
     assert out["status"] == "published"
 
+
+def test_update_invoice_info_updates_metadata_and_writes_audit_log(supabase_admin):
+    svc = editorial_service_module.EditorialService()
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.side_effect = [
+        _Resp(data={"id": "m1", "status": "decision", "invoice_metadata": {"authors": "Old"}}),  # get_manuscript
+        _Resp(data=[{"id": "m1", "status": "decision", "invoice_metadata": {"authors": "New"}}]),  # update
+    ]
+
+    logs = supabase_admin.table("status_transition_logs")
+    logs.execute.return_value = _Resp(data=[{"id": "l1"}])
+
+    out = svc.update_invoice_info(manuscript_id="m1", authors="New", changed_by="u1")
+    assert out["id"] == "m1"
+    assert logs.insert.called is True
+
+
+def test_update_invoice_info_audit_payload_contains_before_after(supabase_admin):
+    svc = editorial_service_module.EditorialService()
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.side_effect = [
+        _Resp(
+            data={
+                "id": "m1",
+                "status": "decision",
+                "invoice_metadata": {"authors": "A", "apc_amount": 100},
+            }
+        ),
+        _Resp(data=[{"id": "m1", "status": "decision", "invoice_metadata": {"authors": "B", "apc_amount": 200}}]),
+    ]
+
+    logs = supabase_admin.table("status_transition_logs")
+    logs.execute.return_value = _Resp(data=[{"id": "l1"}])
+
+    svc.update_invoice_info(manuscript_id="m1", authors="B", apc_amount=200, changed_by="u1")
+    inserted = logs.insert.call_args[0][0]
+    payload = inserted.get("payload") or {}
+    assert payload.get("action") == "update_invoice_info"
+    assert (payload.get("before") or {}).get("authors") == "A"
+    assert (payload.get("after") or {}).get("authors") == "B"
