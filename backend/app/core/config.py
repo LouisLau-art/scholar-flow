@@ -108,6 +108,47 @@ def get_admin_api_key() -> Optional[str]:
 
 
 @dataclass(frozen=True)
+class SentryConfig:
+    """
+    Sentry 监控配置（Feature 027）
+
+    中文注释:
+    - DSN 缺省时视为禁用（不阻塞启动）。
+    - 采样率在 UAT 阶段可设为 1.0（全量追踪）；正式生产可按需调低。
+    """
+
+    enabled: bool
+    dsn: Optional[str]
+    environment: str
+    traces_sample_rate: float
+
+    @staticmethod
+    def from_env() -> "SentryConfig":
+        enabled = _env_bool("SENTRY_ENABLED", True)
+        dsn = (os.environ.get("SENTRY_DSN") or "").strip() or None
+
+        environment = (
+            (os.environ.get("SENTRY_ENVIRONMENT") or "").strip()
+            or (os.environ.get("APP_ENV") or "").strip()
+            or (os.environ.get("GO_ENV") or "").strip()
+            or "development"
+        )
+
+        traces_sample_rate_raw = (os.environ.get("SENTRY_TRACES_SAMPLE_RATE") or "1.0").strip()
+        try:
+            traces_sample_rate = float(traces_sample_rate_raw)
+        except ValueError:
+            traces_sample_rate = 1.0
+
+        return SentryConfig(
+            enabled=enabled,
+            dsn=dsn,
+            environment=environment,
+            traces_sample_rate=traces_sample_rate,
+        )
+
+
+@dataclass(frozen=True)
 class MatchmakingConfig:
     """
     本地审稿人匹配（Feature 012）配置

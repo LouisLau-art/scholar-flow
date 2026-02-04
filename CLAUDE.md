@@ -30,6 +30,11 @@
     - **环境变量**: 在 HF Settings 填入 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_ORIGIN` (Vercel 域名)。
     - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
+- **Sentry（Feature 027，全栈监控）**：
+  - **Frontend**：`@sentry/nextjs`（`frontend/sentry.client.config.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
+  - **Sourcemaps**：Vercel 构建环境需设置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`；缺失时仍可上报事件（DSN），但不会上传 sourcemaps。
+  - **Backend**：`sentry-sdk` 在 `backend/main.py` 初始化并启用 `SqlalchemyIntegration`；隐私策略为“永不上传请求体”（PDF/密码）且初始化失败不阻塞启动（零崩溃原则）。
+  - **自测入口**：后端 `GET /api/v1/internal/sentry/test-error`（需 `ADMIN_API_KEY`）；前端 `/admin/sentry-test`。
 - **Invoice PDF（Feature 026）**：后端需配置 `INVOICE_PAYMENT_INSTRUCTIONS` / `INVOICE_SIGNED_URL_EXPIRES_IN`，并确保云端已应用 `supabase/migrations/20260204120000_invoice_pdf_fields.sql` 与 `supabase/migrations/20260204121000_invoices_bucket.sql`。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
