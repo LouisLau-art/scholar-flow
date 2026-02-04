@@ -15,12 +15,32 @@ const nextConfig = {
       process.env.NEXT_PUBLIC_API_URL ||
       'http://127.0.0.1:8000'
     const backendOrigin = backendOriginRaw.replace(/\/$/, '')
-    return [
+    const rules = [
       {
         source: '/api/v1/:path*',
         destination: `${backendOrigin}/api/v1/:path*`,
       },
     ]
+
+    // 中文注释: Sentry 同源 tunnel，绕过浏览器隐私/跟踪保护对 ingest 域名的拦截
+    const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN
+    if (dsn) {
+      try {
+        const url = new URL(dsn)
+        const host = url.host
+        const projectId = url.pathname.replace(/^\//, '')
+        if (host && projectId) {
+          rules.push({
+            source: '/monitoring',
+            destination: `https://${host}/api/${projectId}/envelope/`,
+          })
+        }
+      } catch {
+        // ignore invalid DSN
+      }
+    }
+
+    return rules
   },
 }
 

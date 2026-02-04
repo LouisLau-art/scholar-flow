@@ -21,6 +21,11 @@ try {
       process.env.SENTRY_ENVIRONMENT ||
       process.env.NODE_ENV,
     enabled: !!dsn,
+    // 中文注释:
+    // - Firefox/隐私模式可能会把 `*.ingest.sentry.io` 当作 tracker 拦截（Network 里表现为 status=0 / time=0）。
+    // - 使用同源 tunnel 把上报流量先打到本站，再由 Vercel 代理转发到 Sentry，能显著提升命中率。
+    // - tunnel 路由由 `frontend/next.config.mjs` 的 rewrites 提供。
+    tunnel: '/monitoring',
 
     // UAT 阶段全量采样（按需求）
     tracesSampleRate: 1.0,
@@ -44,4 +49,3 @@ try {
   // 中文注释: 零崩溃原则 — 监控不可影响页面可用性
   console.warn('[sentry] client init failed (ignored):', e)
 }
-
