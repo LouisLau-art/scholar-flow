@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Article Published</h2>
+        <p>Dear {{ recipient_name }},</p>
+        <p>We are pleased to inform you that your manuscript <strong>{{ manuscript_title }}</strong> has been published.</p>
+        
+        {% if doi %}
+        <p><strong>DOI:</strong> {{ doi }}</p>
+        {% endif %}
+        
+        <p>You can view your published article on our platform.</p>
+    </div>
+</body>
+</html>

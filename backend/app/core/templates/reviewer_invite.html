@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .button { display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px; }
+        .footer { margin-top: 30px; font-size: 0.8em; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Invitation to Review</h2>
+        <p>Dear Reviewer,</p>
+        <p>You have been invited to review the manuscript: <strong>{{ manuscript_title }}</strong>.</p>
+        <p>Please click the button below to accept or decline this invitation. This link is valid for 7 days.</p>
+        <p>
+            <a href="{{ link }}" class="button">View Invitation</a>
+        </p>
+        <p class="footer">
+            If you cannot click the button, copy this link:<br>
+            {{ link }}
+        </p>
+    </div>
+</body>
+</html>

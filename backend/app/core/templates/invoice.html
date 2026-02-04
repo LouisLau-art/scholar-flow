@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .button { display: inline-block; padding: 10px 20px; background-color: #0070f3; color: white; text-decoration: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Invoice Generated</h2>
+        <p>Dear {{ recipient_name }},</p>
+        <p>An invoice for your accepted manuscript <strong>{{ manuscript_title }}</strong> has been generated.</p>
+        <p><strong>Amount Due:</strong> ${{ amount }}</p>
+        
+        <p>Please click the button below to view the invoice and make payment.</p>
+        <p>
+            <a href="{{ link }}" class="button">View Invoice</a>
+        </p>
+    </div>
+</body>
+</html>

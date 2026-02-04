@@ -23,6 +23,7 @@ htmlcov/
 *.coverage
 *.xml
 *.html
+!backend/app/core/templates/*.html
 
 # Supabase
 .supabase/

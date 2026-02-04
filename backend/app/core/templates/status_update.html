@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Manuscript Status Update</h2>
+        <p>Dear {{ recipient_name }},</p>
+        <p>The status of your manuscript <strong>{{ manuscript_title }}</strong> has changed.</p>
+        <p><strong>New Status:</strong> {{ decision_label }}</p>
+        
+        {% if comment %}
+        <p><strong>Editor Comments:</strong></p>
+        <blockquote>{{ comment }}</blockquote>
+        {% endif %}
+        
+        <p>Please log in to the portal to view more details.</p>
+    </div>
+</body>
+</html>

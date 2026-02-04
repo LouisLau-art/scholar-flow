@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ subject }}</title>
+  </head>
+  <body style="font-family: Arial, Helvetica, sans-serif; line-height: 1.5">
+    <p>Dear {{ recipient_name }},</p>
+    <p>
+      This is a friendly reminder that your review is due soon for the manuscript:
+      <strong>{{ manuscript_title }}</strong>.
+    </p>
+    <ul>
+      <li>Manuscript ID: {{ manuscript_id }}</li>
+      <li>Due date: {{ due_at }}</li>
+    </ul>
+    {% if review_url %}
+    <p>
+      Please continue your review here:
+      <a href="{{ review_url }}">{{ review_url }}</a>
+    </p>
+    {% endif %}
+    <p>Thank you for your time and contribution.</p>
+    <p>ScholarFlow Editorial Office</p>
+  </body>
+</html>
