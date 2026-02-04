@@ -23,6 +23,7 @@
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
 - **AI 推荐模型（本地 CPU，部署友好）**：Matchmaking 默认使用纯 Python 的 hash-embedding（`backend/app/core/ml.py`），避免 `sentence-transformers/torch` 导致部署构建过慢或失败；如需更智能的语义匹配，可在“本地/专用环境”额外安装 `sentence-transformers`，系统会自动启用并可配置缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`，配合 `MATCHMAKING_LOCAL_FILES_ONLY=1` 强制离线）。`./start.sh` 仍会默认设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
 - **公开文章 PDF 预览**：`/articles/[id]` 不依赖前端直连 Storage（匿名会 400/权限不一致），统一走后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 返回 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 仅返回 `status='published'` 的稿件。
+- **CMS HTML 渲染（Vercel 约束）**：`isomorphic-dompurify/jsdom` 在 Vercel Node 运行时可能触发 ESM/CJS 兼容崩溃（`ERR_REQUIRE_ESM`）。MVP 约定：`/journal/[slug]` 不在服务端引入 DOMPurify/jsdom，直接渲染后端返回的 HTML（内容仅内部人员维护）；若未来开放用户生成内容，再改为后端做安全清洗。
 - **部署架构（Vercel + Hugging Face Spaces）**：
   - **Frontend**: 部署于 **Vercel**。需设置 `NEXT_PUBLIC_API_URL` 指向 HF Space 地址（无尾部斜杠）。
   - **Backend**: 部署于 **Hugging Face Spaces (Docker)**。

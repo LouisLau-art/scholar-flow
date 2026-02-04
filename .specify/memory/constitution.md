@@ -53,6 +53,7 @@ Sync Impact Report:
   - **Sourcemaps**：线上构建需设置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`，否则只上报事件不上传 sourcemaps。
 - **AI 推荐模型（性能 & 部署）**：Matchmaking（审稿人推荐）默认使用纯 Python 的 hash-embedding（不依赖 `sentence-transformers/torch`，优先保证“可部署可用”）；如在本地/专用环境安装了 `sentence-transformers`，则自动启用语义 embedding，并建议启用缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）；如需彻底离线，设置 `MATCHMAKING_LOCAL_FILES_ONLY=1`（后端会启用 `HF_HUB_OFFLINE=1`）。
 - **公开文章 PDF 预览（MVP 约定）**：公开页 `/articles/[id]` 不允许前端匿名直接调用 Storage `sign`（会 400/权限不一致），必须通过后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 获取 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 必须仅返回 `status='published'` 的稿件。
+- **CMS HTML 渲染（Vercel 约束）**：`isomorphic-dompurify/jsdom` 在 Vercel Node 运行时可能触发 ESM/CJS 兼容崩溃（`ERR_REQUIRE_ESM`）。MVP 约定：`/journal/[slug]` 不在服务端引入 DOMPurify/jsdom，直接渲染后端返回的 HTML（内容仅内部人员维护）；若未来开放用户生成内容，再改为后端做安全清洗。
 - **部署（Vercel + Render / Zeabur）**：
   - 前端大量请求使用相对路径 `/api/v1/*`，依赖 `frontend/next.config.mjs` rewrites；线上必须设置 `BACKEND_ORIGIN`（Render 后端基址），避免默认指向 `127.0.0.1:8000`。
   - 后端必须通过 `FRONTEND_ORIGIN` / `FRONTEND_ORIGINS` 控制 CORS 白名单；生产环境严禁只放开 `localhost`。
