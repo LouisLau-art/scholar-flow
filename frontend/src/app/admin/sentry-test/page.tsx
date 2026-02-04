@@ -7,26 +7,48 @@ import { Button } from '@/components/ui/button'
 
 export default function SentryTestPage() {
   const [loading, setLoading] = useState(false)
-  const dsnConfigured = !!process.env.NEXT_PUBLIC_SENTRY_DSN
+  const [lastEventId, setLastEventId] = useState<string | null>(null)
+  const [lastServerEventId, setLastServerEventId] = useState<string | null>(null)
 
-  const handleCaptureMessage = () => {
-    Sentry.captureMessage('Sentry test message (frontend)')
-    void Sentry.flush(1500)
-    toast.success('已发送 Sentry 测试消息（前端）')
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
+  const dsnConfigured = !!dsn
+  const dsnSummary = (() => {
+    if (!dsn) return null
+    try {
+      const url = new URL(dsn)
+      const host = url.host
+      const projectId = url.pathname.replace(/^\//, '') || null
+      return { host, projectId }
+    } catch {
+      return null
+    }
+  })()
+
+  const handleCaptureMessage = async () => {
+    const eventId = Sentry.captureMessage('Sentry test message (frontend)')
+    setLastEventId(eventId || null)
+    await Sentry.flush(2000)
+    toast.success(`已发送 Sentry 测试消息（前端）${eventId ? `，EventId=${eventId}` : ''}`)
   }
 
-  const handleThrowError = () => {
-    Sentry.captureException(new Error('Sentry test error (frontend)'))
-    void Sentry.flush(1500)
-    toast.success('已发送 Sentry 测试异常（前端）')
+  const handleThrowError = async () => {
+    const eventId = Sentry.captureException(new Error('Sentry test error (frontend)'))
+    setLastEventId(eventId || null)
+    await Sentry.flush(2000)
+    toast.success(`已发送 Sentry 测试异常（前端）${eventId ? `，EventId=${eventId}` : ''}`)
   }
 
   const handleTriggerServerError = async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/sentry-test', { method: 'GET' })
+      const payload = await res.json().catch(() => null)
       if (!res.ok) {
-        toast.success('已触发服务端异常（Next API Route）')
+        const eventId = payload?.eventId ? String(payload.eventId) : null
+        setLastServerEventId(eventId)
+        toast.success(
+          `已触发服务端异常（Next API Route）${eventId ? `，EventId=${eventId}` : ''}`,
+        )
         return
       }
       toast.message('服务端返回了 200（不符合预期）')
@@ -46,6 +68,17 @@ export default function SentryTestPage() {
       <p className="text-xs text-muted-foreground">
         DSN: {dsnConfigured ? 'configured' : 'missing（请在 Vercel 配 NEXT_PUBLIC_SENTRY_DSN）'}
       </p>
+      {dsnSummary ? (
+        <p className="text-xs text-muted-foreground">
+          DSN Host: {dsnSummary.host} / Project: {dsnSummary.projectId}
+        </p>
+      ) : null}
+      {lastEventId ? (
+        <p className="text-xs text-muted-foreground">Last client EventId: {lastEventId}</p>
+      ) : null}
+      {lastServerEventId ? (
+        <p className="text-xs text-muted-foreground">Last server EventId: {lastServerEventId}</p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={handleCaptureMessage} variant="secondary">

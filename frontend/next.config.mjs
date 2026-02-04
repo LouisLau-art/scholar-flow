@@ -3,6 +3,9 @@ import { withSentryConfig } from '@sentry/nextjs'
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   productionBrowserSourceMaps: true,
+  experimental: {
+    instrumentationHook: true,
+  },
   async rewrites() {
     const backendOriginRaw =
       process.env.BACKEND_ORIGIN ||
