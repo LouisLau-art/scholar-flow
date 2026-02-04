@@ -1,5 +1,7 @@
 import hashlib
+import math
 import os
+import re
 import threading
 from functools import lru_cache
 from pathlib import Path
@@ -32,7 +34,13 @@ def _load_sentence_transformer(model_name: str):
     """
 
     with _MODEL_LOCK:
-        from sentence_transformers import SentenceTransformer  # 延迟 import，避免测试环境强制拉起依赖
+        try:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+        except Exception as e:
+            # 中文注释:
+            # - 部署环境可能未安装 sentence-transformers（避免 torch 依赖导致构建/启动过慢）。
+            # - 由上层调用在 embed_text 中做降级，不在这里抛出以免影响启动。
+            raise RuntimeError(f"sentence-transformers unavailable: {e}") from e
 
         cache_folder = os.environ.get("SENTENCE_TRANSFORMERS_HOME") or os.environ.get("HF_HOME")
         local_only = (os.environ.get("MATCHMAKING_LOCAL_FILES_ONLY") or "").strip().lower() in {"1", "true", "yes", "on"}
@@ -56,6 +64,25 @@ def _load_sentence_transformer(model_name: str):
             except TypeError:
                 return SentenceTransformer(model_name)
 
+def _fallback_embed(text: str) -> List[float]:
+    """
+    纯 Python 降级 embedding（384 维）。
+
+    中文注释:
+    - 目标：让后端在“无 sentence-transformers/torch”的部署环境也能启动并提供基础排序能力。
+    - 这不是语义向量，只是基于 token 哈希的稀疏计数向量（L2 normalize），足够用于 MVP 的“可用但不智能”。
+    """
+    vec = [0.0] * 384
+    tokens = re.findall(r"[a-zA-Z0-9]{2,}", (text or "").lower())
+    for tok in tokens[:2000]:
+        h = hashlib.sha256(tok.encode("utf-8")).digest()
+        idx = h[0] % 384
+        sign = 1.0 if (h[1] % 2 == 0) else -1.0
+        vec[idx] += sign
+
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
+
 
 def embed_text(text: str, model_name: str) -> List[float]:
     """
@@ -65,8 +92,12 @@ def embed_text(text: str, model_name: str) -> List[float]:
     - 我们在模型侧开启 normalize_embeddings，便于将 cosine distance 映射为 score = 1 - distance。
     - 必须严格在本地执行（不调用外部 AI API）。
     """
-
-    model = _load_sentence_transformer(model_name)
-    vectors = model.encode([text or ""], normalize_embeddings=True)
-    vec = vectors[0].tolist()
-    return vec
+    try:
+        model = _load_sentence_transformer(model_name)
+        vectors = model.encode([text or ""], normalize_embeddings=True)
+        vec = vectors[0].tolist()
+        return vec
+    except Exception as e:
+        # 中文注释: 降级（不影响主流程）
+        print(f"[matchmaking] embed fallback: {e}")
+        return _fallback_embed(text)
