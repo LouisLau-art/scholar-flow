@@ -7,14 +7,18 @@ import { Button } from '@/components/ui/button'
 
 export default function SentryTestPage() {
   const [loading, setLoading] = useState(false)
+  const dsnConfigured = !!process.env.NEXT_PUBLIC_SENTRY_DSN
 
   const handleCaptureMessage = () => {
     Sentry.captureMessage('Sentry test message (frontend)')
+    void Sentry.flush(1500)
     toast.success('已发送 Sentry 测试消息（前端）')
   }
 
   const handleThrowError = () => {
-    throw new Error('Sentry test error (frontend)')
+    Sentry.captureException(new Error('Sentry test error (frontend)'))
+    void Sentry.flush(1500)
+    toast.success('已发送 Sentry 测试异常（前端）')
   }
 
   const handleTriggerServerError = async () => {
@@ -39,6 +43,9 @@ export default function SentryTestPage() {
       <p className="text-sm text-muted-foreground">
         用于 UAT 验证：前端异常、服务端异常、Replay/Tracing 是否正常上报。
       </p>
+      <p className="text-xs text-muted-foreground">
+        DSN: {dsnConfigured ? 'configured' : 'missing（请在 Vercel 配 NEXT_PUBLIC_SENTRY_DSN）'}
+      </p>
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={handleCaptureMessage} variant="secondary">
@@ -54,4 +61,3 @@ export default function SentryTestPage() {
     </div>
   )
 }
-

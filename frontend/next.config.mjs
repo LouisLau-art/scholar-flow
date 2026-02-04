@@ -23,17 +23,17 @@ const hasSentryAuth =
   !!process.env.SENTRY_ORG &&
   !!process.env.SENTRY_PROJECT
 
-// 中文注释:
-// - 没有配置 token/org/project 时：仍可在浏览器/后端看到 Sentry 事件（DSN），但不会上传 sourcemaps。
-// - 配置完整时：构建阶段自动上传 sourcemaps，Sentry 里可直接定位到源码行。
-const sentryWebpackPluginOptions = {
+const sentryBuildOptions = {
+  // 中文注释:
+  // - 必须始终启用 withSentryConfig：否则 `sentry.*.config.ts` 不会被自动注入到构建入口，导致线上“点测试按钮但 Sentry 无事件”。
+  // - 没有配置 token/org/project 时：禁用 sourcemaps 上传，但保留运行时上报（DSN）。
   authToken: process.env.SENTRY_AUTH_TOKEN,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,
-}
-
-const sentryBuildOptions = {
+  sourcemaps: {
+    disable: !hasSentryAuth,
+  },
   // 让客户端上传更多 bundle sourcemaps，方便定位
   widenClientFileUpload: true,
   // 不把 sourcemap 公开给用户（只上传到 Sentry）
@@ -42,6 +42,4 @@ const sentryBuildOptions = {
   disableLogger: true,
 }
 
-export default hasSentryAuth
-  ? withSentryConfig(nextConfig, sentryWebpackPluginOptions, sentryBuildOptions)
-  : nextConfig
+export default withSentryConfig(nextConfig, sentryBuildOptions)
