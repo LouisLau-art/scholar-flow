@@ -120,7 +120,7 @@ def test_manuscript(db_connection):
         "title": "Test Manuscript",
         "abstract": "Test abstract content",
         "author_id": "00000000-0000-0000-0000-000000000000",
-        "status": "submitted"
+        "status": "pre_check"
     }
 
     response = db_connection.table("manuscripts").insert(data).execute()

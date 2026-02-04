@@ -52,7 +52,7 @@ async def test_regenerate_requires_internal_role_and_preserves_payment_status(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Invoice Regenerate Manuscript",
     )
 
@@ -109,4 +109,3 @@ async def test_regenerate_requires_internal_role_and_preserves_payment_status(
         assert (inv_after.get("pdf_path") or "").strip() != ""
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
-

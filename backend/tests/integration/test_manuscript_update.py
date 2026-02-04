@@ -12,7 +12,7 @@ async def test_manuscript_update_with_real_db(db_connection):
         "title": "Integration Update",
         "abstract": "Update abstract",
         "author_id": "00000000-0000-0000-0000-000000000000",
-        "status": "submitted",
+        "status": "pre_check",
     }
 
     db_connection.table("manuscripts").insert(data).execute()

@@ -106,3 +106,4 @@ Constitution supersedes all other practices. Amendments require documentation an
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
 - Reviewer：补齐修回上下文展示与审稿附件下载；收紧版本历史接口 reviewer 权限。
 - Feature 024：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
+- Feature 028：工作流状态机标准化（`public.manuscript_status`）+ Editor 新增 Process 列表与详情页（`/editor/process`、`/editor/manuscript/[id]`）。

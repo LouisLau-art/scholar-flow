@@ -61,7 +61,7 @@ async def test_financial_gate_blocks_unpaid_publish(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Financial Gate Manuscript",
     )
 

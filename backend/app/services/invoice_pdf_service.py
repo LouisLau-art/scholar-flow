@@ -29,6 +29,16 @@ class InvoicePdfResult:
     pdf_error: str | None
 
 
+def generate_and_store_invoice_pdf_safe(*, invoice_id: UUID) -> None:
+    """
+    给 BackgroundTasks 用的安全包装：任何异常都吞掉，避免在测试/线上把主流程打断。
+    """
+    try:
+        generate_and_store_invoice_pdf(invoice_id=invoice_id)
+    except Exception as e:  # pragma: no cover
+        print(f"[InvoicePDF] generate failed (ignored): invoice_id={invoice_id} error={e}")
+
+
 def _templates_dir() -> Path:
     # backend/app/services -> backend/app -> backend/app/core/templates
     return Path(__file__).resolve().parents[1] / "core" / "templates"
@@ -78,14 +88,37 @@ def _html_to_pdf_bytes(html: str) -> bytes:
 
 
 def _load_invoice_row(invoice_id: UUID) -> dict:
-    resp = (
-        supabase_admin.table("invoices")
-        .select("id,manuscript_id,amount,status,confirmed_at,invoice_number,pdf_path")
-        .eq("id", str(invoice_id))
-        .single()
-        .execute()
-    )
-    return getattr(resp, "data", None) or {}
+    base = "id,manuscript_id,amount,status,confirmed_at"
+    extended = f"{base},invoice_number,pdf_path,pdf_generated_at,pdf_error"
+
+    try:
+        resp = (
+            supabase_admin.table("invoices")
+            .select(extended)
+            .eq("id", str(invoice_id))
+            .single()
+            .execute()
+        )
+        return getattr(resp, "data", None) or {}
+    except Exception as e:
+        # 云端未跑 migration 时，扩展字段可能不存在；降级为只取基础字段。
+        print(f"[InvoicePDF] invoice select fallback: invoice_id={invoice_id} error={e}")
+        resp = (
+            supabase_admin.table("invoices")
+            .select(base)
+            .eq("id", str(invoice_id))
+            .single()
+            .execute()
+        )
+        return getattr(resp, "data", None) or {}
+
+
+def _safe_update_invoice(*, invoice_id: UUID, patch: dict) -> None:
+    try:
+        supabase_admin.table("invoices").update(patch).eq("id", str(invoice_id)).execute()
+    except Exception as e:
+        # 迁移未应用导致列缺失时，不让它影响主流程；仅打印日志。
+        print(f"[InvoicePDF] invoice update failed (ignored): invoice_id={invoice_id} error={e}")
 
 
 def _load_manuscript_row(manuscript_id: str) -> dict:
@@ -170,14 +203,15 @@ def generate_and_store_invoice_pdf(*, invoice_id: UUID) -> InvoicePdfResult:
             content_type="application/pdf",
             upsert=True,
         )
-        supabase_admin.table("invoices").update(
-            {
+        _safe_update_invoice(
+            invoice_id=invoice_id,
+            patch={
                 "invoice_number": inv_no,
                 "pdf_path": pdf_path,
                 "pdf_generated_at": now.isoformat(),
                 "pdf_error": None,
-            }
-        ).eq("id", str(invoice_id)).execute()
+            },
+        )
         print(f"[InvoicePDF] stored: invoice_id={invoice_id} pdf_path={pdf_path}")
         return InvoicePdfResult(
             invoice_id=invoice_id,
@@ -189,9 +223,10 @@ def generate_and_store_invoice_pdf(*, invoice_id: UUID) -> InvoicePdfResult:
     except Exception as e:
         err = str(e)
         print(f"[InvoicePDF] failed: invoice_id={invoice_id} error={err}")
-        supabase_admin.table("invoices").update(
-            {"pdf_error": err, "pdf_generated_at": now.isoformat()}
-        ).eq("id", str(invoice_id)).execute()
+        _safe_update_invoice(
+            invoice_id=invoice_id,
+            patch={"pdf_error": err, "pdf_generated_at": now.isoformat()},
+        )
         return InvoicePdfResult(
             invoice_id=invoice_id,
             invoice_number=inv_no,

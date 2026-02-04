@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from httpx import AsyncClient
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -67,7 +68,7 @@ async def test_happy_path_revision_loop(
     """
     场景 1：标准修订循环
 
-    1) Editor 请求修订 -> manuscripts.status=revision_requested + revisions(pending) + v1 快照
+    1) Editor 请求修订 -> manuscripts.status=major_revision/minor_revision + revisions(pending) + v1 快照
     2) Author 提交修订 -> manuscripts.status=resubmitted + version=2 + revisions(submitted) + v2 记录
     3) Editor 指派审稿人 -> review_assignments.round_number=2
     """
@@ -85,7 +86,7 @@ async def test_happy_path_revision_loop(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         version=1,
         file_path=v1_path,
         title="Revision Cycle Manuscript",
@@ -116,7 +117,7 @@ async def test_happy_path_revision_loop(
             .execute()
             .data
         )
-        assert ms["status"] == "revision_requested"
+        assert ms["status"] == "major_revision"
         assert ms.get("version", 1) == 1
         assert ms.get("file_path") == v1_path
 
@@ -246,7 +247,7 @@ async def test_editor_can_request_revision_from_resubmitted(
     目标：
     - /api/v1/editor/revisions 在 resubmitted 状态可用
     - round_number 正确递增（已有 round 1 -> 新建 round 2）
-    - manuscripts.status 推进到 revision_requested
+    - manuscripts.status 推进到 minor_revision
     """
 
     editor = make_user(email="editor_resubmitted@example.com")
@@ -275,8 +276,10 @@ async def test_editor_can_request_revision_from_resubmitted(
                 "round_number": 1,
                 "decision_type": "major",
                 "editor_comment": "Round 1 comment",
+                # revisions.status 仅允许 pending/submitted（见 RevisionService 约定）
                 "status": "submitted",
                 "response_letter": "Round 1 response",
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
             }
         ).execute()
 
@@ -304,7 +307,7 @@ async def test_editor_can_request_revision_from_resubmitted(
             .execute()
             .data
         )
-        assert ms["status"] == "revision_requested"
+        assert ms["status"] == "minor_revision"
     finally:
         _cleanup_revision_artifacts(supabase_admin_client, manuscript_id)
 
@@ -336,7 +339,7 @@ async def test_rbac_enforcement(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         version=1,
         file_path=f"{manuscript_id}/v1_initial.pdf",
         title="RBAC Manuscript",
@@ -410,7 +413,7 @@ async def test_file_safety(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         version=1,
         file_path=v1_path,
         title="File Safety Manuscript",

@@ -890,6 +890,65 @@ async def public_search(q: str, mode: str = "articles"):
         return {"success": False, "results": []}
 
 
+@router.get("/manuscripts/by-id/{manuscript_id}")
+async def get_manuscript_detail(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    登录态稿件详情（非公开文章页）。
+
+    中文注释:
+    - Submit Revision / Reviewer Workspace / Editor 后台都需要读取“未发表稿件”的详情。
+    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / editor/admin 可读。
+    - 该路由必须放在 /manuscripts/search 之后，避免 path 参数吞掉静态路由。
+    """
+    user_id = str(current_user["id"])
+    roles = set((profile or {}).get("roles") or [])
+
+    try:
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("*")
+            .eq("id", str(manuscript_id))
+            .single()
+            .execute()
+        )
+        ms = getattr(ms_resp, "data", None) or {}
+    except Exception as e:
+        if _is_postgrest_single_no_rows_error(str(e)):
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        raise
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    allowed = False
+    if roles.intersection({"admin", "editor"}):
+        allowed = True
+    elif str(ms.get("author_id") or "") == user_id:
+        allowed = True
+    else:
+        try:
+            ra = (
+                supabase_admin.table("review_assignments")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .eq("reviewer_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if getattr(ra, "data", None):
+                allowed = True
+        except Exception:
+            allowed = False
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return {"success": True, "data": ms}
+
+
 @router.get("/manuscripts/published/latest")
 async def get_latest_published_articles(limit: int = 6):
     """
@@ -1131,7 +1190,7 @@ async def create_manuscript(
             "dataset_url": manuscript.dataset_url,
             "source_code_url": manuscript.source_code_url,
             "author_id": current_user["id"],  # 使用真实的用户 ID
-            "status": "submitted",
+            "status": "pre_check",
             "owner_id": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),

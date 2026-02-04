@@ -56,7 +56,7 @@ def insert_manuscript(
     author_id: str,
     title: str = "Test Manuscript",
     abstract: str = "Test abstract content",
-    status: str = "pending_decision",
+    status: str = "decision",
     version: int = 1,
     file_path: str = "",
 ) -> dict[str, Any]:

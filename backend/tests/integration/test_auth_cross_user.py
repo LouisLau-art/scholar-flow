@@ -21,7 +21,7 @@ async def test_cross_user_author_id_ignored(client: AsyncClient, auth_token: str
         "title": "Auth Bound Manuscript",
         "abstract": "This is a sufficiently long abstract for validation rules.",
         "author_id": token_user_id,
-        "status": "submitted"
+        "status": "pre_check"
     }]
     mock = build_supabase_mock(mock_data)
 

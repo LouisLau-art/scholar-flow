@@ -14,7 +14,7 @@ async def test_plagiarism_gate_high_similarity():
 
 @pytest.mark.asyncio
 async def test_plagiarism_gate_safe():
-    """验证得分 <= 0.3 时状态维持 submitted"""
+    """验证得分 <= 0.3 时状态维持 pre_check"""
     manuscript_id = uuid4()
     result = await handle_plagiarism_result(manuscript_id, 0.15)
-    assert result == "submitted"
+    assert result == "pre_check"

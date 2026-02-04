@@ -12,7 +12,7 @@ async def test_manuscript_deletion_with_real_db(db_connection):
         "title": "Integration Deletion",
         "abstract": "Deletion abstract",
         "author_id": "00000000-0000-0000-0000-000000000000",
-        "status": "submitted",
+        "status": "pre_check",
     }
 
     db_connection.table("manuscripts").insert(data).execute()

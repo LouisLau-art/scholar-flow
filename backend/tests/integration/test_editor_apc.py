@@ -47,7 +47,7 @@ async def test_apc_confirmation_upserts_invoice(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="APC Confirmation Manuscript",
     )
 
@@ -92,4 +92,3 @@ async def test_apc_confirmation_upserts_invoice(
         assert inv2.get("confirmed_at")
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
-

@@ -9,6 +9,10 @@ from app.services.revision_service import RevisionService
 from datetime import timezone
 from app.services.post_acceptance_service import publish_manuscript
 import os
+from app.services.editorial_service import EditorialService
+from app.models.manuscript import normalize_status
+from app.services.owner_binding_service import validate_internal_owner_id
+from uuid import UUID
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -56,6 +60,258 @@ def _is_missing_column_error(error_text: str) -> bool:
     )
 
 
+@router.get("/manuscripts/process")
+async def get_manuscripts_process(
+    journal_id: str | None = Query(None, description="期刊筛选（可选）"),
+    status: list[str] | None = Query(None, description="状态筛选（可选，多选）"),
+    owner_id: str | None = Query(None, description="Internal Owner（可选）"),
+    editor_id: str | None = Query(None, description="Assign Editor（可选）"),
+    manuscript_id: str | None = Query(None, description="Manuscript ID 精确匹配（可选）"),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028 / US1: Manuscripts Process 表格数据源。
+
+    返回字段（前端可按需使用）：
+    - id, created_at, updated_at, status, owner_id, editor_id, journal_id, journals(title,slug)
+    - owner/editor 的 profile（full_name/email）
+    """
+    db = supabase_admin
+    try:
+        q = (
+            db.table("manuscripts")
+            .select("id,created_at,updated_at,status,owner_id,editor_id,journal_id,journals(title,slug)")
+            .order("created_at", desc=True)
+        )
+
+        if manuscript_id:
+            q = q.eq("id", manuscript_id)
+        if journal_id:
+            q = q.eq("journal_id", journal_id)
+        if owner_id:
+            q = q.eq("owner_id", owner_id)
+        if editor_id:
+            q = q.eq("editor_id", editor_id)
+        if status:
+            normalized: list[str] = []
+            for s in status:
+                n = normalize_status(s)
+                if n is None:
+                    raise HTTPException(status_code=422, detail=f"Invalid status: {s}")
+                normalized.append(n)
+            q = q.in_("status", normalized)
+
+        resp = q.execute()
+        rows = getattr(resp, "data", None) or []
+
+        profile_ids: set[str] = set()
+        for r in rows:
+            if r.get("owner_id"):
+                profile_ids.add(str(r["owner_id"]))
+            if r.get("editor_id"):
+                profile_ids.add(str(r["editor_id"]))
+
+        profiles_map: dict[str, dict] = {}
+        if profile_ids:
+            try:
+                prof = (
+                    db.table("user_profiles")
+                    .select("id,email,full_name,roles")
+                    .in_("id", sorted(profile_ids))
+                    .execute()
+                )
+                for p in (getattr(prof, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        profiles_map[pid] = p
+            except Exception as e:
+                print(f"[Process] load user_profiles failed (ignored): {e}")
+
+        for r in rows:
+            oid = str(r.get("owner_id") or "")
+            eid = str(r.get("editor_id") or "")
+            r["owner"] = (
+                {
+                    "id": oid,
+                    "full_name": (profiles_map.get(oid) or {}).get("full_name"),
+                    "email": (profiles_map.get(oid) or {}).get("email"),
+                }
+                if oid
+                else None
+            )
+            r["editor"] = (
+                {
+                    "id": eid,
+                    "full_name": (profiles_map.get(eid) or {}).get("full_name"),
+                    "email": (profiles_map.get(eid) or {}).get("email"),
+                }
+                if eid
+                else None
+            )
+
+        return {"success": True, "data": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Process] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch manuscripts process")
+
+
+@router.get("/manuscripts/{id}")
+async def get_editor_manuscript_detail(
+    id: str,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028 / US2: Editor 专用稿件详情（包含 invoice_metadata、owner/editor profile、journal 信息）。
+    """
+    try:
+        resp = (
+            supabase_admin.table("manuscripts")
+            .select("*, journals(title,slug)")
+            .eq("id", id)
+            .single()
+            .execute()
+        )
+        ms = getattr(resp, "data", None) or None
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Manuscript not found") from e
+    if not ms:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    profile_ids: list[str] = []
+    if ms.get("owner_id"):
+        profile_ids.append(str(ms["owner_id"]))
+    if ms.get("editor_id"):
+        profile_ids.append(str(ms["editor_id"]))
+
+    profiles_map: dict[str, dict] = {}
+    if profile_ids:
+        try:
+            p = (
+                supabase_admin.table("user_profiles")
+                .select("id,email,full_name,roles")
+                .in_("id", sorted(set(profile_ids)))
+                .execute()
+            )
+            for row in (getattr(p, "data", None) or []):
+                rid = str(row.get("id") or "")
+                if rid:
+                    profiles_map[rid] = row
+        except Exception:
+            pass
+
+    oid = str(ms.get("owner_id") or "")
+    eid = str(ms.get("editor_id") or "")
+    ms["owner"] = (
+        {"id": oid, "full_name": (profiles_map.get(oid) or {}).get("full_name"), "email": (profiles_map.get(oid) or {}).get("email")}
+        if oid
+        else None
+    )
+    ms["editor"] = (
+        {"id": eid, "full_name": (profiles_map.get(eid) or {}).get("full_name"), "email": (profiles_map.get(eid) or {}).get("email")}
+        if eid
+        else None
+    )
+    return {"success": True, "data": ms}
+
+
+@router.patch("/manuscripts/{id}/status")
+async def patch_manuscript_status(
+    id: str,
+    payload: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028 / US2: 更新稿件生命周期状态，并写入 transition log。
+    """
+    to_status = str(payload.get("status") or "")
+    comment = payload.get("comment")
+    allow_skip = "admin" in (profile.get("roles") or [])
+    updated = EditorialService().update_status(
+        manuscript_id=id,
+        to_status=to_status,
+        changed_by=str(current_user.get("id")),
+        comment=str(comment) if comment is not None else None,
+        allow_skip=bool(allow_skip),
+    )
+    return {"success": True, "data": updated}
+
+
+@router.put("/manuscripts/{id}/invoice-info")
+async def put_manuscript_invoice_info(
+    id: str,
+    payload: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028 / US2: 更新 manuscripts.invoice_metadata。
+    """
+    updated = EditorialService().update_invoice_info(
+        manuscript_id=id,
+        authors=payload.get("authors"),
+        affiliation=payload.get("affiliation"),
+        apc_amount=payload.get("apc_amount"),
+        funding_info=payload.get("funding_info"),
+        changed_by=str(current_user.get("id")),
+    )
+    return {"success": True, "data": updated}
+
+
+@router.post("/manuscripts/{id}/bind-owner")
+async def bind_internal_owner(
+    id: str,
+    owner_id: str = Body(..., embed=True),
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028 / US3: 绑定 Internal Owner（仅 editor/admin 可操作）。
+
+    显性逻辑：owner_id 必须属于内部员工（editor/admin）。
+    """
+    try:
+        validate_internal_owner_id(UUID(owner_id))
+    except Exception:
+        raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        resp = (
+            supabase_admin.table("manuscripts")
+            .update({"owner_id": owner_id, "updated_at": now})
+            .eq("id", id)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        updated = rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[OwnerBinding] bind owner failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to bind owner")
+
+    # 写入 transition log（若云端未跑迁移则忽略）
+    try:
+        supabase_admin.table("status_transition_logs").insert(
+            {
+                "manuscript_id": str(id),
+                "from_status": str(updated.get("status") or ""),
+                "to_status": str(updated.get("status") or ""),
+                "comment": f"owner bound: {owner_id}",
+                "changed_by": str(current_user.get("id")),
+                "created_at": now,
+            }
+        ).execute()
+    except Exception:
+        pass
+    return {"success": True, "data": updated}
+
+
 @router.get("/internal-staff")
 async def list_internal_staff(
     search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
@@ -87,6 +343,26 @@ async def list_internal_staff(
         raise HTTPException(status_code=500, detail="Failed to load internal staff")
 
 
+@router.get("/journals")
+async def list_journals(
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 028: ProcessFilterBar 数据源（期刊下拉框）。
+    """
+    try:
+        resp = (
+            supabase_admin.table("journals")
+            .select("id,title,slug")
+            .order("title", desc=False)
+            .execute()
+        )
+        return {"success": True, "data": getattr(resp, "data", None) or []}
+    except Exception as e:
+        print(f"[Journals] list failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load journals")
+
+
 @router.get("/pipeline")
 async def get_editor_pipeline(
     current_user: dict = Depends(get_current_user),
@@ -100,11 +376,11 @@ async def get_editor_pipeline(
         # 中文注释: 这里使用 service_role 读取，避免启用 RLS 的云端环境导致 editor 看板空数据。
         db = supabase_admin
 
-        # 待质检 (submitted)
+        # Pre-check（旧：submitted/pending_quality）
         pending_quality_resp = (
             db.table("manuscripts")
             .select("*")
-            .eq("status", "submitted")
+            .eq("status", "pre_check")
             .order("created_at", desc=True)
             .execute()
         )
@@ -156,11 +432,11 @@ async def get_editor_pipeline(
                 del item["review_assignments"]
             under_review.append(item)
 
-        # 待录用 (pending_decision)
+        # 待决策（decision，旧：pending_decision）
         pending_decision_resp = (
             db.table("manuscripts")
             .select("*, review_assignments(count)")
-            .eq("status", "pending_decision")
+            .eq("status", "decision")
             .order("created_at", desc=True)
             .execute()
         )
@@ -245,11 +521,11 @@ async def get_editor_pipeline(
         )
         resubmitted = _extract_supabase_data(resubmitted_resp) or []
 
-        # 等待作者修改 (revision_requested) - 监控用
+        # 等待作者修订（major/minor revision，旧：revision_requested）- 监控用
         revision_requested_resp = (
             db.table("manuscripts")
             .select("*")
-            .eq("status", "revision_requested")
+            .in_("status", ["major_revision", "minor_revision"])
             .order("updated_at", desc=True)
             .execute()
         )
@@ -614,11 +890,11 @@ async def submit_final_decision(
                         from uuid import UUID
 
                         from app.services.invoice_pdf_service import (
-                            generate_and_store_invoice_pdf,
+                            generate_and_store_invoice_pdf_safe,
                         )
 
                         background_tasks.add_task(
-                            generate_and_store_invoice_pdf,
+                            generate_and_store_invoice_pdf_safe,
                             invoice_id=UUID(str(invoice_id)),
                         )
                 except Exception as e:
@@ -869,7 +1145,7 @@ async def get_editor_pipeline_test():
             "success": True,
             "data": {
                 "pending_quality": [
-                    {"id": "1", "title": "Test Manuscript 1", "status": "submitted"}
+                    {"id": "1", "title": "Test Manuscript 1", "status": "pre_check"}
                 ],
                 "under_review": [
                     {"id": "2", "title": "Test Manuscript 2", "status": "under_review"}
@@ -878,7 +1154,7 @@ async def get_editor_pipeline_test():
                     {
                         "id": "3",
                         "title": "Test Manuscript 3",
-                        "status": "pending_decision",
+                        "status": "decision",
                     }
                 ],
                 "published": [

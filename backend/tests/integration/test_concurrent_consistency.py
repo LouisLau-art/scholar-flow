@@ -21,7 +21,7 @@ def _mock_supabase_with_data(data=None):
 async def test_concurrent_consistent_list_responses(client: AsyncClient):
     """验证并发读取列表保持一致"""
     dataset = [
-        {"id": "m-1", "title": "Paper 1", "status": "submitted"},
+        {"id": "m-1", "title": "Paper 1", "status": "pre_check"},
         {"id": "m-2", "title": "Paper 2", "status": "under_review"},
     ]
     mock = _mock_supabase_with_data(dataset)

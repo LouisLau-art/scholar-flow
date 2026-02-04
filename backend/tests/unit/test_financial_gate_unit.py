@@ -152,7 +152,7 @@ async def test_accept_rejects_negative_apc():
 @pytest.mark.asyncio
 async def test_publish_allows_when_invoice_missing_for_non_approved(monkeypatch):
     fake = _FakeSupabaseAdmin(
-        manuscript={"id": "m-1", "status": "submitted"},
+        manuscript={"id": "m-1", "status": "pre_check"},
         invoices=[],
         update_result=[{"id": "m-1", "status": "published"}],
     )

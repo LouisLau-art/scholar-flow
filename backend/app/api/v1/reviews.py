@@ -337,9 +337,9 @@ async def unassign_reviewer(
         )
         remaining_count = len(remaining_res.data or [])
 
-        # 5. 如果没有审稿人了，回滚稿件状态为 submitted
+        # 5. 如果没有审稿人了，回滚稿件状态为 pre_check（进入编辑预检阶段）
         if remaining_count == 0:
-            supabase_admin.table("manuscripts").update({"status": "submitted"}).eq(
+            supabase_admin.table("manuscripts").update({"status": "pre_check"}).eq(
                 "id", manuscript_id
             ).execute()
 
@@ -614,11 +614,11 @@ async def submit_review(
 
             if not pending_rows:
                 try:
-                    supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
+                    supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
                         "id", str(manuscript_id)
                     ).execute()
                 except Exception:
-                    supabase.table("manuscripts").update({"status": "pending_decision"}).eq(
+                    supabase.table("manuscripts").update({"status": "decision"}).eq(
                         "id", str(manuscript_id)
                     ).execute()
 
@@ -955,7 +955,7 @@ async def submit_review_by_token(
                 .execute()
             )
             if not (getattr(pending, "data", None) or []):
-                supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
+                supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
                     "id", str(rr["manuscript_id"])
                 ).execute()
         except Exception as e:

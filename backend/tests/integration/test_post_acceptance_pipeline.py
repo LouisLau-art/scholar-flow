@@ -46,7 +46,7 @@ async def test_invoice_download_returns_pdf(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Invoice Download Manuscript",
     )
 
@@ -97,7 +97,7 @@ async def test_mark_invoice_paid_endpoint(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Invoice Pay Manuscript",
     )
 
@@ -149,7 +149,7 @@ async def test_production_gate_blocks_until_final_pdf_present(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Production Gate Manuscript",
     )
 
