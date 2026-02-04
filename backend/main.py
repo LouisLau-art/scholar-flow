@@ -8,6 +8,17 @@ from dotenv import load_dotenv
 # 在应用启动前加载环境变量
 load_dotenv()
 
+_SENTRY_ENABLED = False
+try:
+    from app.core.sentry_init import init_sentry
+
+    _SENTRY_ENABLED = init_sentry()
+    if _SENTRY_ENABLED:
+        print("[sentry] enabled")
+except Exception as e:
+    # 中文注释: 零崩溃原则 — Sentry 任何异常不得阻塞启动
+    print(f"[sentry] init failed (ignored): {e}")
+
 from app.api.v1 import (
     auth,
     manuscripts,
@@ -66,6 +77,14 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+if _SENTRY_ENABLED:
+    try:
+        from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+
+        app.add_middleware(SentryAsgiMiddleware)
+    except Exception as e:
+        print(f"[sentry] middleware attach failed (ignored): {e}")
 
 def _parse_frontend_origins() -> list[str]:
     """
