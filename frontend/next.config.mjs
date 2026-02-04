@@ -22,24 +22,6 @@ const nextConfig = {
       },
     ]
 
-    // 中文注释: Sentry 同源 tunnel，绕过浏览器隐私/跟踪保护对 ingest 域名的拦截
-    const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN
-    if (dsn) {
-      try {
-        const url = new URL(dsn)
-        const host = url.host
-        const projectId = url.pathname.replace(/^\//, '')
-        if (host && projectId) {
-          rules.push({
-            source: '/monitoring',
-            destination: `https://${host}/api/${projectId}/envelope/`,
-          })
-        }
-      } catch {
-        // ignore invalid DSN
-      }
-    }
-
     return rules
   },
 }
@@ -60,6 +42,10 @@ const sentryBuildOptions = {
   sourcemaps: {
     disable: !hasSentryAuth,
   },
+  // 中文注释:
+  // - 使用 Sentry 官方 tunnelRoute：会自动把浏览器端上报改为同源 `/monitoring?...`
+  // - 同时自动注入 rewrite，把请求转发到对应 region 的 ingest 域名（绕过 Firefox ETP 等 tracker 拦截）
+  tunnelRoute: '/monitoring',
   // 让客户端上传更多 bundle sourcemaps，方便定位
   widenClientFileUpload: true,
   // 不把 sourcemap 公开给用户（只上传到 Sentry）
