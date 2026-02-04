@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import EditorPipeline from '@/components/EditorPipeline'
+import { ManuscriptsProcessPanel } from '@/components/editor/ManuscriptsProcessPanel'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import DecisionPanel from '@/components/DecisionPanel'
 import CmsManagementPanel from '@/components/cms/CmsManagementPanel'
@@ -103,26 +103,26 @@ export default function EditorDashboard() {
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-6">
           <TabsList className="border border-border bg-background p-1">
-            <TabsTrigger value="pipeline" data-testid="editor-tab-pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="pipeline" data-testid="editor-tab-pipeline">Manuscripts Process</TabsTrigger>
             <TabsTrigger value="reviewers" data-testid="editor-tab-reviewers">Reviewers</TabsTrigger>
             <TabsTrigger value="decisions" data-testid="editor-tab-decisions">Decisions</TabsTrigger>
             <TabsTrigger value="website" data-testid="editor-tab-website">Website</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline" className="space-y-6">
-            <EditorPipeline
+            <ManuscriptsProcessPanel
+              refreshKey={pipelineRefresh}
               onAssign={(manuscript) => {
                 setSelectedManuscriptId(manuscript.id)
-                setSelectedManuscriptTitle(manuscript.title)
+                setSelectedManuscriptTitle((manuscript as any).title || manuscript.id)
                 setIsAssignModalOpen(true)
                 setActiveTab('reviewers')
               }}
               onDecide={(manuscript) => {
                 setSelectedManuscriptId(manuscript.id)
-                setSelectedManuscriptTitle(manuscript.title)
+                setSelectedManuscriptTitle((manuscript as any).title || manuscript.id)
                 setActiveTab('decisions')
               }}
-              refreshKey={pipelineRefresh}
             />
           </TabsContent>
 
@@ -136,7 +136,7 @@ export default function EditorDashboard() {
                 {selectedManuscriptId ? (
                   <>Selected manuscript: <span className="font-semibold text-slate-900">{selectedManuscriptTitle}</span></>
                 ) : (
-                  <>No manuscript selected. Go to the <span className="font-semibold text-slate-900">Pipeline</span> tab and click “Assign Reviewers”.</>
+                  <>No manuscript selected. Go to the <span className="font-semibold text-slate-900">Manuscripts Process</span> tab and click “Assign”.</>
                 )}
               </div>
               <Button
@@ -162,7 +162,7 @@ export default function EditorDashboard() {
               />
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 p-8 text-slate-600">
-                No manuscript selected. Go to the <span className="font-semibold text-slate-900">Pipeline</span> tab and click “Make Decision”.
+                No manuscript selected. Go to the <span className="font-semibold text-slate-900">Manuscripts Process</span> tab and click “Decide”.
               </div>
             )}
           </TabsContent>

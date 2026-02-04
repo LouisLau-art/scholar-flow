@@ -67,7 +67,7 @@ async def test_create_manuscript_success(client: AsyncClient):
         "dataset_url": "https://example.com/dataset",
         "source_code_url": "https://github.com/example/repo",
         "author_id": "00000000-0000-0000-0000-000000000000",
-        "status": "submitted",
+        "status": "pre_check",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
         "updated_at": "2026-01-28T00:00:00.000000+00:00"
     }
@@ -93,7 +93,7 @@ async def test_create_manuscript_success(client: AsyncClient):
         result = response.json()
         assert result["success"] is True
         assert result["data"]["title"] == "Test Manuscript"
-        assert result["data"]["status"] == "submitted"
+        assert result["data"]["status"] == "pre_check"
         assert result["data"]["dataset_url"] == "https://example.com/dataset"
         assert result["data"]["source_code_url"] == "https://github.com/example/repo"
 
@@ -135,7 +135,7 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
         "title": "Auth Bound Manuscript",
         "abstract": "This is a sufficiently long abstract content for validation.",
         "author_id": token_user_id,
-        "status": "submitted",
+        "status": "pre_check",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
         "updated_at": "2026-01-28T00:00:00.000000+00:00"
     }
@@ -170,7 +170,7 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
 async def test_get_manuscripts_list(client: AsyncClient):
     """验证获取稿件列表接口"""
     mock_data = [
-        {"id": str(uuid.uuid4()), "title": "Paper 1", "status": "submitted"},
+        {"id": str(uuid.uuid4()), "title": "Paper 1", "status": "pre_check"},
         {"id": str(uuid.uuid4()), "title": "Paper 2", "status": "under_review"}
     ]
     mock = get_full_mock(mock_data)

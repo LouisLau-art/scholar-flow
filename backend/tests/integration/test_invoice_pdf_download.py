@@ -51,7 +51,7 @@ async def test_invoice_pdf_signed_url_access_control(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Invoice Download Manuscript",
     )
 
@@ -113,4 +113,3 @@ async def test_invoice_pdf_signed_url_access_control(
         assert r5.status_code == 403, r5.text
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
-

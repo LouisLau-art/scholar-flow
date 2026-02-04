@@ -26,7 +26,7 @@ async def test_concurrent_manuscript_submissions(client: AsyncClient, auth_token
     responses = []
     for idx in range(5):
         response = MagicMock()
-        response.data = [{"id": f"m-{idx}", "title": f"Paper {idx}", "status": "submitted"}]
+        response.data = [{"id": f"m-{idx}", "title": f"Paper {idx}", "status": "pre_check"}]
         responses.append(response)
 
     mock = _mock_supabase_with_side_effect(responses)

@@ -36,15 +36,15 @@ export default function SubmitRevisionPage() {
           return
         }
         
-        // 1. Fetch Manuscript Details
-        const msRes = await fetch(`/api/v1/manuscripts/articles/${manuscriptId}`, {
+        // 1. Fetch Manuscript Details（登录态，非公开文章页）
+        const msRes = await fetch(`/api/v1/manuscripts/by-id/${manuscriptId}`, {
            headers: { Authorization: `Bearer ${token}` }
         })
         const msData = await msRes.json()
         if (!msData.success) throw new Error('Failed to load manuscript')
         
         const ms = msData.data
-        if (ms.status !== 'revision_requested') {
+        if (!['major_revision', 'minor_revision', 'revision_requested'].includes(ms.status)) {
           toast.error('This manuscript is not awaiting revision.')
           router.push('/dashboard')
           return

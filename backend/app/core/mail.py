@@ -62,7 +62,19 @@ class EmailService:
             self._supabase = supabase_client  # type: ignore[assignment]
 
     def is_configured(self) -> bool:
-        return bool(self.smtp_config or self.resend_config)
+        legacy = getattr(self, "config", None)
+        legacy_api_key = getattr(legacy, "api_key", None) if legacy else None
+        return bool(self.smtp_config or self.resend_config or legacy_api_key)
+
+    def _effective_resend_config(self) -> ResendConfig | None:
+        if self.resend_config:
+            return self.resend_config
+        legacy = getattr(self, "config", None)
+        api_key = (getattr(legacy, "api_key", "") or "").strip() if legacy else ""
+        sender = (getattr(legacy, "sender", "") or "").strip() if legacy else ""
+        if not api_key:
+            return None
+        return ResendConfig(api_key=api_key, sender=sender or "ScholarFlow <onboarding@resend.dev>")
 
     def create_token(self, email: str, salt: str) -> str:
         """Generate a secure, time-bound token."""
@@ -162,27 +174,66 @@ class EmailService:
         Entry point for BackgroundTasks. Handles rendering, sending, retrying, and logging.
         Runs synchronously in a threadpool (FastAPI default for non-async tasks).
         """
-        ok = self.send_template_email(
-            to_email=to_email,
-            subject=subject,
-            template_name=template_name,
-            context=context,
-        )
-        if not ok:
+        if not self.is_configured():
+            return
+
+        try:
+            html = self.render_template(template_name, context)
+        except Exception as e:
+            print(f"[Email] template render failed: {e}")
             self._log_attempt(
                 to_email,
                 subject,
                 template_name,
                 EmailStatus.FAILED,
-                error_message="send failed",
+                error_message=str(e),
             )
-        else:
-            self._log_attempt(to_email, subject, template_name, EmailStatus.SENT)
+            return
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-    def _send_with_retry(self, to_email: str, subject: str, html_content: str):
+        # 优先 SMTP；否则走 Resend（带重试），并记录 provider_id。
+        if self.smtp_config:
+            ok = self.send_email(to_email=to_email, subject=subject, html_body=html)
+            if ok:
+                self._log_attempt(to_email, subject, template_name, EmailStatus.SENT)
+            else:
+                self._log_attempt(
+                    to_email,
+                    subject,
+                    template_name,
+                    EmailStatus.FAILED,
+                    error_message="send failed",
+                )
+            return
+
+        resend_cfg = self._effective_resend_config()
+        if not resend_cfg:
+            return
+
+        resend.api_key = resend_cfg.api_key
+        try:
+            res = self._send_with_retry(to_email, subject, html, sender=resend_cfg.sender)
+            provider_id = (res or {}).get("id") if isinstance(res, dict) else None
+            self._log_attempt(
+                to_email,
+                subject,
+                template_name,
+                EmailStatus.SENT,
+                provider_id=provider_id,
+            )
+        except Exception as e:
+            print(f"[Resend] send failed: {e}")
+            self._log_attempt(
+                to_email,
+                subject,
+                template_name,
+                EmailStatus.FAILED,
+                error_message=str(e),
+            )
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.1, min=0.1, max=1), reraise=True)
+    def _send_with_retry(self, to_email: str, subject: str, html_content: str, *, sender: str):
         params = {
-            "from": self.resend_config.sender if self.resend_config else "ScholarFlow <no-reply@scholarflow.local>",
+            "from": sender or "ScholarFlow <no-reply@scholarflow.local>",
             "to": [to_email],
             "subject": subject,
             "html": html_content,

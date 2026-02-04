@@ -8,23 +8,8 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
   await page.context().setExtraHTTPHeaders({ 'x-scholarflow-e2e': '1' })
 }
 
-function buildPipeline({
-  pendingDecision = [],
-  revisionRequested = [],
-  resubmitted = [],
-}: {
-  pendingDecision?: any[]
-  revisionRequested?: any[]
-  resubmitted?: any[]
-}) {
-  return {
-    pending_quality: [],
-    under_review: [],
-    pending_decision: pendingDecision,
-    published: [],
-    revision_requested: revisionRequested,
-    resubmitted,
-  }
+function buildProcessRows(args: { rows?: any[] }) {
+  return args.rows ?? []
 }
 
 async function mockApi(
@@ -32,9 +17,8 @@ async function mockApi(
   opts: {
     roles: Roles
     manuscriptId: string
-    manuscriptTitle: string
-    initialPipeline?: any
-    getEditorPipeline?: () => any
+    initialRows?: any[]
+    getProcessRows?: () => any[]
     submissions?: any[]
     manuscriptStatus?: string
     revisionRequest?: { decision_type: 'major' | 'minor'; editor_comment: string }
@@ -64,8 +48,16 @@ async function mockApi(
       return fulfillJson(route, 200, { success: true, data: opts.submissions ?? [] })
     }
 
-    if (pathname === '/api/v1/editor/pipeline') {
-      const data = opts.getEditorPipeline ? opts.getEditorPipeline() : (opts.initialPipeline ?? buildPipeline({}))
+    if (pathname === '/api/v1/editor/journals') {
+      return fulfillJson(route, 200, { success: true, data: [] })
+    }
+
+    if (pathname === '/api/v1/editor/internal-staff') {
+      return fulfillJson(route, 200, { success: true, data: [] })
+    }
+
+    if (pathname === '/api/v1/editor/manuscripts/process') {
+      const data = opts.getProcessRows ? opts.getProcessRows() : buildProcessRows({ rows: opts.initialRows })
       return fulfillJson(route, 200, { success: true, data })
     }
 
@@ -87,14 +79,14 @@ async function mockApi(
       })
     }
 
-    if (pathname === `/api/v1/manuscripts/articles/${opts.manuscriptId}`) {
+    if (pathname === `/api/v1/manuscripts/by-id/${opts.manuscriptId}`) {
       return fulfillJson(route, 200, {
         success: true,
         data: {
           id: opts.manuscriptId,
-          title: opts.manuscriptTitle,
+          title: 'Mocked manuscript',
           abstract: 'Mocked abstract',
-          status: opts.manuscriptStatus ?? 'revision_requested',
+          status: opts.manuscriptStatus ?? 'minor_revision',
           version: 1,
           updated_at: nowIso,
         },
@@ -139,8 +131,6 @@ async function mockApi(
 test.describe('Revision workflow (mocked backend)', () => {
   test('Editor requests revision flow', async ({ page }) => {
     const manuscriptId = '11111111-1111-1111-1111-111111111111'
-    const manuscriptTitle = 'E2E Manuscript - Pending Decision'
-
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'editor@example.com'))
 
@@ -148,13 +138,10 @@ test.describe('Revision workflow (mocked backend)', () => {
     await mockApi(page, {
       roles: ['editor'],
       manuscriptId,
-      manuscriptTitle,
-      getEditorPipeline: () =>
+      getProcessRows: () =>
         revisionRequested
-          ? buildPipeline({
-              revisionRequested: [{ id: manuscriptId, title: manuscriptTitle, updated_at: new Date().toISOString() }],
-            })
-          : buildPipeline({ pendingDecision: [{ id: manuscriptId, title: manuscriptTitle }] }),
+          ? [{ id: manuscriptId, status: 'minor_revision', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]
+          : [{ id: manuscriptId, status: 'decision', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
       onEditorRequestRevision: () => {
         revisionRequested = true
       },
@@ -164,11 +151,12 @@ test.describe('Revision workflow (mocked backend)', () => {
     await expect(page.getByText('roles:')).toBeVisible({ timeout: 15000 })
     await page.getByRole('tab', { name: /Editor/i }).click()
 
-    await expect(page.getByTestId('editor-pipeline')).toBeVisible()
-    await expect(page.getByText(manuscriptTitle)).toBeVisible()
+    await expect(page.getByTestId('editor-process-table')).toBeVisible()
+    await expect(page.getByText(manuscriptId)).toBeVisible()
 
     // 打开决策面板
-    await page.getByRole('button', { name: 'Make Decision' }).click()
+    const row = page.locator('tr', { hasText: manuscriptId })
+    await row.getByRole('button', { name: 'Decide' }).click()
     await expect(page.getByRole('heading', { name: 'Final Decision' })).toBeVisible()
 
     // 选择 Request Revision -> Minor -> 填写说明 -> 提交
@@ -177,17 +165,13 @@ test.describe('Revision workflow (mocked backend)', () => {
     await page.locator('textarea').fill('Please fix the formatting and update references.')
     await page.getByRole('button', { name: 'Submit Decision' }).click()
 
-    // 回到 pipeline 后应出现 Waiting for Author（revision_requested）
-    await expect(page.getByTestId('editor-pipeline')).toBeVisible()
-    await expect(
-      page.getByTestId('editor-pipeline-list').getByRole('heading', { name: 'Waiting for Author' })
-    ).toBeVisible()
-    await expect(page.getByText(manuscriptTitle)).toBeVisible()
+    // 回到 process 表后，应看到状态变为 Minor Revision
+    await expect(page.getByTestId('editor-process-table')).toBeVisible()
+    await expect(page.getByText('Minor Revision')).toBeVisible()
   })
 
   test('Author submits revision flow (button visibility + submit)', async ({ page }) => {
     const manuscriptId = '22222222-2222-2222-2222-222222222222'
-    const manuscriptTitle = 'E2E Manuscript - Revision Requested'
 
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'author@example.com'))
@@ -195,8 +179,7 @@ test.describe('Revision workflow (mocked backend)', () => {
     await mockApi(page, {
       roles: ['author'],
       manuscriptId,
-      manuscriptTitle,
-      submissions: [{ id: manuscriptId, title: manuscriptTitle, status: 'revision_requested', created_at: new Date().toISOString() }],
+      submissions: [{ id: manuscriptId, title: 'E2E Manuscript', status: 'minor_revision', created_at: new Date().toISOString() }],
       revisionRequest: { decision_type: 'minor', editor_comment: 'Please update references and fix typos.' },
     })
 
@@ -221,7 +204,6 @@ test.describe('Revision workflow (mocked backend)', () => {
 
   test('Editor verifies resubmission visibility (Resubmitted column)', async ({ page }) => {
     const manuscriptId = '33333333-3333-3333-3333-333333333333'
-    const manuscriptTitle = 'E2E Manuscript - Resubmitted'
 
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('cccccccc-cccc-cccc-cccc-cccccccccccc', 'editor@example.com'))
@@ -229,17 +211,14 @@ test.describe('Revision workflow (mocked backend)', () => {
     await mockApi(page, {
       roles: ['editor'],
       manuscriptId,
-      manuscriptTitle,
-      initialPipeline: buildPipeline({
-        resubmitted: [{ id: manuscriptId, title: manuscriptTitle, updated_at: new Date().toISOString(), version: 2 }],
-      }),
+      initialRows: [{ id: manuscriptId, status: 'resubmitted', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
     })
 
     await page.goto('/dashboard')
     await page.getByRole('tab', { name: /Editor/i }).click()
 
-    await expect(page.getByTestId('editor-pipeline')).toBeVisible()
-    await expect(page.getByText('Resubmitted Revisions')).toBeVisible()
-    await expect(page.getByText(manuscriptTitle)).toBeVisible()
+    await expect(page.getByTestId('editor-process-table')).toBeVisible()
+    await expect(page.getByText(manuscriptId)).toBeVisible()
+    await expect(page.getByText('Resubmitted')).toBeVisible()
   })
 })

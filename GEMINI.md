@@ -274,6 +274,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Reviewer 修回上下文**：审稿弹窗展示作者修回材料（Response Letter/内嵌图片），并补齐审稿附件下载入口。
 - **权限收紧**：`GET /api/v1/manuscripts/{id}/versions` 对 reviewer 增加“必须被分配该稿件”的校验，避免越权读取版本历史。
 - **Feature 024（录用后出版流水线）**：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
+- **Feature 028（Workflow 状态机标准化）**：`manuscripts.status` 迁移到枚举 `public.manuscript_status`（见 `supabase/migrations/20260204000000_update_manuscript_status.sql`），新增审计表 `status_transition_logs`（见 `supabase/migrations/20260204000002_create_transition_logs.sql`）；Editor 新增 Process 列表 `/editor/process`（API：`GET /api/v1/editor/manuscripts/process`）与详情页 `/editor/manuscript/[id]`；稿件详情读取使用 `GET /api/v1/manuscripts/by-id/{id}` 以避免路由吞噬 `/upload`。
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes

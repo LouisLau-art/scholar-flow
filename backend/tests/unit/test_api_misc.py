@@ -146,9 +146,9 @@ class _FakeQuery:
 @pytest.mark.asyncio
 async def test_editor_pipeline_with_stubbed_supabase(monkeypatch):
     pipeline_data = {
-        "submitted": [{"id": "1"}],
+        "pre_check": [{"id": "1"}],
         "under_review": [{"id": "2"}],
-        "pending_decision": [{"id": "3"}],
+        "decision": [{"id": "3"}],
         "published": [{"id": "4"}],
     }
     fake = _FakeSupabase(pipeline_data, reviewers_data=[], decision_data=[])

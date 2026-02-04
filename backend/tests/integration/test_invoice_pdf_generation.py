@@ -55,7 +55,7 @@ async def test_accept_triggers_invoice_pdf_generation(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="pending_decision",
+        status="decision",
         title="Invoice PDF Manuscript",
     )
 
@@ -90,4 +90,3 @@ async def test_accept_triggers_invoice_pdf_generation(
         assert (inv.get("pdf_path") or "").strip() != ""
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
-

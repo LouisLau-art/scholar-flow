@@ -37,7 +37,7 @@ async def test_title_min_length_boundary(client: AsyncClient, auth_token: str):
         "title": "Title",
         "abstract": "This is a sufficiently long abstract for validation rules.",
         "author_id": "00000000-0000-0000-0000-000000000000",
-        "status": "submitted"
+        "status": "pre_check"
     }]
     mock = build_supabase_mock(mock_data)
     with patch("app.lib.api_client.supabase", mock), \

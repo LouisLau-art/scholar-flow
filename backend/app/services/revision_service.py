@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
 from app.lib.api_client import supabase_admin
 from app.services.notification_service import NotificationService
+from app.models.manuscript import ManuscriptStatus, normalize_status
 
 
 class RevisionService:
@@ -117,10 +118,10 @@ class RevisionService:
         Editor 请求修订 (User Story 1)
 
         中文注释:
-        1. 验证稿件状态是否允许请求修订（under_review / pending_decision / resubmitted）
+        1. 验证稿件状态是否允许请求修订（under_review / decision / resubmitted）
         2. 创建当前版本的快照（manuscript_version）
         3. 创建 revision 记录
-        4. 更新稿件状态为 revision_requested
+        4. 更新稿件状态为 major_revision / minor_revision（Feature 028）
 
         Gate 2: 文件安全 - 此操作不修改任何文件，仅创建元数据记录
         """
@@ -129,10 +130,16 @@ class RevisionService:
         if not manuscript:
             return {"success": False, "error": "Manuscript not found"}
 
-        current_status = manuscript.get("status", "")
+        current_status_raw = manuscript.get("status", "")
+        current_status = normalize_status(str(current_status_raw)) or str(current_status_raw or "")
         # 中文注释:
         # - resubmitted：作者修回后，Editor 可能仍需“再退回一轮小修/大修”，MVP 允许此操作。
-        allowed_statuses = ["under_review", "pending_decision", "resubmitted"]
+        allowed_statuses = [
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.DECISION.value,
+            "pending_decision",  # 兼容旧数据
+            ManuscriptStatus.RESUBMITTED.value,
+        ]
         if current_status not in allowed_statuses:
             return {
                 "success": False,
@@ -168,11 +175,16 @@ class RevisionService:
             print(f"[RevisionService] create revision error: {e}")
             return {"success": False, "error": f"Failed to create revision: {e}"}
 
-        # 5. 更新稿件状态
+        # 5. 更新稿件状态（Feature 028）
         try:
+            new_status = (
+                ManuscriptStatus.MAJOR_REVISION.value
+                if decision_type == "major"
+                else ManuscriptStatus.MINOR_REVISION.value
+            )
             self.client.table("manuscripts").update(
                 {
-                    "status": "revision_requested",
+                    "status": new_status,
                     "updated_at": now,
                 }
             ).eq("id", manuscript_id).execute()
@@ -186,7 +198,7 @@ class RevisionService:
         # 6. 取消未完成的审稿任务（避免 Reviewer 继续看到该稿件）
         # 中文注释:
         # - MVP 允许 Editor “不等所有 reviewer 回应就直接做决定/退修”。
-        # - 一旦进入 revision_requested，未完成的 review_assignments 应视为作废。
+        # - 一旦进入 major/minor revision，未完成的 review_assignments 应视为作废。
         try:
             self.client.table("review_assignments").update({"status": "cancelled"}).eq(
                 "manuscript_id", manuscript_id
@@ -198,7 +210,7 @@ class RevisionService:
             "success": True,
             "data": {
                 "revision": revision,
-                "manuscript_status": "revision_requested",
+                "manuscript_status": new_status,
                 "round_number": round_number,
             },
         }
@@ -238,7 +250,7 @@ class RevisionService:
         Author 提交修订稿 (User Story 2)
 
         中文注释:
-        1. 验证稿件状态必须是 revision_requested
+        1. 验证稿件状态必须是 major_revision / minor_revision（兼容旧 revision_requested）
         2. 验证作者身份
         3. 创建新版本记录
         4. 更新 revision 记录（填充 response_letter, submitted_at）
@@ -252,10 +264,11 @@ class RevisionService:
             return {"success": False, "error": "Manuscript not found"}
 
         # 2. 验证状态
-        if manuscript.get("status") != "revision_requested":
+        current_status = normalize_status(str(manuscript.get("status") or "")) or str(manuscript.get("status") or "")
+        if current_status not in {ManuscriptStatus.MAJOR_REVISION.value, ManuscriptStatus.MINOR_REVISION.value, "revision_requested"}:
             return {
                 "success": False,
-                "error": f"Cannot submit revision: manuscript status is '{manuscript.get('status')}', expected 'revision_requested'",
+                "error": f"Cannot submit revision: manuscript status is '{manuscript.get('status')}', expected major/minor revision",
             }
 
         # 3. 验证作者身份

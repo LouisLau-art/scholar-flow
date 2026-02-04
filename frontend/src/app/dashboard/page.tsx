@@ -179,12 +179,12 @@ function DashboardPageContent() {
                               <div>
                                 <p className="font-bold text-slate-900">{item.title}</p>
                                 <p className="text-sm text-slate-500 font-medium">
-                                  Status: {item.status || 'submitted'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
+                                  Status: {item.status || 'pre_check'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
                                 </p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              {item.status === 'revision_requested' && (
+                              {['major_revision', 'minor_revision', 'revision_requested'].includes(item.status) && (
                                 <Link
                                   href={`/submit-revision/${item.id}`}
                                   className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"

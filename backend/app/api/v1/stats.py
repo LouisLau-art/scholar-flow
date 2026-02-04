@@ -22,7 +22,11 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
         total = len(rows)
         published = sum(1 for r in rows if r.get("status") == "published")
         under_review = sum(1 for r in rows if r.get("status") == "under_review")
-        revision_requested = sum(1 for r in rows if r.get("status") == "revision_requested")
+        revision_requested = sum(
+            1
+            for r in rows
+            if (r.get("status") in {"major_revision", "minor_revision", "revision_requested"})
+        )
         rejected = sum(1 for r in rows if r.get("status") == "rejected")
 
         return {
@@ -61,7 +65,7 @@ async def get_editor_stats(current_user: dict = Depends(get_current_user)):
         pending_assignment = (
             supabase.table("manuscripts")
             .select("id")
-            .eq("status", "submitted")
+            .eq("status", "pre_check")
             .execute()
             .data
         )
@@ -75,7 +79,7 @@ async def get_editor_stats(current_user: dict = Depends(get_current_user)):
         overdue_reviews = (
             supabase.table("manuscripts")
             .select("id")
-            .eq("status", "pending_decision")
+            .eq("status", "decision")
             .execute()
             .data
         )

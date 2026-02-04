@@ -92,7 +92,7 @@ def test_create_revision_request_error_paths(supabase_admin, monkeypatch):
     monkeypatch.setattr(
         svc,
         "get_manuscript",
-        lambda *_args, **_kwargs: {"id": "m1", "status": "submitted", "version": 1},
+        lambda *_args, **_kwargs: {"id": "m1", "status": "pre_check", "version": 1},
     )
     out = svc.create_revision_request("m1", "major", "c")
     assert out["success"] is False
@@ -132,10 +132,10 @@ def test_create_revision_request_insert_and_update_failures(supabase_admin, monk
     "manuscript,pending,expected_error",
     [
         (None, None, "Manuscript not found"),
-        ({"id": "m1", "status": "submitted", "author_id": "a1", "version": 1}, None, "Cannot submit revision"),
-        ({"id": "m1", "status": "revision_requested", "author_id": "a1", "version": 1}, None, "No pending revision request found"),
+        ({"id": "m1", "status": "pre_check", "author_id": "a1", "version": 1}, None, "Cannot submit revision"),
+        ({"id": "m1", "status": "minor_revision", "author_id": "a1", "version": 1}, None, "No pending revision request found"),
         (
-            {"id": "m1", "status": "revision_requested", "author_id": "a1", "version": 1},
+            {"id": "m1", "status": "minor_revision", "author_id": "a1", "version": 1},
             {"id": "r1"},
             "Only the manuscript author can submit revisions",
         ),
@@ -168,7 +168,7 @@ def test_submit_revision_happy_path_and_failures(supabase_admin, monkeypatch):
         "get_manuscript",
         lambda *_args, **_kwargs: {
             "id": "m1",
-            "status": "revision_requested",
+            "status": "minor_revision",
             "author_id": "a1",
             "version": 1,
             "title": "t",

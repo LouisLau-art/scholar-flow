@@ -90,26 +90,36 @@ async def test_publish_manuscript_success():
 
 
 @pytest.mark.asyncio
-async def test_process_quality_check_passed():
+async def test_process_quality_check_passed(monkeypatch):
     manuscript_id = UUID(int=2)
     owner_id = UUID(int=3)
 
+    class DummySvc:
+        def update_status(self, **_kwargs):
+            return {"id": str(manuscript_id), "status": "under_review", "owner_id": str(owner_id)}
+
+    monkeypatch.setattr(editorial_service, "EditorialService", lambda: DummySvc())
     result = await editorial_service.process_quality_check(manuscript_id, True, owner_id)
 
     assert result["status"] == "under_review"
-    assert result["owner_id"] == owner_id
+    assert result["owner_id"] == str(owner_id)
 
 
 @pytest.mark.asyncio
-async def test_process_quality_check_failed_with_notes():
+async def test_process_quality_check_failed_with_notes(monkeypatch):
     manuscript_id = UUID(int=4)
     owner_id = UUID(int=5)
 
+    class DummySvc:
+        def update_status(self, **_kwargs):
+            return {"id": str(manuscript_id), "status": "minor_revision", "owner_id": str(owner_id)}
+
+    monkeypatch.setattr(editorial_service, "EditorialService", lambda: DummySvc())
     result = await editorial_service.process_quality_check(
         manuscript_id, False, owner_id, revision_notes="Need fixes"
     )
 
-    assert result["status"] == "returned_for_revision"
+    assert result["status"] == "minor_revision"
 
 
 @pytest.mark.asyncio
@@ -127,7 +137,7 @@ async def test_handle_plagiarism_result_safe():
 
     result = await editorial_service.handle_plagiarism_result(manuscript_id, 0.1)
 
-    assert result == "submitted"
+    assert result == "pre_check"
 
 
 @pytest.mark.asyncio
