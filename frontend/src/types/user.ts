@@ -17,6 +17,8 @@ export interface User {
   google_scholar_url?: string | null;
   avatar_url?: string | null;
   research_interests?: string[];
+  homepage_url?: string | null;
+  is_reviewer_active?: boolean;
 }
 
 // Alias for single user response

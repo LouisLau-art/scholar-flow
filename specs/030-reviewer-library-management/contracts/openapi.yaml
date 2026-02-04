@@ -1,0 +1,78 @@
+openapi: 3.0.0
+info:
+  title: Reviewer Library API
+  version: 1.0.0
+paths:
+  /api/v1/editor/reviewer-library:
+    get:
+      summary: Search and list reviewers in the library
+      parameters:
+        - name: query
+          in: query
+          description: Name, affiliation, or research interests
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: Max items (1..200)
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: List of reviewer profiles
+    post:
+      summary: Add a new reviewer to the library (no email)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, full_name, title]
+              properties:
+                email: { type: string, format: email }
+                full_name: { type: string }
+                title: { type: string }
+                affiliation: { type: string }
+                homepage_url: { type: string, format: uri }
+                research_interests: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Reviewer added/linked successfully
+  /api/v1/editor/reviewer-library/{id}:
+    get:
+      summary: Get full reviewer profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+    put:
+      summary: Update reviewer library entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                title: { type: string }
+                affiliation: { type: string }
+                homepage_url: { type: string, format: uri }
+                research_interests: { type: array, items: { type: string } }
+                is_reviewer_active: { type: boolean }
+      responses:
+        '200':
+          description: Updated reviewer profile
+    delete:
+      summary: Remove reviewer from library (soft delete)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deactivated reviewer profile

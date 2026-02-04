@@ -108,3 +108,4 @@ Constitution supersedes all other practices. Amendments require documentation an
 - Feature 024：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
 - Feature 028：工作流状态机标准化（`public.manuscript_status`）+ Editor 新增 Process 列表与详情页（`/editor/process`、`/editor/manuscript/[id]`）。
 - Feature 029：完善 Editor 稿件详情页（文档分组 + Invoice Info 编辑），并将 invoice_metadata 的变更记录写入审计日志（`status_transition_logs.payload`）。
+- Feature 030：审稿人库（Reviewer Library）与指派解耦：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），指派弹窗改为只从库中检索并保持列表不跳动；新增 `is_reviewer_active` 与 `reviewer_search_text`（trigram GIN）以保证 1k+ 检索性能。

@@ -12,6 +12,7 @@ import { ManuscriptDetailsHeader } from '@/components/editor/ManuscriptDetailsHe
 import { FileSectionGroup, type FileSection } from '@/components/editor/FileSectionGroup'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { InvoiceInfoSection } from '@/components/editor/InvoiceInfoSection'
+import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
 import VersionHistory from '@/components/VersionHistory'
 import { getStatusLabel } from '@/lib/statusStyles'
 
@@ -200,6 +201,12 @@ export default function EditorManuscriptDetailPage() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-slate-500">Current Status</span>
                   <span className="text-slate-900">{getStatusLabel(status)}</span>
+                </div>
+                <div className="pt-2">
+                  <ReviewerAssignmentSearch manuscriptId={id} onChanged={load} />
+                  <div className="mt-2 text-xs text-slate-500">
+                    从 Reviewer Library 搜索并指派；已分配的审稿人会在弹窗中置顶显示。
+                  </div>
                 </div>
               </CardContent>
             </Card>

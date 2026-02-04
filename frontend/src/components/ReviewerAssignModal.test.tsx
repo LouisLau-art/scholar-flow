@@ -83,19 +83,16 @@ describe('ReviewerAssignModal AI Recommendations', () => {
             }),
         }) as any
       }
-      if (String(url).includes('/api/v1/admin/users')) {
+      if (String(url).includes('/api/v1/editor/reviewer-library')) {
+        const u = String(url)
+        const base = [
+          { id: 'r-assigned', full_name: 'Assigned Reviewer', email: 'assigned@test.com', roles: ['reviewer'] },
+          { id: 'r-manual', full_name: 'Manual Reviewer', email: 'manual@test.com', roles: ['reviewer'] },
+        ]
+        const data = u.includes('query=Manual') ? base.filter((x) => x.id === 'r-manual') : base
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({
-            success: true,
-            data: [
-              { id: 'r-assigned', full_name: 'Assigned Reviewer', email: 'assigned@test.com' },
-              { id: 'r-manual', full_name: 'Manual Reviewer', email: 'manual@test.com' }
-            ],
-            total: 1,
-            page: 1,
-            per_page: 100
-          }),
+          json: () => Promise.resolve({ success: true, data }),
         }) as any
       }
       return Promise.reject(new Error(`unexpected url ${url}`))
