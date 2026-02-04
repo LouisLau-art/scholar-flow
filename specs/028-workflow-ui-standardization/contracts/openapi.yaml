@@ -1,0 +1,61 @@
+openapi: 3.0.0
+info:
+  title: Workflow and UI Standardization API
+  version: 1.0.0
+paths:
+  /api/v1/editor/manuscripts/process:
+    get:
+      summary: Fetch manuscript process list (Table view)
+      parameters:
+        - name: journal_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: array, items: { type: string } }
+        - name: owner_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: List of manuscripts with precise timestamps
+  /api/v1/editor/manuscripts/{id}/status:
+    patch:
+      summary: Transition manuscript to new lifecycle stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                comment: { type: string }
+      responses:
+        '200':
+          description: Status updated successfully
+  /api/v1/editor/manuscripts/{id}/invoice-info:
+    put:
+      summary: Update invoice/APC metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                authors: { type: string }
+                affiliation: { type: string }
+                apc_amount: { type: number }
+                funding_info: { type: string }
+      responses:
+        '200':
+          description: Metadata updated
