@@ -47,7 +47,7 @@ Sync Impact Report:
   - **成本/耗时约束**：严禁在上传链路引入远程大模型网络调用；必须截断页数与字符数，保证上传响应可预测。
 - **日志（可观测性）**：`./start.sh` 必须同时满足“终端实时可见 + 文件持久化”，默认输出到 `logs/backend.log` 与 `logs/frontend.log`（最新别名）。
 - **异常监控（Feature 027 - Sentry）**：
-  - **全栈启用**：前端使用 `@sentry/nextjs`，后端使用 `sentry-sdk`（含 `SqlalchemyIntegration`）。
+  - **全栈启用**：前端使用 `@sentry/nextjs`，后端使用 `sentry-sdk`（`SqlalchemyIntegration` **可选**：仅当环境安装了 `sqlalchemy` 才会自动启用）。
   - **隐私底线**：不得上传明文密码或 PDF 内容；后端默认“永不上传请求体”，前端 Replay 默认 `blockAllMedia`。
   - **零崩溃原则**：Sentry 初始化必须容错；连不上/配置错不得阻塞服务启动。
   - **Sourcemaps**：线上构建需设置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`，否则只上报事件不上传 sourcemaps。
