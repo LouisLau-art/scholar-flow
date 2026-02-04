@@ -27,7 +27,7 @@
 - **部署架构（Vercel + Hugging Face Spaces）**：
   - **Frontend**: 部署于 **Vercel**。需设置 `NEXT_PUBLIC_API_URL` 指向 HF Space 地址（无尾部斜杠）。
   - **Backend**: 部署于 **Hugging Face Spaces (Docker)**。
-    - **Docker策略**: 使用项目根目录 `Dockerfile`（基于 `python:3.12-slim`，更利于依赖 wheels；强制使用非 root 用户 `user:1000`）。
+    - **Docker策略**: 使用项目根目录 `Dockerfile`（基于 `python:3.12-slim`，更利于依赖 wheels；本地开发仍使用 Python 3.14；容器内强制使用非 root 用户 `user:1000`）。
     - **环境变量**: 在 HF Settings 填入 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_ORIGIN` (Vercel 域名)。
     - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
@@ -270,7 +270,6 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-04）
-- **Feature 024 (Post-Acceptance)**: 录用后增加 Payment Gate（系统生成 Invoice -> Admin/Editor 标记支付）；Production Gate（上传 Final PDF）为可选项（默认关闭提速 MVP，可用 `PRODUCTION_GATE_ENABLED=1` 启用）；满足门禁后 Editor 可一键 Publish（生成 Mock DOI，状态变更为 `published`）。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
 - **Analytics 导出按钮**：Excel/CSV 不再同时显示“导出中...”，改为“按格式单独 loading 文案 + 全局禁用避免并发导出”。
 - **Reviewer 修回上下文**：审稿弹窗展示作者修回材料（Response Letter/内嵌图片），并补齐审稿附件下载入口。
@@ -282,10 +281,14 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 030-reviewer-library-management: Added Python 3.14+, TypeScript 5.x + FastAPI, Supabase-py, Next.js, Shadcn UI
-- 029-manuscript-details-invoice: Added Python 3.14+, TypeScript 5.x (Next.js 14 App Router) + FastAPI, Shadcn UI (Card, Dialog, Button), date-fns
-- 026-automated-invoice-pdf: Added Python 3.14+ + FastAPI, Pydantic v2, Supabase-py v2.x, Jinja2, WeasyPrint
+- 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
+- 029-manuscript-details-invoice: Added Manuscript Details docs grouping + invoice metadata editing/audit payload
+- 028-workflow-status-standardization: Standardized `manuscripts.status` enum + transition logs + editor process view
+- 027-sentry-integration: Added Sentry (Next.js + FastAPI), fail-open, no request-body capture
+- 026-automated-invoice-pdf: Added WeasyPrint invoice PDF + Storage `invoices` bucket wiring
+- 022-core-logic-hardening: Financial Gate + reviewer dual comments + attachments
 
 ## Active Technologies
-- Python 3.14+, TypeScript 5.x + FastAPI, Supabase-py, Next.js, Shadcn UI (030-reviewer-library-management)
-- Supabase (PostgreSQL) - `user_profiles` table extension (030-reviewer-library-management)
+- Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
+- Deploy runtime: Python 3.12-slim (HF Space Docker)
+- Supabase (PostgreSQL + Storage) – `user_profiles` reviewer library extension + `invoices` bucket + status transition logs
