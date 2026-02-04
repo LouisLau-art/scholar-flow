@@ -33,7 +33,14 @@ class AppConfig:
         # Assuming platform-level swap for simplicity, so we just read SUPABASE_URL.
         
         supabase_url = (os.environ.get("SUPABASE_URL") or "").strip()
-        supabase_key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+        # 中文注释:
+        # - 生产环境使用 service role key（SUPABASE_SERVICE_ROLE_KEY）。
+        # - 为兼容历史/CI 配置，允许回退到 SUPABASE_KEY。
+        supabase_key = (
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            or os.environ.get("SUPABASE_KEY")
+            or ""
+        ).strip()
 
         return AppConfig(
             env=env,
