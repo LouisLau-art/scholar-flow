@@ -119,14 +119,38 @@ def init_sentry() -> bool:
         # 零崩溃原则：缺失 SQLAlchemy 不应导致 Sentry 整体不可用
         pass
 
-    sentry_sdk.init(
-        dsn=cfg.dsn,
-        environment=cfg.environment,
-        traces_sample_rate=cfg.traces_sample_rate,
-        integrations=integrations,
-        send_default_pii=False,
-        with_locals=False,
-        before_send=_before_send,
-        max_request_body_size="never",
-    )
+    # 中文注释:
+    # - HF Space / 轻量部署环境里 sentry-sdk 版本可能偏旧，部分配置项（如 with_locals/max_request_body_size）
+    #   会报 "Unknown option ..."。
+    # - 为了保证“零崩溃原则”同时让 Sentry 尽可能启用：先用更完整的参数初始化，
+    #   若遇到未知参数则自动降级重试。
+    base_options: dict[str, Any] = {
+        "dsn": cfg.dsn,
+        "environment": cfg.environment,
+        "traces_sample_rate": cfg.traces_sample_rate,
+        "integrations": integrations,
+        "send_default_pii": False,
+        "before_send": _before_send,
+    }
+
+    extra_options: dict[str, Any] = {
+        # 不记录请求体（尤其是 multipart/pdf）
+        "max_request_body_size": "never",
+        # 避免把局部变量上报到云端（隐私与体积）
+        "with_locals": False,
+    }
+
+    options = {**base_options, **extra_options}
+    try:
+        sentry_sdk.init(**options)
+    except Exception as exc:
+        message = str(exc)
+        # 常见：ValueError("Unknown option 'with_locals'")
+        # 也可能是 TypeError: got an unexpected keyword argument ...
+        if "Unknown option" in message or "unexpected keyword argument" in message:
+            options.pop("with_locals", None)
+            options.pop("max_request_body_size", None)
+            sentry_sdk.init(**options)
+        else:
+            raise
     return True

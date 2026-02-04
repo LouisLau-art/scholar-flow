@@ -32,7 +32,7 @@
 - **Sentry（Feature 027，全栈监控）**：
   - **Frontend**：`@sentry/nextjs`（`frontend/sentry.client.config.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
   - **Sourcemaps**：Vercel 构建环境需设置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`；缺失时仍可上报事件（DSN），但不会上传 sourcemaps。
-  - **Backend**：`sentry-sdk` 在 `backend/main.py` 初始化；`SqlalchemyIntegration` **可选**（仅当环境安装了 `sqlalchemy` 才会自动启用）。隐私策略为“永不上传请求体”（PDF/密码）且初始化失败不阻塞启动（零崩溃原则）。
+  - **Backend**：`sentry-sdk` 在 `backend/main.py` 初始化；`SqlalchemyIntegration` **可选**（仅当环境安装了 `sqlalchemy` 才会自动启用）。为兼容 HF Space 可能存在的旧版 `sentry-sdk`，初始化会在遇到 `Unknown option`（如 `with_locals`/`max_request_body_size`）时自动降级重试。隐私策略为“永不上传请求体”（PDF/密码）且初始化失败不阻塞启动（零崩溃原则）。
   - **自测入口**：后端 `GET /api/v1/internal/sentry/test-error`（需 `ADMIN_API_KEY`）；前端 `/admin/sentry-test`。
 - **Invoice PDF（Feature 026）**：后端需配置 `INVOICE_PAYMENT_INSTRUCTIONS` / `INVOICE_SIGNED_URL_EXPIRES_IN`，并确保云端已应用 `supabase/migrations/20260204120000_invoice_pdf_fields.sql` 与 `supabase/migrations/20260204121000_invoices_bucket.sql`。
 - **MVP 状态机与财务门禁（重要约定）**：

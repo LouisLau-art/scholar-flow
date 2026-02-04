@@ -50,6 +50,7 @@ Sync Impact Report:
   - **全栈启用**：前端使用 `@sentry/nextjs`，后端使用 `sentry-sdk`（`SqlalchemyIntegration` **可选**：仅当环境安装了 `sqlalchemy` 才会自动启用）。
   - **隐私底线**：不得上传明文密码或 PDF 内容；后端默认“永不上传请求体”，前端 Replay 默认 `blockAllMedia`。
   - **零崩溃原则**：Sentry 初始化必须容错；连不上/配置错不得阻塞服务启动。
+  - **兼容性**：部署环境可能存在旧版 `sentry-sdk`；后端初始化遇到 `Unknown option`（如 `with_locals`/`max_request_body_size`）时必须自动降级重试，确保至少能上报异常/trace。
   - **Sourcemaps**：线上构建需设置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`，否则只上报事件不上传 sourcemaps。
 - **AI 推荐模型（性能 & 部署）**：Matchmaking（审稿人推荐）默认使用纯 Python 的 hash-embedding（不依赖 `sentence-transformers/torch`，优先保证“可部署可用”）；如在本地/专用环境安装了 `sentence-transformers`，则自动启用语义 embedding，并建议启用缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`）。项目默认通过 `./start.sh` 设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）；如需彻底离线，设置 `MATCHMAKING_LOCAL_FILES_ONLY=1`（后端会启用 `HF_HUB_OFFLINE=1`）。
 - **公开文章 PDF 预览（MVP 约定）**：公开页 `/articles/[id]` 不允许前端匿名直接调用 Storage `sign`（会 400/权限不一致），必须通过后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 获取 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 必须仅返回 `status='published'` 的稿件。
