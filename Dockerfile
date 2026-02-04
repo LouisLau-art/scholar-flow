@@ -1,7 +1,9 @@
-FROM python:3.14-slim
+FROM python:3.12-slim
 
 # 关键修复：安装 gcc 和编译工具
-# Python 3.14 较新，pyroaring 等库需要现场编译，没有 gcc 会报错
+# 中文注释:
+# - 部署环境建议使用 Python 3.12：生态 wheels 更齐全（3.14 仍可能缺少关键依赖的预编译包）。
+# - 这里安装的是 WeasyPrint / lxml 等常见依赖所需的系统库。
 RUN apt-get update && apt-get install -y \
     build-essential \
     libxml2-dev \
