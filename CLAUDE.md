@@ -27,7 +27,9 @@
 - **部署架构（Vercel + Hugging Face Spaces）**：
   - **Frontend**: 部署于 **Vercel**。需设置 `NEXT_PUBLIC_API_URL` 指向 HF Space 地址（无尾部斜杠）。
   - **Backend**: 部署于 **Hugging Face Spaces (Docker)**。
-    - **CI/CD**: 已配置 GitHub Action (`.github/workflows/deploy-hf.yml`)，当 `main` 分支有 Push 或 Merge 时，会自动将代码镜像同步到 Hugging Face Space 仓库（依赖 GitHub Secret: `HF_TOKEN`）。
+    - **Docker策略**: 使用项目根目录 `Dockerfile`（基于 `python:3.12-slim`，更利于依赖 wheels；本地开发仍使用 Python 3.14；容器内强制使用非 root 用户 `user:1000`）。
+    - **环境变量**: 在 HF Settings 填入 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_ORIGIN` (Vercel 域名)。
+    - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
 - **Sentry（Feature 027，全栈监控）**：
   - **Frontend**：`@sentry/nextjs`（`frontend/sentry.client.config.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
@@ -279,8 +281,14 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 026-automated-invoice-pdf: Added Python 3.14+ + FastAPI, Pydantic v2, Supabase-py v2.x, Jinja2, WeasyPrint
-- 022-core-logic-hardening: Implemented Financial Gate (payment check), APC Confirmation, and Reviewer Privacy (Dual Comments & Confidential Attachments). Updates to Editor Dashboard and Review Submission flow.
+- 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
+- 029-manuscript-details-invoice: Added Manuscript Details docs grouping + invoice metadata editing/audit payload
+- 028-workflow-status-standardization: Standardized `manuscripts.status` enum + transition logs + editor process view
+- 027-sentry-integration: Added Sentry (Next.js + FastAPI), fail-open, no request-body capture
+- 026-automated-invoice-pdf: Added WeasyPrint invoice PDF + Storage `invoices` bucket wiring
+- 022-core-logic-hardening: Financial Gate + reviewer dual comments + attachments
 
 ## Active Technologies
-- Supabase (PostgreSQL + Storage) (026-automated-invoice-pdf)
+- Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
+- Deploy runtime: Python 3.12-slim (HF Space Docker)
+- Supabase (PostgreSQL + Storage) – `user_profiles` reviewer library extension + `invoices` bucket + status transition logs
