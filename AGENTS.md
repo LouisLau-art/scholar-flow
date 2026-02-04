@@ -26,9 +26,7 @@
 - **部署架构（Vercel + Hugging Face Spaces）**：
   - **Frontend**: 部署于 **Vercel**。需设置 `NEXT_PUBLIC_API_URL` 指向 HF Space 地址（无尾部斜杠）。
   - **Backend**: 部署于 **Hugging Face Spaces (Docker)**。
-    - **Docker策略**: 使用项目根目录 `Dockerfile`（基于 `python:3.14-slim`, 包含 `build-essential` 用于编译 `pyroaring`, 强制使用非 root 用户 `user:1000`）。
-    - **环境变量**: 在 HF Settings 填入 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FRONTEND_ORIGIN` (Vercel 域名)。
-    - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
+    - **CI/CD**: 已配置 GitHub Action (`.github/workflows/deploy-hf.yml`)，当 `main` 分支有 Push 或 Merge 时，会自动将代码镜像同步到 Hugging Face Space 仓库（依赖 GitHub Secret: `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
 - **Sentry（Feature 027，全栈监控）**：
   - **Frontend**：`@sentry/nextjs`（`frontend/sentry.client.config.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
