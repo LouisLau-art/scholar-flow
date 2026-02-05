@@ -3,20 +3,38 @@
 import { cn } from '@/lib/utils'
 import type { Notification } from '@/types'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { ChevronRight } from 'lucide-react'
 
 type Props = {
   notification: Notification
-  onMarkRead: (id: string) => void
+  onMarkRead: (id: string) => void | Promise<void>
 }
 
 export function NotificationItem({ notification, onMarkRead }: Props) {
   const href = notification.action_url || '/dashboard/notifications'
+  const router = useRouter()
+
+  const createdAt = notification.created_at ? new Date(notification.created_at) : null
+  const createdText = createdAt ? createdAt.toLocaleString() : ''
+
   return (
     <Link
       href={href}
-      onClick={() => onMarkRead(notification.id)}
+      onClick={(e) => {
+        // 中文注释：支持新标签打开（Ctrl/⌘/中键）时不拦截默认行为
+        const isModifiedClick =
+          e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (e as any).button === 1
+        if (isModifiedClick) return
+
+        e.preventDefault()
+        Promise.resolve(onMarkRead(notification.id)).finally(() => {
+          router.push(href)
+        })
+      }}
       className={cn(
-        'w-full text-left rounded-lg border border-border bg-card px-3 py-2 hover:bg-muted transition-colors',
+        // 中文注释：必须是 block，否则多行内容会出现“边框分段/括号”样式（inline 行盒渲染）。
+        'block w-full rounded-lg border border-border bg-card px-3 py-2 hover:bg-muted transition-colors cursor-pointer',
         notification.is_read ? 'opacity-60' : 'opacity-100'
       )}
     >
@@ -29,13 +47,12 @@ export function NotificationItem({ notification, onMarkRead }: Props) {
             {notification.content}
           </div>
         </div>
-        {!notification.is_read && (
-          <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-primary" />
-        )}
+        <div className="flex items-center gap-2 pt-0.5">
+          {!notification.is_read && <span className="inline-flex h-2 w-2 rounded-full bg-primary" />}
+          <ChevronRight className="h-4 w-4 text-slate-400" />
+        </div>
       </div>
-      <div className="mt-1 text-[11px] text-muted-foreground">
-        {new Date(notification.created_at).toLocaleString()}
-      </div>
+      {createdText ? <div className="mt-1 text-[11px] text-muted-foreground">{createdText}</div> : null}
     </Link>
   )
 }
