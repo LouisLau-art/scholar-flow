@@ -6,7 +6,7 @@ import { ManuscriptsProcessPanel } from '@/components/editor/ManuscriptsProcessP
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ArrowLeft, Table2 } from 'lucide-react'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
@@ -59,17 +59,25 @@ export default function ManuscriptsProcessPage() {
           </Link>
         </div>
 
-        <ManuscriptsProcessPanel
-          refreshKey={refreshKey}
-          onAssign={(row) => {
-            setSelectedManuscriptId(row.id)
-            setIsAssignModalOpen(true)
-          }}
-          onDecide={(row) => {
-            window.location.href = `/dashboard?tab=editor` // 最小实现：回到编辑台用 Decisions 面板
-            console.log(row)
-          }}
-        />
+        <Suspense
+          fallback={
+            <div className="rounded-xl border border-slate-200 bg-white p-10 text-sm text-slate-500">
+              Loading…
+            </div>
+          }
+        >
+          <ManuscriptsProcessPanel
+            refreshKey={refreshKey}
+            onAssign={(row) => {
+              setSelectedManuscriptId(row.id)
+              setIsAssignModalOpen(true)
+            }}
+            onDecide={(row) => {
+              window.location.href = `/dashboard?tab=editor` // 最小实现：回到编辑台用 Decisions 面板
+              console.log(row)
+            }}
+          />
+        </Suspense>
       </main>
 
       {isAssignModalOpen && selectedManuscriptId && (
@@ -83,4 +91,3 @@ export default function ManuscriptsProcessPage() {
     </div>
   )
 }
-
