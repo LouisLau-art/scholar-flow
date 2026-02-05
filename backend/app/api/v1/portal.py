@@ -1,7 +1,39 @@
+from functools import lru_cache
+
 from fastapi import APIRouter, Query
 from app.lib.api_client import supabase_admin
 
 router = APIRouter(prefix="/portal", tags=["Portal Public"])
+
+
+def _mask_email(email: str) -> str:
+    email = (email or "").strip()
+    if not email or "@" not in email:
+        return ""
+    local, domain = email.split("@", 1)
+    local = local.strip()
+    domain = domain.strip()
+    if not local:
+        return f"*@{domain}" if domain else "*"
+    if len(local) == 1:
+        return f"{local}*@{domain}" if domain else f"{local}*"
+    return f"{local[0]}***@{domain}" if domain else f"{local[0]}***"
+
+
+@lru_cache(maxsize=2048)
+def _fallback_author_label_from_auth(uid: str) -> str:
+    """
+    Portal 公开接口兜底：当 user_profiles 缺失时，尽量避免返回 'Unknown'，
+    但也不能泄露明文邮箱。这里用 Supabase Admin API 取 email 并做脱敏。
+    """
+    try:
+        res = supabase_admin.auth.admin.get_user_by_id(str(uid))
+        email = getattr(getattr(res, "user", None), "email", None)
+        masked = _mask_email(email or "")
+        return masked or "Author"
+    except Exception:
+        return "Author"
+
 
 @router.get("/articles/latest")
 async def get_latest_articles(limit: int = Query(default=10, ge=1, le=50)):
@@ -52,7 +84,10 @@ async def get_latest_articles(limit: int = Query(default=10, ge=1, le=50)):
 
     for row in data:
         author_id = str(row.get("author_id")) if row.get("author_id") else ""
-        row["authors"] = [author_name_by_id.get(author_id, "Unknown")]
+        label = author_name_by_id.get(author_id)
+        if not label or label == "Unknown":
+            label = _fallback_author_label_from_auth(author_id) if author_id else "Author"
+        row["authors"] = [label]
         row.pop("author_id", None)
 
     return data
