@@ -1,0 +1,33 @@
+openapi: 3.0.0
+info:
+  title: Public Portal API
+  version: 1.0.0
+paths:
+  /api/v1/articles/latest:
+    get:
+      summary: Get latest published articles for the homepage
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of published articles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicArticle'
+components:
+  schemas:
+    PublicArticle:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        authors: { type: array, items: { type: string } }
+        abstract: { type: string }
+        published_at: { type: string, format: date-time }

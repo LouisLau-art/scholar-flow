@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Toast from '@/components/Toast'
-import SiteFooter from '@/components/layout/SiteFooter'
+import { SiteFooter } from '@/components/portal/SiteFooter'
 import QueryProvider from '@/components/providers/QueryProvider'
 
 import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'

@@ -36,6 +36,7 @@ from app.api.v1 import (
     analytics,
     doi,
     cms,
+    portal,
 )
 from app.api.v1.endpoints import system
 from app.api.v1.admin import users as admin_users
@@ -151,6 +152,7 @@ app.include_router(doi.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")
 app.include_router(oaipmh.router)
 app.include_router(cms.router, prefix="/api/v1")
+app.include_router(portal.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
 
 

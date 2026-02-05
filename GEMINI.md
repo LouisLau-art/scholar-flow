@@ -286,16 +286,10 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 034-portal-refinement: Added Python 3.14+, TypeScript 5.x + Next.js 14 (App Router), Tailwind CSS, Shadcn UI
 - 033-align-detail-layout: Align editor manuscript detail layout (header/files/invoice) + editor-only peer review file upload
 - 032-enhance-process-list: Process filters (URL-driven), quick pre-check, safer Playwright webServer behavior
-- 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
-- 029-manuscript-details-invoice: Added Manuscript Details docs grouping + invoice metadata editing/audit payload
-- 028-workflow-status-standardization: Standardized `manuscripts.status` enum + transition logs + editor process view
-- 027-sentry-integration: Added Sentry (Next.js + FastAPI), fail-open, no request-body capture
-- 026-automated-invoice-pdf: Added WeasyPrint invoice PDF + Storage `invoices` bucket wiring
-- 022-core-logic-hardening: Financial Gate + reviewer dual comments + attachments
 
 ## Active Technologies
-- Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
-- Deploy runtime: Python 3.12-slim (HF Space Docker)
-- Supabase (PostgreSQL + Storage) – `user_profiles` reviewer library extension + `invoices` bucket + status transition logs
+- Python 3.14+, TypeScript 5.x + Next.js 14 (App Router), Tailwind CSS, Shadcn UI (034-portal-refinement)
+- Supabase (Read-only `status='published'` query) (034-portal-refinement)
