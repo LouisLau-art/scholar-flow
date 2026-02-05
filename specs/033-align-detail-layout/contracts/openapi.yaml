@@ -1,0 +1,18 @@
+openapi: 3.0.0
+info:
+  title: Manuscript Details Layout API
+  version: 1.0.0
+paths:
+  /api/v1/editor/manuscripts/{id}/files/review-attachment:
+    post:
+      summary: Upload a peer review file (Editor only)
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: File uploaded

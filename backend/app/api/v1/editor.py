@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -19,6 +19,7 @@ from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 from app.services.reviewer_service import ReviewerService
 from app.services.editor_service import EditorService, ProcessListFilters
 from typing import Literal
+from uuid import uuid4
 
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
@@ -39,6 +40,26 @@ def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -
     except Exception as e:
         print(f"[SignedURL] create_signed_url failed: bucket={bucket} path={path} err={e}")
         return None
+
+
+def _ensure_bucket_exists(bucket: str, *, public: bool = False) -> None:
+    """
+    确保存储桶存在（用于演示/首次部署自愈）。
+    - 失败不阻断：后续 upload 会返回更明确的错误。
+    """
+    try:
+        storage = supabase_admin.storage
+        storage.get_bucket(bucket)
+    except Exception:
+        try:
+            supabase_admin.storage.create_bucket(bucket, options={"public": bool(public)})
+        except Exception:
+            return
+
+
+def _is_missing_table_error(error_text: str) -> bool:
+    t = (error_text or "").lower()
+    return "does not exist" in t and "manuscript_files" in t
 
 
 class InvoiceInfoUpdatePayload(BaseModel):
@@ -211,6 +232,7 @@ async def get_editor_manuscript_detail(
 
     # 文件签名（原稿 PDF + 审稿附件）
     file_path = str(ms.get("file_path") or "").strip()
+    ms["files"] = []
     ms["signed_files"] = {
         "original_manuscript": {
             "bucket": "manuscripts",
@@ -219,6 +241,53 @@ async def get_editor_manuscript_detail(
         },
         "peer_review_reports": [],
     }
+    if file_path:
+        ms["files"].append(
+            {
+                "id": "original_manuscript",
+                "file_type": "manuscript",
+                "bucket": "manuscripts",
+                "path": file_path,
+                "label": "Current Manuscript PDF",
+                "signed_url": _get_signed_url("manuscripts", file_path),
+                "created_at": ms.get("updated_at") or ms.get("created_at"),
+            }
+        )
+
+    # Feature 033: 内部文件（cover letter / editor peer review attachments）
+    try:
+        mf = (
+            supabase_admin.table("manuscript_files")
+            .select("id,file_type,bucket,path,original_filename,content_type,created_at,uploaded_by")
+            .eq("manuscript_id", id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        mf_rows = getattr(mf, "data", None) or []
+        for r in mf_rows:
+            bucket = str(r.get("bucket") or "").strip()
+            path = str(r.get("path") or "").strip()
+            if not bucket or not path:
+                continue
+            ms["files"].append(
+                {
+                    "id": r.get("id"),
+                    "file_type": r.get("file_type"),
+                    "bucket": bucket,
+                    "path": path,
+                    "label": r.get("original_filename") or path,
+                    "signed_url": _get_signed_url(bucket, path),
+                    "created_at": r.get("created_at"),
+                    "uploaded_by": r.get("uploaded_by"),
+                }
+            )
+    except Exception as e:
+        # 中文注释: 云端未应用 migration 时不应导致详情页 500
+        if _is_missing_table_error(str(e)):
+            pass
+        else:
+            print(f"[ManuscriptFiles] load manuscript_files failed (ignored): {e}")
+
     try:
         rr = (
             supabase_admin.table("review_reports")
@@ -250,6 +319,7 @@ async def get_editor_manuscript_detail(
                 continue
             rid = str(r.get("reviewer_id") or "")
             prof = reviewer_map.get(rid) or {}
+            signed_url = _get_signed_url("review-attachments", path)
             ms["signed_files"]["peer_review_reports"].append(
                 {
                     "review_report_id": r.get("id"),
@@ -260,7 +330,19 @@ async def get_editor_manuscript_detail(
                     "created_at": r.get("created_at"),
                     "bucket": "review-attachments",
                     "path": path,
-                    "signed_url": _get_signed_url("review-attachments", path),
+                    "signed_url": signed_url,
+                }
+            )
+            ms["files"].append(
+                {
+                    "id": r.get("id"),
+                    "file_type": "review_attachment",
+                    "bucket": "review-attachments",
+                    "path": path,
+                    "label": f"{prof.get('full_name') or prof.get('email') or rid or 'Reviewer'} — Annotated PDF",
+                    "signed_url": signed_url,
+                    "created_at": r.get("created_at"),
+                    "uploaded_by": r.get("reviewer_id"),
                 }
             )
     except Exception as e:
@@ -301,6 +383,82 @@ async def get_editor_manuscript_detail(
         else None
     )
     return {"success": True, "data": ms}
+
+
+@router.post("/manuscripts/{id}/files/review-attachment", status_code=201)
+async def upload_editor_review_attachment(
+    id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 033: Editor/Admin 上传 Peer Review Files（仅内部可见）。
+
+    中文注释:
+    - 文件上传至私有桶 `review-attachments`（Author 不可见）。
+    - 元数据写入 `public.manuscript_files`（file_type=review_attachment）。
+    """
+    filename = (file.filename or "review_attachment").strip()
+    lowered = filename.lower()
+    if not (lowered.endswith(".pdf") or lowered.endswith(".doc") or lowered.endswith(".docx")):
+        raise HTTPException(status_code=400, detail="Only .pdf/.doc/.docx are supported")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(file_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 25MB)")
+
+    safe_name = filename.replace("/", "_")
+    object_path = f"editor_review_files/{id}/{uuid4()}_{safe_name}"
+    try:
+        _ensure_bucket_exists("review-attachments", public=False)
+        supabase_admin.storage.from_("review-attachments").upload(
+            object_path,
+            file_bytes,
+            {"content-type": file.content_type or "application/octet-stream"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EditorReviewAttachment] upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload review attachment")
+
+    try:
+        ins = (
+            supabase_admin.table("manuscript_files")
+            .insert(
+                {
+                    "manuscript_id": id,
+                    "file_type": "review_attachment",
+                    "bucket": "review-attachments",
+                    "path": object_path,
+                    "original_filename": filename,
+                    "content_type": file.content_type,
+                    "uploaded_by": str(current_user.get("id") or ""),
+                }
+            )
+            .execute()
+        )
+        row = (getattr(ins, "data", None) or [None])[0] or None
+    except Exception as e:
+        # 云端未迁移时给出明确提示，便于 Dashboard SQL Editor 快速执行 migration
+        if _is_missing_table_error(str(e)):
+            raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
+        print(f"[EditorReviewAttachment] insert manuscript_files failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to persist file metadata")
+
+    return {
+        "success": True,
+        "data": {
+            "id": (row or {}).get("id"),
+            "file_type": "review_attachment",
+            "bucket": "review-attachments",
+            "path": object_path,
+            "signed_url": _get_signed_url("review-attachments", object_path),
+        },
+    }
 
 
 @router.patch("/manuscripts/{id}/status")

@@ -8,14 +8,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-import { ManuscriptDetailsHeader } from '@/components/editor/ManuscriptDetailsHeader'
-import { FileSectionGroup, type FileSection } from '@/components/editor/FileSectionGroup'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
-import { InvoiceInfoSection } from '@/components/editor/InvoiceInfoSection'
 import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
 import VersionHistory from '@/components/VersionHistory'
 import { getStatusLabel } from '@/lib/statusStyles'
+import { ManuscriptHeader } from '@/components/editor/ManuscriptHeader'
+import { FileSectionCard, type FileCardItem } from '@/components/editor/FileSectionCard'
+import { UploadReviewFile } from '@/components/editor/UploadReviewFile'
+import { InvoiceInfoPanel } from '@/components/editor/InvoiceInfoPanel'
+import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
+import { filterFilesByType, type ManuscriptFile } from './utils'
 
 type ManuscriptDetail = {
   id: string
@@ -39,6 +42,7 @@ type ManuscriptDetail = {
       path?: string | null
     }>
   }
+  files?: ManuscriptFile[] | null
 }
 
 function allowedNext(status: string): string[] {
@@ -108,36 +112,20 @@ export default function EditorManuscriptDetailPage() {
   const nextStatuses = useMemo(() => allowedNext(status), [status])
   const pdfSignedUrl = ms?.signed_files?.original_manuscript?.signed_url || null
 
-  const documentSections = useMemo((): FileSection[] => {
-    const originalPath = ms?.signed_files?.original_manuscript?.path || ''
-    const originalHref = ms?.signed_files?.original_manuscript?.signed_url || null
-    const originalItems = originalHref
-      ? [
-          {
-            id: 'original_pdf',
-            label: 'Current Manuscript PDF',
-            href: originalHref,
-            meta: originalPath ? `Storage: ${originalPath}` : null,
-          },
-        ]
-      : []
+  const coverFiles = useMemo(() => filterFilesByType(ms?.files || [], 'cover_letter'), [ms])
+  const originalFiles = useMemo(() => filterFilesByType(ms?.files || [], 'manuscript'), [ms])
+  const reviewFiles = useMemo(() => filterFilesByType(ms?.files || [], 'review_attachment'), [ms])
 
-    const peer = Array.isArray(ms?.signed_files?.peer_review_reports) ? ms?.signed_files?.peer_review_reports : []
-    const peerItems = peer
-      .filter((r) => !!r?.signed_url)
-      .map((r) => ({
-        id: String(r.review_report_id),
-        label: `${r.reviewer_name || r.reviewer_email || r.reviewer_id || 'Reviewer'} — Annotated PDF`,
-        href: r.signed_url || undefined,
-        meta: r.path ? `Storage: ${r.path}` : null,
+  const toItems = (files: ManuscriptFile[], fallbackEmptyLabel: string): FileCardItem[] => {
+    return (files || [])
+      .filter((f) => !!f?.signed_url)
+      .map((f) => ({
+        id: String(f.id),
+        label: String(f.label || fallbackEmptyLabel),
+        href: f.signed_url || undefined,
+        meta: f.path ? `Storage: ${f.path}` : null,
       }))
-
-    return [
-      { title: 'Cover Letter', items: [], emptyText: 'Not uploaded (MVP placeholder).' },
-      { title: 'Original Manuscript', items: originalItems, emptyText: 'PDF not available.' },
-      { title: 'Peer Review Reports (Word/PDF)', items: peerItems, emptyText: 'No peer review attachments.' },
-    ]
-  }, [ms])
+  }
 
   if (loading) {
     return (
@@ -163,7 +151,7 @@ export default function EditorManuscriptDetailPage() {
     <div className="min-h-screen bg-slate-50">
       <SiteHeader />
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
-        <ManuscriptDetailsHeader ms={ms as any} />
+        <ManuscriptHeader ms={ms as any} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-8 space-y-6">
@@ -191,12 +179,47 @@ export default function EditorManuscriptDetailPage() {
               </CardContent>
             </Card>
 
-            <FileSectionGroup title="Documents" sections={documentSections} />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <FileSectionCard
+                title="Cover Letter"
+                description="Author-provided materials (if any)."
+                items={toItems(coverFiles, 'Cover Letter')}
+                emptyText="No cover letter uploaded."
+              />
+
+              <FileSectionCard
+                title="Original Manuscript"
+                description="Current manuscript file (signed URL)."
+                items={toItems(originalFiles, 'Manuscript PDF')}
+                emptyText="PDF not available."
+              />
+
+              <FileSectionCard
+                title="Peer Review Files"
+                description="Editor-only internal files (Word/PDF) + reviewer attachments."
+                items={toItems(reviewFiles, 'Peer Review File')}
+                emptyText="No peer review files."
+                action={<UploadReviewFile manuscriptId={id} onUploaded={load} />}
+              />
+            </div>
 
             <VersionHistory manuscriptId={id} />
           </div>
 
           <div className="lg:col-span-4 space-y-6">
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle className="text-lg">Owner Binding</CardTitle>
+                <BindingOwnerDropdown manuscriptId={id} currentOwner={ms.owner as any} onBound={load} />
+              </CardHeader>
+              <CardContent className="text-sm text-slate-600 space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-500">Current Owner</span>
+                  <span className="text-slate-900">{ms.owner?.full_name || ms.owner?.email || '—'}</span>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Workflow</CardTitle>
@@ -229,16 +252,6 @@ export default function EditorManuscriptDetailPage() {
                 }}
               />
             ) : null}
-
-            <InvoiceInfoSection
-              info={{
-                authors: invoiceForm.authors,
-                affiliation: invoiceForm.affiliation,
-                apcAmount: invoiceForm.apcAmount,
-                fundingInfo: invoiceForm.fundingInfo,
-              }}
-              onEdit={() => setInvoiceOpen(true)}
-            />
 
             {!isPostAcceptance ? (
               <Card>
@@ -279,6 +292,16 @@ export default function EditorManuscriptDetailPage() {
             ) : null}
           </div>
         </div>
+
+        <InvoiceInfoPanel
+          info={{
+            authors: invoiceForm.authors,
+            affiliation: invoiceForm.affiliation,
+            apcAmount: invoiceForm.apcAmount,
+            fundingInfo: invoiceForm.fundingInfo,
+          }}
+          onEdit={() => setInvoiceOpen(true)}
+        />
       </main>
 
       <InvoiceInfoModal

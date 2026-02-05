@@ -112,6 +112,17 @@ export const EditorApi = {
     return res.json()
   },
 
+  // Feature 033: Editor uploads peer review files (internal)
+  async uploadPeerReviewFile(manuscriptId: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/files/review-attachment`, {
+      method: 'POST',
+      body: formData,
+    })
+    return res.json()
+  },
+
   // Feature 030: Reviewer Library
   async addReviewerToLibrary(payload: {
     email: string
