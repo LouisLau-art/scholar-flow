@@ -1,63 +1,52 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Calendar, User, DollarSign, ArrowRight } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
-import VersionHistory from '@/components/VersionHistory'
-import { getStatusLabel } from '@/lib/statusStyles'
-import { ManuscriptHeader } from '@/components/editor/ManuscriptHeader'
-import { FileSectionCard, type FileCardItem } from '@/components/editor/FileSectionCard'
-import { UploadReviewFile } from '@/components/editor/UploadReviewFile'
-import { InvoiceInfoPanel } from '@/components/editor/InvoiceInfoPanel'
+import { getStatusLabel, getStatusColor } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
+import { InternalNotebook } from '@/components/editor/InternalNotebook'
+import { AuditLogTimeline } from '@/components/editor/AuditLogTimeline'
+import { FileHubCard, type FileItem } from '@/components/editor/FileHubCard'
 import { filterFilesByType, type ManuscriptFile } from './utils'
+import { format } from 'date-fns'
 
+// ... (Reuse types and logic)
 type ManuscriptDetail = {
   id: string
   title?: string | null
   abstract?: string | null
   status?: string | null
+  created_at?: string | null
   updated_at?: string | null
   final_pdf_path?: string | null
   owner?: { full_name?: string | null; email?: string | null } | null
   editor?: { full_name?: string | null; email?: string | null } | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
   invoice?: { status?: string | null; amount?: number | string | null } | null
-  signed_files?: {
-    original_manuscript?: { signed_url?: string | null; path?: string | null }
-    peer_review_reports?: Array<{
-      review_report_id: string
-      reviewer_name?: string | null
-      reviewer_email?: string | null
-      reviewer_id?: string | null
-      signed_url?: string | null
-      path?: string | null
-    }>
-  }
+  signed_files?: any
   files?: ManuscriptFile[] | null
+  journals?: { title?: string } | null
 }
 
 function allowedNext(status: string): string[] {
   const s = (status || '').toLowerCase()
+  // ... (Same logic as before)
   if (s === 'pre_check') return ['under_review', 'minor_revision', 'rejected']
   if (s === 'under_review') return ['decision', 'major_revision', 'minor_revision', 'rejected']
   if (s === 'major_revision' || s === 'minor_revision') return ['resubmitted']
   if (s === 'resubmitted') return ['under_review', 'decision', 'major_revision', 'minor_revision', 'rejected']
   if (s === 'decision') return ['decision_done']
   if (s === 'decision_done') return ['approved', 'rejected']
-  if (s === 'approved') return ['layout']
-  if (s === 'layout') return ['english_editing', 'proofreading']
-  if (s === 'english_editing') return ['proofreading']
-  if (s === 'proofreading') return ['published']
-  return []
+  return [] // Production handled separately
 }
 
 export default function EditorManuscriptDetailPage() {
@@ -106,26 +95,30 @@ export default function EditorManuscriptDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // --- Derived State ---
   const status = String(ms?.status || '')
   const statusLower = status.toLowerCase()
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])
-  const pdfSignedUrl = ms?.signed_files?.original_manuscript?.signed_url || null
 
-  const coverFiles = useMemo(() => filterFilesByType(ms?.files || [], 'cover_letter'), [ms])
-  const originalFiles = useMemo(() => filterFilesByType(ms?.files || [], 'manuscript'), [ms])
-  const reviewFiles = useMemo(() => filterFilesByType(ms?.files || [], 'review_attachment'), [ms])
+  // --- File Processing ---
+  const mapFile = (f: ManuscriptFile, type: FileItem['type']): FileItem => ({
+    id: String(f.id),
+    label: f.label || 'Unknown File',
+    type,
+    url: f.signed_url || undefined,
+    date: f.created_at ? format(new Date(f.created_at), 'yyyy-MM-dd') : undefined,
+  })
 
-  const toItems = (files: ManuscriptFile[], fallbackEmptyLabel: string): FileCardItem[] => {
-    return (files || [])
-      .filter((f) => !!f?.signed_url)
-      .map((f) => ({
-        id: String(f.id),
-        label: String(f.label || fallbackEmptyLabel),
-        href: f.signed_url || undefined,
-        meta: f.path ? `Storage: ${f.path}` : null,
-      }))
-  }
+  const fileHubProps = useMemo(() => {
+    const rawFiles = ms?.files || []
+    return {
+      manuscriptFiles: filterFilesByType(rawFiles, 'manuscript').map((f) => mapFile(f, 'pdf')),
+      coverFiles: filterFilesByType(rawFiles, 'cover_letter').map((f) => mapFile(f, 'doc')),
+      reviewFiles: filterFilesByType(rawFiles, 'review_attachment').map((f) => mapFile(f, 'pdf')),
+    }
+  }, [ms?.files])
+
 
   if (loading) {
     return (
@@ -148,162 +141,192 @@ export default function EditorManuscriptDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
-        <ManuscriptHeader ms={ms as any} />
+      
+      {/* Top Header Sticky */}
+      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3 overflow-hidden">
+            <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
+                {ms.journals?.title?.substring(0, 4).toUpperCase() || 'MS'}
+            </span>
+            <h1 className="font-bold text-slate-900 truncate max-w-xl text-lg" title={ms.title || ''}>
+                {ms.title || 'Untitled Manuscript'}
+            </h1>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(status)}`}>
+                {getStatusLabel(status)}
+            </span>
+        </div>
+        <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">
+            <Calendar className="h-3 w-3" />
+            Updated: <span className="font-mono font-medium text-slate-700">{ms.updated_at ? format(new Date(ms.updated_at), 'yyyy-MM-dd HH:mm') : '-'}</span>
+        </div>
+      </header>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-8 space-y-6">
-            <Card>
-              <CardHeader className="flex-row items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg">PDF Preview</CardTitle>
-                  <p className="text-sm text-slate-500">通过 signed URL 预览（避免 Storage RLS 影响）</p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {pdfSignedUrl ? (
-                  <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
-                    <iframe
-                      title="Manuscript PDF"
-                      src={pdfSignedUrl}
-                      className="w-full h-[calc(100vh-260px)] min-h-[720px]"
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-                    PDF not available.
-                  </div>
-                )}
-              </CardContent>
+      <main className="mx-auto max-w-[1600px] px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* LEFT COLUMN (8/12) */}
+        <div className="lg:col-span-8 space-y-6">
+            
+            {/* 1. Basic Info Card (Metadata) */}
+            <Card className="shadow-sm">
+                <CardHeader className="py-4 border-b bg-slate-50/30">
+                     <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-slate-700">
+                        <User className="h-4 w-4" /> Metadata & Staff
+                     </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+                        <div>
+                            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Authors</div>
+                            <div className="font-medium text-slate-900 text-sm">
+                                {invoiceForm.authors || 'Unknown Authors'}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">{invoiceForm.affiliation || 'No affiliation'}</div>
+                        </div>
+                        <div className="text-right">
+                             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Submitted</div>
+                             <div className="font-medium text-slate-900 text-sm">
+                                {ms.created_at ? format(new Date(ms.created_at), 'yyyy-MM-dd') : '-'}
+                             </div>
+                        </div>
+                    </div>
+                    
+                    {/* Staff Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        {/* Owner Binding */}
+                        <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Owner (Sales)</div>
+                            <BindingOwnerDropdown manuscriptId={id} currentOwner={ms.owner as any} onBound={load} />
+                        </div>
+                        
+                        {/* AE Info */}
+                        <div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Assistant Editor</div>
+                            <div className="flex items-center gap-2 h-9">
+                                {ms.editor ? (
+                                    <>
+                                        <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
+                                            {(ms.editor.full_name || ms.editor.email || 'E').substring(0, 1).toUpperCase()}
+                                        </div>
+                                        <span className="text-sm font-medium truncate">{ms.editor.full_name || ms.editor.email}</span>
+                                    </>
+                                ) : (
+                                    <span className="text-sm text-slate-400 italic">Unassigned</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Finance Status */}
+                        <div className="cursor-pointer hover:bg-slate-100 p-1 rounded -m-1 transition" onClick={() => setInvoiceOpen(true)}>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                APC Status <DollarSign className="h-3 w-3" />
+                            </div>
+                            <div className="flex items-center gap-2 h-9">
+                                {ms.invoice?.status === 'paid' ? (
+                                    <span className="text-sm font-bold text-green-600 flex items-center gap-1">
+                                        PAID <span className="text-xs font-normal text-slate-500">(${ms.invoice.amount})</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
+                                        {ms.invoice?.status ? ms.invoice.status.toUpperCase() : 'PENDING'} 
+                                        <span className="text-xs font-normal text-slate-500">(${invoiceForm.apcAmount || '0'})</span>
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <FileSectionCard
-                title="Cover Letter"
-                description="Author-provided materials (if any)."
-                items={toItems(coverFiles, 'Cover Letter')}
-                emptyText="No cover letter uploaded."
-              />
+            {/* 2. File Hub */}
+            <FileHubCard 
+                manuscriptId={id} 
+                manuscriptFiles={fileHubProps.manuscriptFiles}
+                coverFiles={fileHubProps.coverFiles}
+                reviewFiles={fileHubProps.reviewFiles}
+                onUploadReviewFile={load}
+            />
 
-              <FileSectionCard
-                title="Original Manuscript"
-                description="Current manuscript file (signed URL)."
-                items={toItems(originalFiles, 'Manuscript PDF')}
-                emptyText="PDF not available."
-              />
-
-              <FileSectionCard
-                title="Peer Review Files"
-                description="Editor-only internal files (Word/PDF) + reviewer attachments."
-                items={toItems(reviewFiles, 'Peer Review File')}
-                emptyText="No peer review files."
-                action={<UploadReviewFile manuscriptId={id} onUploaded={load} />}
-              />
+            {/* 3. Internal Notebook */}
+            <div className="h-[500px]">
+                <InternalNotebook manuscriptId={id} />
             </div>
 
-            <VersionHistory manuscriptId={id} />
-          </div>
-
-          <div className="lg:col-span-4 space-y-6">
-            <Card>
-              <CardHeader className="flex-row items-center justify-between">
-                <CardTitle className="text-lg">Owner Binding</CardTitle>
-                <BindingOwnerDropdown manuscriptId={id} currentOwner={ms.owner as any} onBound={load} />
-              </CardHeader>
-              <CardContent className="text-sm text-slate-600 space-y-1">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Current Owner</span>
-                  <span className="text-slate-900">{ms.owner?.full_name || ms.owner?.email || '—'}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Workflow</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Current Status</span>
-                  <span className="text-slate-900">{getStatusLabel(status)}</span>
-                </div>
-                <div className="pt-2">
-                  <ReviewerAssignmentSearch manuscriptId={id} onChanged={load} />
-                  <div className="mt-2 text-xs text-slate-500">
-                    从 Reviewer Library 搜索并指派；已分配的审稿人会在弹窗中置顶显示。
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {isPostAcceptance ? (
-              <ProductionStatusCard
-                manuscriptId={id}
-                status={statusLower || 'approved'}
-                finalPdfPath={ms?.final_pdf_path}
-                invoice={ms?.invoice}
-                onStatusChange={(next) => {
-                  setMs((prev) => (prev ? { ...prev, status: next } : prev))
-                }}
-                onReload={async () => {
-                  await load()
-                }}
-              />
-            ) : null}
-
-            {!isPostAcceptance ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Status Transition</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {nextStatuses.length === 0 ? (
-                    <div className="text-sm text-slate-500">No next actions available.</div>
-                  ) : (
-                    nextStatuses.map((s) => (
-                      <Button
-                        key={s}
-                        className="w-full justify-between"
-                        variant="outline"
-                        disabled={transitioning === s}
-                        onClick={async () => {
-                          try {
-                            setTransitioning(s)
-                            const res = await EditorApi.patchManuscriptStatus(id, s)
-                            if (!res?.success) throw new Error(res?.detail || res?.message || 'Transition failed')
-                            toast.success(`Moved to ${getStatusLabel(s)}`)
-                            await load()
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : 'Transition failed')
-                          } finally {
-                            setTransitioning(null)
-                          }
-                        }}
-                      >
-                        <span>Move to {getStatusLabel(s)}</span>
-                        {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      </Button>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-          </div>
         </div>
 
-        <InvoiceInfoPanel
-          info={{
-            authors: invoiceForm.authors,
-            affiliation: invoiceForm.affiliation,
-            apcAmount: invoiceForm.apcAmount,
-            fundingInfo: invoiceForm.fundingInfo,
-          }}
-          onEdit={() => setInvoiceOpen(true)}
-        />
+        {/* RIGHT COLUMN (4/12) */}
+        <div className="lg:col-span-4 space-y-6">
+            
+            {/* Action Panel / Workflow */}
+            <Card className="border-t-4 border-t-purple-500 shadow-sm">
+                <CardHeader>
+                    <CardTitle className="text-lg">Editorial Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {/* Reviewer Assignment */}
+                    {!isPostAcceptance && (
+                        <div className="pt-2 pb-4 border-b border-slate-100">
+                            <div className="text-xs font-semibold text-slate-500 mb-2">ASSIGN REVIEWERS</div>
+                            <ReviewerAssignmentSearch manuscriptId={id} onChanged={load} />
+                        </div>
+                    )}
+
+                    {/* Status Transitions */}
+                    {isPostAcceptance ? (
+                        <ProductionStatusCard
+                            manuscriptId={id}
+                            status={statusLower || 'approved'}
+                            finalPdfPath={ms?.final_pdf_path}
+                            invoice={ms?.invoice}
+                            onStatusChange={(next) => {
+                                setMs((prev) => (prev ? { ...prev, status: next } : prev))
+                            }}
+                            onReload={load}
+                        />
+                    ) : (
+                        <div className="space-y-2">
+                             <div className="text-xs font-semibold text-slate-500 mb-2">CHANGE STATUS</div>
+                             {nextStatuses.length === 0 ? (
+                                <div className="text-sm text-slate-400 italic">No next status available.</div>
+                             ) : (
+                                nextStatuses.map((s) => (
+                                    <Button
+                                        key={s}
+                                        className="w-full justify-between"
+                                        variant="outline"
+                                        disabled={transitioning === s}
+                                        onClick={async () => {
+                                            try {
+                                                setTransitioning(s)
+                                                const res = await EditorApi.patchManuscriptStatus(id, s)
+                                                if (!res?.success) throw new Error(res?.detail || res?.message || 'Failed')
+                                                toast.success(`Moved to ${getStatusLabel(s)}`)
+                                                await load()
+                                            } catch (e) {
+                                                toast.error(e instanceof Error ? e.message : 'Transition failed')
+                                            } finally {
+                                                setTransitioning(null)
+                                            }
+                                        }}
+                                    >
+                                        <span>Move to {getStatusLabel(s)}</span>
+                                        {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4 opacity-50" />}
+                                    </Button>
+                                ))
+                             )}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Audit Log Timeline */}
+            <AuditLogTimeline manuscriptId={id} />
+
+        </div>
       </main>
 
+      {/* Invoice Modal (Hidden) */}
       <InvoiceInfoModal
         open={invoiceOpen}
         onOpenChange={setInvoiceOpen}

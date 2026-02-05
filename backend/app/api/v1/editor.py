@@ -62,11 +62,161 @@ def _is_missing_table_error(error_text: str) -> bool:
     return "does not exist" in t and "manuscript_files" in t
 
 
+    return "does not exist" in t and "manuscript_files" in t
+
+
+@router.get("/manuscripts/{id}/comments")
+async def get_internal_comments(
+    id: str,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 036: Fetch internal notebook comments (Staff only).
+    """
+    try:
+        # Note: 'user:user_id(...)' requires foreign key relationship in Supabase
+        resp = (
+            supabase_admin.table("internal_comments")
+            .select("id, content, created_at, user_id")
+            .eq("manuscript_id", id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        comments = getattr(resp, "data", None) or []
+        
+        # Manually fetch user profiles to avoid complex join issues if FK name varies
+        user_ids = sorted(list(set(c["user_id"] for c in comments if c.get("user_id"))))
+        users_map = {}
+        if user_ids:
+            try:
+                u_resp = (
+                    supabase_admin.table("user_profiles")
+                    .select("id, full_name, email")
+                    .in_("id", user_ids)
+                    .execute()
+                )
+                for u in (getattr(u_resp, "data", None) or []):
+                    users_map[u["id"]] = u
+            except Exception:
+                pass
+        
+        for c in comments:
+            uid = c.get("user_id")
+            c["user"] = users_map.get(uid) or {"full_name": "Unknown", "email": ""}
+            
+        return {"success": True, "data": comments}
+    except Exception as e:
+        # If table missing (migration not run), return empty list instead of 500
+        if "does not exist" in str(e):
+            return {"success": True, "data": []}
+        print(f"[InternalComments] list failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch comments")
+
+
+@router.post("/manuscripts/{id}/comments")
+async def create_internal_comment(
+    id: str,
+    payload: InternalCommentPayload,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 036: Post internal comment.
+    """
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+
+    try:
+        data = {
+            "manuscript_id": id,
+            "user_id": str(current_user.get("id")),
+            "content": content,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = supabase_admin.table("internal_comments").insert(data).execute()
+        new_comment = (getattr(resp, "data", None) or [{}])[0]
+        
+        # Return with user info for immediate UI update
+        user_info = {
+            "id": str(current_user.get("id")),
+            "email": current_user.get("email"),
+            "full_name": current_user.get("user_metadata", {}).get("full_name")
+        }
+        # Try to fetch profile for better name
+        try:
+             p_resp = supabase_admin.table("user_profiles").select("full_name").eq("id", user_info["id"]).single().execute()
+             p_data = getattr(p_resp, "data", None)
+             if p_data and p_data.get("full_name"):
+                 user_info["full_name"] = p_data.get("full_name")
+        except Exception:
+            pass
+            
+        new_comment["user"] = user_info
+        return {"success": True, "data": new_comment}
+    except Exception as e:
+        if "does not exist" in str(e):
+             raise HTTPException(status_code=500, detail="Migration missing: internal_comments table not found")
+        print(f"[InternalComments] create failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to post comment")
+
+
+@router.get("/manuscripts/{id}/audit-logs")
+async def get_audit_logs(
+    id: str,
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 036: Fetch status transition logs.
+    """
+    try:
+        resp = (
+            supabase_admin.table("status_transition_logs")
+            .select("*, changed_by")
+            .eq("manuscript_id", id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        logs = getattr(resp, "data", None) or []
+        
+        # Populate user info
+        user_ids = sorted(list(set(l["changed_by"] for l in logs if l.get("changed_by"))))
+        users_map = {}
+        if user_ids:
+            try:
+                u_resp = (
+                    supabase_admin.table("user_profiles")
+                    .select("id, full_name, email")
+                    .in_("id", user_ids)
+                    .execute()
+                )
+                for u in (getattr(u_resp, "data", None) or []):
+                    users_map[u["id"]] = u
+            except Exception:
+                pass
+                
+        for l in logs:
+            uid = l.get("changed_by")
+            l["user"] = users_map.get(uid) or {"full_name": "System/Unknown", "email": ""}
+            
+        return {"success": True, "data": logs}
+    except Exception as e:
+        print(f"[AuditLogs] fetch failed: {e}")
+        # Allow fail-open if table missing (though it should exist from Feature 028)
+        if "does not exist" in str(e):
+             return {"success": True, "data": []}
+        raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
+
+
 class InvoiceInfoUpdatePayload(BaseModel):
     authors: str | None = None
     affiliation: str | None = None
     apc_amount: float | None = Field(default=None, ge=0)
     funding_info: str | None = None
+
+
+class InternalCommentPayload(BaseModel):
+    content: str
 
 
 class QuickPrecheckPayload(BaseModel):

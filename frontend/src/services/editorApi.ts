@@ -163,4 +163,24 @@ export const EditorApi = {
     })
     return res.json()
   },
+
+  // Feature 036: Internal Notebook & Audit
+  async getInternalComments(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`)
+    return res.json()
+  },
+
+  async postInternalComment(manuscriptId: string, content: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+    return res.json()
+  },
+
+  async getAuditLogs(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/audit-logs`)
+    return res.json()
+  },
 }
