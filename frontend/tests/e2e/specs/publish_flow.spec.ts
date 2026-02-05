@@ -72,8 +72,9 @@ test.describe('Publish workflow (mocked backend)', () => {
     // 上传最终稿
     await page.getByRole('button', { name: 'Upload Final PDF' }).click()
     const fixture = path.join(__dirname, '..', 'fixtures', 'revised.pdf')
-    await page.setInputFiles('input[type="file"]', fixture)
-    await page.getByRole('button', { name: 'Upload' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Production Upload' })
+    await dialog.locator('input[type="file"]').setInputFiles(fixture)
+    await dialog.getByRole('button', { name: 'Upload' }).click()
 
     // Publish（proofreading -> published）
     await page.getByRole('button', { name: 'Publish' }).click()

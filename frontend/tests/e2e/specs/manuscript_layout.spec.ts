@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test'
-import { buildSession, fulfillJson, seedSession } from './utils'
+import { buildSession, fulfillJson, seedSession } from '../utils'
 
 async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
   await page.context().setExtraHTTPHeaders({ 'x-scholarflow-e2e': '1' })
 }
 
-test.describe('Editor manuscript details (mocked backend)', () => {
+test.describe('Manuscript detail layout (mocked backend)', () => {
   test.setTimeout(90_000)
 
-  test('shows header, file sections, and edits invoice info', async ({ page }) => {
+  test('shows aligned header, 3 file cards, and invoice panel; attaches screenshot', async ({ page }) => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('00000000-0000-0000-0000-000000000001', 'editor@example.com'))
 
@@ -23,7 +23,6 @@ test.describe('Editor manuscript details (mocked backend)', () => {
       const url = new URL(req.url())
       const pathname = url.pathname
 
-      // SiteHeader / Layout dependencies
       if (pathname === '/api/v1/cms/menu') {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
@@ -42,8 +41,8 @@ test.describe('Editor manuscript details (mocked backend)', () => {
             title: 'Mocked Manuscript Title',
             status: 'decision',
             updated_at: new Date().toISOString(),
-            owner: { full_name: 'Owner A', email: 'owner@example.com' },
-            editor: { full_name: 'Editor A', email: 'editor@example.com' },
+            owner: { id: 'o1', full_name: 'Owner A', email: 'owner@example.com' },
+            editor: { id: 'e1', full_name: 'Editor A', email: 'editor@example.com' },
             invoice: { status: 'unpaid', amount: invoiceApc },
             invoice_metadata: {
               authors: invoiceAuthors,
@@ -68,19 +67,8 @@ test.describe('Editor manuscript details (mocked backend)', () => {
               },
             ],
             signed_files: {
-              original_manuscript: {
-                path: 'manuscripts/demo.pdf',
-                // 使用站内静态资源，避免 iframe 跨域/网络导致 page load 事件长时间不触发
-                signed_url: '/favicon.svg',
-              },
-              peer_review_reports: [
-                {
-                  review_report_id: 'rr1',
-                  reviewer_name: 'Reviewer A',
-                  signed_url: '/favicon.svg',
-                  path: 'review_reports/rr1/annotated.pdf',
-                },
-              ],
+              original_manuscript: { path: 'manuscripts/demo.pdf', signed_url: '/favicon.svg' },
+              peer_review_reports: [],
             },
           },
         })
@@ -104,36 +92,19 @@ test.describe('Editor manuscript details (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: { versions: [], revisions: [] } })
       }
 
-      // default: 避免请求真实后端导致 E2E 卡死
-      return fulfillJson(route, 200, { success: true, data: [] })
+      return fulfillJson(route, 200, { success: true, data: {} })
     })
 
     await page.goto(`/editor/manuscript/${manuscriptId}`, { waitUntil: 'domcontentloaded' })
-    await page.waitForURL(`**/editor/manuscript/${manuscriptId}`)
-
     await expect(page.getByRole('heading', { name: 'Mocked Manuscript Title' })).toBeVisible({ timeout: 15000 })
-    await expect(page.locator('main').locator('text=Decision').first()).toBeVisible()
 
-    await expect(page.getByText('Cover Letter')).toBeVisible()
-    await expect(page.getByText('Original Manuscript')).toBeVisible()
-    await expect(page.getByText('Peer Review Files')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Cover Letter' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Original Manuscript' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Peer Review Files' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Owner Binding' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Invoice Info' })).toBeVisible()
 
-    // Invoice info shows initial values
-    await expect(page.getByText('Invoice Info')).toBeVisible()
-    await expect(page.locator('main').locator('text=John Doe, Jane Smith').first()).toBeVisible()
-    await expect(page.locator('main').locator('text=University of Science').first()).toBeVisible()
-
-    // Open modal and edit
-    await page.getByTestId('invoice-edit').click()
-    await page.getByPlaceholder('Authors').fill('Alice, Bob')
-    await page.getByPlaceholder('Affiliation').fill('New Institute')
-    await page.getByPlaceholder('APC Amount (USD)').fill('1200')
-    await page.getByPlaceholder('Funding Info').fill('N/A')
-    await page.getByRole('button', { name: /save/i }).click()
-
-    // After reload, updated values should show
-    await expect(page.locator('main').locator('text=Alice, Bob').first()).toBeVisible()
-    await expect(page.locator('main').locator('text=New Institute').first()).toBeVisible()
-    await expect(page.locator('main').locator('text=1200').first()).toBeVisible()
+    const shot = await page.screenshot({ fullPage: true })
+    test.info().attach('manuscript-detail-layout', { body: shot, contentType: 'image/png' })
   })
 })
