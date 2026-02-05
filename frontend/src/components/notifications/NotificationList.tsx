@@ -7,8 +7,8 @@ import { ArrowRight } from 'lucide-react'
 
 type Props = {
   notifications: Notification[]
-  onMarkRead: (id: string) => void
-  onMarkAllRead: () => void
+  onMarkRead: (id: string) => void | Promise<void>
+  onMarkAllRead: () => void | Promise<void>
 }
 
 export function NotificationList({ notifications, onMarkRead, onMarkAllRead }: Props) {
@@ -37,7 +37,7 @@ export function NotificationList({ notifications, onMarkRead, onMarkAllRead }: P
         <div className="text-sm font-bold text-slate-900">Recent Updates</div>
         <button
           type="button"
-          onClick={onMarkAllRead}
+          onClick={() => void onMarkAllRead()}
           className="text-xs font-semibold text-blue-600 hover:underline"
         >
           Mark all read
@@ -59,4 +59,3 @@ export function NotificationList({ notifications, onMarkRead, onMarkAllRead }: P
     </div>
   )
 }
-
