@@ -258,6 +258,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
+- **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
 - **Feature 033（Manuscript Files）迁移**：云端需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`（新增 `public.manuscript_files` 用于 editor 上传 peer review files），否则 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment` 会返回 “DB not migrated”。
@@ -283,6 +284,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 030（Reviewer Library）**：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），并在稿件详情页 `/editor/manuscript/[id]` 提供 `Manage Reviewers` 入口；指派弹窗改为只从 Reviewer Library 检索（不再“Invite New”直接发邮件），且选中时不触发列表重排（避免 UI 跳动）。
 - **Feature 032（Process List 增强）**：Process API 支持 `q` 搜索 + 多条件过滤；前端过滤栏改为 URL 驱动（仅 `q` debounce 自动落地）；新增 Quick Pre-check（`pre_check` 一键：Under Review / Minor Revision / Rejected）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
 - **Feature 033（详情页布局对齐）**：重构 `/editor/manuscript/[id]`：顶部 Header (Title/Authors/Funding/APC/Owner/Editor)、文件区三卡（Cover/Original/Peer Review + Upload）、Invoice Info 移到底部表格；新增 Editor-only 上传 peer review file 接口 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment`，文件写入 `review-attachments` 私有桶并记录到 `public.manuscript_files`。
+- **Portal（UAT 线上稳定性）**：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异（`order(desc=...)`）与云端 schema 漂移（缺失 `authors`/`published_at`）导致的 500；作者显示不再返回 `Unknown`，且不会泄露明文邮箱。
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes

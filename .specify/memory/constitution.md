@@ -102,7 +102,7 @@ Sync Impact Report:
 
 Constitution supersedes all other practices. Amendments require documentation and version bump. 若使用 PR 流程，则 PR 必须验证符合本宪法原则。
 
-**Version**: 1.1.2 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-05
+**Version**: 1.1.3 | **Ratified**: 2026-02-02 | **Last Amended**: 2026-02-05
 
 ## 近期关键修复快照（2026-02-05）
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
@@ -113,3 +113,4 @@ Constitution supersedes all other practices. Amendments require documentation an
 - Feature 030：审稿人库（Reviewer Library）与指派解耦：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），指派弹窗改为只从库中检索并保持列表不跳动；新增 `is_reviewer_active` 与 `reviewer_search_text`（trigram GIN）以保证 1k+ 检索性能。
 - Feature 032：Process List 增强（`q` 搜索、多条件过滤、URL 驱动过滤栏、Quick Pre-check 一键状态流转）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
 - Feature 033：详情页布局对齐：重构 `/editor/manuscript/[id]`（Header 信息重组、文件区三卡、Invoice Info 移至底部）；新增 Editor-only 上传 peer review file 接口 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment`，并引入 `public.manuscript_files`（需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`）。
+- Portal：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异与云端 schema 漂移（缺 `authors`/`published_at`）导致的 500；作者展示字段由后端组装（profile 优先、Auth email 脱敏兜底），不返回 `Unknown` 且不泄露明文邮箱。
