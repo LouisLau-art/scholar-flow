@@ -6,6 +6,7 @@ import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import ProductionUploadDialog from '@/components/ProductionUploadDialog'
+import { getStatusLabel } from '@/lib/statusStyles'
 
 type Manuscript = {
   id: string
@@ -499,7 +500,18 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Approved</span>
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">
+                        {getStatusLabel((manuscript.status || 'approved').toString())}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          window.location.href = `/editor/manuscript/${manuscript.id}`
+                        }}
+                      >
+                        Details
+                      </Button>
                       <ProductionUploadDialog
                         manuscriptId={manuscript.id}
                         manuscriptTitle={manuscript.title}
@@ -529,8 +541,17 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                       )}
                       <Button
                         size="sm"
-                        disabled={waitingPayment}
-                        title={waitingPayment ? 'Waiting for Payment' : 'Publish'}
+                        disabled={
+                          waitingPayment ||
+                          (manuscript.status || 'approved').toString().trim().toLowerCase() !== 'proofreading'
+                        }
+                        title={
+                          waitingPayment
+                            ? 'Waiting for Payment'
+                            : (manuscript.status || 'approved').toString().trim().toLowerCase() !== 'proofreading'
+                              ? 'Continue production in Details'
+                              : 'Publish'
+                        }
                         onClick={() => handlePublish(manuscript.id)}
                         data-testid="editor-publish"
                       >

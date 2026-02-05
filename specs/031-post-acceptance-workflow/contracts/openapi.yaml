@@ -1,0 +1,36 @@
+openapi: 3.0.0
+info:
+  title: Post-Acceptance Workflow API
+  version: 1.0.0
+paths:
+  /api/v1/editor/manuscripts/{id}/production/advance:
+    post:
+      summary: Advance manuscript to the next production stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  previous_status: { type: string }
+                  new_status: { type: string }
+        '400':
+          description: Validation failed (Payment/Production gate)
+  /api/v1/editor/manuscripts/{id}/production/revert:
+    post:
+      summary: Revert manuscript to the previous production stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Status reverted successfully

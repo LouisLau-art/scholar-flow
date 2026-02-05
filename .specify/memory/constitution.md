@@ -94,6 +94,7 @@ Sync Impact Report:
 - **单人开发提速（默认模式）**：本项目当前为“单人 + 单机 + 单目录”开发，默认不走 PR / review / auto-merge 流程；**直接在 `main` 小步提交并 `git push`** 同步到 GitHub 作为备份与回滚点。
 - **PR（可选）**：仅在需要多人协作、外部审查、或重大高风险改动时才使用 PR；否则视为不必要开销。
 - **Doc Sync**：任何“环境假设/核心规则/提速策略”的变更，必须同步更新 `GEMINI.md`、`CLAUDE.md`、`AGENTS.md` 三个上下文文件。
+- **交付收尾（强约束）**：每个 Feature 完成后必须执行：`git push` → 合并到 `main`（`--no-ff`）→ `git push` → 删除除 `main` 之外所有本地/远端分支（保持仓库整洁）→ 使用 `gh` 检查 GitHub Actions，确保主干始终为绿。
 
 ## Governance
 <!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->

@@ -90,7 +90,8 @@ def publish_manuscript(*, manuscript_id: str) -> dict[str, Any]:
     # Production gate（默认关闭，MVP 提速）：
     # - 仅当 PRODUCTION_GATE_ENABLED=1/true/yes 时启用
     # - 且仅在 schema 存在时拦截（字段不存在则降级不拦截）
-    enabled = (os.getenv("PRODUCTION_GATE_ENABLED") or "").strip().lower() in {
+    # 默认开启（测试/生产更安全）；如需提速可显式设置 PRODUCTION_GATE_ENABLED=0
+    enabled = (os.getenv("PRODUCTION_GATE_ENABLED") or "1").strip().lower() in {
         "1",
         "true",
         "yes",
