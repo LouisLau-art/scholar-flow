@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 from uuid import UUID
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -33,10 +34,27 @@ def generate_and_store_invoice_pdf_safe(*, invoice_id: UUID) -> None:
     """
     给 BackgroundTasks 用的安全包装：任何异常都吞掉，避免在测试/线上把主流程打断。
     """
-    try:
-        generate_and_store_invoice_pdf(invoice_id=invoice_id)
-    except Exception as e:  # pragma: no cover
-        print(f"[InvoicePDF] generate failed (ignored): invoice_id={invoice_id} error={e}")
+    def _is_transient_not_found(err: Exception) -> bool:
+        text = str(err).lower()
+        return (
+            "pgrst116" in text
+            or "contains 0 rows" in text
+            or "invoice not found" in text
+            or "result contains 0 rows" in text
+        )
+
+    # 中文注释：Supabase/PostgREST 在极少数情况下会出现“刚插入的 row 立即读取不到”的瞬态。
+    # 为了提高稳定性，这里做短暂重试（不影响主流程）。
+    for i in range(8):
+        try:
+            generate_and_store_invoice_pdf(invoice_id=invoice_id)
+            return
+        except Exception as e:  # pragma: no cover
+            if _is_transient_not_found(e) and i < 7:
+                time.sleep(0.15 * (i + 1))
+                continue
+            print(f"[InvoicePDF] generate failed (ignored): invoice_id={invoice_id} error={e}")
+            return
 
 
 def _templates_dir() -> Path:
@@ -133,14 +151,16 @@ def _load_manuscript_row(manuscript_id: str) -> dict:
 
 
 def _load_author_profile(author_id: str) -> dict:
+    # 中文注释：集成测试/演示环境可能没有对应 user_profiles 行；这里要容错，避免影响发票生成。
     resp = (
         supabase_admin.table("user_profiles")
         .select("full_name,email")
         .eq("id", author_id)
-        .single()
+        .limit(1)
         .execute()
     )
-    return getattr(resp, "data", None) or {}
+    rows = getattr(resp, "data", None) or []
+    return rows[0] if rows else {}
 
 
 def generate_and_store_invoice_pdf(*, invoice_id: UUID) -> InvoicePdfResult:

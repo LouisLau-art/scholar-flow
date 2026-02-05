@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
 const STORAGE_KEY = 'scholarflow:access_token'
+const SUPABASE_STORAGE_KEY = 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
 
 const cacheToken = (token?: string | null) => {
   if (typeof window === 'undefined') return
@@ -12,6 +13,27 @@ const cacheToken = (token?: string | null) => {
   }
 }
 
+function readAccessTokenFromLocalStorage(): string | null {
+  if (typeof window === 'undefined') return null
+
+  const cached = window.localStorage.getItem(STORAGE_KEY)
+  if (cached) return cached
+
+  // 中文注释：E2E / 部分环境下 supabase-js 的 getSession 可能触发网络刷新并导致卡住。
+  // 这里优先从 Supabase 自己的 localStorage session 里取 access_token，避免阻塞页面加载。
+  const raw = window.localStorage.getItem(SUPABASE_STORAGE_KEY)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as { access_token?: string | null } | null
+    const token = parsed?.access_token ?? null
+    if (token) cacheToken(token)
+    return token
+  } catch {
+    return null
+  }
+}
+
 export const authService = {
   async getSession(): Promise<Session | null> {
     const { data } = await supabase.auth.getSession()
@@ -19,6 +41,9 @@ export const authService = {
     return data.session ?? null
   },
   async getAccessToken(): Promise<string | null> {
+    const local = readAccessTokenFromLocalStorage()
+    if (local) return local
+
     const session = await authService.getSession()
     return session?.access_token ?? null
   },

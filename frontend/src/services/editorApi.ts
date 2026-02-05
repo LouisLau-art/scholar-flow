@@ -55,6 +55,21 @@ export const EditorApi = {
     return res.json()
   },
 
+  // Feature 031: Post-Acceptance Workflow
+  async advanceProduction(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/advance`, {
+      method: 'POST',
+    })
+    return res.json()
+  },
+
+  async revertProduction(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/revert`, {
+      method: 'POST',
+    })
+    return res.json()
+  },
+
   async updateInvoiceInfo(
     manuscriptId: string,
     payload: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string }

@@ -67,7 +67,7 @@ export PLAYWRIGHT_PORT="${PLAYWRIGHT_PORT:-3001}"
 # 默认只跑“可脱离真实后端”的 mocked E2E（更接近 CI 可重复性）。
 # 若你希望跑全量 E2E（可能依赖后端 HTTP 服务 / 真实 Supabase），设置 E2E_FULL=1。
 E2E_FULL="${E2E_FULL:-0}"
-E2E_SPEC="${E2E_SPEC:-tests/e2e/specs/revision_flow.spec.ts}"
+E2E_SPEC="${E2E_SPEC:-tests/e2e/specs/*.spec.ts}"
 
 if [ "$E2E_FULL" = "1" ]; then
     echo "ℹ️  E2E_FULL=1：尝试启动后端 (127.0.0.1:${BACKEND_PORT:-8000}) 并运行全量 Playwright 用例"

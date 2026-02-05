@@ -13,6 +13,7 @@ import { FileSectionGroup, type FileSection } from '@/components/editor/FileSect
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { InvoiceInfoSection } from '@/components/editor/InvoiceInfoSection'
 import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
+import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
 import VersionHistory from '@/components/VersionHistory'
 import { getStatusLabel } from '@/lib/statusStyles'
 
@@ -22,6 +23,7 @@ type ManuscriptDetail = {
   abstract?: string | null
   status?: string | null
   updated_at?: string | null
+  final_pdf_path?: string | null
   owner?: { full_name?: string | null; email?: string | null } | null
   editor?: { full_name?: string | null; email?: string | null } | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
@@ -101,6 +103,8 @@ export default function EditorManuscriptDetailPage() {
   }, [id])
 
   const status = String(ms?.status || '')
+  const statusLower = status.toLowerCase()
+  const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])
   const pdfSignedUrl = ms?.signed_files?.original_manuscript?.signed_url || null
 
@@ -211,6 +215,21 @@ export default function EditorManuscriptDetailPage() {
               </CardContent>
             </Card>
 
+            {isPostAcceptance ? (
+              <ProductionStatusCard
+                manuscriptId={id}
+                status={statusLower || 'approved'}
+                finalPdfPath={ms?.final_pdf_path}
+                invoice={ms?.invoice}
+                onStatusChange={(next) => {
+                  setMs((prev) => (prev ? { ...prev, status: next } : prev))
+                }}
+                onReload={async () => {
+                  await load()
+                }}
+              />
+            ) : null}
+
             <InvoiceInfoSection
               info={{
                 authors: invoiceForm.authors,
@@ -221,41 +240,43 @@ export default function EditorManuscriptDetailPage() {
               onEdit={() => setInvoiceOpen(true)}
             />
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Status Transition</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {nextStatuses.length === 0 ? (
-                  <div className="text-sm text-slate-500">No next actions available.</div>
-                ) : (
-                  nextStatuses.map((s) => (
-                    <Button
-                      key={s}
-                      className="w-full justify-between"
-                      variant="outline"
-                      disabled={transitioning === s}
-                      onClick={async () => {
-                        try {
-                          setTransitioning(s)
-                          const res = await EditorApi.patchManuscriptStatus(id, s)
-                          if (!res?.success) throw new Error(res?.detail || res?.message || 'Transition failed')
-                          toast.success(`Moved to ${getStatusLabel(s)}`)
-                          await load()
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : 'Transition failed')
-                        } finally {
-                          setTransitioning(null)
-                        }
-                      }}
-                    >
-                      <span>Move to {getStatusLabel(s)}</span>
-                      {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    </Button>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+            {!isPostAcceptance ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Status Transition</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {nextStatuses.length === 0 ? (
+                    <div className="text-sm text-slate-500">No next actions available.</div>
+                  ) : (
+                    nextStatuses.map((s) => (
+                      <Button
+                        key={s}
+                        className="w-full justify-between"
+                        variant="outline"
+                        disabled={transitioning === s}
+                        onClick={async () => {
+                          try {
+                            setTransitioning(s)
+                            const res = await EditorApi.patchManuscriptStatus(id, s)
+                            if (!res?.success) throw new Error(res?.detail || res?.message || 'Transition failed')
+                            toast.success(`Moved to ${getStatusLabel(s)}`)
+                            await load()
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : 'Transition failed')
+                          } finally {
+                            setTransitioning(null)
+                          }
+                        }}
+                      >
+                        <span>Move to {getStatusLabel(s)}</span>
+                        {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      </Button>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </div>
       </main>

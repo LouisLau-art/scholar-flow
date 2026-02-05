@@ -276,8 +276,13 @@ async def upload_production_file(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
-    if (ms.get("status") or "").lower() != "approved":
-        raise HTTPException(status_code=400, detail="Only approved manuscripts can upload production file")
+    # Feature 031：录用后生产阶段也允许替换最终排版 PDF（便于排版/校对迭代）。
+    allowed_statuses = {"approved", "layout", "english_editing", "proofreading"}
+    if (ms.get("status") or "").lower() not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Production file upload requires status in {sorted(allowed_statuses)}",
+        )
 
     safe_name = (file.filename or "final.pdf").replace("/", "_").replace("\\", "_")
     ts = int(time.time())

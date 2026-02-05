@@ -61,6 +61,6 @@ def upload_bytes(
     upsert: bool = True,
 ) -> None:
     ensure_bucket_exists(bucket=bucket, public=False)
-    opts = {"content-type": content_type, "upsert": bool(upsert)}
+    # storage3 期望 header value 为字符串；传 bool 会触发 httpx "Header value must be str or bytes"。
+    opts = {"content-type": content_type, "upsert": "true" if upsert else "false"}
     supabase_admin.storage.from_(bucket).upload(path, content, opts)
-
