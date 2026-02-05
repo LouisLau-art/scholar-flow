@@ -52,11 +52,13 @@ htmlcov/
 # Local dev artifacts (do not commit)
 /academic_paper_*.pdf
 /test_manuscript_copy_*.pdf
+/test_manuscript.pdf
 /期刊系统整理20260204.pdf
 /generate_academic_pdfs.py
 /scripts/check_interests.py
 /scripts/seed_reviewer_interests.py
 /QWEN.md
 /reference.pdf
+/reference*.pdf
 /稿件处理系统流程解析20260119.pdf
 /详细审稿流程说明_原文.pdf
