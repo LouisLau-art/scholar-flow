@@ -80,7 +80,7 @@ Sync Impact Report:
 - **数据库全量 RLS**：MVP 主要依赖后端 API 鉴权 + `service_role` 访问；不要求对 `manuscripts/review_assignments/review_reports` 全量补齐 RLS（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：可保留 schema/占位字段，但不做真实注册与异步任务闭环。
 - **查重（iThenticate/mock）**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不阻塞上传/修订链路。
-- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor Pipeline 的 `approved` 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
+- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor 稿件详情页 `/editor/manuscript/[id]` 的 Production 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
 - **通知群发（给所有 editor/admin）**：为避免 mock 用户导致的 409 日志刷屏，MVP 禁止对“所有 editor”群发通知；改为只通知稿件 `owner_id/editor_id`（或仅作者自通知）。
 - **修订 Response Letter 图片上传到 Storage**：MVP 不做图片入库/权限/RLS；改为前端把图片压缩后以 Data URL 直接嵌入富文本（有限制体积）。
 - **“论文详情/Response Letter”的长期可扩展富媒体**：MVP 允许简化实现（文本/少量内嵌图片），不追求可迁移、可检索、可复用的媒体资产体系。
@@ -94,6 +94,7 @@ Sync Impact Report:
 - **单人开发提速（默认模式）**：本项目当前为“单人 + 单机 + 单目录”开发，默认不走 PR / review / auto-merge 流程；**直接在 `main` 小步提交并 `git push`** 同步到 GitHub 作为备份与回滚点。
 - **PR（可选）**：仅在需要多人协作、外部审查、或重大高风险改动时才使用 PR；否则视为不必要开销。
 - **Doc Sync**：任何“环境假设/核心规则/提速策略”的变更，必须同步更新 `GEMINI.md`、`CLAUDE.md`、`AGENTS.md` 三个上下文文件。
+- **Playwright WebServer 复用（重要）**：E2E 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **交付收尾（强约束）**：每个 Feature 完成后必须执行：`git push` → 合并到 `main`（`--no-ff`）→ `git push` → 删除除 `main` 之外所有本地/远端分支（保持仓库整洁）→ 使用 `gh` 检查 GitHub Actions，确保主干始终为绿。
 
 ## Governance
@@ -110,3 +111,4 @@ Constitution supersedes all other practices. Amendments require documentation an
 - Feature 028：工作流状态机标准化（`public.manuscript_status`）+ Editor 新增 Process 列表与详情页（`/editor/process`、`/editor/manuscript/[id]`）。
 - Feature 029：完善 Editor 稿件详情页（文档分组 + Invoice Info 编辑），并将 invoice_metadata 的变更记录写入审计日志（`status_transition_logs.payload`）。
 - Feature 030：审稿人库（Reviewer Library）与指派解耦：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），指派弹窗改为只从库中检索并保持列表不跳动；新增 `is_reviewer_active` 与 `reviewer_search_text`（trigram GIN）以保证 1k+ 检索性能。
+- Feature 032：Process List 增强（`q` 搜索、多条件过滤、URL 驱动过滤栏、Quick Pre-check 一键状态流转）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。

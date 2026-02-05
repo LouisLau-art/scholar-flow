@@ -6,22 +6,6 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
   await page.context().setExtraHTTPHeaders({ 'x-scholarflow-e2e': '1' })
 }
 
-function buildPipeline(args: {
-  approved?: any[]
-  published?: any[]
-}) {
-  return {
-    pending_quality: [],
-    under_review: [],
-    pending_decision: [],
-    revision_requested: [],
-    resubmitted: [],
-    rejected: [],
-    approved: args.approved ?? [],
-    published: args.published ?? [],
-  }
-}
-
 test.describe('Publish workflow (mocked backend)', () => {
   test('Editor uploads final PDF then publishes', async ({ page }) => {
     await enableE2EAuthBypass(page)
@@ -31,16 +15,18 @@ test.describe('Publish workflow (mocked backend)', () => {
     const manuscriptTitle = 'Mocked Post-Acceptance Manuscript'
     const nowIso = new Date().toISOString()
 
-    let approvedRow: any = {
+    let manuscript: any = {
       id: manuscriptId,
       title: manuscriptTitle,
-      status: 'approved',
-      invoice_amount: 1000,
-      invoice_status: 'paid',
+      status: 'proofreading',
       final_pdf_path: null,
       updated_at: nowIso,
+      invoice: { amount: 1000, status: 'paid' },
+      signed_files: {
+        original_manuscript: { signed_url: 'https://example.com/original.pdf', path: `${manuscriptId}/v1.pdf` },
+        peer_review_reports: [],
+      },
     }
-    let published: any[] = []
 
     await page.route('**/api/v1/**', async (route) => {
       const req = route.request()
@@ -62,56 +48,35 @@ test.describe('Publish workflow (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      if (pathname === '/api/v1/editor/pipeline') {
-        return fulfillJson(route, 200, {
-          success: true,
-          data: buildPipeline({
-            approved: [approvedRow],
-            published,
-          }),
-        })
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}`) {
+        return fulfillJson(route, 200, { success: true, data: manuscript })
       }
 
       if (pathname === `/api/v1/manuscripts/${manuscriptId}/production-file` && req.method() === 'POST') {
-        approvedRow = { ...approvedRow, final_pdf_path: `production/${manuscriptId}/final.pdf` }
-        return fulfillJson(route, 200, { success: true, data: { final_pdf_path: approvedRow.final_pdf_path } })
+        manuscript = { ...manuscript, final_pdf_path: `production/${manuscriptId}/final.pdf`, updated_at: new Date().toISOString() }
+        return fulfillJson(route, 200, { success: true, data: { final_pdf_path: manuscript.final_pdf_path } })
       }
 
-      if (pathname === '/api/v1/editor/publish' && req.method() === 'POST') {
-        published = [{ id: manuscriptId, title: manuscriptTitle, status: 'published', updated_at: nowIso }]
-        return fulfillJson(route, 200, { success: true, data: { ...approvedRow, status: 'published' } })
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/production/advance` && req.method() === 'POST') {
+        manuscript = { ...manuscript, status: 'published', updated_at: new Date().toISOString() }
+        return fulfillJson(route, 200, { success: true, data: { new_status: 'published' } })
       }
 
-      return route.fallback()
+      // 默认兜底：避免 Next rewrites 代理到 127.0.0.1:8000（单测环境下可能未启动后端）
+      return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto('/dashboard?tab=editor')
+    await page.goto(`/editor/manuscript/${manuscriptId}`)
+    await expect(page.getByTestId('production-status-card')).toBeVisible()
 
-    await expect(page.getByTestId('editor-pipeline')).toBeVisible()
-
-    // Approved 卡片存在
-    await page.getByRole('button', { name: /Approved/i }).click()
-    await expect(page.getByText(manuscriptTitle)).toBeVisible()
-
-    // 未上传最终稿时，Publish 应禁用
-    const publishBtn = page.getByTestId('editor-publish').first()
-    await expect(publishBtn).toBeDisabled()
-
-    // Upload Final PDF
-    await page.getByRole('button', { name: 'Upload Final PDF' }).first().click()
+    // 上传最终稿
+    await page.getByRole('button', { name: 'Upload Final PDF' }).click()
     const fixture = path.join(__dirname, '..', 'fixtures', 'revised.pdf')
     await page.setInputFiles('input[type="file"]', fixture)
     await page.getByRole('button', { name: 'Upload' }).click()
 
-    // 上传后 Publish 可用
-    await expect(publishBtn).toBeEnabled()
-
-    // Publish
-    await publishBtn.click()
-
-    // Published 列表应出现该稿件
-    await page.getByRole('button', { name: /Published/i }).click()
-    await expect(page.getByText(manuscriptTitle)).toBeVisible()
+    // Publish（proofreading -> published）
+    await page.getByRole('button', { name: 'Publish' }).click()
+    await expect(page.getByTestId('production-stage')).toHaveText('Published')
   })
 })
-

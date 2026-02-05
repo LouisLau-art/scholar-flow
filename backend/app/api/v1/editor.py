@@ -17,6 +17,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 from app.services.reviewer_service import ReviewerService
+from app.services.editor_service import EditorService, ProcessListFilters
+from typing import Literal
 
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
@@ -44,6 +46,11 @@ class InvoiceInfoUpdatePayload(BaseModel):
     affiliation: str | None = None
     apc_amount: float | None = Field(default=None, ge=0)
     funding_info: str | None = None
+
+
+class QuickPrecheckPayload(BaseModel):
+    decision: Literal["approve", "reject", "revision"]
+    comment: str | None = Field(default=None, max_length=2000)
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
@@ -93,6 +100,7 @@ def _is_missing_column_error(error_text: str) -> bool:
 
 @router.get("/manuscripts/process")
 async def get_manuscripts_process(
+    q: str | None = Query(None, description="搜索（Title / UUID 精确匹配，可选）"),
     journal_id: str | None = Query(None, description="期刊筛选（可选）"),
     status: list[str] | None = Query(None, description="状态筛选（可选，多选）"),
     owner_id: str | None = Query(None, description="Internal Owner（可选）"),
@@ -107,85 +115,61 @@ async def get_manuscripts_process(
     - id, created_at, updated_at, status, owner_id, editor_id, journal_id, journals(title,slug)
     - owner/editor 的 profile（full_name/email）
     """
-    db = supabase_admin
     try:
-        q = (
-            db.table("manuscripts")
-            .select("id,created_at,updated_at,status,owner_id,editor_id,journal_id,journals(title,slug)")
-            .order("created_at", desc=True)
+        rows = EditorService().list_manuscripts_process(
+            filters=ProcessListFilters(
+                q=q,
+                statuses=status,
+                journal_id=journal_id,
+                editor_id=editor_id,
+                owner_id=owner_id,
+                manuscript_id=manuscript_id,
+            )
         )
-
-        if manuscript_id:
-            q = q.eq("id", manuscript_id)
-        if journal_id:
-            q = q.eq("journal_id", journal_id)
-        if owner_id:
-            q = q.eq("owner_id", owner_id)
-        if editor_id:
-            q = q.eq("editor_id", editor_id)
-        if status:
-            normalized: list[str] = []
-            for s in status:
-                n = normalize_status(s)
-                if n is None:
-                    raise HTTPException(status_code=422, detail=f"Invalid status: {s}")
-                normalized.append(n)
-            q = q.in_("status", normalized)
-
-        resp = q.execute()
-        rows = getattr(resp, "data", None) or []
-
-        profile_ids: set[str] = set()
-        for r in rows:
-            if r.get("owner_id"):
-                profile_ids.add(str(r["owner_id"]))
-            if r.get("editor_id"):
-                profile_ids.add(str(r["editor_id"]))
-
-        profiles_map: dict[str, dict] = {}
-        if profile_ids:
-            try:
-                prof = (
-                    db.table("user_profiles")
-                    .select("id,email,full_name,roles")
-                    .in_("id", sorted(profile_ids))
-                    .execute()
-                )
-                for p in (getattr(prof, "data", None) or []):
-                    pid = str(p.get("id") or "")
-                    if pid:
-                        profiles_map[pid] = p
-            except Exception as e:
-                print(f"[Process] load user_profiles failed (ignored): {e}")
-
-        for r in rows:
-            oid = str(r.get("owner_id") or "")
-            eid = str(r.get("editor_id") or "")
-            r["owner"] = (
-                {
-                    "id": oid,
-                    "full_name": (profiles_map.get(oid) or {}).get("full_name"),
-                    "email": (profiles_map.get(oid) or {}).get("email"),
-                }
-                if oid
-                else None
-            )
-            r["editor"] = (
-                {
-                    "id": eid,
-                    "full_name": (profiles_map.get(eid) or {}).get("full_name"),
-                    "email": (profiles_map.get(eid) or {}).get("email"),
-                }
-                if eid
-                else None
-            )
-
         return {"success": True, "data": rows}
     except HTTPException:
         raise
     except Exception as e:
         print(f"[Process] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch manuscripts process")
+
+
+@router.post("/manuscripts/{id}/quick-precheck")
+async def quick_precheck(
+    id: str,
+    payload: QuickPrecheckPayload,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    032 / US2: 高频“Pre-check”快操作（无需进入详情页）。
+
+    decision 映射：
+    - approve  -> under_review
+    - revision -> minor_revision
+    - reject   -> rejected
+    """
+    decision = payload.decision
+    comment = (payload.comment or "").strip() or None
+
+    if decision in {"reject", "revision"} and not comment:
+        raise HTTPException(status_code=422, detail="comment is required for reject/revision")
+
+    svc = EditorialService()
+    ms = svc.get_manuscript(id)
+    current_status = normalize_status(str(ms.get("status") or "")) or ""
+    if current_status != "pre_check":
+        raise HTTPException(status_code=400, detail=f"Quick pre-check only allowed for pre_check. Current: {current_status}")
+
+    to_status = "under_review" if decision == "approve" else "minor_revision" if decision == "revision" else "rejected"
+    updated = svc.update_status(
+        manuscript_id=id,
+        to_status=to_status,
+        changed_by=str(current_user.get("id")),
+        comment=comment,
+        allow_skip=False,
+    )
+    return {"success": True, "data": updated}
 
 
 @router.get("/manuscripts/{id}")

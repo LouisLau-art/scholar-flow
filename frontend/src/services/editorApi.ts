@@ -1,6 +1,7 @@
 import { authService } from '@/services/auth'
 
 export type ManuscriptsProcessFilters = {
+  q?: string
   journalId?: string
   manuscriptId?: string
   statuses?: string[]
@@ -31,6 +32,7 @@ export const EditorApi = {
 
   async getManuscriptsProcess(filters: ManuscriptsProcessFilters) {
     const params = new URLSearchParams()
+    if (filters.q) params.set('q', filters.q)
     if (filters.journalId) params.set('journal_id', filters.journalId)
     if (filters.manuscriptId) params.set('manuscript_id', filters.manuscriptId)
     if (filters.ownerId) params.set('owner_id', filters.ownerId)
@@ -70,6 +72,15 @@ export const EditorApi = {
     return res.json()
   },
 
+  async confirmInvoicePaid(manuscriptId: string) {
+    const res = await authedFetch('/api/v1/editor/invoices/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manuscript_id: manuscriptId }),
+    })
+    return res.json()
+  },
+
   async updateInvoiceInfo(
     manuscriptId: string,
     payload: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string }
@@ -87,6 +98,16 @@ export const EditorApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner_id: ownerId }),
+    })
+    return res.json()
+  },
+
+  // Feature 032: Quick Actions
+  async quickPrecheck(manuscriptId: string, payload: { decision: 'approve' | 'reject' | 'revision'; comment?: string }) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/quick-precheck`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     })
     return res.json()
   },

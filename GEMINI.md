@@ -43,7 +43,7 @@
   - **录用与门禁**：录用进入 `approved` 并创建/更新 `invoices`；**Publish 必须通过 Payment Gate**（`amount>0` 且 `status!=paid` 时禁止发布）。
   - **账单 PDF（Feature 026）**：录用后生成并持久化 Invoice PDF（WeasyPrint + Storage `invoices`），回填 `invoices.pdf_path` 供作者/编辑下载。
   - **Production Gate（可选）**：为提速 MVP，`final_pdf_path` 门禁默认关闭；如需强制 Production Final PDF，设置 `PRODUCTION_GATE_ENABLED=1`（启用后 `final_pdf_path` 为空将禁止发布；云端可执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql` 补齐字段）。
-  - **人工确认到账（MVP）**：Editor 在 Pipeline 的 Approved 卡片上可点 `Mark Paid`，调用 `POST /api/v1/editor/invoices/confirm` 把 invoice 标记为 `paid` 后才能发布。
+  - **人工确认到账（MVP）**：Editor 在稿件详情页 `/editor/manuscript/[id]` 的 Production 卡片上可点 `Mark Paid`，调用 `POST /api/v1/editor/invoices/confirm` 把 invoice 标记为 `paid` 后才能发布。
   - **云端数据清理**：若云端存在 `status='revision_required'` 的旧数据，需要在 Supabase Dashboard 的 SQL Editor 执行 `supabase/migrations/20260203120000_status_cleanup.sql`（或直接跑其中的 `update public.manuscripts ...`）以迁移到 `rejected`。
 
 ## MVP 已砍/延期清单（提速约束，三份文档需一致）
@@ -51,7 +51,7 @@
 - **全量 RLS**：MVP 主要靠后端鉴权 + `service_role`；不强制把 `manuscripts/review_assignments/review_reports` 的 RLS 全补齐（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：保留 schema/占位即可，不做真实注册与异步任务闭环。
 - **查重**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不进入关键链路。
-- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor Pipeline 的 `approved` 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
+- **Finance 页面**：仅作 UI 演示/占位；MVP 的财务入口在 Editor 稿件详情页 `/editor/manuscript/[id]` 的 Production 卡片（`Mark Paid` + Payment Gate）。Finance 页不与云端 `invoices` 同步。
 - **通知群发**：MVP 禁止给所有 editor/admin 群发通知（会引发云端 mock 用户导致的 409 日志刷屏）；仅通知 `owner_id/editor_id` 或作者本人。
 - **修订 Response Letter 图片上传**：MVP 不做上传到 Storage；改为前端压缩后以 Data URL 内嵌（有体积限制）。
 
@@ -268,6 +268,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **E2E 鉴权说明**：`frontend/src/middleware.ts` 在 **非生产环境** 且请求头带 `x-scholarflow-e2e: 1`（或 Supabase Auth 不可用）时，允许从 Supabase session cookie 解析用户用于 Playwright；生产环境不会启用该降级逻辑。
 - **测试提速（分层策略）**：开发中默认跑 Tier-1：`./scripts/test-fast.sh`（可用 `BACKEND_TESTS=...` / `FRONTEND_TESTS=...` 只跑相关用例）；提 PR 前/合并前必须跑全量：`./scripts/run-all-tests.sh`，确保主干永远保持绿。
 - **CI-like 一键测试**：`./scripts/run-all-tests.sh` 默认跑 `backend pytest` + `frontend vitest` + mocked E2E（`frontend/tests/e2e/specs/*.spec.ts`）。可用 `PLAYWRIGHT_PORT` 改端口，`E2E_SPEC` 指定单个 spec。若要跑全量 Playwright：`E2E_FULL=1 ./scripts/run-all-tests.sh`（脚本会尝试启动 `uvicorn main:app --port 8000`，可用 `BACKEND_PORT` 覆盖）。
+- **Playwright WebServer 复用（重要）**：`frontend/playwright.config.ts` 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-04）
@@ -279,9 +280,11 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 028（Workflow 状态机标准化）**：`manuscripts.status` 迁移到枚举 `public.manuscript_status`（见 `supabase/migrations/20260204000000_update_manuscript_status.sql`），新增审计表 `status_transition_logs`（见 `supabase/migrations/20260204000002_create_transition_logs.sql`）；Editor 新增 Process 列表 `/editor/process`（API：`GET /api/v1/editor/manuscripts/process`）与详情页 `/editor/manuscript/[id]`；稿件详情读取使用 `GET /api/v1/manuscripts/by-id/{id}` 以避免路由吞噬 `/upload`。
 - **Feature 029（稿件详情页与 Invoice Info）**：完善 `/editor/manuscript/[id]`：页头展示 Title/Authors/Owner/APC 状态/Updated Time（YYYY-MM-DD HH:mm）；文档分组为 `Cover Letter`、`Original Manuscript`、`Peer Review Reports`（Editor-only，附件走后端 signed URL）；支持编辑 `invoice_metadata`（Authors/Affiliation/APC Amount/Funding Info）并在审计表写入 before/after（`status_transition_logs.payload`，见 `supabase/migrations/20260204193000_status_transition_logs_payload.sql`）。
 - **Feature 030（Reviewer Library）**：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），并在稿件详情页 `/editor/manuscript/[id]` 提供 `Manage Reviewers` 入口；指派弹窗改为只从 Reviewer Library 检索（不再“Invite New”直接发邮件），且选中时不触发列表重排（避免 UI 跳动）。
+- **Feature 032（Process List 增强）**：Process API 支持 `q` 搜索 + 多条件过滤；前端过滤栏改为 URL 驱动（仅 `q` debounce 自动落地）；新增 Quick Pre-check（`pre_check` 一键：Under Review / Minor Revision / Rejected）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 032-enhance-process-list: Process filters (URL-driven), quick pre-check, safer Playwright webServer behavior
 - 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
 - 029-manuscript-details-invoice: Added Manuscript Details docs grouping + invoice metadata editing/audit payload
 - 028-workflow-status-standardization: Standardized `manuscripts.status` enum + transition logs + editor process view

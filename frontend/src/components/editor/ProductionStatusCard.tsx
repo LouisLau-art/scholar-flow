@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
 import { getStatusLabel } from '@/lib/statusStyles'
+import ProductionUploadDialog from '@/components/ProductionUploadDialog'
 
 type Props = {
   manuscriptId: string
@@ -80,6 +81,21 @@ export function ProductionStatusCard({
 
   const showAdvance = nextStatus != null
   const showRevert = prevStatus != null
+  const paymentOk = isPaid(invoice)
+  const shouldShowMarkPaid = !paymentOk
+  const shouldShowUpload = effectiveStatus !== 'published'
+
+  async function markPaid() {
+    const toastId = toast.loading('Confirming payment…')
+    try {
+      const res = await EditorApi.confirmInvoicePaid(manuscriptId)
+      if (!res?.success) throw new Error(res?.detail || res?.message || 'Confirm payment failed')
+      toast.success('Payment confirmed.', { id: toastId })
+      await onReload?.()
+    } catch (e: any) {
+      toast.error(e instanceof Error ? e.message : 'Confirm payment failed', { id: toastId })
+    }
+  }
 
   async function runAdvance() {
     if (!nextStatus) return
@@ -175,6 +191,36 @@ export function ProductionStatusCard({
               </span>
             </div>
             <div className="text-slate-500">Note: Production Gate may be disabled in MVP.</div>
+          </div>
+        ) : null}
+
+        {shouldShowUpload ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-slate-500">Final PDF</span>
+              <span className="font-mono text-[11px] text-slate-700 truncate max-w-[180px]" title={finalPdfPath || ''}>
+                {finalPdfPath ? 'Uploaded' : 'Missing'}
+              </span>
+            </div>
+            <ProductionUploadDialog
+              manuscriptId={manuscriptId}
+              disabled={pending != null}
+              onUploaded={async () => {
+                await onReload?.()
+              }}
+            />
+          </div>
+        ) : null}
+
+        {shouldShowMarkPaid ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Payment</span>
+              <span className="text-amber-700 font-medium">Pending</span>
+            </div>
+            <Button type="button" variant="outline" className="w-full" onClick={markPaid} disabled={pending != null}>
+              Mark Paid
+            </Button>
           </div>
         ) : null}
 
