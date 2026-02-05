@@ -274,6 +274,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-05）
+- **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
 - **Feature 037（Spec 就绪，待实现）**：审稿邀请支持 Reviewer 先预览再 **Accept/Decline**；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
 - **Analytics 导出按钮**：Excel/CSV 不再同时显示“导出中...”，改为“按格式单独 loading 文案 + 全局禁用避免并发导出”。
@@ -285,11 +286,14 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 030（Reviewer Library）**：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），并在稿件详情页 `/editor/manuscript/[id]` 提供 `Manage Reviewers` 入口；指派弹窗改为只从 Reviewer Library 检索（不再“Invite New”直接发邮件），且选中时不触发列表重排（避免 UI 跳动）。
 - **Feature 032（Process List 增强）**：Process API 支持 `q` 搜索 + 多条件过滤；前端过滤栏改为 URL 驱动（仅 `q` debounce 自动落地）；新增 Quick Pre-check（`pre_check` 一键：Under Review / Minor Revision / Rejected）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
 - **Feature 033（详情页布局对齐）**：重构 `/editor/manuscript/[id]`：顶部 Header (Title/Authors/Funding/APC/Owner/Editor)、文件区三卡（Cover/Original/Peer Review + Upload）、Invoice Info 移到底部表格；新增 Editor-only 上传 peer review file 接口 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment`，文件写入 `review-attachments` 私有桶并记录到 `public.manuscript_files`。
+- **Feature 036 (内部协作与详情页升级)**：重构稿件详情页为双栏布局（左侧信息/文件/评论，右侧流程/审计）；新增 `internal_comments` 表用于内部沟通（Notebook）；集成 `status_transition_logs` 可视化审计时间轴；文件下载中心化管理。
 - **Portal（UAT 线上稳定性）**：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异（`order(desc=...)`）与云端 schema 漂移（缺失 `authors`/`published_at`）导致的 500；作者显示不再返回 `Unknown`，且不会泄露明文邮箱。
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 038-precheck-role-workflow: Spec for ME→AE→EIC pre-check role workflow + audit timestamps
 - 037-reviewer-invite-response: Spec for reviewer accept/decline + due date + timeline stamps
+- 036-internal-collaboration: Refactored detail page (2-col), added Internal Notebook, Audit Log, and centralized File Hub
 - 033-align-detail-layout: Align editor manuscript detail layout (header/files/invoice) + editor-only peer review file upload
 - 032-enhance-process-list: Process filters (URL-driven), quick pre-check, safer Playwright webServer behavior
 - 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
