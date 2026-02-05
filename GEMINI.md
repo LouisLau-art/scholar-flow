@@ -274,6 +274,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-05）
+- **Feature 037（Spec 就绪，待实现）**：审稿邀请支持 Reviewer 先预览再 **Accept/Decline**；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
 - **Analytics 导出按钮**：Excel/CSV 不再同时显示“导出中...”，改为“按格式单独 loading 文案 + 全局禁用避免并发导出”。
 - **Reviewer 修回上下文**：审稿弹窗展示作者修回材料（Response Letter/内嵌图片），并补齐审稿附件下载入口。
@@ -289,6 +290,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 037-reviewer-invite-response: Spec for reviewer accept/decline + due date + timeline stamps
 - 036-internal-collaboration: Refactored detail page (2-col), added Internal Notebook, Audit Log, and centralized File Hub
 - 033-align-detail-layout: Align editor manuscript detail layout (header/files/invoice) + editor-only peer review file upload
 - 032-enhance-process-list: Process filters (URL-driven), quick pre-check, safer Playwright webServer behavior

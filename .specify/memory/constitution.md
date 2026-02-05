@@ -107,6 +107,7 @@ Constitution supersedes all other practices. Amendments require documentation an
 ## 近期关键修复快照（2026-02-05）
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
 - Reviewer：补齐修回上下文展示与审稿附件下载；收紧版本历史接口 reviewer 权限。
+- Feature 037（Spec 就绪，待实现）：审稿邀请支持 Reviewer 先预览再 Accept/Decline；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
 - Feature 024：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
 - Feature 028：工作流状态机标准化（`public.manuscript_status`）+ Editor 新增 Process 列表与详情页（`/editor/process`、`/editor/manuscript/[id]`）。
 - Feature 029：完善 Editor 稿件详情页（文档分组 + Invoice Info 编辑），并将 invoice_metadata 的变更记录写入审计日志（`status_transition_logs.payload`）。
