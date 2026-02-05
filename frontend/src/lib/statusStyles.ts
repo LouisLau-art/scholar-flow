@@ -74,3 +74,7 @@ export function getStatusBadgeClass(status: ManuscriptStatus): string {
   }
 }
 
+// Backward-compatible alias used by some pages/components.
+export function getStatusColor(status: ManuscriptStatus): string {
+  return getStatusBadgeClass(status)
+}

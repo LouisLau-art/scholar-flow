@@ -21,6 +21,24 @@ from app.services.editor_service import EditorService, ProcessListFilters
 from typing import Literal
 from uuid import uuid4
 
+router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
+
+
+class InternalCommentPayload(BaseModel):
+    content: str
+
+
+class InvoiceInfoUpdatePayload(BaseModel):
+    authors: str | None = None
+    affiliation: str | None = None
+    apc_amount: float | None = Field(default=None, ge=0)
+    funding_info: str | None = None
+
+
+class QuickPrecheckPayload(BaseModel):
+    decision: Literal["approve", "reject", "revision"]
+    comment: str | None = Field(default=None, max_length=2000)
+
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
     """
@@ -60,10 +78,6 @@ def _ensure_bucket_exists(bucket: str, *, public: bool = False) -> None:
 def _is_missing_table_error(error_text: str) -> bool:
     t = (error_text or "").lower()
     return "does not exist" in t and "manuscript_files" in t
-
-
-    return "does not exist" in t and "manuscript_files" in t
-
 
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
@@ -206,24 +220,6 @@ async def get_audit_logs(
         if "does not exist" in str(e):
              return {"success": True, "data": []}
         raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
-
-
-class InvoiceInfoUpdatePayload(BaseModel):
-    authors: str | None = None
-    affiliation: str | None = None
-    apc_amount: float | None = Field(default=None, ge=0)
-    funding_info: str | None = None
-
-
-class InternalCommentPayload(BaseModel):
-    content: str
-
-
-class QuickPrecheckPayload(BaseModel):
-    decision: Literal["approve", "reject", "revision"]
-    comment: str | None = Field(default=None, max_length=2000)
-
-router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 
 
 def _extract_supabase_data(response):
