@@ -3,14 +3,15 @@
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
-import { ArrowRight, Users, Gavel } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
+import { ManuscriptActions } from '@/components/editor/ManuscriptActions'
 
 export type ProcessRow = {
   id: string
+  title?: string
   created_at?: string
   updated_at?: string
   status?: string
@@ -31,11 +32,13 @@ export function ManuscriptTable({
   onAssign,
   onDecide,
   onOwnerBound,
+  onRowUpdated,
 }: {
   rows: ProcessRow[]
   onAssign?: (row: ProcessRow) => void
   onDecide?: (row: ProcessRow) => void
   onOwnerBound?: () => void
+  onRowUpdated?: (updated: { id: string; status?: string; updated_at?: string }) => void
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto" data-testid="editor-process-table">
@@ -99,16 +102,7 @@ export function ManuscriptTable({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" className="h-8 gap-2 border-slate-200 text-slate-700 hover:bg-slate-100" onClick={() => onAssign?.(r)}>
-                        <Users className="h-3.5 w-3.5" />
-                        Assign
-                      </Button>
-                      <Button size="sm" className="h-8 gap-2 bg-slate-900 hover:bg-slate-800" onClick={() => onDecide?.(r)}>
-                        <Gavel className="h-3.5 w-3.5" />
-                        Decide
-                      </Button>
-                    </div>
+                    <ManuscriptActions row={r} onAssign={onAssign} onDecide={onDecide} onRowUpdated={onRowUpdated} />
                   </TableCell>
                 </TableRow>
               )

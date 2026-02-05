@@ -61,8 +61,17 @@ npm run test:run
 echo ""
 echo "3️⃣  运行前端 E2E 测试（Playwright/Chromium）..."
 echo "-----------------------------------------------"
-# 默认用 3001，避免本地常见的 3000 端口冲突；可通过 PLAYWRIGHT_PORT 覆盖
-export PLAYWRIGHT_PORT="${PLAYWRIGHT_PORT:-3001}"
+# 默认从 3100 起找空闲端口，避免误复用其他项目的 dev server（Nuxt/Next 等）。
+# 可通过 PLAYWRIGHT_PORT 覆盖。
+if [ -z "${PLAYWRIGHT_PORT:-}" ]; then
+    for p in $(seq 3100 3199); do
+        if ! ss -ltn "sport = :$p" 2>/dev/null | tail -n +2 | grep -q LISTEN; then
+            export PLAYWRIGHT_PORT="$p"
+            break
+        fi
+    done
+fi
+export PLAYWRIGHT_PORT="${PLAYWRIGHT_PORT:-3100}"
 
 # 默认只跑“可脱离真实后端”的 mocked E2E（更接近 CI 可重复性）。
 # 若你希望跑全量 E2E（可能依赖后端 HTTP 服务 / 真实 Supabase），设置 E2E_FULL=1。
@@ -88,8 +97,16 @@ if [ "$E2E_FULL" = "1" ]; then
 
     CI=1 npx playwright test --project=chromium
 else
-    echo "ℹ️  默认仅跑：$E2E_SPEC（mocked backend，不需要 8000 后端服务）"
-    CI=1 npx playwright test "$E2E_SPEC" --project=chromium
+    echo "ℹ️  默认仅跑：$E2E_SPEC（mocked backend）"
+    echo "ℹ️  启动本地 mock backend (127.0.0.1:8000) 兜底 /api/v1/*，避免 Next rewrites 触发 ECONNREFUSED"
+
+    python3 ../scripts/mock_backend_server.py --host 127.0.0.1 --port 8000 > /tmp/scholarflow-mock-backend.log 2>&1 &
+    MOCK_BACKEND_PID="$!"
+    trap 'kill -TERM "$MOCK_BACKEND_PID" 2>/dev/null || true' EXIT
+
+    # 中文注释：允许使用 glob（默认 tests/e2e/specs/*.spec.ts），不要把参数整体 quote 掉，否则 Playwright 找不到文件。
+    # shellcheck disable=SC2086
+    CI=1 npx playwright test $E2E_SPEC --project=chromium
 fi
 
 cd ..

@@ -152,22 +152,22 @@ test.describe('Revision workflow (mocked backend)', () => {
     await page.getByRole('tab', { name: /Editor/i }).click()
 
     await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    await expect(page.getByText(manuscriptId)).toBeVisible()
+    const table = page.getByTestId('editor-process-table')
+    await expect(table.getByText(manuscriptId)).toBeVisible()
 
     // 打开决策面板
-    const row = page.locator('tr', { hasText: manuscriptId })
-    await row.getByRole('button', { name: 'Decide' }).click()
+    await page.getByTestId(`decide-${manuscriptId}`).click()
     await expect(page.getByRole('heading', { name: 'Final Decision' })).toBeVisible()
 
     // 选择 Request Revision -> Minor -> 填写说明 -> 提交
-    await page.getByText('Request Revision').click()
+    await page.getByText('Request Revision', { exact: true }).click()
     await page.getByRole('radio', { name: 'Minor Revision', exact: true }).click()
     await page.locator('textarea').fill('Please fix the formatting and update references.')
     await page.getByRole('button', { name: 'Submit Decision' }).click()
 
     // 回到 process 表后，应看到状态变为 Minor Revision
     await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    await expect(page.getByText('Minor Revision')).toBeVisible()
+    await expect(table.getByText('Minor Revision')).toBeVisible()
   })
 
   test('Author submits revision flow (button visibility + submit)', async ({ page }) => {
@@ -218,7 +218,8 @@ test.describe('Revision workflow (mocked backend)', () => {
     await page.getByRole('tab', { name: /Editor/i }).click()
 
     await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    await expect(page.getByText(manuscriptId)).toBeVisible()
-    await expect(page.getByText('Resubmitted')).toBeVisible()
+    const table = page.getByTestId('editor-process-table')
+    await expect(table.getByText(manuscriptId)).toBeVisible()
+    await expect(table.getByText('Resubmitted')).toBeVisible()
   })
 })
