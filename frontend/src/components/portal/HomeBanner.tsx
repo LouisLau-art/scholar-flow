@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site-config";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export function HomeBanner() {
   return (
@@ -19,9 +20,12 @@ export function HomeBanner() {
             Impact Factor: {siteConfig.impact_factor}
           </Badge>
         </div>
-        <Button size="lg" asChild className="px-10 h-12 text-lg">
-          <Link href={siteConfig.links.submit}>Submit Manuscript</Link>
-        </Button>
+        <Link 
+          href={siteConfig.links.submit}
+          className={cn(buttonVariants({ size: "lg" }), "px-10 h-12 text-lg")}
+        >
+          Submit Manuscript
+        </Link>
       </div>
     </section>
   );
