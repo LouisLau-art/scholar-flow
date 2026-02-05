@@ -1,0 +1,7 @@
+- [x] T001 Create `internal_comments` table migration
+- [x] T002 Implement Backend API for comments (`GET/POST`) & audit logs (`GET`)
+- [x] T003 Create Frontend `InternalNotebook` component
+- [x] T004 Create Frontend `AuditLogTimeline` component
+- [x] T005 Create Frontend `FileHubCard` component
+- [x] T006 Refactor `/editor/manuscript/[id]` page layout (2-column)
+- [x] T007 Integrate all components and verify data loading
