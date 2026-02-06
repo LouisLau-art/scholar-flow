@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>upgrade_plan_v2</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="doc_style.css" />
+</head>
+<body>
+<h1 id="scholarflow-期刊投稿与审稿系统升级方案-v2.0">ScholarFlow
+期刊投稿与审稿系统升级方案 (v2.0)</h1>
+<p><strong>日期</strong>: 2026-02-05 <strong>受众</strong>: 鲁总 /
+业务负责人 <strong>状态</strong>: 规划中</p>
+<h2 id="项目背景与目标">1. 项目背景与目标</h2>
+<p>根据最新的业务需求分析，我们需要将现有的 ScholarFlow
+系统从一个基础的投稿系统升级为一个<strong>全流程、商业化、高度自动化</strong>的出版管理平台（类似
+MDPI/Frontiers 模式）。</p>
+<p><strong>核心差异点（本次升级重点）：</strong> 1.
+<strong>销售/归属权管理（Owner
+Binding）</strong>：引入“特刊编辑/归属人（Owner）”概念，用于追踪业务员/编辑的业绩（拉稿绩效）。
+2.
+<strong>学术与行政分离</strong>：明确<strong>内部行政编辑（AE/ME）</strong>负责流程跑腿，<strong>外部学术编辑（主编/编委）</strong>掌握生杀大权（初审与终审）。
+3.
+<strong>前台与后台分离的审稿流</strong>：审稿人不需要注册繁琐账号，通过“Magic
+Link（魔术链接）”直接操作，降低门槛。 4.
+<strong>出版与财务并行</strong>：录用后立即进入排版，但上线前必须经过<strong>财务门禁</strong>（款项结清）。</p>
+<hr />
+<h2 id="核心业务流程图-flowcharts">2. 核心业务流程图 (Flowcharts)</h2>
+<h3 id="稿件全生命周期流程-宏观视角">2.1 稿件全生命周期流程
+(宏观视角)</h3>
+<p>这张图展示了稿件从投稿到上线的完整路径。 * <strong>双重
+Pre-check</strong>：先由 <strong>ME</strong>
+完成投稿前期技术/行政审查，随后由 <strong>AE</strong> 跟进执行，最后交由
+<strong>学术主编/编委</strong> 进行学术初审。 *
+<strong>决策权分离</strong>：AE 负责邀请审稿人、催收报告，但最终的
+<strong>录用/拒稿/修回</strong> 决定由 <strong>学术主编</strong> 做出。
+*
+<strong>出版阶段</strong>：录用后，<strong>财务流程</strong>与<strong>制作流程</strong>并行，最终在“上线”节点汇合。</p>
+<figure>
+<img src="doc_artifacts/flow_lifecycle.png" alt="稿件全生命周期流程" />
+<figcaption aria-hidden="true">稿件全生命周期流程</figcaption>
+</figure>
+<hr />
+<h2 id="角色与权限体系-role-definition">3. 角色与权限体系 (Role
+Definition)</h2>
+<p>系统严格区分“公司内部员工”与“外部合作学者”。</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">角色类别</th>
+<th style="text-align: left;">角色名称</th>
+<th style="text-align: left;">英文缩写</th>
+<th style="text-align: left;">职责描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>公司高管</strong></td>
+<td style="text-align: left;"><strong>Publisher</strong></td>
+<td style="text-align: left;"><strong>Admin</strong></td>
+<td
+style="text-align: left;"><strong>出版人/系统总管</strong>。负责整个出版社系统，管理所有期刊与人员权限。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>公司员工</strong></td>
+<td style="text-align: left;"><strong>Managing Editor</strong></td>
+<td style="text-align: left;"><strong>ME</strong></td>
+<td
+style="text-align: left;"><strong>期刊负责人</strong>。负责新稿件入口审查（技术/行政）与
+AE 分配，并监督整体进度。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>公司员工</strong></td>
+<td style="text-align: left;"><strong>Assistant Editor</strong></td>
+<td style="text-align: left;"><strong>AE</strong></td>
+<td
+style="text-align: left;"><strong>助理编辑/操作主力</strong>。负责已通过入口审查稿件的具体跟进（送审、催审、修回跟进）。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>公司员工/合作</strong></td>
+<td style="text-align: left;"><strong>Special Issue Editor</strong></td>
+<td style="text-align: left;"><strong>Owner</strong></td>
+<td
+style="text-align: left;"><strong>业务编辑/归属人</strong>。负责“拉人头”（组稿/邀稿），通过此角色追踪<strong>销售业绩</strong>。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>外部学者</strong></td>
+<td style="text-align: left;"><strong>Editor-in-Chief /
+Board</strong></td>
+<td style="text-align: left;"><strong>EIC</strong></td>
+<td style="text-align: left;"><strong>主编/编委
+(教授)</strong>。挂靠的学术专家，不负责具体操作，但拥有<strong>Pre-check
+(学术把关)</strong> 和 <strong>Final Decision (终审)</strong>
+的最高决定权。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>外部学者</strong></td>
+<td style="text-align: left;"><strong>Reviewer</strong></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;"><strong>审稿专家</strong>。通过 Magic Link
+进行同行评审，无需登录后台。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>公司员工</strong></td>
+<td style="text-align: left;"><strong>Production</strong></td>
+<td style="text-align: left;">-</td>
+<td
+style="text-align: left;"><strong>制作编辑</strong>。负责排版、润色、处理校对。</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="关键功能模块设计-uml-diagrams">4. 关键功能模块设计 (UML
+Diagrams)</h2>
+<h3 id="审稿人邀请机制-sequence-diagram">4.1 审稿人邀请机制 (Sequence
+Diagram)</h3>
+<p><strong>痛点解决</strong>：以前需要审稿人注册账号才能审稿，转化率低。现在改为“先入库，后邀请，链接直达”。</p>
+<figure>
+<img src="doc_artifacts/seq_invite.svg" alt="审稿人邀请机制" />
+<figcaption aria-hidden="true">审稿人邀请机制</figcaption>
+</figure>
+<h3 id="稿件状态机-state-machine">4.2 稿件状态机 (State Machine)</h3>
+<p>这是系统流转的核心逻辑，清晰展示了 Revision 的分支逻辑以及 Production
+阶段的并行状态。</p>
+<figure>
+<img src="doc_artifacts/state_manuscript.png" alt="稿件状态机" />
+<figcaption aria-hidden="true">稿件状态机</figcaption>
+</figure>
+<hr />
+<h2 id="下一步实施计划-implementation-roadmap">5. 下一步实施计划
+(Implementation Roadmap)</h2>
+<p>基于目前的项目进度（已完成基础框架和部分编辑端重构），建议接下来的开发分为三个
+Sprint：</p>
+<h3
+id="阶段一质检与归属体系-sprint-1---high-priority">阶段一：质检与归属体系
+(Sprint 1 - High Priority)</h3>
+<ul>
+<li><strong>目标</strong>：完善稿件进入系统后的第一步管理，建立“行政分配
+-&gt; 学术初审”的流转机制。</li>
+<li><strong>功能点</strong>：
+<ol type="1">
+<li><p><strong>Pre-check 页面开发</strong>：</p>
+<ul>
+<li>ME 视图：新稿件入口审查（技术/行政）+ 分配 AE。</li>
+<li>AE 视图：跟进执行（修回跟踪/外审推进）。</li>
+<li><strong>EIC 视图</strong>：学术初审（Pass/Reject）。</li>
+</ul></li>
+<li><p><strong>Owner 绑定与详情页增强</strong>：</p>
+<ul>
+<li><strong>元数据</strong>：绑定 <code>Owner</code> (Special Issue
+Editor) 与 <code>AE</code>。</li>
+<li><strong>文件中心 (File Hub)</strong>：统一管理 Cover Letter,
+查重报告, 审稿附件等（提供下载，无需预览）。</li>
+<li><strong>内部协作
+(Notebook)</strong>：内部员工专用的评论区（带时间戳与人员信息），用于 AE
+与 ME/EIC 沟通。</li>
+<li><strong>审计日志 (Audit
+Log)</strong>：记录所有状态变更与操作历史。</li>
+</ul></li>
+<li><p><strong>APC 设置</strong>：确认版面费金额。</p>
+<blockquote>
+<p><strong>界面示意图</strong>：Editor Dashboard (Frontier Style) <img
+src="doc_artifacts/mock_dashboard.png"
+alt="Editor Dashboard Mockup" /></p>
+</blockquote>
+<blockquote>
+<p><strong>界面示意图</strong>：Internal Manuscript Detail (File Hub,
+Notebook, Audit Log) <img src="doc_artifacts/mock_detail.png"
+alt="Manuscript Detail Mockup" /></p>
+</blockquote></li>
+</ol></li>
+</ul>
+<h3
+id="阶段二审稿人库与-magic-link-sprint-2---core-value">阶段二：审稿人库与
+Magic Link (Sprint 2 - Core Value)</h3>
+<ul>
+<li><strong>目标</strong>：降低审稿门槛，建立私有专家库。</li>
+<li><strong>功能点</strong>：
+<ol type="1">
+<li><strong>Reviewer
+Library</strong>：独立的审稿人管理页面（增删改查）。</li>
+<li><strong>邀请弹窗重构</strong>：从库中搜索 -&gt; 发送邮件。</li>
+<li><strong>Token 机制与工作台开发</strong>：
+<ul>
+<li><strong>PDF 预览</strong>：审稿人无需下载即可在线阅读。</li>
+<li><strong>双向评论 (Dual Comments)</strong>：区分“致作者 (Visible to
+Author)”和“致编辑 (Confidential to Editor)”的评论框。</li>
+<li><strong>隔离机制</strong>：审稿人互不可见，只能看到自己的对话。</li>
+</ul>
+<blockquote>
+<p><strong>界面示意图</strong>：Reviewer Workspace (PDF Preview + Dual
+Comments) <img src="doc_artifacts/mock_reviewer.png"
+alt="Reviewer Landing Mockup" /></p>
+</blockquote></li>
+<li><strong>文件预览</strong>：审稿人落地页需集成 PDF 预览功能。</li>
+</ol></li>
+</ul>
+<h3
+id="阶段三财务门禁与出版流-sprint-3---revenue-safety">阶段三：财务门禁与出版流
+(Sprint 3 - Revenue Safety)</h3>
+<ul>
+<li><strong>目标</strong>：确保“先付钱，后上线”，同时不阻塞制作进度。</li>
+<li><strong>功能点</strong>：
+<ol type="1">
+<li><strong>Invoice 生成器</strong>：基于录用稿件信息，自动生成 PDF
+账单。</li>
+<li><strong>并行工作流</strong>：录用后状态自动变更为
+<code>Approved / In Production</code>，同时触发财务通知。</li>
+<li><strong>作者校对
+(Proofreading)</strong>：开发在线或邮件触发的校对确认环节。</li>
+<li><strong>出版门禁逻辑</strong>：在“Publish”按钮增加<strong>双重校验</strong>（Invoice
+Paid + Author Confirmed），缺一不可。</li>
+</ol></li>
+</ul>
+<hr />
+<p><strong>附：技术术语解释</strong> * <strong>APC (Article Processing
+Charge)</strong>: 文章处理费，开源期刊的主要收入来源。 * <strong>Magic
+Link</strong>: 一种免密码登录技术，用户点击邮件链接即可获得临时权限。 *
+<strong>QC (Quality Check)</strong>: 稿件初筛/质检。 *
+<strong>Production Gate</strong>:
+生产门禁，指系统强制要求满足特定条件（如付款）才能进入下一阶段。</p>
+</body>
+</html>

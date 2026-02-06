@@ -25,7 +25,7 @@
 *   **决策权分离**：AE 负责邀请审稿人、催收报告，但最终的 **录用/拒稿/修回** 决定由 **学术主编** 做出。
 *   **出版阶段**：录用后，**财务流程**与**制作流程**并行，最终在“上线”节点汇合。
 
-![稿件全生命周期流程](doc_artifacts/flow_lifecycle.svg)
+![稿件全生命周期流程](doc_artifacts/flow_lifecycle.png)
 
 ---
 
@@ -57,7 +57,7 @@
 
 这是系统流转的核心逻辑，清晰展示了 Revision 的分支逻辑以及 Production 阶段的并行状态。
 
-![稿件状态机](doc_artifacts/state_manuscript.svg)
+![稿件状态机](doc_artifacts/state_manuscript.png)
 
 ---
 
