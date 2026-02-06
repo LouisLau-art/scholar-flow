@@ -1,0 +1,132 @@
+openapi: 3.0.0
+info:
+  title: Pre-check Role Workflow API
+  version: 1.0.0
+paths:
+  /editor/intake:
+    get:
+      summary: List manuscripts in Intake Queue (ME)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of manuscripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManuscriptList'
+
+  /editor/workspace:
+    get:
+      summary: List manuscripts in AE Workspace (Technical Check)
+      description: Returns manuscripts assigned to current user (AE) in technical check stage.
+      responses:
+        '200':
+          description: List of manuscripts
+
+  /editor/academic:
+    get:
+      summary: List manuscripts in Academic Check Queue (EIC)
+      responses:
+        '200':
+          description: List of manuscripts
+
+  /editor/manuscripts/{id}/assign-ae:
+    post:
+      summary: ME assigns AE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ae_id:
+                  type: string
+                  format: uuid
+              required:
+                - ae_id
+      responses:
+        '200':
+          description: Assignment successful
+
+  /editor/manuscripts/{id}/submit-check:
+    post:
+      summary: AE submits technical check
+      description: Moves manuscript to Academic Check (EIC)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Submission successful
+
+  /editor/manuscripts/{id}/academic-check:
+    post:
+      summary: EIC completes academic check
+      description: Routes to Review or Decision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decision:
+                  type: string
+                  enum: [review, decision_phase]
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Check completed
+
+components:
+  schemas:
+    ManuscriptList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Manuscript'
+        total:
+          type: integer
+    Manuscript:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+        pre_check_status:
+          type: string
+        assistant_editor_id:
+          type: string
+          format: uuid

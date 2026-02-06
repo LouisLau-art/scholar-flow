@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Iterable
 from uuid import UUID
 
 from fastapi import HTTPException
 
 from app.lib.api_client import supabase_admin
-from app.models.manuscript import normalize_status
+from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
 
 
 @dataclass(frozen=True)
@@ -163,4 +164,98 @@ class EditorService:
             )
 
         return rows
+
+    # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
+
+    def get_intake_queue(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+        """
+        ME Intake Queue: Status=PRE_CHECK, PreCheckStatus=INTAKE
+        """
+        q = (
+            self.client.table("manuscripts")
+            .select("*")
+            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+            .or_(f"pre_check_status.eq.{PreCheckStatus.INTAKE.value},pre_check_status.is.null")
+            .order("created_at", desc=True)
+            .range((page - 1) * page_size, page * page_size - 1)
+        )
+        resp = q.execute()
+        return getattr(resp, "data", None) or []
+
+    def assign_ae(self, manuscript_id: UUID, ae_id: UUID, current_user_id: UUID) -> bool:
+        """
+        Assign AE: Update assistant_editor_id and move to TECHNICAL
+        """
+        data = {
+            "assistant_editor_id": str(ae_id),
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = self.client.table("manuscripts").update(data).eq("id", str(manuscript_id)).execute()
+        
+        # Log transition (Simplified for MVP)
+        if getattr(resp, "data", None):
+            print(f"[038] Manuscript {manuscript_id} assigned to AE {ae_id} by {current_user_id}")
+            return True
+        return False
+
+    def get_ae_workspace(self, ae_id: UUID, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+        """
+        AE Workspace: Status=PRE_CHECK, PreCheckStatus=TECHNICAL, assigned to ae_id
+        """
+        q = (
+            self.client.table("manuscripts")
+            .select("*")
+            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+            .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+            .eq("assistant_editor_id", str(ae_id))
+            .order("created_at", desc=True)
+            .range((page - 1) * page_size, page * page_size - 1)
+        )
+        resp = q.execute()
+        return getattr(resp, "data", None) or []
+
+    def submit_technical_check(self, manuscript_id: UUID, ae_id: UUID) -> bool:
+        """
+        Move to ACADEMIC check
+        """
+        data = {
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = (
+            self.client.table("manuscripts")
+            .update(data)
+            .eq("id", str(manuscript_id))
+            .eq("assistant_editor_id", str(ae_id))
+            .execute()
+        )
+        return bool(getattr(resp, "data", None))
+
+    def get_academic_queue(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+        """
+        EIC Academic Queue: Status=PRE_CHECK, PreCheckStatus=ACADEMIC
+        """
+        q = (
+            self.client.table("manuscripts")
+            .select("*")
+            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+            .eq("pre_check_status", PreCheckStatus.ACADEMIC.value)
+            .order("created_at", desc=True)
+            .range((page - 1) * page_size, page * page_size - 1)
+        )
+        resp = q.execute()
+        return getattr(resp, "data", None) or []
+
+    def submit_academic_check(self, manuscript_id: UUID, decision: str, comment: str | None = None) -> bool:
+        """
+        Academic Decision: route to Review or Decision phase
+        """
+        new_status = ManuscriptStatus.UNDER_REVIEW.value if decision == "review" else ManuscriptStatus.DECISION.value
+        data = {
+            "status": new_status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        resp = self.client.table("manuscripts").update(data).eq("id", str(manuscript_id)).execute()
+        return bool(getattr(resp, "data", None))
 

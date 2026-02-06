@@ -51,8 +51,9 @@ Pre-check</strong>：先由 <strong>ME</strong>
 完成投稿前期技术/行政审查，随后由 <strong>AE</strong> 跟进执行，最后交由
 <strong>学术主编/编委</strong> 进行学术初审。 *
 <strong>决策权分离</strong>：AE 负责邀请审稿人、催收报告，但最终的
-<strong>录用/拒稿/修回</strong> 决定由 <strong>学术主编</strong> 做出。
-*
+<strong>录用/拒稿/修回</strong> 决定由 <strong>学术主编</strong>
+做出。(特别修正：Under Review 状态下不可直接拒稿，必须先提交至
+<strong>Decision</strong> 阶段，再由主编发出拒稿决定。) *
 <strong>出版阶段</strong>：录用后，<strong>财务流程</strong>与<strong>制作流程</strong>并行，最终在“上线”节点汇合。</p>
 <figure>
 <img src="doc_artifacts/flow_lifecycle.png" alt="稿件全生命周期流程" />
@@ -140,12 +141,13 @@ Diagrams)</h2>
 Diagram)</h3>
 <p><strong>痛点解决</strong>：以前需要审稿人注册账号才能审稿，转化率低。现在改为“先入库，后邀请，链接直达”。</p>
 <figure>
-<img src="doc_artifacts/seq_invite.svg" alt="审稿人邀请机制" />
+<img src="doc_artifacts/seq_invite.png" alt="审稿人邀请机制" />
 <figcaption aria-hidden="true">审稿人邀请机制</figcaption>
 </figure>
 <h3 id="稿件状态机-state-machine">4.2 稿件状态机 (State Machine)</h3>
 <p>这是系统流转的核心逻辑，清晰展示了 Revision 的分支逻辑以及 Production
-阶段的并行状态。</p>
+阶段的并行状态。(修正注：严禁从 Under Review 直接跳转至
+Rejected。所有拒稿流程必须经过 Decision 节点。)</p>
 <figure>
 <img src="doc_artifacts/state_manuscript.png" alt="稿件状态机" />
 <figcaption aria-hidden="true">稿件状态机</figcaption>

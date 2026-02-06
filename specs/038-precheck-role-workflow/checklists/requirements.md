@@ -1,8 +1,8 @@
 # Specification Quality Checklist: Pre-check Role Workflow (ME → AE → EIC)
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-02-05  
-**Feature**: [specs/038-precheck-role-workflow/spec.md]
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-02-06
+**Feature**: [Link to spec.md](../spec.md)
 
 ## Content Quality
 
@@ -31,4 +31,6 @@
 
 ## Notes
 
-- 本 feature 聚焦 “Pre-check 角色分工与可审计决策链路”。审稿邀请、催审、制作阶段派单等属于后续阶段（见 `docs/upgrade_plan_v2.md` 的 Sprint 2/3）。
+- Spec looks solid and aligns with the ME -> AE -> EIC workflow requirement.
+- Success criteria time limits (30s, 5m) are good measurable targets for UAT.
+- Explicitly handles the "No direct reject" constraint (FR-007, SC-004).

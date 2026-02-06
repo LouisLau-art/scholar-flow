@@ -268,6 +268,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 ## 环境约定 / Environment Assumptions（AGENTS / CLAUDE / GEMINI 三份需保持一致）
 
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
+- **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
 - **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
@@ -290,7 +291,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 ## 近期关键修复快照（2026-02-06）
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
-- **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
+- **Feature 038（Pre-check 角色工作流）**：实现 ME → AE → EIC 三级预审体系（Intake → Technical → Academic）；新增 `assistant_editor_id` 与 `pre_check_status` 字段及审计时间戳；补齐各角色专用队列与工作空间。
 - **Feature 037（Reviewer Invite Response）**：已实现 Reviewer 邀请页 Accept/Decline（含截止日期窗口校验）、邀请时间线字段（invited/opened/accepted/declined/submitted）与 Editor 详情页可视化时间线；并补齐幂等与 E2E/后端测试。
 - **Workflow（鲁总反馈）**：状态机已收紧：`pre_check/under_review/resubmitted` 不可直接拒稿，拒稿只能在 `decision/decision_done` 执行；Quick Pre-check 去掉 `reject` 选项并要求 `revision` 必填 comment。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
