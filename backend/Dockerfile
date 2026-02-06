@@ -1,4 +1,5 @@
 FROM python:3.14-slim
+COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /usr/local/bin/uv
 
 # 关键修复：安装 gcc 和编译工具
 # Python 3.14 较新，pyroaring 等库需要现场编译，没有 gcc 会报错
@@ -37,8 +38,8 @@ USER user
 # 复制依赖并安装
 # 注意：此 Dockerfile 位于 backend/ 目录下，假设构建上下文也是 backend/
 COPY --chown=user:user requirements.txt .
-# 增加 --prefer-binary 优先使用预编译包，避免不必要的编译
-RUN pip install --no-cache-dir --upgrade --prefer-binary -r requirements.txt
+# 使用 uv 安装 Python 依赖（替换 pip，速度更快）
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # 复制后端代码
 COPY --chown=user:user . .

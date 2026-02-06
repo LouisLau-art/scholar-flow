@@ -38,11 +38,10 @@ cd "$ROOT_DIR/frontend"
 
 FRONTEND_TESTS="${FRONTEND_TESTS:-}"
 if [ -n "$FRONTEND_TESTS" ]; then
-  npm run test:run -- "$FRONTEND_TESTS"
+  bun run test:run -- "$FRONTEND_TESTS"
 else
-  npm run test:run
+  bun run test:run
 fi
 
 echo ""
 echo "✅ Tier-1 完成"
-

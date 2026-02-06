@@ -37,7 +37,7 @@ export default defineConfig({
   ...(shouldStartWebServer
     ? {
         webServer: {
-          command: `npm run dev -- --port ${playwrightPort}`,
+          command: `bun run dev -- --port ${playwrightPort}`,
           url: playwrightBaseURL,
           // 中文注释：CI 环境不允许复用“外部已有服务”，避免误连到其他项目的 3000/3001（导致 404/错误页面）。
           reuseExistingServer,

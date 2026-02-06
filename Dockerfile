@@ -1,4 +1,5 @@
 FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /usr/local/bin/uv
 
 # 关键修复：安装 gcc 和编译工具
 # 中文注释:
@@ -40,8 +41,8 @@ USER user
 # 复制依赖并安装
 # 注意：这里假设构建上下文是项目根目录，所以路径带 backend/
 COPY --chown=user:user backend/requirements.txt .
-# 增加 --prefer-binary 优先使用预编译包，避免不必要的编译
-RUN pip install --no-cache-dir --upgrade --prefer-binary -r requirements.txt
+# 使用 uv 安装 Python 依赖（替换 pip，速度更快）
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # 复制后端代码
 COPY --chown=user:user backend/ .

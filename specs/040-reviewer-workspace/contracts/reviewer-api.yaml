@@ -1,0 +1,94 @@
+openapi: 3.0.0
+info:
+  title: Reviewer Workspace API
+  version: 1.0.0
+paths:
+  /api/v1/reviewer/assignments/{assignment_id}/workspace:
+    get:
+      summary: Load workspace data (Manuscript + Draft)
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workspace data loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceData'
+
+  /api/v1/reviewer/assignments/{assignment_id}/attachments:
+    post:
+      summary: Upload reviewer attachment
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Attachment uploaded successfully
+  
+  /api/v1/reviewer/assignments/{assignment_id}/submit:
+    post:
+      summary: Finalize and submit review
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmission'
+      responses:
+        '200':
+          description: Review submitted successfully
+
+components:
+  schemas:
+    WorkspaceData:
+      type: object
+      properties:
+        manuscript:
+          type: object
+          properties:
+            title: { type: string }
+            pdf_url: { type: string }
+        review_report:
+          $ref: '#/components/schemas/ReviewSubmission'
+        permissions:
+          type: object
+          properties:
+            is_read_only: { type: boolean }
+
+    ReviewSubmission:
+      type: object
+      properties:
+        comments_for_author: { type: string }
+        confidential_comments_to_editor: { type: string }
+        recommendation:
+          type: string
+          enum: [accept, minor_revision, major_revision, reject]
+        attachments:
+          type: array
+          items: { type: string }
