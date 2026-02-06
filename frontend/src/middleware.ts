@@ -30,7 +30,8 @@ export async function middleware(req: NextRequest) {
   // 中文注释:
   // - /review/invite?token=... 是审稿人“免登录”入口。
   // - 这里在 Middleware 里做一次后端校验（签名/过期/撤销），然后写入 httpOnly cookie 作为“访客会话”。
-  // - 随后重定向到 /review/assignment/[id]，避免 token 长期暴露在地址栏（Referer 泄露风险）。
+  // - 随后重定向到 /review/invite?assignment_id=...（去掉 token，避免 Referer 泄露）。
+  // - Reviewer 明确 Accept 后，前端再跳转到 /reviewer/workspace/[id]。
   if (req.nextUrl.pathname === '/review/invite') {
     const token = req.nextUrl.searchParams.get('token')
     if (token) {
@@ -67,8 +68,8 @@ export async function middleware(req: NextRequest) {
       }
 
       const url = req.nextUrl.clone()
-      url.pathname = `/reviewer/workspace/${encodeURIComponent(assignmentId)}`
-      url.search = ''
+      url.pathname = '/review/invite'
+      url.search = `?assignment_id=${encodeURIComponent(assignmentId)}`
 
       const resp = NextResponse.redirect(url)
       resp.cookies.set({

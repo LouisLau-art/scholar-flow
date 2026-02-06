@@ -35,6 +35,19 @@ type ManuscriptDetail = {
   signed_files?: any
   files?: ManuscriptFile[] | null
   journals?: { title?: string } | null
+  reviewer_invites?: Array<{
+    id: string
+    reviewer_name?: string | null
+    reviewer_email?: string | null
+    status: string
+    due_at?: string | null
+    invited_at?: string | null
+    opened_at?: string | null
+    accepted_at?: string | null
+    declined_at?: string | null
+    submitted_at?: string | null
+    decline_reason?: string | null
+  }> | null
 }
 
 function allowedNext(status: string): string[] {
@@ -318,6 +331,42 @@ export default function EditorManuscriptDetailPage() {
                         </div>
                     )}
                 </CardContent>
+            </Card>
+
+            {/* Audit Log Timeline */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">Reviewer Invite Timeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(ms.reviewer_invites || []).length === 0 ? (
+                  <div className="text-sm text-slate-400 italic">No reviewer invitations yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(ms.reviewer_invites || []).map((item) => (
+                      <div key={item.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium text-slate-800 truncate">
+                            {item.reviewer_name || item.reviewer_email || item.id}
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase text-slate-700">
+                            {item.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-500">
+                          <div>Invited: {item.invited_at ? format(new Date(item.invited_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          <div>Opened: {item.opened_at ? format(new Date(item.opened_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          <div>Accepted: {item.accepted_at ? format(new Date(item.accepted_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          <div>Declined: {item.declined_at ? format(new Date(item.declined_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          <div>Submitted: {item.submitted_at ? format(new Date(item.submitted_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          <div>Due: {item.due_at ? format(new Date(item.due_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
+                          {item.decline_reason ? <div>Decline reason: {item.decline_reason}</div> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
             </Card>
 
             {/* Audit Log Timeline */}

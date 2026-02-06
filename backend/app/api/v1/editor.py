@@ -528,6 +528,87 @@ async def get_editor_manuscript_detail(
         if eid
         else None
     )
+
+    # Feature 037: Reviewer invite timeline（Editor 可见）
+    ms["reviewer_invites"] = []
+    try:
+        ra_resp = (
+            supabase_admin.table("review_assignments")
+            .select(
+                "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,decline_reason,decline_note,created_at"
+            )
+            .eq("manuscript_id", id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        ra_rows = getattr(ra_resp, "data", None) or []
+        reviewer_ids = sorted({str(r.get("reviewer_id") or "") for r in ra_rows if r.get("reviewer_id")})
+        reviewer_map: dict[str, dict] = {}
+        if reviewer_ids:
+            try:
+                rp = (
+                    supabase_admin.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", reviewer_ids)
+                    .execute()
+                )
+                for p in (getattr(rp, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        reviewer_map[pid] = p
+            except Exception:
+                reviewer_map = {}
+
+        submitted_map: dict[str, str] = {}
+        try:
+            rr = (
+                supabase_admin.table("review_reports")
+                .select("reviewer_id,created_at,status")
+                .eq("manuscript_id", id)
+                .eq("status", "completed")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            for row in (getattr(rr, "data", None) or []):
+                rid = str(row.get("reviewer_id") or "")
+                if rid and rid not in submitted_map:
+                    submitted_map[rid] = str(row.get("created_at") or "")
+        except Exception:
+            submitted_map = {}
+
+        for row in ra_rows:
+            rid = str(row.get("reviewer_id") or "")
+            prof = reviewer_map.get(rid) or {}
+            status_raw = str(row.get("status") or "").lower()
+            if status_raw == "completed":
+                invite_state = "submitted"
+            elif status_raw == "declined" or row.get("declined_at"):
+                invite_state = "declined"
+            elif row.get("accepted_at"):
+                invite_state = "accepted"
+            else:
+                invite_state = "invited"
+
+            ms["reviewer_invites"].append(
+                {
+                    "id": row.get("id"),
+                    "reviewer_id": row.get("reviewer_id"),
+                    "reviewer_name": prof.get("full_name"),
+                    "reviewer_email": prof.get("email"),
+                    "status": invite_state,
+                    "due_at": row.get("due_at"),
+                    "invited_at": row.get("invited_at") or row.get("created_at"),
+                    "opened_at": row.get("opened_at"),
+                    "accepted_at": row.get("accepted_at"),
+                    "declined_at": row.get("declined_at"),
+                    "submitted_at": submitted_map.get(rid),
+                    "decline_reason": row.get("decline_reason"),
+                    "decline_note": row.get("decline_note"),
+                }
+            )
+    except Exception as e:
+        print(f"[ReviewerInvites] load failed (ignored): {e}")
+
     return {"success": True, "data": ms}
 
 

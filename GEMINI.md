@@ -290,7 +290,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
 - **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
-- **Feature 037（Spec 就绪，待实现）**：审稿邀请支持 Reviewer 先预览再 **Accept/Decline**；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
+- **Feature 037（Reviewer Invite Response）**：已实现 Reviewer 邀请页 Accept/Decline（含截止日期窗口校验）、邀请时间线字段（invited/opened/accepted/declined/submitted）与 Editor 详情页可视化时间线；并补齐幂等与 E2E/后端测试。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
 - **Analytics 导出按钮**：Excel/CSV 不再同时显示“导出中...”，改为“按格式单独 loading 文案 + 全局禁用避免并发导出”。
 - **Reviewer 修回上下文**：审稿弹窗展示作者修回材料（Response Letter/内嵌图片），并补齐审稿附件下载入口。
@@ -306,10 +306,10 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 037-reviewer-invite-response: Implemented reviewer accept/decline + due date window + invite timeline + editor visibility + tests
 - 040-reviewer-workspace: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `react-pdf` or native iframe (Frontend), `fastapi` (Backend)
 - 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
-- 038-precheck-role-workflow: Spec for ME→AE→EIC pre-check role workflow + audit timestamps
 
 ## Active Technologies
-- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `react-pdf` or native iframe (Frontend), `fastapi` (Backend) (040-reviewer-workspace)
-- Supabase Storage (for PDF retrieval + Attachment upload), PostgreSQL (Metadata) (040-reviewer-workspace)
+- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `fastapi`, `next.js` (037-reviewer-invite-response)
+- PostgreSQL (`review_assignments`, `manuscript_status_logs`?) (037-reviewer-invite-response)
