@@ -67,7 +67,7 @@ export async function middleware(req: NextRequest) {
       }
 
       const url = req.nextUrl.clone()
-      url.pathname = `/review/assignment/${encodeURIComponent(assignmentId)}`
+      url.pathname = `/reviewer/workspace/${encodeURIComponent(assignmentId)}`
       url.search = ''
 
       const resp = NextResponse.redirect(url)

@@ -20,6 +20,7 @@
 ## 关键环境假设（必须一致）
 - **Supabase 使用云端项目**（非本地 DB 作为默认）；迁移优先用 `supabase` CLI（`supabase login` / `supabase link` / `supabase db push --linked`），必要时可在 Dashboard 的 SQL Editor 手动执行迁移 SQL。
 - **环境变量与密钥**：真实密钥只放本地/CI/平台 Secrets；仓库只保留模板（`.env.example` / `backend/.env.example` / `frontend/.env.local.example`），严禁提交 `SUPABASE_SERVICE_ROLE_KEY` 等敏感信息。
+- **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **日志**：`./start.sh` 会同时将前后端日志输出到终端，并持久化到 `logs/backend-*.log` / `logs/frontend-*.log`，最新别名为 `logs/backend.log` / `logs/frontend.log`。
 - **AI 推荐模型（本地 CPU，部署友好）**：Matchmaking 默认使用纯 Python 的 hash-embedding（`backend/app/core/ml.py`），避免 `sentence-transformers/torch` 导致部署构建过慢或失败；如需更智能的语义匹配，可在“本地/专用环境”额外安装 `sentence-transformers`，系统会自动启用并可配置缓存（`HF_HOME` / `SENTENCE_TRANSFORMERS_HOME`，配合 `MATCHMAKING_LOCAL_FILES_ONLY=1` 强制离线）。`./start.sh` 仍会默认设置 `HF_ENDPOINT=https://hf-mirror.com`（可覆盖）。
 - **公开文章 PDF 预览**：`/articles/[id]` 不依赖前端直连 Storage（匿名会 400/权限不一致），统一走后端 `GET /api/v1/manuscripts/articles/{id}/pdf-signed` 返回 `signed_url`；同时 `GET /api/v1/manuscripts/articles/{id}` 仅返回 `status='published'` 的稿件。
@@ -41,6 +42,10 @@
   - Cookie：`sf_review_magic`（JWT，绑定 `assignment_id` + `reviewer_id` + `manuscript_id` + scope）。
   - 后端：`POST /api/v1/auth/magic-link/verify`；Reviewer 免登录接口 `GET/POST /api/v1/reviews/magic/assignments/...`。
   - 密钥：必须设置 `MAGIC_LINK_JWT_SECRET`（严禁复用 `SUPABASE_SERVICE_ROLE_KEY`）。
+- **Reviewer Workspace（Feature 040）**：
+  - 前端路由：`/reviewer/workspace/[id]`（沉浸式双栏，最小头部，无全站 footer）。
+  - 后端接口：`GET /api/v1/reviewer/assignments/{id}/workspace`、`POST /api/v1/reviewer/assignments/{id}/attachments`、`POST /api/v1/reviewer/assignments/{id}/submit`。
+  - 安全策略：所有接口必须通过 `sf_review_magic` scope 校验，并严格校验 `assignment_id` 与 `reviewer_id` 归属关系。
 - **Invoice PDF（Feature 026）**：后端需配置 `INVOICE_PAYMENT_INSTRUCTIONS` / `INVOICE_SIGNED_URL_EXPIRES_IN`，并确保云端已应用 `supabase/migrations/20260204120000_invoice_pdf_fields.sql` 与 `supabase/migrations/20260204121000_invoices_bucket.sql`。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
@@ -102,10 +107,10 @@ pytest -m concurrent            # 并发请求测试
 ### 前端测试
 ```bash
 cd frontend
-npm run test                    # 运行单元测试 (Vitest)
-npm run test:coverage           # 运行单元测试并生成覆盖率
-npm run test:e2e                # 运行 E2E 测试 (Playwright)
-npm run test:e2e:ui             # 在 UI 模式下运行 E2E 测试
+bun run test                    # 运行单元测试 (Vitest)
+bun run test:coverage           # 运行单元测试并生成覆盖率
+bun run test:e2e                # 运行 E2E 测试 (Playwright)
+bun run test:e2e:ui             # 在 UI 模式下运行 E2E 测试
 ```
 
 ### 综合测试
@@ -270,6 +275,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 033（Manuscript Files）迁移**：云端需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`（新增 `public.manuscript_files` 用于 editor 上传 peer review files），否则 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment` 会返回 “DB not migrated”。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
+- **分支发布约束（强制）**：GitHub 远端只保留 `main` 作为长期分支；功能开发可在本地短分支进行，但完成后必须合入 `main` 并删除本地/远端功能分支，禁止在 GitHub 长期保留 `0xx-*` 分支。
 - **交付收尾（强约束）**：每个 Feature 完成后必须执行：`git push` → 合并到 `main`（`--no-ff`）→ `git push` → 删除除 `main` 之外所有本地/远端分支 → 用 `gh` 检查 GitHub Actions，确保主干始终为绿。
 - **GitHub 分支发布策略（强约束）**：推送到 GitHub 的提交**只能进入 `main`**；禁止将 `0xx-*` 等 feature 分支推到远端长期保留。可在本地临时建分支开发，但发布时必须以 `main` 为唯一远端分支。
 - **上下文同步（强约束）**：任何 Agent 在完成重大功能规划、实施环境变更（如新路由、新表字段、新环境变量）后，**必须立即同步更新** `GEMINI.md`、`CLAUDE.md` 和 `AGENTS.md` 的“近期关键修复快照”和“环境约定”部分，确保全系统 Agent 认知一致。
@@ -281,6 +287,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-05）
+- **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
 - **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
 - **Feature 037（Spec 就绪，待实现）**：审稿邀请支持 Reviewer 先预览再 **Accept/Decline**；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
@@ -299,6 +306,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 040-reviewer-workspace: Dedicated reviewer workspace route + APIs + tests (immersive layout, dual comments, attachments, readonly-after-submit)
 - 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
 - 038-precheck-role-workflow: Spec for ME→AE→EIC pre-check role workflow + audit timestamps
 - 037-reviewer-invite-response: Spec for reviewer accept/decline + due date + timeline stamps

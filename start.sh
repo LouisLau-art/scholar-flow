@@ -59,6 +59,7 @@ echo "🧹 Cleaning up old processes..."
 pkill -f "uvicorn main:app" || true
 pkill -f "next dev" || true
 pkill -f "pnpm dev" || true
+pkill -f "bun run dev" || true
 
 # 2.2 清理 Next.js dev 缓存（避免切分支/合并后 .next 里残留导致 404 / MODULE_NOT_FOUND）
 # 默认开启：宁可多花几秒重建，也避免出现大量“_next/static 404 / Cannot find module './xxx.js' / favicon 500”
@@ -95,8 +96,8 @@ BACKEND_TEE_PID=$!
 echo -e "${GREEN}⚛️  Starting Frontend (Next.js on :3000)...${NC}"
 (
   cd frontend || exit 1
-  # 确保 pnpm dev 的输出包含颜色
-  FORCE_COLOR=1 pnpm dev 2>&1 | stdbuf -oL -eL tee -a "../$FRONTEND_LOG"
+  # 确保 bun dev 的输出包含颜色
+  FORCE_COLOR=1 bun run dev 2>&1 | stdbuf -oL -eL tee -a "../$FRONTEND_LOG"
 ) &
 FRONTEND_TEE_PID=$!
 
@@ -114,6 +115,7 @@ cleanup() {
   pkill -f "uvicorn main:app" || true
   pkill -f "next dev" || true
   pkill -f "pnpm dev" || true
+  pkill -f "bun run dev" || true
   # 再杀 tee 管道（避免残留后台输出）
   kill "$BACKEND_TEE_PID" 2>/dev/null || true
   kill "$FRONTEND_TEE_PID" 2>/dev/null || true

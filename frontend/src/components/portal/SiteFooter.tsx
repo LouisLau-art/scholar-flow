@@ -1,7 +1,15 @@
+'use client'
+
 import Link from "next/link";
+import { usePathname } from 'next/navigation'
 import { siteConfig } from "@/config/site-config";
 
 export function SiteFooter() {
+  const pathname = usePathname()
+  if (pathname.startsWith('/reviewer/workspace/')) {
+    return null
+  }
+
   return (
     <footer className="bg-slate-900 text-slate-400 py-16 border-t border-slate-800">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-12 mb-12">

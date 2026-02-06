@@ -11,7 +11,8 @@ echo "🚀 生成测试覆盖率报告..."
 cd backend
 
 echo "📦 安装测试依赖..."
-pip install -r requirements.txt --break-system-packages 2>/dev/null || pip install -r requirements.txt
+uv pip install --system -r requirements.txt
+uv pip install --system -r requirements-dev.txt
 
 echo "🧪 运行后端测试并生成覆盖率报告..."
 pytest --cov=app --cov-report=html --cov-report=xml --cov-report=term-missing
@@ -25,10 +26,10 @@ cd ..
 cd frontend
 
 echo "📦 安装前端依赖..."
-npm install
+bun install
 
 echo "🧪 运行前端单元测试并生成覆盖率报告..."
-npm run test:coverage
+bun run test:coverage
 
 echo "📊 前端覆盖率报告已生成: frontend/coverage/index.html"
 

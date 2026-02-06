@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from postgrest.exceptions import APIError
+
 from app.lib.api_client import supabase_admin
+from app.schemas.review import ReviewSubmission, WorkspaceData
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 
 
@@ -205,3 +208,196 @@ class ReviewerService:
         resp = base.or_(ors).order("updated_at", desc=True).execute()
         return getattr(resp, "data", None) or []
 
+
+class ReviewerWorkspaceService:
+    """
+    Reviewer workspace domain service:
+    - Strict assignment ownership checks
+    - Aggregate manuscript + draft review report for workspace
+    - Handle attachment upload and final submission
+    """
+
+    def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
+        resp = (
+            supabase_admin.table("review_assignments")
+            .select("id, manuscript_id, reviewer_id, status")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        assignment = getattr(resp, "data", None) or {}
+        if not assignment:
+            raise ValueError("Assignment not found")
+        if str(assignment.get("reviewer_id") or "") != str(reviewer_id):
+            raise PermissionError("Assignment does not belong to current reviewer")
+        return assignment
+
+    def _get_pdf_signed_url(self, file_path: str, expires_in: int = 60 * 10) -> str:
+        # 中文注释: Reviewer 端仅使用短时效 signed URL，避免公开暴露原始路径。
+        signed = supabase_admin.storage.from_("manuscripts").create_signed_url(file_path, expires_in)
+        if isinstance(signed, dict):
+            value = signed.get("signedURL") or signed.get("signed_url")
+            if value:
+                return value
+        value = getattr(signed, "get", lambda _k, _d=None: None)("signedURL")
+        if value:
+            return value
+        data = getattr(signed, "data", None)
+        if isinstance(data, dict):
+            value = data.get("signedURL") or data.get("signed_url")
+            if value:
+                return value
+        raise ValueError("Failed to generate signed URL")
+
+    def _get_latest_review_report(self, *, manuscript_id: str, reviewer_id: str) -> Dict[str, Any] | None:
+        try:
+            rr = (
+                supabase_admin.table("review_reports")
+                .select("id,status,comments_for_author,confidential_comments_to_editor,recommendation,attachment_path")
+                .eq("manuscript_id", manuscript_id)
+                .eq("reviewer_id", reviewer_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(rr, "data", None) or []
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
+    def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        manuscript_id = str(assignment["manuscript_id"])
+
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,title,abstract,file_path")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+        )
+        manuscript = getattr(ms_resp, "data", None) or {}
+        if not manuscript:
+            raise ValueError("Manuscript not found")
+        file_path = str(manuscript.get("file_path") or "").strip()
+        if not file_path:
+            raise ValueError("Manuscript PDF not found")
+        pdf_url = self._get_pdf_signed_url(file_path)
+
+        report = self._get_latest_review_report(manuscript_id=manuscript_id, reviewer_id=str(reviewer_id))
+        attachments: list[str] = []
+        if report and report.get("attachment_path"):
+            attachments = [str(report["attachment_path"])]
+
+        is_read_only = str(assignment.get("status") or "").lower() == "completed"
+        can_submit = not is_read_only
+        recommendation = report.get("recommendation") if report else None
+        if recommendation is None and report and report.get("status") == "completed":
+            # 兼容历史数据：老数据可能没有 recommendation 字段
+            recommendation = "minor_revision"
+
+        return WorkspaceData.model_validate(
+            {
+                "manuscript": {
+                    "id": manuscript["id"],
+                    "title": manuscript.get("title") or "Untitled",
+                    "abstract": manuscript.get("abstract"),
+                    "pdf_url": pdf_url,
+                },
+                "review_report": {
+                    "id": report.get("id") if report else None,
+                    "status": (report or {}).get("status") or "pending",
+                    "comments_for_author": (report or {}).get("comments_for_author") or "",
+                    "confidential_comments_to_editor": (report or {}).get("confidential_comments_to_editor") or "",
+                    "recommendation": recommendation,
+                    "attachments": attachments,
+                },
+                "permissions": {"can_submit": can_submit, "is_read_only": is_read_only},
+            }
+        )
+
+    def upload_attachment(
+        self,
+        *,
+        assignment_id: UUID,
+        reviewer_id: UUID,
+        filename: str,
+        content: bytes,
+        content_type: str | None = None,
+    ) -> str:
+        self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        safe_name = (filename or "attachment").replace("/", "_")
+        object_path = f"assignments/{assignment_id}/{safe_name}"
+        supabase_admin.storage.from_("review-attachments").upload(
+            object_path,
+            content,
+            {"content-type": content_type or "application/octet-stream"},
+        )
+        return object_path
+
+    def submit_review(
+        self,
+        *,
+        assignment_id: UUID,
+        reviewer_id: UUID,
+        payload: ReviewSubmission,
+    ) -> Dict[str, Any]:
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        if str(assignment.get("status") or "").lower() == "completed":
+            raise ValueError("Review already submitted")
+
+        manuscript_id = str(assignment["manuscript_id"])
+        attachment_path = payload.attachments[-1] if payload.attachments else None
+        report_payload = {
+            "manuscript_id": manuscript_id,
+            "reviewer_id": str(reviewer_id),
+            "status": "completed",
+            "comments_for_author": payload.comments_for_author,
+            "confidential_comments_to_editor": payload.confidential_comments_to_editor or None,
+            "recommendation": payload.recommendation,
+            "attachment_path": attachment_path,
+            "content": payload.comments_for_author,
+            "score": 5,
+        }
+
+        existing = (
+            supabase_admin.table("review_reports")
+            .select("id")
+            .eq("manuscript_id", manuscript_id)
+            .eq("reviewer_id", str(reviewer_id))
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(existing, "data", None) or []
+        if rows:
+            try:
+                supabase_admin.table("review_reports").update(report_payload).eq("id", rows[0]["id"]).execute()
+            except APIError as e:
+                # 中文注释: 兼容历史 schema（缺字段 recommendation）避免直接 500。
+                if "recommendation" not in str(e).lower():
+                    raise
+                fallback_payload = {k: v for k, v in report_payload.items() if k != "recommendation"}
+                supabase_admin.table("review_reports").update(fallback_payload).eq("id", rows[0]["id"]).execute()
+        else:
+            try:
+                supabase_admin.table("review_reports").insert(report_payload).execute()
+            except APIError as e:
+                if "recommendation" not in str(e).lower():
+                    raise
+                fallback_payload = {k: v for k, v in report_payload.items() if k != "recommendation"}
+                supabase_admin.table("review_reports").insert(fallback_payload).execute()
+
+        supabase_admin.table("review_assignments").update({"status": "completed"}).eq("id", str(assignment_id)).execute()
+
+        # 当该稿件所有 assignment 都 completed 时，推进到 pending_decision
+        pending = (
+            supabase_admin.table("review_assignments")
+            .select("id")
+            .eq("manuscript_id", manuscript_id)
+            .neq("status", "completed")
+            .execute()
+        )
+        if not (getattr(pending, "data", None) or []):
+            supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq("id", manuscript_id).execute()
+
+        return {"success": True, "status": "completed"}

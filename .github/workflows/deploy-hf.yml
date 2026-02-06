@@ -25,11 +25,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           # 中文注释: huggingface_hub v1.x 默认提供 `hf` CLI（不再保证 `huggingface-cli` 命令存在）
-          python -m pip install "huggingface_hub[cli]"
+          uv tool install "huggingface_hub[cli]"
 
       - name: Push to Hub
         env:
@@ -39,7 +41,7 @@ jobs:
           # 中文注释:
           # - Dockerfile 依赖 backend/ 路径（COPY backend/requirements.txt 与 COPY backend/ .）
           # - 只同步 backend/，避免把根目录文件“铺平”进 Space
-          hf upload LouisShawn/scholarflow-api backend backend --repo-type space --token "$HF_TOKEN" --commit-message "Sync backend from GitHub: ${{ github.sha }}"
+          uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api backend backend --repo-type space --token "$HF_TOKEN" --commit-message "Sync backend from GitHub: ${{ github.sha }}"
           
           # 单独上传 Dockerfile (因为它在 GitHub 的根目录下)
-          hf upload LouisShawn/scholarflow-api Dockerfile Dockerfile --repo-type space --token "$HF_TOKEN" --commit-message "Sync Dockerfile from GitHub: ${{ github.sha }}"
+          uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api Dockerfile Dockerfile --repo-type space --token "$HF_TOKEN" --commit-message "Sync Dockerfile from GitHub: ${{ github.sha }}"

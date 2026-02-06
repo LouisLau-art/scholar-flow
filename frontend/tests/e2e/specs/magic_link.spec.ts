@@ -17,36 +17,47 @@ test.describe('Reviewer magic link (mocked)', () => {
       const url = new URL(req.url())
       const p = url.pathname
 
-      if (p === `/api/v1/reviews/magic/assignments/${a1}`) {
+      if (p === `/api/v1/auth/magic-link/verify`) {
         return fulfillJson(route, 200, {
           success: true,
           data: {
             assignment_id: a1,
-            reviewer_id: 'r1',
-            manuscript: { id: 'm1', title: 'Magic Link Manuscript A' },
-            review_report: null,
-            latest_revision: null,
           },
         })
       }
-      if (p === `/api/v1/reviews/magic/assignments/${a2}`) {
+      if (p === `/api/v1/reviewer/assignments/${a1}/workspace`) {
         return fulfillJson(route, 200, {
           success: true,
           data: {
-            assignment_id: a2,
-            reviewer_id: 'r2',
-            manuscript: { id: 'm2', title: 'Magic Link Manuscript B' },
-            review_report: null,
-            latest_revision: null,
+            manuscript: { id: 'm1', title: 'Magic Link Manuscript A', pdf_url: 'https://example.com/a.pdf' },
+            review_report: {
+              id: null,
+              status: 'pending',
+              comments_for_author: '',
+              confidential_comments_to_editor: '',
+              recommendation: 'minor_revision',
+              attachments: [],
+            },
+            permissions: { can_submit: true, is_read_only: false },
           },
         })
       }
-
-      if (p.endsWith('/pdf-signed')) {
-        return fulfillJson(route, 200, { success: true, data: { signed_url: 'https://example.com/x.pdf' } })
-      }
-      if (p.endsWith('/attachment-signed')) {
-        return fulfillJson(route, 200, { success: true, data: { signed_url: null } })
+      if (p === `/api/v1/reviewer/assignments/${a2}/workspace`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            manuscript: { id: 'm2', title: 'Magic Link Manuscript B', pdf_url: 'https://example.com/b.pdf' },
+            review_report: {
+              id: null,
+              status: 'pending',
+              comments_for_author: '',
+              confidential_comments_to_editor: '',
+              recommendation: 'minor_revision',
+              attachments: [],
+            },
+            permissions: { can_submit: true, is_read_only: false },
+          },
+        })
       }
 
       if (p.endsWith('/submit') && req.method() === 'POST') {
@@ -57,7 +68,8 @@ test.describe('Reviewer magic link (mocked)', () => {
     })
 
     await page.goto(`/review/invite?token=fake&assignment_id=${a1}`)
-    await expect(page.getByRole('heading', { name: 'Review Manuscript' })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${a1}$`))
+    await expect(page.getByText('Action Panel')).toBeVisible()
     await expect(page.getByText('Magic Link Manuscript A')).toBeVisible()
 
     await page.getByLabel('Comments for the Authors').fill('Looks good.')
@@ -69,4 +81,3 @@ test.describe('Reviewer magic link (mocked)', () => {
     await expect(page.getByLabel('Comments for the Authors')).toHaveValue('')
   })
 })
-

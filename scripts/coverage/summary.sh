@@ -34,7 +34,7 @@ elif [ -f "frontend/coverage/coverage-final.json" ]; then
     echo ""
 else
     echo "前端覆盖率报告未生成"
-    echo "运行: cd frontend && npm run test:coverage"
+    echo "运行: cd frontend && bun run test:coverage"
     echo ""
 fi
 

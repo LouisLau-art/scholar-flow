@@ -13,8 +13,10 @@ from urllib.parse import quote
 from fastapi import Cookie
 
 from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
+from app.schemas.review import ReviewSubmission
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
+from app.services.reviewer_service import ReviewerWorkspaceService
 
 router = APIRouter(tags=["Reviews"])
 
@@ -113,6 +115,74 @@ def _is_foreign_key_user_error(err: Exception, *, constraint: str) -> bool:
         return False
     text = str(err).lower()
     return ("23503" in text or "foreign key" in text) and constraint.lower() in text
+
+
+@router.get("/reviewer/assignments/{assignment_id}/workspace")
+async def get_reviewer_workspace_data(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    try:
+        data = ReviewerWorkspaceService().get_workspace_data(
+            assignment_id=assignment_id,
+            reviewer_id=payload.reviewer_id,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load workspace: {e}")
+    return {"success": True, "data": data.model_dump()}
+
+
+@router.post("/reviewer/assignments/{assignment_id}/attachments")
+async def upload_reviewer_workspace_attachment(
+    assignment_id: UUID,
+    file: UploadFile = File(...),
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Attachment cannot be empty")
+    try:
+        path = ReviewerWorkspaceService().upload_attachment(
+            assignment_id=assignment_id,
+            reviewer_id=payload.reviewer_id,
+            filename=file.filename or "attachment",
+            content=raw,
+            content_type=file.content_type,
+        )
+        signed_url = _get_signed_url_for_review_attachments_bucket(path, expires_in=60 * 5)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {e}")
+    return {"success": True, "data": {"path": path, "url": signed_url}}
+
+
+@router.post("/reviewer/assignments/{assignment_id}/submit")
+async def submit_reviewer_workspace_review(
+    assignment_id: UUID,
+    body: ReviewSubmission,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    try:
+        result = ReviewerWorkspaceService().submit_review(
+            assignment_id=assignment_id,
+            reviewer_id=payload.reviewer_id,
+            payload=body,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to submit review: {e}")
+    return {"success": True, "data": {"status": result.get("status", "completed"), "redirect_to": "/review/thank-you"}}
 
 
 # === 1. 分配审稿人 (Editor Task) ===

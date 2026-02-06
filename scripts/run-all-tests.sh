@@ -34,7 +34,8 @@ cd backend
 # 安装依赖（如果需要）
 if ! python3 -c "import pytest" 2>/dev/null; then
     echo "📦 安装后端测试依赖..."
-    pip install -r requirements.txt --break-system-packages 2>/dev/null || pip install -r requirements.txt
+    uv pip install --system -r requirements.txt
+    uv pip install --system -r requirements-dev.txt
 fi
 
 # 运行测试
@@ -51,12 +52,12 @@ cd frontend
 # 安装依赖（如果需要）
 if [ ! -d "node_modules" ]; then
     echo "📦 安装前端依赖..."
-    npm install
+    bun install
 fi
 
 # 运行测试
 echo "🧪 执行 Vitest..."
-npm run test:run
+bun run test:run
 
 echo ""
 echo "3️⃣  运行前端 E2E 测试（Playwright/Chromium）..."
@@ -95,7 +96,7 @@ if [ "$E2E_FULL" = "1" ]; then
         exit 1
     fi
 
-    CI=1 npx playwright test --project=chromium
+    CI=1 bunx playwright test --project=chromium
 else
     echo "ℹ️  默认仅跑：$E2E_SPEC（mocked backend）"
     echo "ℹ️  启动本地 mock backend (127.0.0.1:8000) 兜底 /api/v1/*，避免 Next rewrites 触发 ECONNREFUSED"
@@ -106,7 +107,7 @@ else
 
     # 中文注释：允许使用 glob（默认 tests/e2e/specs/*.spec.ts），不要把参数整体 quote 掉，否则 Playwright 找不到文件。
     # shellcheck disable=SC2086
-    CI=1 npx playwright test $E2E_SPEC --project=chromium
+    CI=1 bunx playwright test $E2E_SPEC --project=chromium
 fi
 
 cd ..

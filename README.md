@@ -58,6 +58,8 @@ Built with a "Glue Coding" philosophy, it leverages best-in-class open source co
 ### Prerequisites
 - Python 3.10+
 - Node.js 20+
+- Bun 1.3+
+- uv 0.9+
 - Docker (Optional, for local containerization)
 
 ### Installation
@@ -73,7 +75,7 @@ Built with a "Glue Coding" philosophy, it leverages best-in-class open source co
    cd backend
    python -m venv venv
    source venv/bin/activate
-   pip install -r requirements.txt
+   uv pip install -r requirements.txt
    
    # Set up .env
    cp .env.example .env
@@ -85,12 +87,12 @@ Built with a "Glue Coding" philosophy, it leverages best-in-class open source co
 3. **Frontend Setup**
    ```bash
    cd frontend
-   npm install
+   bun install
    
    # Set up .env.local
    echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
    
-   npm run dev
+   bun run dev
    ```
 
 ## 🐳 Deployment Architecture

@@ -24,6 +24,7 @@ Sync Impact Report:
 - **Tier 1（开发中，秒级/分钟级）**：只跑“相关/改动附近”的单测或单文件集成测试；必要时用 `-o addopts=` 跳过全局覆盖率门槛做快速回归。
 - **Tier 2（提 PR 前）**：跑后端 unit + 相关 integration + 前端 unit（Vitest），确保该 PR 的核心路径稳定。
 - **Tier 3（合并前/CI）**：跑全量（含覆盖率门槛与必要 E2E），例如 `./scripts/run-all-tests.sh`；主干永远保持绿。
+- **包管理器统一**：前端统一使用 `bun`，后端统一使用 `uv`；默认命令为 `bun run ...`、`uv pip ...`。
 
 ### III. 安全优先 (Security First)
 所有敏感操作必须鉴权。绝不允许未认证访问用户数据。使用 Supabase JWT 验证。设计阶段即考虑安全（Design Security）。
@@ -32,7 +33,7 @@ Sync Impact Report:
 必须及时提交代码至 GitHub，避免大量未提交的更改。必须时刻保持 `GEMINI.md`, `CLAUDE.md`, `AGENTS.md` 三个上下文文档的同步和统一，确保不同 Agent 获取的环境和规则信息一致。
 
 ### V. 环境与工具规范 (Environment & Tooling)
-遵循 Arch Linux 包管理优先级 (`pacman` > `paru` > `pip`/`npm`)。文档查询优先使用 `context7` 工具。始终使用中文交流。
+遵循 Arch Linux 包管理优先级（系统包 `pacman` > `paru`；项目依赖统一使用 `uv`/`bun`）。文档查询优先使用 `context7` 工具。始终使用中文交流。
 
 ## Technology Stack & Constraints
 
