@@ -57,7 +57,7 @@ function InviteLoadingFallback() {
 function ReviewInvitePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const assignmentId = searchParams.get('assignment_id') || ''
+  const assignmentId = searchParams?.get('assignment_id') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
