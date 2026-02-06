@@ -30,10 +30,11 @@
 1. 进入 **Editor Dashboard (主编工作台)**。
 2. 找到标题为 "Quantum Entanglement at Macroscopic Scales" (或类似的待处理稿件)。
 3. 点击进入详情页。
-4. 找到 **Decision (决策)** 面板。
-5. 选择 **Reject (拒稿)**。
-6. 在拒稿理由中选择 **Academic Misconduct (学术不端)**。
-7. 确认提交决策。
+4. 如果当前状态不是 `decision` / `decision_done`，先在 **Change Status** 中将稿件推进到决策阶段（例如 `Move to Decision Done`）。
+5. 找到 **Decision (决策)** 面板。
+6. 选择 **Reject (拒稿)**。
+7. 在拒稿理由中选择 **Academic Misconduct (学术不端)**。
+8. 确认提交决策。
 
 **预期结果**:
 - 稿件状态变更为 `Rejected`。
