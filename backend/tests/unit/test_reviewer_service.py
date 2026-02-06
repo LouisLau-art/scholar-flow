@@ -143,6 +143,7 @@ def test_workspace_access_denied_for_other_reviewer(supabase_admin):
             "manuscript_id": "m1",
             "reviewer_id": "00000000-0000-0000-0000-000000000099",
             "status": "pending",
+            "accepted_at": "2026-02-01T00:00:00Z",
         }
     )
 
@@ -163,6 +164,7 @@ def test_workspace_loads_and_returns_permissions(supabase_admin):
             "manuscript_id": "00000000-0000-0000-0000-000000000011",
             "reviewer_id": "00000000-0000-0000-0000-000000000002",
             "status": "pending",
+            "accepted_at": "2026-02-01T00:00:00Z",
         }
     )
 
@@ -206,6 +208,7 @@ def test_submit_review_marks_assignment_completed(supabase_admin):
                 "manuscript_id": "00000000-0000-0000-0000-000000000011",
                 "reviewer_id": str(reviewer_id),
                 "status": "pending",
+                "accepted_at": "2026-02-01T00:00:00Z",
             }
         ),
         _Resp(data=[{"id": str(assignment_id)}]),  # update assignment response

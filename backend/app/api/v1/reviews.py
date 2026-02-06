@@ -13,10 +13,10 @@ from urllib.parse import quote
 from fastapi import Cookie
 
 from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
-from app.schemas.review import ReviewSubmission
+from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, ReviewSubmission
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
-from app.services.reviewer_service import ReviewerWorkspaceService
+from app.services.reviewer_service import ReviewerInviteService, ReviewerWorkspaceService
 
 router = APIRouter(tags=["Reviews"])
 
@@ -135,6 +135,70 @@ async def get_reviewer_workspace_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load workspace: {e}")
     return {"success": True, "data": data.model_dump()}
+
+
+@router.get("/reviewer/assignments/{assignment_id}/invite")
+async def get_reviewer_invite_data(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    try:
+        data = ReviewerInviteService().get_invite_view(
+            assignment_id=assignment_id,
+            reviewer_id=payload.reviewer_id,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load invite view: {e}")
+    return {"success": True, "data": data.model_dump()}
+
+
+@router.post("/reviewer/assignments/{assignment_id}/accept")
+async def accept_reviewer_invitation(
+    assignment_id: UUID,
+    payload: InviteAcceptPayload,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    token_payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    try:
+        data = ReviewerInviteService().accept_invitation(
+            assignment_id=assignment_id,
+            reviewer_id=token_payload.reviewer_id,
+            payload=payload,
+        )
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to accept invitation: {e}")
+
+
+@router.post("/reviewer/assignments/{assignment_id}/decline")
+async def decline_reviewer_invitation(
+    assignment_id: UUID,
+    payload: InviteDeclinePayload,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    token_payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+    try:
+        data = ReviewerInviteService().decline_invitation(
+            assignment_id=assignment_id,
+            reviewer_id=token_payload.reviewer_id,
+            payload=payload,
+        )
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to decline invitation: {e}")
 
 
 @router.post("/reviewer/assignments/{assignment_id}/attachments")
@@ -258,20 +322,32 @@ async def assign_reviewer(
 
         # 中文注释: 默认给审稿任务 7 天期限，后续可改为按期刊/稿件类型配置
         due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-        res = (
-            # 中文注释: 使用 service_role 写入，避免云端 RLS/权限导致“写入成功但读取不到”的不一致体验
-            supabase_admin.table("review_assignments")
-            .insert(
-                {
-                    "manuscript_id": str(manuscript_id),
-                    "reviewer_id": str(reviewer_id),
-                    "status": "pending",
-                    "due_at": due_at,
-                    "round_number": current_version,
-                }
+        insert_payload = {
+            "manuscript_id": str(manuscript_id),
+            "reviewer_id": str(reviewer_id),
+            "status": "pending",
+            "due_at": due_at,
+            "invited_at": datetime.now(timezone.utc).isoformat(),
+            "round_number": current_version,
+        }
+        try:
+            res = (
+                # 中文注释: 使用 service_role 写入，避免云端 RLS/权限导致“写入成功但读取不到”的不一致体验
+                supabase_admin.table("review_assignments")
+                .insert(insert_payload)
+                .execute()
             )
-            .execute()
-        )
+        except Exception as insert_err:
+            # 兼容未迁移 037 的云端：移除 invited_at 再试一次
+            if "invited_at" in str(insert_err).lower() and "column" in str(insert_err).lower():
+                insert_payload.pop("invited_at", None)
+                res = (
+                    supabase_admin.table("review_assignments")
+                    .insert(insert_payload)
+                    .execute()
+                )
+            else:
+                raise
         # 更新稿件状态为评审中
         supabase_admin.table("manuscripts").update({"status": "under_review"}).eq(
             "id", str(manuscript_id)

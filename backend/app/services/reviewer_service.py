@@ -2,14 +2,25 @@ from __future__ import annotations
 
 import secrets
 import string
-from datetime import datetime, timezone
+import os
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from postgrest.exceptions import APIError
 
 from app.lib.api_client import supabase_admin
-from app.schemas.review import ReviewSubmission, WorkspaceData
+from app.schemas.review import (
+    InviteAcceptPayload,
+    InviteActionWindow,
+    InviteAssignmentState,
+    InviteDeclinePayload,
+    InviteManuscriptPreview,
+    InviteTimeline,
+    InviteViewData,
+    ReviewSubmission,
+    WorkspaceData,
+)
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 
 
@@ -209,6 +220,242 @@ class ReviewerService:
         return getattr(resp, "data", None) or []
 
 
+class ReviewerInviteService:
+    """
+    Feature 037: invitation response workflow service.
+
+    - 读取邀请态（invited/opened/accepted/declined/submitted）
+    - 处理 Accept/Decline 状态流转（幂等）
+    - 校验 due date 窗口
+    """
+
+    def _due_window_days(self) -> tuple[int, int]:
+        try:
+            min_days = int((os.environ.get("REVIEW_INVITE_DUE_MIN_DAYS") or "7").strip())
+        except Exception:
+            min_days = 7
+        try:
+            max_days = int((os.environ.get("REVIEW_INVITE_DUE_MAX_DAYS") or "10").strip())
+        except Exception:
+            max_days = 10
+        min_days = max(1, min_days)
+        max_days = max(min_days, max_days)
+        return min_days, max_days
+
+    def _build_due_window(self) -> InviteActionWindow:
+        min_days, max_days = self._due_window_days()
+        today = datetime.now(timezone.utc).date()
+        return InviteActionWindow(
+            min_due_date=today + timedelta(days=min_days),
+            max_due_date=today + timedelta(days=max_days),
+            default_due_date=today + timedelta(days=min_days),
+        )
+
+    def _derive_invite_state(self, assignment: Dict[str, Any]) -> str:
+        status = str(assignment.get("status") or "").lower()
+        if status == "completed":
+            return "submitted"
+        if status == "accepted":
+            return "accepted"
+        if status == "declined" or assignment.get("declined_at"):
+            return "declined"
+        if assignment.get("accepted_at"):
+            return "accepted"
+        return "invited"
+
+    def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
+        try:
+            resp = (
+                supabase_admin.table("review_assignments")
+                .select(
+                    "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note"
+                )
+                .eq("id", str(assignment_id))
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            # 兼容未应用 037 migration 的环境
+            if "column" in str(e).lower() and (
+                "invited_at" in str(e).lower()
+                or "accepted_at" in str(e).lower()
+                or "declined_at" in str(e).lower()
+            ):
+                resp = (
+                    supabase_admin.table("review_assignments")
+                    .select("id, manuscript_id, reviewer_id, status, due_at")
+                    .eq("id", str(assignment_id))
+                    .single()
+                    .execute()
+                )
+            else:
+                raise
+        assignment = getattr(resp, "data", None) or {}
+        if not assignment:
+            raise ValueError("Assignment not found")
+        if str(assignment.get("reviewer_id") or "") != str(reviewer_id):
+            raise PermissionError("Assignment does not belong to current reviewer")
+        return assignment
+
+    def _get_submitted_at(self, *, manuscript_id: str, reviewer_id: str) -> str | None:
+        try:
+            rr = (
+                supabase_admin.table("review_reports")
+                .select("created_at,status")
+                .eq("manuscript_id", manuscript_id)
+                .eq("reviewer_id", reviewer_id)
+                .eq("status", "completed")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(rr, "data", None) or []
+            return rows[0].get("created_at") if rows else None
+        except Exception:
+            return None
+
+    def get_invite_view(self, *, assignment_id: UUID, reviewer_id: UUID) -> InviteViewData:
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        opened_at = assignment.get("opened_at")
+        if not opened_at:
+            now_iso = _utc_now_iso()
+            try:
+                supabase_admin.table("review_assignments").update({"opened_at": now_iso}).eq(
+                    "id", str(assignment_id)
+                ).execute()
+                assignment["opened_at"] = now_iso
+            except Exception:
+                pass
+
+        manuscript_id = str(assignment.get("manuscript_id") or "")
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,title,abstract")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+        )
+        manuscript = getattr(ms_resp, "data", None) or {}
+        if not manuscript:
+            raise ValueError("Manuscript not found")
+
+        state = self._derive_invite_state(assignment)
+        submitted_at = self._get_submitted_at(manuscript_id=manuscript_id, reviewer_id=str(reviewer_id))
+        timeline = InviteTimeline(
+            invited_at=assignment.get("invited_at"),
+            opened_at=assignment.get("opened_at"),
+            accepted_at=assignment.get("accepted_at"),
+            declined_at=assignment.get("declined_at"),
+            submitted_at=submitted_at,
+        )
+        assignment_state = InviteAssignmentState(
+            assignment_id=UUID(str(assignment["id"])),
+            manuscript_id=UUID(manuscript_id),
+            reviewer_id=UUID(str(assignment["reviewer_id"])),
+            status=state,
+            due_at=assignment.get("due_at"),
+            decline_reason=assignment.get("decline_reason"),
+            decline_note=assignment.get("decline_note"),
+            timeline=timeline,
+        )
+        window = self._build_due_window()
+        return InviteViewData(
+            assignment=assignment_state,
+            manuscript=InviteManuscriptPreview(
+                id=UUID(str(manuscript["id"])),
+                title=str(manuscript.get("title") or "Untitled Manuscript"),
+                abstract=manuscript.get("abstract"),
+            ),
+            window=window,
+            can_open_workspace=state in {"accepted", "submitted"},
+        )
+
+    def accept_invitation(
+        self,
+        *,
+        assignment_id: UUID,
+        reviewer_id: UUID,
+        payload: InviteAcceptPayload,
+    ) -> Dict[str, Any]:
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        state = self._derive_invite_state(assignment)
+        if state == "submitted":
+            return {"status": "submitted", "idempotent": True, "due_at": assignment.get("due_at")}
+        if state == "declined":
+            raise ValueError("Invitation already declined")
+        if state == "accepted":
+            return {"status": "accepted", "idempotent": True, "due_at": assignment.get("due_at")}
+
+        window = self._build_due_window()
+        due_date = payload.due_date
+        if due_date < window.min_due_date or due_date > window.max_due_date:
+            raise ValueError(
+                f"Due date must be between {window.min_due_date.isoformat()} and {window.max_due_date.isoformat()}"
+            )
+
+        due_at_iso = datetime.combine(due_date, datetime.min.time(), tzinfo=timezone.utc).isoformat()
+        now_iso = _utc_now_iso()
+        try:
+            supabase_admin.table("review_assignments").update(
+                {
+                    "status": "pending",
+                    "accepted_at": now_iso,
+                    "due_at": due_at_iso,
+                    "declined_at": None,
+                    "decline_reason": None,
+                    "decline_note": None,
+                }
+            ).eq("id", str(assignment_id)).execute()
+        except Exception as e:
+            if "column" in str(e).lower() and "accepted_at" in str(e).lower():
+                supabase_admin.table("review_assignments").update(
+                    {
+                        "status": "accepted",
+                        "due_at": due_at_iso,
+                    }
+                ).eq("id", str(assignment_id)).execute()
+            else:
+                raise
+        return {"status": "accepted", "idempotent": False, "due_at": due_at_iso}
+
+    def decline_invitation(
+        self,
+        *,
+        assignment_id: UUID,
+        reviewer_id: UUID,
+        payload: InviteDeclinePayload,
+    ) -> Dict[str, Any]:
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        state = self._derive_invite_state(assignment)
+        if state == "submitted":
+            raise ValueError("Review already submitted")
+        if state == "accepted":
+            raise ValueError("Invitation already accepted")
+        if state == "declined":
+            return {"status": "declined", "idempotent": True}
+
+        now_iso = _utc_now_iso()
+        try:
+            supabase_admin.table("review_assignments").update(
+                {
+                    "status": "declined",
+                    "declined_at": now_iso,
+                    "decline_reason": payload.reason,
+                    "decline_note": (payload.note or "").strip() or None,
+                }
+            ).eq("id", str(assignment_id)).execute()
+        except Exception as e:
+            if "column" in str(e).lower() and "declined_at" in str(e).lower():
+                supabase_admin.table("review_assignments").update(
+                    {
+                        "status": "declined",
+                    }
+                ).eq("id", str(assignment_id)).execute()
+            else:
+                raise
+        return {"status": "declined", "idempotent": False}
+
+
 class ReviewerWorkspaceService:
     """
     Reviewer workspace domain service:
@@ -218,13 +465,27 @@ class ReviewerWorkspaceService:
     """
 
     def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
-        resp = (
-            supabase_admin.table("review_assignments")
-            .select("id, manuscript_id, reviewer_id, status")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
+        try:
+            resp = (
+                supabase_admin.table("review_assignments")
+                .select("id, manuscript_id, reviewer_id, status, accepted_at, declined_at, due_at")
+                .eq("id", str(assignment_id))
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            if "column" in str(e).lower() and (
+                "accepted_at" in str(e).lower() or "declined_at" in str(e).lower()
+            ):
+                resp = (
+                    supabase_admin.table("review_assignments")
+                    .select("id, manuscript_id, reviewer_id, status, due_at")
+                    .eq("id", str(assignment_id))
+                    .single()
+                    .execute()
+                )
+            else:
+                raise
         assignment = getattr(resp, "data", None) or {}
         if not assignment:
             raise ValueError("Assignment not found")
@@ -267,6 +528,11 @@ class ReviewerWorkspaceService:
 
     def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        state = ReviewerInviteService()._derive_invite_state(assignment)
+        if state == "declined":
+            raise PermissionError("Invitation has been declined")
+        if state == "invited":
+            raise PermissionError("Please accept invitation first")
         manuscript_id = str(assignment["manuscript_id"])
 
         ms_resp = (
@@ -343,8 +609,13 @@ class ReviewerWorkspaceService:
         payload: ReviewSubmission,
     ) -> Dict[str, Any]:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
-        if str(assignment.get("status") or "").lower() == "completed":
+        state = ReviewerInviteService()._derive_invite_state(assignment)
+        if state == "submitted":
             raise ValueError("Review already submitted")
+        if state == "declined":
+            raise ValueError("Invitation already declined")
+        if state == "invited":
+            raise ValueError("Please accept invitation first")
 
         manuscript_id = str(assignment["manuscript_id"])
         attachment_path = payload.attachments[-1] if payload.attachments else None

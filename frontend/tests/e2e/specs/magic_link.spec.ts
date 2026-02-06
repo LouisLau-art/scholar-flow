@@ -25,6 +25,37 @@ test.describe('Reviewer magic link (mocked)', () => {
           },
         })
       }
+      if (p === `/api/v1/reviewer/assignments/${a1}/invite`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            assignment: {
+              assignment_id: a1,
+              status: 'invited',
+              due_at: null,
+              decline_reason: null,
+              decline_note: null,
+              timeline: {
+                invited_at: '2026-02-01T00:00:00Z',
+                opened_at: '2026-02-01T00:01:00Z',
+                accepted_at: null,
+                declined_at: null,
+                submitted_at: null,
+              },
+            },
+            manuscript: { id: 'm1', title: 'Magic Link Manuscript A', abstract: null },
+            window: {
+              min_due_date: '2026-02-06',
+              max_due_date: '2026-02-09',
+              default_due_date: '2026-02-06',
+            },
+            can_open_workspace: false,
+          },
+        })
+      }
+      if (p === `/api/v1/reviewer/assignments/${a1}/accept`) {
+        return fulfillJson(route, 200, { success: true, data: { status: 'accepted', idempotent: false } })
+      }
       if (p === `/api/v1/reviewer/assignments/${a1}/workspace`) {
         return fulfillJson(route, 200, {
           success: true,
@@ -41,6 +72,37 @@ test.describe('Reviewer magic link (mocked)', () => {
             permissions: { can_submit: true, is_read_only: false },
           },
         })
+      }
+      if (p === `/api/v1/reviewer/assignments/${a2}/invite`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            assignment: {
+              assignment_id: a2,
+              status: 'invited',
+              due_at: null,
+              decline_reason: null,
+              decline_note: null,
+              timeline: {
+                invited_at: '2026-02-01T00:00:00Z',
+                opened_at: '2026-02-01T00:01:00Z',
+                accepted_at: null,
+                declined_at: null,
+                submitted_at: null,
+              },
+            },
+            manuscript: { id: 'm2', title: 'Magic Link Manuscript B', abstract: null },
+            window: {
+              min_due_date: '2026-02-06',
+              max_due_date: '2026-02-09',
+              default_due_date: '2026-02-06',
+            },
+            can_open_workspace: false,
+          },
+        })
+      }
+      if (p === `/api/v1/reviewer/assignments/${a2}/accept`) {
+        return fulfillJson(route, 200, { success: true, data: { status: 'accepted', idempotent: false } })
       }
       if (p === `/api/v1/reviewer/assignments/${a2}/workspace`) {
         return fulfillJson(route, 200, {
@@ -68,6 +130,8 @@ test.describe('Reviewer magic link (mocked)', () => {
     })
 
     await page.goto(`/review/invite?token=fake&assignment_id=${a1}`)
+    await expect(page).toHaveURL(new RegExp(`/review/invite\\?assignment_id=${a1}$`))
+    await page.getByRole('button', { name: 'Accept & Continue' }).click()
     await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${a1}$`))
     await expect(page.getByText('Action Panel')).toBeVisible()
     await expect(page.getByText('Magic Link Manuscript A')).toBeVisible()
@@ -77,6 +141,7 @@ test.describe('Reviewer magic link (mocked)', () => {
 
     // Switch to another assignment — form state should reset (key remount)
     await page.goto(`/review/invite?token=fake&assignment_id=${a2}`)
+    await page.getByRole('button', { name: 'Accept & Continue' }).click()
     await expect(page.getByText('Magic Link Manuscript B')).toBeVisible()
     await expect(page.getByLabel('Comments for the Authors')).toHaveValue('')
   })

@@ -111,7 +111,7 @@ Constitution supersedes all other practices. Amendments require documentation an
 - Analytics：修复 `/editor/analytics` 登录态与导出按钮交互（Excel/CSV 不再同时显示“导出中...”）。
 - Reviewer：补齐修回上下文展示与审稿附件下载；收紧版本历史接口 reviewer 权限。
 - Feature 039：Reviewer Magic Link（JWT + httpOnly cookie + middleware 交换）打通“免登录审稿”；修复 E2E mocked 环境下稿件详情页因空数组/空对象导致的 ErrorBoundary。
-- Feature 037（Spec 就绪，待实现）：审稿邀请支持 Reviewer 先预览再 Accept/Decline；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
+- Feature 037（Reviewer Invite Response，已实现）：审稿邀请支持 Reviewer 先预览再 Accept/Decline；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数，且包含幂等保护与 E2E/后端测试覆盖（见 `specs/037-reviewer-invite-response/spec.md`）。
 - Feature 038（Spec 就绪，待实现）：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
 - Feature 024：新增 Production Final PDF 上传、发布门禁（Payment；Production Gate 可选）、作者账单下载、首页 Latest Articles published-only。
 - Feature 028：工作流状态机标准化（`public.manuscript_status`）+ Editor 新增 Process 列表与详情页（`/editor/process`、`/editor/manuscript/[id]`）。

@@ -44,12 +44,49 @@ test.describe('Reviewer Workspace layout (mocked)', () => {
       if (pathname === '/api/v1/auth/magic-link/verify') {
         return fulfillJson(route, 200, { success: true, data: { assignment_id: assignmentId } })
       }
+      if (pathname === `/api/v1/reviewer/assignments/${assignmentId}/invite`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            assignment: {
+              assignment_id: assignmentId,
+              status: 'invited',
+              due_at: null,
+              decline_reason: null,
+              decline_note: null,
+              timeline: {
+                invited_at: '2026-02-01T00:00:00Z',
+                opened_at: '2026-02-01T00:01:00Z',
+                accepted_at: null,
+                declined_at: null,
+                submitted_at: null,
+              },
+            },
+            manuscript: {
+              id: 'm-1',
+              title: 'Reviewer Workspace Mock',
+              abstract: 'Abstract',
+            },
+            window: {
+              min_due_date: '2026-02-06',
+              max_due_date: '2026-02-09',
+              default_due_date: '2026-02-06',
+            },
+            can_open_workspace: false,
+          },
+        })
+      }
+      if (pathname === `/api/v1/reviewer/assignments/${assignmentId}/accept` && req.method() === 'POST') {
+        return fulfillJson(route, 200, { success: true, data: { status: 'accepted', idempotent: false } })
+      }
       return route.fulfill({ status: 404, body: 'not mocked' })
     })
 
     await page.goto(`/review/invite?token=fake-token&assignment_id=${assignmentId}`)
+    await expect(page).toHaveURL(new RegExp(`/review/invite\\?assignment_id=${assignmentId}$`))
+    await page.getByRole('button', { name: 'Accept & Continue' }).click()
     await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${assignmentId}$`))
-    await expect(page.getByText('Reviewer Workspace')).toBeVisible()
+    await expect(page.getByText('Reviewer Workspace', { exact: true })).toBeVisible()
     await expect(page.getByText('Action Panel')).toBeVisible()
     await expect(page.getByTitle('Manuscript PDF')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Reviewer Workspace Mock' })).toBeVisible()
