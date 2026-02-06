@@ -3,7 +3,7 @@
 **Feature Branch**: `038-precheck-role-workflow`  
 **Created**: 2026-02-05  
 **Last Updated**: 2026-02-06  
-**Status**: Draft  
+**Status**: Approved  
 **Input**: User description: "Feature 038: Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审）+ 可视化待办与时间戳"
 
 ## User Scenarios & Testing *(mandatory)*

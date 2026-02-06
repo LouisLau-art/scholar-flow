@@ -290,7 +290,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 ## 近期关键修复快照（2026-02-06）
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
-- **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
+- **Feature 038（Pre-check 角色工作流）**：实现 ME → AE → EIC 三级预审体系（Intake → Technical → Academic）；新增 `assistant_editor_id` 与 `pre_check_status`（intake/technical/academic）字段；后端新增相关队列与处理接口，前端新增 ME/AE/EIC 专用视图与操作弹窗；补齐集成测试与 Mocked E2E。
 - **Feature 037（Reviewer Invite Response）**：已实现 Reviewer 邀请页 Accept/Decline（含截止日期窗口校验）、邀请时间线字段（invited/opened/accepted/declined/submitted）与 Editor 详情页可视化时间线；并补齐幂等与 E2E/后端测试。
 - **Workflow（鲁总反馈）**：状态机已收紧：`pre_check/under_review/resubmitted` 不可直接拒稿，拒稿只能在 `decision/decision_done` 执行；Quick Pre-check 去掉 `reject` 选项并要求 `revision` 必填 comment。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
@@ -308,10 +308,10 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 038-precheck-role-workflow: Added Python 3.14+, TypeScript 5.x + FastAPI, Supabase (PostgreSQL), Pydantic
 - 037-reviewer-invite-response: Implemented reviewer accept/decline + due date window + invite timeline + editor visibility + tests
 - 040-reviewer-workspace: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `react-pdf` or native iframe (Frontend), `fastapi` (Backend)
-- 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
 
 ## Active Technologies
-- Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `fastapi`, `next.js` (037-reviewer-invite-response)
-- PostgreSQL (`review_assignments`, `manuscript_status_logs`?) (037-reviewer-invite-response)
+- Python 3.14+, TypeScript 5.x + FastAPI, Supabase (PostgreSQL), Pydantic (038-precheck-role-workflow)
+- PostgreSQL (`manuscripts` table update, `status_transition_logs` usage) (038-precheck-role-workflow)

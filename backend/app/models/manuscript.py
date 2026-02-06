@@ -3,6 +3,15 @@ from __future__ import annotations
 from enum import Enum
 
 
+class PreCheckStatus(str, Enum):
+    """
+    Feature 038: Sub-status for PRE_CHECK phase.
+    """
+    INTAKE = "intake"       # ME Queue
+    TECHNICAL = "technical" # AE Queue
+    ACADEMIC = "academic"   # EIC Queue
+
+
 class ManuscriptStatus(str, Enum):
     """
     Feature 028：统一稿件生命周期状态枚举。
@@ -45,16 +54,20 @@ class ManuscriptStatus(str, Enum):
         """
         c = (current or "").strip().lower()
         if c == cls.PRE_CHECK.value:
-            return {cls.UNDER_REVIEW.value, cls.MINOR_REVISION.value}
+            # Feature 038: ME/AE can request revision (minor_revision), EIC can route to review or decision
+            return {cls.UNDER_REVIEW.value, cls.MINOR_REVISION.value, cls.DECISION.value}
         if c == cls.UNDER_REVIEW.value:
+            # 章程 039/040: 外审发现严重问题必须先进入 decision 阶段再拒稿
             return {cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}
         if c in {cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}:
             return {cls.RESUBMITTED.value}
         if c == cls.RESUBMITTED.value:
+            # 章程 039/040: 修回后可送外审 (under_review) 或进入决策 (decision)
             return {cls.UNDER_REVIEW.value, cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}
         if c == cls.DECISION.value:
             return {cls.DECISION_DONE.value}
         if c == cls.DECISION_DONE.value:
+            # 只有在决策完成后才能 录用 (approved) 或 拒稿 (rejected)
             return {cls.APPROVED.value, cls.REJECTED.value}
         if c == cls.APPROVED.value:
             return {cls.LAYOUT.value}

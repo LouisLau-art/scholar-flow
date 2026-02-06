@@ -8,14 +8,27 @@ body {
 }
 h1, h2, h3 {
     color: #2c3e50;
+    page-break-after: avoid;
+}
+p {
+    orphans: 3;
+    widows: 3;
 }
 img {
     max-width: 100%;
+    /* Limit height to fit on a standard page (A4 height approx 297mm, minus margins) */
+    max-height: 230mm; 
+    width: auto;
     height: auto;
     border: 1px solid #ddd;
     border-radius: 4px;
     padding: 5px;
     margin: 10px 0;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    /* Ensure image doesn't break across pages if possible (though block images usually don't) */
+    page-break-inside: avoid;
 }
 table {
     border-collapse: collapse;
@@ -41,4 +54,16 @@ pre {
     padding: 10px;
     border-radius: 5px;
     overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+/* Print-specific adjustments */
+@media print {
+    body {
+        max-width: 100%;
+        padding: 0;
+    }
+    img {
+        max-height: 240mm; /* Slightly larger allowance for print media context */
+    }
 }

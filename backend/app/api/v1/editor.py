@@ -40,6 +40,17 @@ class QuickPrecheckPayload(BaseModel):
     comment: str | None = Field(default=None, max_length=2000)
 
 
+# --- Feature 038: Pre-check Role Workflow DTOs ---
+
+class AssignAERequest(BaseModel):
+    ae_id: UUID
+
+
+class AcademicCheckRequest(BaseModel):
+    decision: str  # review, decision_phase
+    comment: str | None = None
+
+
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
     """
     生成 Supabase Storage signed URL（Editor/Admin 详情页使用）。
@@ -299,6 +310,125 @@ async def get_manuscripts_process(
     except Exception as e:
         print(f"[Process] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch manuscripts process")
+
+
+# --- Feature 038: Pre-check Role Workflow Endpoints ---
+
+@router.get("/intake")
+async def get_intake_queue(
+    page: int = 1,
+    page_size: int = 20,
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    List manuscripts in Managing Editor Intake Queue.
+    Status: pre_check, Sub-status: intake
+    """
+    try:
+        return EditorService().get_intake_queue(page, page_size)
+    except Exception as e:
+        print(f"[Intake] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch intake queue")
+
+
+@router.post("/manuscripts/{id}/assign-ae")
+async def assign_ae(
+    id: UUID,
+    request: AssignAERequest,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    Assign an Assistant Editor (AE) to a manuscript.
+    Moves manuscript from 'intake' to 'technical'.
+    """
+    try:
+        success = EditorService().assign_ae(id, request.ae_id, current_user["id"])
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to assign AE")
+        return {"message": "AE assigned successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[AssignAE] failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/workspace")
+async def get_ae_workspace(
+    page: int = 1,
+    page_size: int = 20,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["assistant_editor", "admin"])),
+):
+    """
+    List manuscripts in Assistant Editor Workspace.
+    Status: pre_check, Sub-status: technical, Assigned to: Me
+    """
+    try:
+        return EditorService().get_ae_workspace(current_user["id"], page, page_size)
+    except Exception as e:
+        print(f"[AEWorkspace] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch AE workspace")
+
+
+@router.post("/manuscripts/{id}/submit-check")
+async def submit_technical_check(
+    id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["assistant_editor", "admin"])),
+):
+    """
+    Submit technical check. Moves manuscript to Academic Check (EIC).
+    """
+    try:
+        success = EditorService().submit_technical_check(id, current_user["id"])
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to submit check")
+        return {"message": "Technical check submitted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SubmitCheck] failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/academic")
+async def get_academic_queue(
+    page: int = 1,
+    page_size: int = 20,
+    _profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+):
+    """
+    List manuscripts in Academic Check Queue (EIC).
+    Status: pre_check, Sub-status: academic
+    """
+    try:
+        return EditorService().get_academic_queue(page, page_size)
+    except Exception as e:
+        print(f"[AcademicQueue] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch academic queue")
+
+
+@router.post("/manuscripts/{id}/academic-check")
+async def submit_academic_check(
+    id: UUID,
+    request: AcademicCheckRequest,
+    _profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+):
+    """
+    Submit academic check. Routes to Review or Decision Phase.
+    """
+    try:
+        success = EditorService().submit_academic_check(id, request.decision, request.comment)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to submit academic check")
+        return {"message": "Academic check submitted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[AcademicCheck] failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/manuscripts/{id}/quick-precheck")

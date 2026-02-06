@@ -55,6 +55,8 @@ class Manuscript(ManuscriptBase):
     """数据库中的完整稿件模型"""
     id: UUID
     status: str = Field("draft", description="稿件状态 (submitted, approved, etc.)")
+    pre_check_status: Optional[str] = Field("intake", description="Pre-check Sub-status")
+    assistant_editor_id: Optional[UUID] = Field(None, description="Assigned Assistant Editor")
     owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
