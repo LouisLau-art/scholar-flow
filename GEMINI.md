@@ -270,6 +270,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
+- **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
 - **Feature 033（Manuscript Files）迁移**：云端需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`（新增 `public.manuscript_files` 用于 editor 上传 peer review files），否则 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment` 会返回 “DB not migrated”。
@@ -286,11 +287,12 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Playwright WebServer 复用（重要）**：`frontend/playwright.config.ts` 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
-## 近期关键修复快照（2026-02-05）
+## 近期关键修复快照（2026-02-06）
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
 - **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
 - **Feature 037（Reviewer Invite Response）**：已实现 Reviewer 邀请页 Accept/Decline（含截止日期窗口校验）、邀请时间线字段（invited/opened/accepted/declined/submitted）与 Editor 详情页可视化时间线；并补齐幂等与 E2E/后端测试。
+- **Workflow（鲁总反馈）**：状态机已收紧：`pre_check/under_review/resubmitted` 不可直接拒稿，拒稿只能在 `decision/decision_done` 执行；Quick Pre-check 去掉 `reject` 选项并要求 `revision` 必填 comment。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
 - **Analytics 导出按钮**：Excel/CSV 不再同时显示“导出中...”，改为“按格式单独 loading 文案 + 全局禁用避免并发导出”。
 - **Reviewer 修回上下文**：审稿弹窗展示作者修回材料（Response Letter/内嵌图片），并补齐审稿附件下载入口。
@@ -299,7 +301,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 028（Workflow 状态机标准化）**：`manuscripts.status` 迁移到枚举 `public.manuscript_status`（见 `supabase/migrations/20260204000000_update_manuscript_status.sql`），新增审计表 `status_transition_logs`（见 `supabase/migrations/20260204000002_create_transition_logs.sql`）；Editor 新增 Process 列表 `/editor/process`（API：`GET /api/v1/editor/manuscripts/process`）与详情页 `/editor/manuscript/[id]`；稿件详情读取使用 `GET /api/v1/manuscripts/by-id/{id}` 以避免路由吞噬 `/upload`。
 - **Feature 029（稿件详情页与 Invoice Info）**：完善 `/editor/manuscript/[id]`：页头展示 Title/Authors/Owner/APC 状态/Updated Time（YYYY-MM-DD HH:mm）；文档分组为 `Cover Letter`、`Original Manuscript`、`Peer Review Reports`（Editor-only，附件走后端 signed URL）；支持编辑 `invoice_metadata`（Authors/Affiliation/APC Amount/Funding Info）并在审计表写入 before/after（`status_transition_logs.payload`，见 `supabase/migrations/20260204193000_status_transition_logs_payload.sql`）。
 - **Feature 030（Reviewer Library）**：新增 `/editor/reviewers` 管理页（Add/Search/Edit/Soft Delete），并在稿件详情页 `/editor/manuscript/[id]` 提供 `Manage Reviewers` 入口；指派弹窗改为只从 Reviewer Library 检索（不再“Invite New”直接发邮件），且选中时不触发列表重排（避免 UI 跳动）。
-- **Feature 032（Process List 增强）**：Process API 支持 `q` 搜索 + 多条件过滤；前端过滤栏改为 URL 驱动（仅 `q` debounce 自动落地）；新增 Quick Pre-check（`pre_check` 一键：Under Review / Minor Revision / Rejected）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
+- **Feature 032（Process List 增强）**：Process API 支持 `q` 搜索 + 多条件过滤；前端过滤栏改为 URL 驱动（仅 `q` debounce 自动落地）；新增 Quick Pre-check（`pre_check` 一键：Under Review / Minor Revision）；CI-like E2E 默认端口选 3100+ 且 mocked 模式启动本地 `/api/v1/*` mock server；Production 卡片补齐 `Upload Final PDF` 与 `Mark Paid`。
 - **Feature 033（详情页布局对齐）**：重构 `/editor/manuscript/[id]`：顶部 Header (Title/Authors/Funding/APC/Owner/Editor)、文件区三卡（Cover/Original/Peer Review + Upload）、Invoice Info 移到底部表格；新增 Editor-only 上传 peer review file 接口 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment`，文件写入 `review-attachments` 私有桶并记录到 `public.manuscript_files`。
 - **Feature 036 (内部协作与详情页升级)**：重构稿件详情页为双栏布局（左侧信息/文件/评论，右侧流程/审计）；新增 `internal_comments` 表用于内部沟通（Notebook）；集成 `status_transition_logs` 可视化审计时间轴；文件下载中心化管理。
 - **Portal（UAT 线上稳定性）**：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异（`order(desc=...)`）与云端 schema 漂移（缺失 `authors`/`published_at`）导致的 500；作者显示不再返回 `Unknown`，且不会泄露明文邮箱。

@@ -32,10 +32,10 @@ class ManuscriptStatus(str, Enum):
         章程要求：状态机规则必须显性可见。
 
         MVP 规则（editor 视角）：
-        - pre_check -> under_review / minor_revision / rejected
-        - under_review -> decision / major_revision / minor_revision / rejected
+        - pre_check -> under_review / minor_revision
+        - under_review -> decision / major_revision / minor_revision
         - major_revision/minor_revision -> resubmitted
-        - resubmitted -> under_review / decision / major_revision / minor_revision / rejected
+        - resubmitted -> under_review / decision / major_revision / minor_revision
         - decision -> decision_done
         - decision_done -> approved / rejected
         - approved -> layout
@@ -45,13 +45,13 @@ class ManuscriptStatus(str, Enum):
         """
         c = (current or "").strip().lower()
         if c == cls.PRE_CHECK.value:
-            return {cls.UNDER_REVIEW.value, cls.MINOR_REVISION.value, cls.REJECTED.value}
+            return {cls.UNDER_REVIEW.value, cls.MINOR_REVISION.value}
         if c == cls.UNDER_REVIEW.value:
-            return {cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value, cls.REJECTED.value}
+            return {cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}
         if c in {cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}:
             return {cls.RESUBMITTED.value}
         if c == cls.RESUBMITTED.value:
-            return {cls.UNDER_REVIEW.value, cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value, cls.REJECTED.value}
+            return {cls.UNDER_REVIEW.value, cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}
         if c == cls.DECISION.value:
             return {cls.DECISION_DONE.value}
         if c == cls.DECISION_DONE.value:
@@ -87,4 +87,3 @@ def normalize_status(value: str | None) -> str | None:
         return ManuscriptStatus(v).value
     except Exception:
         return None
-

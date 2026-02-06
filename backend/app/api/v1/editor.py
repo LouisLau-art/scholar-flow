@@ -11,7 +11,7 @@ from app.services.post_acceptance_service import publish_manuscript
 from app.services.production_service import ProductionService
 import os
 from app.services.editorial_service import EditorialService
-from app.models.manuscript import normalize_status
+from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
 from pydantic import BaseModel, Field
@@ -36,7 +36,7 @@ class InvoiceInfoUpdatePayload(BaseModel):
 
 
 class QuickPrecheckPayload(BaseModel):
-    decision: Literal["approve", "reject", "revision"]
+    decision: Literal["approve", "revision"]
     comment: str | None = Field(default=None, max_length=2000)
 
 
@@ -314,13 +314,12 @@ async def quick_precheck(
     decision 映射：
     - approve  -> under_review
     - revision -> minor_revision
-    - reject   -> rejected
     """
     decision = payload.decision
     comment = (payload.comment or "").strip() or None
 
-    if decision in {"reject", "revision"} and not comment:
-        raise HTTPException(status_code=422, detail="comment is required for reject/revision")
+    if decision == "revision" and not comment:
+        raise HTTPException(status_code=422, detail="comment is required for revision")
 
     svc = EditorialService()
     ms = svc.get_manuscript(id)
@@ -328,7 +327,7 @@ async def quick_precheck(
     if current_status != "pre_check":
         raise HTTPException(status_code=400, detail=f"Quick pre-check only allowed for pre_check. Current: {current_status}")
 
-    to_status = "under_review" if decision == "approve" else "minor_revision" if decision == "revision" else "rejected"
+    to_status = "under_review" if decision == "approve" else "minor_revision"
     updated = svc.update_status(
         manuscript_id=id,
         to_status=to_status,
@@ -1447,16 +1446,39 @@ async def submit_final_decision(
     # 验证决策类型
     if decision not in ["accept", "reject"]:
         raise HTTPException(status_code=400, detail="Invalid decision type")
+    if decision == "accept":
+        if apc_amount is None:
+            raise HTTPException(status_code=400, detail="apc_amount is required for accept")
+        if apc_amount < 0:
+            raise HTTPException(status_code=400, detail="apc_amount must be >= 0")
 
     try:
+        try:
+            manuscript_row = (
+                supabase_admin.table("manuscripts")
+                .select("status")
+                .eq("id", manuscript_id)
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Manuscript not found") from e
+        manuscript = getattr(manuscript_row, "data", None) or {}
+        current_status = normalize_status(str(manuscript.get("status") or ""))
+        if not current_status:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        if current_status not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Decision is only allowed in {ManuscriptStatus.DECISION.value}/"
+                    f"{ManuscriptStatus.DECISION_DONE.value}. Current: {current_status}"
+                ),
+            )
+
         # 更新稿件状态
         if decision == "accept":
             # 录用：仅进入“已录用/待发布”状态；发布必须通过 Financial Gate
-            if apc_amount is None:
-                raise HTTPException(status_code=400, detail="apc_amount is required for accept")
-            if apc_amount < 0:
-                raise HTTPException(status_code=400, detail="apc_amount must be >= 0")
-
             update_data = {"status": "approved"}
         else:
             # 拒稿：进入 rejected 终态（修回请走 /editor/revisions）

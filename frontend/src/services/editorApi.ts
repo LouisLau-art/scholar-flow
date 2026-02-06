@@ -103,7 +103,7 @@ export const EditorApi = {
   },
 
   // Feature 032: Quick Actions
-  async quickPrecheck(manuscriptId: string, payload: { decision: 'approve' | 'reject' | 'revision'; comment?: string }) {
+  async quickPrecheck(manuscriptId: string, payload: { decision: 'approve' | 'revision'; comment?: string }) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/quick-precheck`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

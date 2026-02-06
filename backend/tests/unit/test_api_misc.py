@@ -84,7 +84,11 @@ class _FakeSupabase:
         self.decision_data = decision_data
         self.raise_on_update = raise_on_update
         self.invoice_rows = invoice_rows or []
-        self.manuscript_single = manuscript_single or {"id": "1", "status": "approved"}
+        self.manuscript_single = (
+            manuscript_single
+            if manuscript_single is not None
+            else {"id": "1", "status": "decision"}
+        )
 
     def table(self, name):
         return _FakeQuery(self, name)
@@ -227,7 +231,12 @@ async def test_editor_submit_decision_invalid():
 
 @pytest.mark.asyncio
 async def test_editor_submit_decision_not_found(monkeypatch):
-    fake = _FakeSupabase(pipeline_data={}, reviewers_data=[], decision_data=[])
+    fake = _FakeSupabase(
+        pipeline_data={},
+        reviewers_data=[],
+        decision_data=[],
+        manuscript_single={},
+    )
     monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
     with pytest.raises(HTTPException) as exc:
@@ -245,7 +254,11 @@ async def test_editor_submit_decision_not_found(monkeypatch):
 @pytest.mark.asyncio
 async def test_editor_submit_decision_exception(monkeypatch):
     fake = _FakeSupabase(
-        pipeline_data={}, reviewers_data=[], decision_data=[], raise_on_update=True
+        pipeline_data={},
+        reviewers_data=[],
+        decision_data=[],
+        raise_on_update=True,
+        manuscript_single={"id": "1", "status": "decision"},
     )
     monkeypatch.setattr(editor_api, "supabase_admin", fake)
 
@@ -259,6 +272,27 @@ async def test_editor_submit_decision_exception(monkeypatch):
         )
 
     assert exc.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_editor_submit_decision_requires_decision_stage(monkeypatch):
+    fake = _FakeSupabase(
+        pipeline_data={},
+        reviewers_data=[],
+        decision_data=[{"id": "1"}],
+        manuscript_single={"id": "1", "status": "under_review"},
+    )
+    monkeypatch.setattr(editor_api, "supabase_admin", fake)
+
+    with pytest.raises(HTTPException) as exc:
+        await editor_api.submit_final_decision(
+            current_user={"id": "user"},
+            manuscript_id="1",
+            decision="reject",
+            comment="needs work",
+        )
+
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -321,7 +355,7 @@ async def test_editor_submit_decision_fallback_on_missing_column(monkeypatch):
 
         def execute(self):
             if self._single:
-                return SimpleNamespace(data={"author_id": "user", "title": "t"})
+                return SimpleNamespace(data={"id": "1", "status": "decision", "author_id": "user", "title": "t"})
             if self.name == "invoices":
                 return SimpleNamespace(data=[{"id": "inv-1"}])
             self.parent.calls += 1

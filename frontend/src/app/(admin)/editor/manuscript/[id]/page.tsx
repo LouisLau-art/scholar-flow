@@ -53,10 +53,10 @@ type ManuscriptDetail = {
 function allowedNext(status: string): string[] {
   const s = (status || '').toLowerCase()
   // ... (Same logic as before)
-  if (s === 'pre_check') return ['under_review', 'minor_revision', 'rejected']
-  if (s === 'under_review') return ['decision', 'major_revision', 'minor_revision', 'rejected']
+  if (s === 'pre_check') return ['under_review', 'minor_revision']
+  if (s === 'under_review') return ['decision', 'major_revision', 'minor_revision']
   if (s === 'major_revision' || s === 'minor_revision') return ['resubmitted']
-  if (s === 'resubmitted') return ['under_review', 'decision', 'major_revision', 'minor_revision', 'rejected']
+  if (s === 'resubmitted') return ['under_review', 'decision', 'major_revision', 'minor_revision']
   if (s === 'decision') return ['decision_done']
   if (s === 'decision_done') return ['approved', 'rejected']
   return [] // Production handled separately

@@ -10,7 +10,7 @@ import { EditorApi } from '@/services/editorApi'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
-export type QuickPrecheckDecision = 'approve' | 'reject' | 'revision'
+export type QuickPrecheckDecision = 'approve' | 'revision'
 
 export function QuickPrecheckModal({
   open,
@@ -35,7 +35,7 @@ export function QuickPrecheckModal({
     setComment('')
   }, [open])
 
-  const needsComment = decision === 'reject' || decision === 'revision'
+  const needsComment = decision === 'revision'
   const canSubmit = useMemo(() => {
     if (!needsComment) return true
     return comment.trim().length > 0
@@ -94,13 +94,6 @@ export function QuickPrecheckModal({
                   <div className="text-xs text-slate-500">Moves status to Minor Revision</div>
                 </label>
               </div>
-              <div className="flex items-start gap-2 rounded-md border border-slate-200 p-3">
-                <RadioGroupItem value="reject" id="qp-reject" className="mt-1" />
-                <label htmlFor="qp-reject" className="flex-1 cursor-pointer">
-                  <div className="font-medium">Reject</div>
-                  <div className="text-xs text-slate-500">Moves status to Rejected</div>
-                </label>
-              </div>
             </RadioGroup>
           </div>
 
@@ -109,7 +102,7 @@ export function QuickPrecheckModal({
               Comment {needsComment ? <span className="text-red-600">*</span> : <span className="text-slate-400">(optional)</span>}
             </Label>
             <Textarea
-              placeholder={needsComment ? 'Required for reject/revision…' : 'Optional note…'}
+              placeholder={needsComment ? 'Required for revision…' : 'Optional note…'}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               className="min-h-[120px]"
@@ -130,4 +123,3 @@ export function QuickPrecheckModal({
     </Dialog>
   )
 }
-

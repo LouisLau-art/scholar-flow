@@ -54,7 +54,6 @@ test.describe('Process list enhancements (mocked backend)', () => {
         const decision = body?.decision
         if (decision === 'approve') status = 'under_review'
         if (decision === 'revision') status = 'minor_revision'
-        if (decision === 'reject') status = 'rejected'
         updatedAt = new Date().toISOString()
         return fulfillJson(route, 200, { success: true, data: { id: manuscriptId, status, updated_at: updatedAt } })
       }
@@ -73,15 +72,15 @@ test.describe('Process list enhancements (mocked backend)', () => {
     await expect(table.getByText(manuscriptId)).toBeVisible()
     await expect(table.getByText(otherId)).not.toBeVisible()
 
-    // Quick Pre-check：改为 Reject，并要求 comment
+    // Quick Pre-check：改为 Revision，并要求 comment
     await page.getByTestId(`quick-precheck-${manuscriptId}`).click()
     await expect(page.getByRole('heading', { name: 'Quick Pre-check' })).toBeVisible()
     const dialog = page.getByRole('dialog')
-    await dialog.getByText('Reject', { exact: true }).click()
-    await page.getByPlaceholder('Required for reject/revision…').fill('Not in scope for this journal.')
+    await dialog.getByText('Request Revision', { exact: true }).click()
+    await page.getByPlaceholder('Required for revision…').fill('Please fix formatting and reference style.')
     await page.getByRole('button', { name: 'Confirm' }).click()
 
-    // 表格应更新为 Rejected（无需页面刷新）
-    await expect(table.getByText('Rejected')).toBeVisible()
+    // 表格应更新为 Minor Revision（无需页面刷新）
+    await expect(table.getByText('Minor Revision')).toBeVisible()
   })
 })
