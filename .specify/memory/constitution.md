@@ -93,6 +93,7 @@ Sync Impact Report:
 ## Development Workflow
 
 - **单人开发提速（默认模式）**：本项目当前为“单人 + 单机 + 单目录”开发，默认不走 PR / review / auto-merge 流程；**直接在 `main` 小步提交并 `git push`** 同步到 GitHub 作为备份与回滚点。
+- **GitHub 分支发布策略（强约束）**：远端 GitHub **只允许 `main` 作为长期分支**。功能分支可在本地临时使用，但禁止推送 `0xx-*` 等 feature 分支到远端长期保留；发布必须直接进入 `main`。
 - **PR（可选）**：仅在需要多人协作、外部审查、或重大高风险改动时才使用 PR；否则视为不必要开销。
 - **Doc Sync**：任何“环境假设/核心规则/提速策略”的变更，必须同步更新 `GEMINI.md`、`CLAUDE.md`、`AGENTS.md` 三个上下文文件。
 - **Playwright WebServer 复用（重要）**：E2E 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
