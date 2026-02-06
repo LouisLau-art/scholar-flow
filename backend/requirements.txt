@@ -5,6 +5,7 @@ uvicorn
 httpx
 python-dotenv>=1.0.0
 python-jose[cryptography]
+PyJWT>=2.8.0
 python-multipart
 pdfplumber
 weasyprint>=62.0

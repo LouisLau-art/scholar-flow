@@ -36,6 +36,11 @@
   - **Sourcemaps**：`frontend/next.config.mjs` **始终**包裹 `withSentryConfig`（保证 config 注入与事件上报可用）；若 Vercel 未配置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`，则自动禁用 sourcemaps 上传（但 DSN 上报仍可用）。
   - **Backend**：`sentry-sdk` 在 `backend/main.py` 初始化；`SqlalchemyIntegration` **可选**（仅当环境安装了 `sqlalchemy` 才会自动启用）。为兼容 HF Space 可能存在的旧版 `sentry-sdk`，初始化会在遇到 `Unknown option`（如 `with_locals`/`max_request_body_size`）时自动降级重试。隐私策略为“永不上传请求体”（PDF/密码）且初始化失败不阻塞启动（零崩溃原则）。
   - **自测入口**：后端 `GET /api/v1/internal/sentry/test-error`（需 `ADMIN_API_KEY`）；前端 `/admin/sentry-test`。
+- **Reviewer Magic Link（Feature 039）**：
+  - 入口：`/review/invite?token=...`（Next Middleware 交换 token → 设置 httpOnly cookie → 跳转 `/review/assignment/[id]`）。
+  - Cookie：`sf_review_magic`（JWT，绑定 `assignment_id` + `reviewer_id` + `manuscript_id` + scope）。
+  - 后端：`POST /api/v1/auth/magic-link/verify`；Reviewer 免登录接口 `GET/POST /api/v1/reviews/magic/assignments/...`。
+  - 密钥：必须设置 `MAGIC_LINK_JWT_SECRET`（严禁复用 `SUPABASE_SERVICE_ROLE_KEY`）。
 - **Invoice PDF（Feature 026）**：后端需配置 `INVOICE_PAYMENT_INSTRUCTIONS` / `INVOICE_SIGNED_URL_EXPIRES_IN`，并确保云端已应用 `supabase/migrations/20260204120000_invoice_pdf_fields.sql` 与 `supabase/migrations/20260204121000_invoices_bucket.sql`。
 - **MVP 状态机与财务门禁（重要约定）**：
   - **Reject 终态**：拒稿使用 `status='rejected'`（不再使用历史遗留的 `revision_required`）。
@@ -47,7 +52,8 @@
   - **云端数据清理**：若云端存在 `status='revision_required'` 的旧数据，需要在 Supabase Dashboard 的 SQL Editor 执行 `supabase/migrations/20260203120000_status_cleanup.sql`（或直接跑其中的 `update public.manuscripts ...`）以迁移到 `rejected`。
 
 ## MVP 已砍/延期清单（提速约束，三份文档需一致）
-- **Magic Link（生产级）**：MVP 不做稳定化；本地默认用 reviewer token 页面 + `dev-login` 测试。
+- **Magic Link（Supabase Session 版，生产级）**：仍延期（本地/多环境下不稳定，排查成本高）。
+- **Reviewer Magic Link（MVP 版）**：已实现 **JWT Magic Link**（无 Supabase session，走 httpOnly cookie + 后端 scope 校验），用于 UAT/MVP 的“免登录审稿”闭环。
 - **全量 RLS**：MVP 主要靠后端鉴权 + `service_role`；不强制把 `manuscripts/review_assignments/review_reports` 的 RLS 全补齐（但前端严禁持有 `service_role key`）。
 - **DOI/Crossref 真对接**：保留 schema/占位即可，不做真实注册与异步任务闭环。
 - **查重**：默认关闭（`PLAGIARISM_CHECK_ENABLED=0`），不进入关键链路。
@@ -274,6 +280,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-05）
+- **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
 - **Feature 038（Spec 就绪，待实现）**：Pre-check 角色工作流（ME 分配 AE → AE 技术质检 → EIC 学术初审），提供角色队列、关键时间戳与可审计的分配/决策链路（见 `specs/038-precheck-role-workflow/spec.md`）。
 - **Feature 037（Spec 就绪，待实现）**：审稿邀请支持 Reviewer 先预览再 **Accept/Decline**；Accept 必选截止时间（默认 7–10 天窗，可配置）；全流程时间戳（invited/opened/accepted/declined/submitted）在 Editor 侧可见并避免重复计数（见 `specs/037-reviewer-invite-response/spec.md`）。
 - **Analytics 登录态**：修复 `/editor/analytics` 误判“未登录”（API 统一使用 `createBrowserClient`，可读 cookie session）。
@@ -291,6 +298,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
 - 038-precheck-role-workflow: Spec for ME→AE→EIC pre-check role workflow + audit timestamps
 - 037-reviewer-invite-response: Spec for reviewer accept/decline + due date + timeline stamps
 - 036-internal-collaboration: Refactored detail page (2-col), added Internal Notebook, Audit Log, and centralized File Hub

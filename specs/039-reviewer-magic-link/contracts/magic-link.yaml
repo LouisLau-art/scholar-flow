@@ -1,0 +1,39 @@
+openapi: 3.0.0
+info:
+  title: Magic Link Auth API
+  version: 1.0.0
+paths:
+  /api/v1/auth/magic-link/verify:
+    post:
+      summary: Verify a magic link token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: The JWT from the URL
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      reviewer_id:
+                        type: string
+                        format: uuid
+                      manuscript_id:
+                        type: string
+                        format: uuid
+        '401':
+          description: Invalid or expired token

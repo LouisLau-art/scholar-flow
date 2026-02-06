@@ -26,6 +26,64 @@ function getUserFromSupabaseSessionCookie(req: NextRequest): { id: string; email
 }
 
 export async function middleware(req: NextRequest) {
+  // 0.5) Reviewer Magic Link（Feature 039）
+  // 中文注释:
+  // - /review/invite?token=... 是审稿人“免登录”入口。
+  // - 这里在 Middleware 里做一次后端校验（签名/过期/撤销），然后写入 httpOnly cookie 作为“访客会话”。
+  // - 随后重定向到 /review/assignment/[id]，避免 token 长期暴露在地址栏（Referer 泄露风险）。
+  if (req.nextUrl.pathname === '/review/invite') {
+    const token = req.nextUrl.searchParams.get('token')
+    if (token) {
+      const allowBypass =
+        process.env.NODE_ENV !== 'production' && req.headers.get('x-scholarflow-e2e') === '1'
+
+      // E2E 兜底：避免在 Middleware 里走真实后端请求（Playwright mock 无法拦截服务端 fetch）
+      const bypassAssignmentId = req.nextUrl.searchParams.get('assignment_id')
+
+      let assignmentId: string | null = null
+      if (allowBypass && bypassAssignmentId) {
+        assignmentId = bypassAssignmentId
+      } else {
+        try {
+          const verifyRes = await fetch(`${req.nextUrl.origin}/api/v1/auth/magic-link/verify`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token }),
+          })
+          const json = await verifyRes.json().catch(() => null)
+          if (verifyRes.ok && json?.success && json?.data?.assignment_id) {
+            assignmentId = String(json.data.assignment_id)
+          }
+        } catch {
+          assignmentId = null
+        }
+      }
+
+      if (!assignmentId) {
+        const url = req.nextUrl.clone()
+        url.pathname = '/review/error'
+        url.searchParams.set('reason', 'invalid')
+        return NextResponse.redirect(url)
+      }
+
+      const url = req.nextUrl.clone()
+      url.pathname = `/review/assignment/${encodeURIComponent(assignmentId)}`
+      url.search = ''
+
+      const resp = NextResponse.redirect(url)
+      resp.cookies.set({
+        name: 'sf_review_magic',
+        value: token,
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 14,
+      })
+      return resp
+    }
+  }
+
   // 0) Favicon 兜底
   // 中文注释:
   // - 某些 Next.js 版本/缓存状态下，/favicon.ico 偶发返回 500（且没有明显错误栈）。
@@ -148,6 +206,7 @@ export const config = {
     '/submit/:path*',
     '/editor/:path*',
     '/favicon.ico',
+    '/review/invite',
     // 也可以匹配所有，然后在逻辑里排除，但显式匹配受保护路径性能更好
   ],
 }

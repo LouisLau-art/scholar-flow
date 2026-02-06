@@ -27,7 +27,7 @@ export function AuditLogTimeline({ manuscriptId }: AuditLogTimelineProps) {
 
   useEffect(() => {
     EditorApi.getAuditLogs(manuscriptId).then((res) => {
-      if (res.success) setLogs(res.data)
+      if (res?.success) setLogs(Array.isArray(res.data) ? res.data : [])
     })
   }, [manuscriptId])
 

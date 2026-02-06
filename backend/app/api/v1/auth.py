@@ -1,12 +1,15 @@
 import os
 from urllib.parse import urlencode
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from starlette.responses import RedirectResponse
 from supabase import create_client
 
 from app.core.config import app_config
+from app.core.security import decode_magic_link_jwt
 from app.lib.api_client import supabase_admin
+from app.schemas.token import MagicLinkVerifyRequest, MagicLinkVerifyResponse, MagicLinkVerifyResponseData
 
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -85,3 +88,49 @@ async def dev_login(
     )
     return RedirectResponse(url=f"{frontend_origin}/auth/callback?{qs}", status_code=302)
 
+
+@router.post("/magic-link/verify", response_model=MagicLinkVerifyResponse)
+async def verify_magic_link(req: MagicLinkVerifyRequest):
+    """
+    Reviewer Magic Link 校验接口（Feature 039）
+
+    中文注释:
+    - 仅做“签名/过期”校验 + DB 状态校验（撤销/cancelled 立即失效）。
+    - 不返回任何 PII（不返回邮箱/姓名）。
+    """
+
+    payload = decode_magic_link_jwt(req.token)
+
+    try:
+        a = (
+            supabase_admin.table("review_assignments")
+            .select("id, status, manuscript_id, reviewer_id")
+            .eq("id", str(payload.assignment_id))
+            .single()
+            .execute()
+        )
+        assignment = getattr(a, "data", None) or {}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid assignment: {e}")
+
+    if not assignment:
+        raise HTTPException(status_code=401, detail="Invalid assignment")
+    if str(assignment.get("status") or "").lower() == "cancelled":
+        raise HTTPException(status_code=401, detail="Invitation revoked")
+
+    # 范围校验：防止 token 被“换 manuscript_id / reviewer_id”伪造（即使 assignment_id 猜中也不应放行）
+    if str(assignment.get("manuscript_id")) != str(payload.manuscript_id):
+        raise HTTPException(status_code=401, detail="Token scope mismatch")
+    if str(assignment.get("reviewer_id")) != str(payload.reviewer_id):
+        raise HTTPException(status_code=401, detail="Token scope mismatch")
+
+    expires_at = datetime.fromtimestamp(payload.exp, tz=timezone.utc)
+    return MagicLinkVerifyResponse(
+        success=True,
+        data=MagicLinkVerifyResponseData(
+            reviewer_id=payload.reviewer_id,
+            manuscript_id=payload.manuscript_id,
+            assignment_id=payload.assignment_id,
+            expires_at=expires_at,
+        ),
+    )

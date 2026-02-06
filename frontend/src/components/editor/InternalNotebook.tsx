@@ -33,8 +33,9 @@ export function InternalNotebook({ manuscriptId }: InternalNotebookProps) {
     try {
       setLoading(true)
       const res = await EditorApi.getInternalComments(manuscriptId)
-      if (res.success) {
-        setComments(res.data)
+      if (res?.success) {
+        const next = Array.isArray(res.data) ? res.data : []
+        setComments(next)
       }
     } catch (e) {
       console.error('Failed to load comments', e)
@@ -53,7 +54,7 @@ export function InternalNotebook({ manuscriptId }: InternalNotebookProps) {
     try {
       setSubmitting(true)
       const res = await EditorApi.postInternalComment(manuscriptId, inputText)
-      if (res.success) {
+      if (res?.success && res?.data) {
         setComments((prev) => [...prev, res.data])
         setInputText('')
         // Scroll to bottom?

@@ -66,4 +66,19 @@ export const authService = {
       handler(session)
     })
   },
+  async verifyMagicLink(token: string): Promise<{
+    reviewer_id: string
+    manuscript_id: string
+    assignment_id: string
+    expires_at: string
+  } | null> {
+    const res = await fetch('/api/v1/auth/magic-link/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok || !json?.success || !json?.data?.assignment_id) return null
+    return json.data
+  },
 }

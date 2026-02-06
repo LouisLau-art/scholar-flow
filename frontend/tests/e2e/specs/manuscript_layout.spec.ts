@@ -98,11 +98,20 @@ test.describe('Manuscript detail layout (mocked backend)', () => {
     await page.goto(`/editor/manuscript/${manuscriptId}`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Mocked Manuscript Title' })).toBeVisible({ timeout: 15000 })
 
-    await expect(page.getByRole('heading', { name: 'Cover Letter' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Original Manuscript' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Peer Review Files' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Owner Binding' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Invoice Info' })).toBeVisible()
+    // Layout sections (copy may evolve; assert stable high-level blocks)
+    await expect(page.getByRole('heading', { name: 'Metadata & Staff' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Document Repository' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Editorial Actions' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Status History' })).toBeVisible()
+
+    // File hub sub-sections
+    await expect(page.getByText('Manuscript Versions')).toBeVisible()
+    await expect(page.getByText('Supporting Documents')).toBeVisible()
+    await expect(page.getByText('Peer Review Files (Internal)')).toBeVisible()
+
+    // Invoice modal open
+    await page.getByText('APC Status').click()
+    await expect(page.getByRole('dialog', { name: 'Edit Invoice Info' })).toBeVisible()
 
     const shot = await page.screenshot({ fullPage: true })
     test.info().attach('manuscript-detail-layout', { body: shot, contentType: 'image/png' })

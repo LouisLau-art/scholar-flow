@@ -8,6 +8,13 @@ from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
 from datetime import datetime, timedelta, timezone
 import os
+from urllib.parse import quote
+
+from fastapi import Cookie
+
+from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
+from app.schemas.token import MagicLinkPayload
+from app.core.mail import email_service
 
 router = APIRouter(tags=["Reviews"])
 
@@ -225,37 +232,51 @@ async def assign_reviewer(
             reviewer_email = None
 
         if reviewer_email:
-            # Feature 025: Use signed tokens
-            from app.core.mail import email_service
-            token = email_service.create_token(reviewer_email, salt="review-invite")
-            expiry_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+            # Feature 039: Magic Link (JWT, 14-day default)
+            assignment_id = None
             try:
-                supabase_admin.table("review_reports").insert(
-                    {
-                        "manuscript_id": str(manuscript_id),
-                        "reviewer_id": str(reviewer_id),
-                        "token": token,
-                        "expiry_date": expiry_date,
-                        "status": "invited",
-                    }
-                ).execute()
-            except Exception as e:
-                # 中文注释: 缺表/缺列时不阻塞主流程；邮件仍可发送，但 Token 校验可能无法落库
-                print(f"[Review Invite] 写入 review_reports 失败（降级继续）: {e}")
+                assignment_id = (res.data or [])[0].get("id") if isinstance(res.data, list) else None
+            except Exception:
+                assignment_id = None
+            if assignment_id:
+                try:
+                    expires_days = int((os.environ.get("MAGIC_LINK_EXPIRES_DAYS") or "14").strip())
+                except ValueError:
+                    expires_days = 14
+                try:
+                    assignment_uuid = UUID(str(assignment_id))
+                except Exception:
+                    assignment_uuid = None
+                token = (
+                    create_magic_link_jwt(
+                        reviewer_id=reviewer_id,
+                        manuscript_id=manuscript_id,
+                        assignment_id=assignment_uuid,
+                        expires_in_days=expires_days,
+                    )
+                    if assignment_uuid
+                    else None
+                )
+            else:
+                token = None
 
-            frontend_base_url = os.environ.get(
-                "FRONTEND_BASE_URL", "http://localhost:3000"
-            ).rstrip("/")
-            review_url = f"{frontend_base_url}/review/{token}"
+            frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
+            review_url = (
+                f"{frontend_base_url}/review/invite?token={quote(str(token))}"
+                if token
+                else f"{frontend_base_url}/dashboard"
+            )
             
             background_tasks.add_task(
                 email_service.send_email_background,
                 to_email=reviewer_email,
                 subject="Invitation to Review",
-                template_name="reviewer_invite.html",
+                template_name="invitation.html",
                 context={
-                    "link": review_url,
+                    "review_url": review_url,
                     "manuscript_title": manuscript_title,
+                    "manuscript_id": str(manuscript_id),
+                    "due_at": due_at,
                 },
             )
 
@@ -279,6 +300,268 @@ async def assign_reviewer(
         raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
+
+
+def _get_magic_link_from_cookie(magic_token: str | None) -> str:
+    if not magic_token:
+        raise HTTPException(status_code=401, detail="Missing magic link session")
+    return magic_token
+
+
+async def _require_magic_link_scope(
+    *,
+    assignment_id: UUID,
+    magic_token: str | None,
+) -> MagicLinkPayload:
+    token = _get_magic_link_from_cookie(magic_token)
+    payload = decode_magic_link_jwt(token)
+    if str(payload.assignment_id) != str(assignment_id):
+        raise HTTPException(status_code=401, detail="Magic link scope mismatch")
+
+    try:
+        a = (
+            supabase_admin.table("review_assignments")
+            .select("id, status, manuscript_id, reviewer_id, due_at")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        assignment = getattr(a, "data", None) or {}
+    except Exception:
+        assignment = {}
+
+    if not assignment:
+        raise HTTPException(status_code=401, detail="Assignment not found")
+    if str(assignment.get("status") or "").lower() == "cancelled":
+        raise HTTPException(status_code=401, detail="Invitation revoked")
+    if str(assignment.get("manuscript_id")) != str(payload.manuscript_id):
+        raise HTTPException(status_code=401, detail="Magic link scope mismatch")
+    if str(assignment.get("reviewer_id")) != str(payload.reviewer_id):
+        raise HTTPException(status_code=401, detail="Magic link scope mismatch")
+
+    return payload
+
+
+@router.get("/reviews/magic/assignments/{assignment_id}")
+async def get_review_assignment_via_magic_link(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    """
+    Magic Link 审稿任务入口（Feature 039）
+
+    中文注释:
+    - 通过 httpOnly cookie `sf_review_magic`（JWT）鉴权。
+    - 严格限制仅可访问 token 指向的 assignment。
+    """
+
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id,title,abstract,file_path,status")
+        .eq("id", str(payload.manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+
+    latest_revision = None
+    try:
+        rev_resp = (
+            supabase_admin.table("revisions")
+            .select("id, round_number, decision_type, editor_comment, response_letter, status, submitted_at, created_at")
+            .eq("manuscript_id", str(payload.manuscript_id))
+            .order("round_number", desc=True)
+            .limit(1)
+            .execute()
+        )
+        revs = getattr(rev_resp, "data", None) or []
+        latest_revision = revs[0] if revs else None
+    except Exception:
+        latest_revision = None
+
+    # review_reports 用于存储双通道意见与机密附件（可能尚未创建）
+    review_report = None
+    try:
+        rr = (
+            supabase_admin.table("review_reports")
+            .select("id, manuscript_id, reviewer_id, status, score, comments_for_author, confidential_comments_to_editor, attachment_path")
+            .eq("manuscript_id", str(payload.manuscript_id))
+            .eq("reviewer_id", str(payload.reviewer_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(rr, "data", None) or []
+        review_report = rows[0] if rows else None
+    except Exception:
+        review_report = None
+
+    return {
+        "success": True,
+        "data": {
+            "assignment_id": str(payload.assignment_id),
+            "reviewer_id": str(payload.reviewer_id),
+            "manuscript": ms,
+            "review_report": review_report,
+            "latest_revision": latest_revision,
+        },
+    }
+
+
+@router.get("/reviews/magic/assignments/{assignment_id}/pdf-signed")
+async def get_review_assignment_pdf_signed_via_magic_link(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id,file_path")
+        .eq("id", str(payload.manuscript_id))
+        .single()
+        .execute()
+    )
+    ms = getattr(ms_resp, "data", None) or {}
+    file_path = ms.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Manuscript PDF not found")
+
+    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.get("/reviews/magic/assignments/{assignment_id}/attachment-signed")
+async def get_review_attachment_signed_via_magic_link(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+
+    try:
+        rr = (
+            supabase_admin.table("review_reports")
+            .select("id, attachment_path")
+            .eq("manuscript_id", str(payload.manuscript_id))
+            .eq("reviewer_id", str(payload.reviewer_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(rr, "data", None) or []
+        row = rows[0] if rows else None
+    except Exception:
+        row = None
+
+    attachment_path = (row or {}).get("attachment_path") if row else None
+    if not attachment_path:
+        return {"success": True, "data": {"signed_url": None}}
+
+    signed_url = _get_signed_url_for_review_attachments_bucket(str(attachment_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.post("/reviews/magic/assignments/{assignment_id}/submit")
+async def submit_review_via_magic_link(
+    assignment_id: UUID,
+    sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
+    comments_for_author: str | None = Form(None),
+    content: str | None = Form(None),
+    score: int = Form(...),
+    confidential_comments_to_editor: str | None = Form(None),
+    attachment: UploadFile | None = File(None),
+):
+    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
+
+    public_comments = (comments_for_author or content or "").strip()
+    if not public_comments:
+        raise HTTPException(status_code=400, detail="comments_for_author is required")
+    if score < 1 or score > 5:
+        raise HTTPException(status_code=400, detail="score must be 1..5")
+
+    attachment_path = None
+    if attachment is not None:
+        file_bytes = await attachment.read()
+        safe_name = (attachment.filename or "attachment").replace("/", "_")
+        # 中文注释: 机密附件仅供编辑查看；存储路径不暴露给作者
+        attachment_path = f"review_reports/{payload.assignment_id}/{safe_name}"
+        try:
+            _ensure_review_attachments_bucket_exists()
+            supabase_admin.storage.from_("review-attachments").upload(
+                attachment_path,
+                file_bytes,
+                {"content-type": attachment.content_type or "application/octet-stream"},
+            )
+        except Exception as e:
+            print(f"[Review Attachment] upload failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to upload attachment")
+
+    # 1) 写 review_reports（双通道评论）
+    rr_payload = {
+        "manuscript_id": str(payload.manuscript_id),
+        "reviewer_id": str(payload.reviewer_id),
+        "status": "completed",
+        "comments_for_author": public_comments,
+        "content": public_comments,  # 兼容旧字段
+        "score": score,
+        "confidential_comments_to_editor": confidential_comments_to_editor,
+        "attachment_path": attachment_path,
+    }
+    try:
+        existing = (
+            supabase_admin.table("review_reports")
+            .select("id")
+            .eq("manuscript_id", str(payload.manuscript_id))
+            .eq("reviewer_id", str(payload.reviewer_id))
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(existing, "data", None) or []
+        if rows:
+            supabase_admin.table("review_reports").update(rr_payload).eq("id", rows[0]["id"]).execute()
+        else:
+            supabase_admin.table("review_reports").insert(
+                {
+                    **rr_payload,
+                    "token": None,
+                    "expiry_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+                }
+            ).execute()
+    except Exception as e:
+        print(f"[Reviews] upsert review_reports failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit review")
+
+    # 2) 同步 review_assignments 状态
+    try:
+        supabase_admin.table("review_assignments").update(
+            {
+                "status": "completed",
+                "comments": public_comments,
+                "scores": {"overall": score},
+            }
+        ).eq("id", str(assignment_id)).execute()
+    except Exception as e:
+        print(f"[Reviews] update assignment failed (ignored): {e}")
+
+    # 3) 若全部评审完成，推动稿件进入待终审状态（沿用既有逻辑）
+    try:
+        pending = (
+            supabase_admin.table("review_assignments")
+            .select("id")
+            .eq("manuscript_id", str(payload.manuscript_id))
+            .eq("status", "pending")
+            .execute()
+        )
+        if not (getattr(pending, "data", None) or []):
+            supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
+                "id", str(payload.manuscript_id)
+            ).execute()
+    except Exception:
+        pass
+
+    return {"success": True, "data": {"assignment_id": str(assignment_id)}}
 
 
 @router.delete("/reviews/assign/{assignment_id}")
