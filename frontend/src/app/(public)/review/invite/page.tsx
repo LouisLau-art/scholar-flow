@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AcceptForm } from './accept-form'
 import { DeclineForm } from './decline-form'
@@ -42,7 +43,18 @@ function formatDateTime(raw: string | null | undefined) {
   }
 }
 
-export default function ReviewInvitePage() {
+function InviteLoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="text-center">
+        <div className="text-sm font-semibold text-slate-900">Loading…</div>
+        <div className="mt-2 text-sm text-slate-500">Checking your invitation status.</div>
+      </div>
+    </div>
+  )
+}
+
+function ReviewInvitePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const assignmentId = searchParams.get('assignment_id') || ''
@@ -84,14 +96,7 @@ export default function ReviewInvitePage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="text-center">
-          <div className="text-sm font-semibold text-slate-900">Loading…</div>
-          <div className="mt-2 text-sm text-slate-500">Checking your invitation status.</div>
-        </div>
-      </div>
-    )
+    return <InviteLoadingFallback />
   }
 
   if (error || !data) {
@@ -170,5 +175,13 @@ export default function ReviewInvitePage() {
         </section>
       </div>
     </main>
+  )
+}
+
+export default function ReviewInvitePage() {
+  return (
+    <Suspense fallback={<InviteLoadingFallback />}>
+      <ReviewInvitePageInner />
+    </Suspense>
   )
 }
