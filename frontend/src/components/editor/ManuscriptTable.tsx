@@ -63,9 +63,8 @@ export function ManuscriptTable({
       <Table className="table-fixed">
         <TableHeader>
           <TableRow className="bg-slate-50/50">
-            <TableHead className="w-[16%]">Manuscript ID</TableHead>
-            <TableHead className="w-[16%]">Journal</TableHead>
-            <TableHead className="w-[26%]">Status</TableHead>
+            <TableHead className="w-[25%]">Manuscript</TableHead>
+            <TableHead className="w-[33%]">Status</TableHead>
             <TableHead className="w-[14%]">Updated</TableHead>
             <TableHead className="w-[20%]">People</TableHead>
             <TableHead className="w-[8%] text-right">Actions</TableHead>
@@ -74,7 +73,7 @@ export function ManuscriptTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -93,17 +92,17 @@ export function ManuscriptTable({
               const showAssigneeLine = currentAssignee !== '—' && currentAssignee !== editorLabel
               return (
                 <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="text-xs">
                     <Link
                       href={`/editor/manuscript/${r.id}`}
-                      className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600 font-medium"
+                      className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600 font-medium max-w-full"
                     >
-                      <span className="block min-w-0 max-w-full truncate">{r.id}</span>
+                      <span className="block min-w-0 max-w-full truncate font-mono">{r.id}</span>
                       <ArrowRight className="h-3 w-3" />
                     </Link>
-                  </TableCell>
-                  <TableCell className="text-sm text-slate-700">
-                    {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      Journal: {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
+                    </p>
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
