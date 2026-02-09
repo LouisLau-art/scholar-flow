@@ -22,6 +22,7 @@ export function ManuscriptsProcessPanel({
     const q = (searchParams?.get('q') || '').trim() || undefined
     const journalId = searchParams?.get('journal_id') || undefined
     const editorId = searchParams?.get('editor_id') || undefined
+    const overdueOnly = ['1', 'true', 'yes', 'on'].includes((searchParams?.get('overdue_only') || '').toLowerCase())
     const rawStatuses = searchParams?.getAll('status') || []
     const statuses =
       rawStatuses.length === 1 && rawStatuses[0]?.includes(',')
@@ -32,6 +33,7 @@ export function ManuscriptsProcessPanel({
       journalId,
       editorId,
       statuses: statuses.length ? statuses : undefined,
+      overdueOnly,
     }
   }, [searchParams])
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters])

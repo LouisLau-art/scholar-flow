@@ -46,18 +46,20 @@ export function ProcessFilterBar({
     const q = (searchParams?.get('q') || '').trim()
     const journalId = searchParams?.get('journal_id') || ''
     const editorId = searchParams?.get('editor_id') || ''
+    const overdueOnly = ['1', 'true', 'yes', 'on'].includes((searchParams?.get('overdue_only') || '').toLowerCase())
     const rawStatuses = searchParams?.getAll('status') || []
     const statuses =
       rawStatuses.length === 1 && rawStatuses[0]?.includes(',')
         ? rawStatuses[0].split(',').map((s) => s.trim()).filter(Boolean)
         : rawStatuses
-    return { q, journalId, editorId, statuses }
+    return { q, journalId, editorId, statuses, overdueOnly }
   }, [searchParams])
 
   const [q, setQ] = useState(applied.q)
   const [journalId, setJournalId] = useState(applied.journalId)
   const [editorId, setEditorId] = useState(applied.editorId)
   const [statuses, setStatuses] = useState<string[]>(applied.statuses)
+  const [overdueOnly, setOverdueOnly] = useState<boolean>(applied.overdueOnly)
 
   const qDebounceTimer = useRef<number | null>(null)
   const mountedRef = useRef(false)
@@ -108,10 +110,17 @@ export function ProcessFilterBar({
     setJournalId(applied.journalId)
     setEditorId(applied.editorId)
     setStatuses(applied.statuses)
+    setOverdueOnly(applied.overdueOnly)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied.q, applied.journalId, applied.editorId, applied.statuses.join('|')])
+  }, [applied.q, applied.journalId, applied.editorId, applied.statuses.join('|'), applied.overdueOnly])
 
-  function updateUrl(partial: { q?: string | null; journalId?: string | null; editorId?: string | null; statuses?: string[] | null }) {
+  function updateUrl(partial: {
+    q?: string | null
+    journalId?: string | null
+    editorId?: string | null
+    statuses?: string[] | null
+    overdueOnly?: boolean | null
+  }) {
     const next = new URLSearchParams(searchParams?.toString() || '')
 
     if ('q' in partial) {
@@ -132,6 +141,10 @@ export function ProcessFilterBar({
     if ('statuses' in partial) {
       next.delete('status')
       for (const s of partial.statuses || []) next.append('status', s)
+    }
+    if ('overdueOnly' in partial) {
+      if (partial.overdueOnly) next.set('overdue_only', 'true')
+      else next.delete('overdue_only')
     }
 
     const qs = next.toString()
@@ -224,6 +237,15 @@ export function ProcessFilterBar({
         </div>
 
         <div className="md:col-span-12 flex flex-wrap gap-2 pt-2">
+          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={overdueOnly}
+              onChange={(e) => setOverdueOnly(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Overdue only
+          </label>
           <Button
             onClick={() =>
               updateUrl({
@@ -231,6 +253,7 @@ export function ProcessFilterBar({
                 journalId: journalId || null,
                 editorId: editorId || null,
                 statuses: statuses.length ? statuses : null,
+                overdueOnly,
               })
             }
             className="gap-2"
@@ -250,7 +273,8 @@ export function ProcessFilterBar({
               setJournalId('')
               setEditorId('')
               setStatuses([])
-              updateUrl({ q: null, journalId: null, editorId: null, statuses: null })
+              setOverdueOnly(false)
+              updateUrl({ q: null, journalId: null, editorId: null, statuses: null, overdueOnly: null })
             }}
             className="gap-2"
           >

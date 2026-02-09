@@ -21,6 +21,8 @@ export type ProcessRow = {
   assigned_at?: string | null
   technical_completed_at?: string | null
   academic_completed_at?: string | null
+  is_overdue?: boolean
+  overdue_tasks_count?: number
   journals?: { title?: string; slug?: string } | null
   owner?: { id: string; full_name?: string | null; email?: string | null } | null
   editor?: { id: string; full_name?: string | null; email?: string | null } | null
@@ -57,6 +59,7 @@ export function ManuscriptTable({
             <TableHead className="whitespace-nowrap">Status</TableHead>
             <TableHead className="whitespace-nowrap">Pre-check</TableHead>
             <TableHead className="whitespace-nowrap">Updated</TableHead>
+            <TableHead className="whitespace-nowrap">SLA</TableHead>
             <TableHead className="whitespace-nowrap">Assign Editor</TableHead>
             <TableHead className="whitespace-nowrap">Current Assignee</TableHead>
             <TableHead className="whitespace-nowrap">Owner</TableHead>
@@ -66,7 +69,7 @@ export function ManuscriptTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={11} className="py-10 text-center text-sm text-slate-500">
                 No manuscripts found.
               </TableCell>
             </TableRow>
@@ -103,6 +106,16 @@ export function ManuscriptTable({
                   </TableCell>
                   <TableCell className="text-xs text-slate-600 whitespace-nowrap">{precheckLabel}</TableCell>
                   <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.updated_at)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {r.is_overdue ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                        Overdue
+                        <span className="text-[11px]">({r.overdue_tasks_count || 0})</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">On track</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm text-slate-700 font-medium">
                     {r.editor?.full_name || r.editor?.email || '—'}
                   </TableCell>

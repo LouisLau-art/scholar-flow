@@ -42,13 +42,15 @@
     - [x] 新增放行脚本：`scripts/validate-production-rollout.sh`（dry-run/readiness-only/统一退出码）
     - [x] 新增测试：`test_release_validation_service.py`、`test_release_validation_api.py`，并验证 `15 passed`
 
-- [ ] **GAP-P0-03：内部协作增强（Feature 036 增量）**
-  - 现状：已有 Internal Notebook + Audit Timeline。
-  - 缺口：缺少 @mentions、可分配内部任务、SLA 逾期预警。
+- [x] **GAP-P0-03：内部协作增强（Feature 036 增量）**
+  - 结果：已完成 045（`045-internal-collaboration-enhancement`）落地，形成“@提及 -> 任务化 -> 逾期筛选”闭环。
   - 完成标准：
-    - [ ] Notebook 支持 @用户并触发站内通知
-    - [ ] 增加内部 task 字段（负责人、截止时间、状态）
-    - [ ] Process 列表显示 overdue 标识与筛选
+    - [x] Notebook 支持 @用户并触发站内通知（提及去重、无效提及拦截）
+    - [x] 增加内部 task 字段（负责人、截止时间、状态）+ activity log
+    - [x] Process 列表显示 overdue 标识与筛选（`overdue_only`）
+  - 验收记录：
+    - [x] Backend：`15 passed`（contract + unit + integration，见 045 quickstart）
+    - [x] Frontend：Vitest `7 passed` + Playwright `1 passed`
 
 ## P1（P0 后立即推进）
 
@@ -95,12 +97,12 @@
 
 ### Iteration 2（下周，先把“编辑团队提效”）
 
-- [ ] 完成 GAP-P0-03（@mentions + 内部任务 + SLA 预警）
+- [x] 完成 GAP-P0-03（@mentions + 内部任务 + SLA 预警）
 - [ ] 启动 GAP-P1-01（Finance 真数据接入）
 
 ---
 
 ## 4. 立即下一步（单一建议）
 
-**建议立刻开工：`GAP-P0-03`（内部协作增强）**。  
-原因：GAP-P0-01 与 GAP-P0-02 已完成，下一瓶颈在编辑团队内部协作效率（@mentions/任务化/SLA 预警）。
+**建议立刻开工：`GAP-P1-01`（Finance 真数据接入）**。  
+原因：当前 P0 三项已完成，下一优先级瓶颈转为财务数据链路（`/finance` 仍为 demo）。

@@ -3,6 +3,7 @@ from uuid import uuid4
 from postgrest.exceptions import APIError
 
 from .test_utils import make_user
+import app.api.v1.editor as editor_api
 
 
 def _cleanup(db, manuscript_ids: list[str], journal_id: str) -> None:
@@ -252,3 +253,38 @@ async def test_process_and_detail_include_precheck_visual_fields(
         except Exception:
             pass
         _cleanup(supabase_admin_client, [manuscript_id], journal_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_process_overdue_only_query_param_is_forwarded(client, set_admin_emails, monkeypatch: pytest.MonkeyPatch):
+    editor = make_user(email="editor_process_overdue@example.com")
+    set_admin_emails([editor.email])
+
+    captured = {}
+
+    def _stub_list(self, *, filters):
+        captured["overdue_only"] = filters.overdue_only
+        return [
+            {
+                "id": str(uuid4()),
+                "title": "Overdue Manuscript",
+                "status": "under_review",
+                "is_overdue": True,
+                "overdue_tasks_count": 2,
+            }
+        ]
+
+    monkeypatch.setattr(editor_api.EditorService, "list_manuscripts_process", _stub_list)
+
+    res = await client.get(
+        "/api/v1/editor/manuscripts/process?overdue_only=true",
+        headers={"Authorization": f"Bearer {editor.token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("success") is True
+    assert captured.get("overdue_only") is True
+    row = (body.get("data") or [])[0]
+    assert row.get("is_overdue") is True
+    assert row.get("overdue_tasks_count") == 2

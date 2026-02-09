@@ -1,0 +1,530 @@
+openapi: 3.0.3
+info:
+  title: Internal Collaboration Enhancement API
+  version: 1.0.0
+  description: |
+    GAP-P0-03：增强内部协作能力，覆盖 Notebook @mentions、内部任务、Process 逾期筛选。
+
+servers:
+  - url: /api/v1
+
+security:
+  - BearerAuth: []
+
+paths:
+  /editor/manuscripts/{id}/comments:
+    get:
+      summary: 获取稿件内部评论（含提及信息）
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      responses:
+        '200':
+          description: Comment list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InternalComment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: 发布内部评论并触发提及提醒
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInternalCommentRequest'
+      responses:
+        '200':
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/InternalComment'
+              examples:
+                with_mentions:
+                  value:
+                    success: true
+                    data:
+                      id: "11111111-1111-1111-1111-111111111111"
+                      manuscript_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                      content: "@Alice 请补充统计图例说明"
+                      mention_user_ids:
+                        - "22222222-2222-2222-2222-222222222222"
+                      created_at: "2026-02-09T12:10:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /editor/manuscripts/{id}/tasks:
+    get:
+      summary: 获取稿件内部任务列表
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [todo, in_progress, done]
+        - name: overdue_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InternalTask'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: 创建稿件内部任务
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInternalTaskRequest'
+      responses:
+        '200':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/InternalTask'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /editor/manuscripts/{id}/tasks/{task_id}:
+    patch:
+      summary: 更新内部任务（状态/负责人/截止时间）
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInternalTaskRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/InternalTask'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /editor/manuscripts/{id}/tasks/{task_id}/activity:
+    get:
+      summary: 获取任务操作轨迹
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Activity log
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InternalTaskActivity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /editor/manuscripts/process:
+    get:
+      summary: 获取 Process 列表（支持逾期筛选）
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: status
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: overdue_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Process rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProcessRow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ManuscriptId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            token_missing:
+              value:
+                detail: Not authenticated
+    Forbidden:
+      description: Role not allowed for this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            role_blocked:
+              value:
+                detail: Operation requires internal editor role
+    NotFound:
+      description: Target resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Invalid payload or state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Concurrent update conflict / stale data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+
+    InternalComment:
+      type: object
+      required: [id, manuscript_id, content, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        manuscript_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        mention_user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        user:
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    CreateInternalCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        mention_user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 20
+
+    InternalTask:
+      type: object
+      required: [id, manuscript_id, title, assignee_user_id, status, due_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        manuscript_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        assignee_user_id:
+          type: string
+          format: uuid
+        assignee:
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        creator:
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        priority:
+          type: string
+          enum: [low, medium, high]
+          nullable: true
+        due_at:
+          type: string
+          format: date-time
+        is_overdue:
+          type: boolean
+        can_edit:
+          type: boolean
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateInternalTaskRequest:
+      type: object
+      required: [title, assignee_user_id, due_at]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+          nullable: true
+        assignee_user_id:
+          type: string
+          format: uuid
+        due_at:
+          type: string
+          format: date-time
+        priority:
+          type: string
+          enum: [low, medium, high]
+          nullable: true
+
+    UpdateInternalTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+          nullable: true
+        assignee_user_id:
+          type: string
+          format: uuid
+        due_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        priority:
+          type: string
+          enum: [low, medium, high]
+
+    InternalTaskActivity:
+      type: object
+      required: [id, task_id, action, actor_user_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        actor_user_id:
+          type: string
+          format: uuid
+        before_payload:
+          type: object
+          nullable: true
+        after_payload:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        actor:
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+
+    ProcessRow:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        title:
+          type: string
+          nullable: true
+        is_overdue:
+          type: boolean
+        overdue_tasks_count:
+          type: integer
+          minimum: 0
+        nearest_due_at:
+          type: string
+          format: date-time
+          nullable: true

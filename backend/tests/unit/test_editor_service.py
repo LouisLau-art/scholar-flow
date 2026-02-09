@@ -1,7 +1,9 @@
 import pytest
 from fastapi import HTTPException
+from datetime import datetime, timedelta, timezone
 
 from app.services.editor_service import ProcessListFilters, apply_process_filters
+from app.services.editor_service import EditorService
 
 
 class FakeQuery:
@@ -69,3 +71,53 @@ def test_apply_process_filters_q_too_long_raises_422():
         apply_process_filters(q, ProcessListFilters(q="x" * 101))
     assert ei.value.status_code == 422
 
+
+class _FakeTaskQuery:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def in_(self, *_args, **_kwargs):
+        return self
+
+    def neq(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(data=self._rows)
+
+
+class _FakeClient:
+    def __init__(self, task_rows: list[dict]) -> None:
+        self._task_rows = task_rows
+
+    def table(self, name: str):
+        if name == "internal_tasks":
+            return _FakeTaskQuery(self._task_rows)
+        raise AssertionError(f"unexpected table: {name}")
+
+
+def test_attach_overdue_snapshot_marks_overdue_and_counts():
+    now = datetime.now(timezone.utc)
+    overdue_due = (now - timedelta(hours=2)).isoformat()
+    future_due = (now + timedelta(hours=2)).isoformat()
+    rows = [{"id": "m1"}, {"id": "m2"}]
+    task_rows = [
+        {"manuscript_id": "m1", "status": "todo", "due_at": overdue_due},
+        {"manuscript_id": "m1", "status": "in_progress", "due_at": future_due},
+        {"manuscript_id": "m2", "status": "todo", "due_at": future_due},
+    ]
+
+    svc = EditorService()
+    svc.client = _FakeClient(task_rows)
+    out = svc._attach_overdue_snapshot(rows)
+    by_id = {row["id"]: row for row in out}
+
+    assert by_id["m1"]["is_overdue"] is True
+    assert by_id["m1"]["overdue_tasks_count"] == 1
+    assert by_id["m2"]["is_overdue"] is False
+    assert by_id["m2"]["overdue_tasks_count"] == 0

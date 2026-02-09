@@ -1,5 +1,11 @@
 import { authService } from '@/services/auth'
 import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
+import type {
+  CreateInternalCommentPayload,
+  CreateInternalTaskPayload,
+  UpdateInternalTaskPayload,
+  InternalTaskStatus,
+} from '@/types/internal-collaboration'
 
 export type ManuscriptsProcessFilters = {
   q?: string
@@ -8,6 +14,7 @@ export type ManuscriptsProcessFilters = {
   statuses?: string[]
   ownerId?: string
   editorId?: string
+  overdueOnly?: boolean
 }
 
 export type DecisionSubmissionPayload = {
@@ -127,6 +134,7 @@ export const EditorApi = {
     if (filters.manuscriptId) params.set('manuscript_id', filters.manuscriptId)
     if (filters.ownerId) params.set('owner_id', filters.ownerId)
     if (filters.editorId) params.set('editor_id', filters.editorId)
+    if (filters.overdueOnly) params.set('overdue_only', 'true')
     for (const s of filters.statuses || []) params.append('status', s)
     const qs = params.toString()
     const res = await authedFetch(`/api/v1/editor/manuscripts/process${qs ? `?${qs}` : ''}`)
@@ -344,11 +352,59 @@ export const EditorApi = {
   },
 
   async postInternalComment(manuscriptId: string, content: string) {
+    const payload: CreateInternalCommentPayload = { content }
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(payload),
     })
+    return res.json()
+  },
+
+  async postInternalCommentWithMentions(manuscriptId: string, payload: CreateInternalCommentPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async listInternalTasks(
+    manuscriptId: string,
+    filters?: {
+      status?: InternalTaskStatus
+      overdueOnly?: boolean
+    }
+  ) {
+    const params = new URLSearchParams()
+    if (filters?.status) params.set('status', filters.status)
+    if (filters?.overdueOnly) params.set('overdue_only', 'true')
+    const query = params.toString()
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks${query ? `?${query}` : ''}`)
+    return res.json()
+  },
+
+  async createInternalTask(manuscriptId: string, payload: CreateInternalTaskPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async patchInternalTask(manuscriptId: string, taskId: string, payload: UpdateInternalTaskPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async getInternalTaskActivity(manuscriptId: string, taskId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}/activity`)
     return res.json()
   },
 

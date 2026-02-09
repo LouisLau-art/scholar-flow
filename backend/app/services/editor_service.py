@@ -28,6 +28,7 @@ class ProcessListFilters:
     editor_id: str | None = None
     owner_id: str | None = None
     manuscript_id: str | None = None
+    overdue_only: bool = False
 
 
 def _is_uuid(value: str) -> bool:
@@ -293,6 +294,68 @@ class EditorService:
             return raw
         return PreCheckStatus.INTAKE.value
 
+    def _attach_overdue_snapshot(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Feature 045:
+        在 Process 列表行上补充任务逾期快照（读时聚合，不做冗余存储）。
+        """
+        if not rows:
+            return rows
+
+        manuscript_ids = [str(r.get("id") or "") for r in rows if r.get("id")]
+        if not manuscript_ids:
+            return rows
+
+        overdue_count: dict[str, int] = {mid: 0 for mid in manuscript_ids}
+        nearest_due: dict[str, str] = {}
+        now = datetime.now(timezone.utc)
+
+        try:
+            resp = (
+                self.client.table("internal_tasks")
+                .select("manuscript_id,status,due_at")
+                .in_("manuscript_id", manuscript_ids)
+                .neq("status", "done")
+                .execute()
+            )
+            task_rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            # 中文注释: 云端未迁移 internal_tasks 时，Process 列表不应 500。
+            # 统一按“无逾期数据”降级，并保留日志便于排障。
+            print(f"[Process] load internal_tasks failed (ignored): {e}")
+            task_rows = []
+
+        for task in task_rows:
+            manuscript_id = str(task.get("manuscript_id") or "")
+            due_raw = str(task.get("due_at") or "")
+            if not manuscript_id or not due_raw:
+                continue
+            try:
+                due_at = datetime.fromisoformat(due_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except Exception:
+                continue
+            if due_at < now:
+                overdue_count[manuscript_id] = overdue_count.get(manuscript_id, 0) + 1
+
+            nearest = nearest_due.get(manuscript_id)
+            if nearest:
+                try:
+                    nearest_dt = datetime.fromisoformat(str(nearest).replace("Z", "+00:00")).astimezone(timezone.utc)
+                except Exception:
+                    nearest_dt = None
+            else:
+                nearest_dt = None
+            if nearest_dt is None or due_at < nearest_dt:
+                nearest_due[manuscript_id] = due_at.isoformat()
+
+        for row in rows:
+            mid = str(row.get("id") or "")
+            count = int(overdue_count.get(mid, 0))
+            row["is_overdue"] = count > 0
+            row["overdue_tasks_count"] = count
+            row["nearest_due_at"] = nearest_due.get(mid)
+        return rows
+
     def list_manuscripts_process(self, *, filters: ProcessListFilters) -> list[dict[str, Any]]:
         q = (
             self.client.table("manuscripts")
@@ -365,6 +428,10 @@ class EditorService:
                 row["assigned_at"] = enriched.get("assigned_at")
                 row["technical_completed_at"] = enriched.get("technical_completed_at")
                 row["academic_completed_at"] = enriched.get("academic_completed_at")
+
+        rows = self._attach_overdue_snapshot(rows)
+        if filters.overdue_only:
+            rows = [row for row in rows if bool(row.get("is_overdue"))]
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---

@@ -14,6 +14,7 @@ import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
 import { getStatusLabel, getStatusColor } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
 import { InternalNotebook } from '@/components/editor/InternalNotebook'
+import { InternalTasksPanel } from '@/components/editor/InternalTasksPanel'
 import { AuditLogTimeline } from '@/components/editor/AuditLogTimeline'
 import { FileHubCard, type FileItem } from '@/components/editor/FileHubCard'
 import { filterFilesByType, type ManuscriptFile } from './utils'
@@ -61,6 +62,12 @@ type ManuscriptDetail = {
     submitted_at?: string | null
     decline_reason?: string | null
   }> | null
+  task_summary?: {
+    open_tasks_count?: number
+    overdue_tasks_count?: number
+    is_overdue?: boolean
+    nearest_due_at?: string | null
+  } | null
 }
 
 function allowedNext(status: string): string[] {
@@ -276,8 +283,11 @@ export default function EditorManuscriptDetailPage() {
 
             {/* 3. Internal Notebook */}
             <div className="h-[500px]">
-                <InternalNotebook manuscriptId={id} />
+                <InternalNotebook manuscriptId={id} onCommentPosted={load} />
             </div>
+
+            {/* 4. Internal Tasks */}
+            <InternalTasksPanel manuscriptId={id} onChanged={load} />
 
         </div>
 
@@ -369,6 +379,30 @@ export default function EditorManuscriptDetailPage() {
                         </div>
                     )}
                 </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">Task SLA Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Open Tasks</span>
+                  <span className="font-medium text-slate-900">{ms.task_summary?.open_tasks_count ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Overdue Tasks</span>
+                  <span className={`font-medium ${ms.task_summary?.is_overdue ? 'text-rose-700' : 'text-slate-900'}`}>
+                    {ms.task_summary?.overdue_tasks_count ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Nearest Due</span>
+                  <span className="font-medium text-slate-900">
+                    {ms.task_summary?.nearest_due_at ? format(new Date(ms.task_summary.nearest_due_at), 'yyyy-MM-dd HH:mm') : '—'}
+                  </span>
+                </div>
+              </CardContent>
             </Card>
 
             {/* Audit Log Timeline */}
