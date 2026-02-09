@@ -144,6 +144,7 @@ export default function SubmissionForm() {
       let raw = ''
       let result: any = null
       let lastError: Error | null = null
+      let parseTraceId = ''
 
       const parseEndpoints = getUploadParseEndpoints()
       const parseStartedAt = Date.now()
@@ -169,6 +170,7 @@ export default function SubmissionForm() {
           } catch {
             result = null
           }
+          parseTraceId = String(result?.trace_id || '')
 
           // 非 5xx（例如 400 文件格式错误）直接返回给用户，不再切换端点重试。
           if (!response.ok && response.status < 500) {
@@ -209,22 +211,30 @@ export default function SubmissionForm() {
           result?.detail ||
           (raw && raw.length < 500 ? raw : '') ||
           'AI parsing failed'
-        throw new Error(msg)
+        const err: any = new Error(msg)
+        if (parseTraceId) err.trace_id = parseTraceId
+        throw err
       }
 
       if (!result) {
-        throw new Error('AI parsing failed: invalid response')
+        const err: any = new Error('AI parsing failed: invalid response')
+        if (parseTraceId) err.trace_id = parseTraceId
+        throw err
       }
 
       if (result.success) {
         setMetadata(result.data)
         if (result.message) {
-          toast.success(result.message, { id: toastId })
+          const info = parseTraceId ? `${result.message}（trace: ${parseTraceId}）` : result.message
+          toast.success(info, { id: toastId })
         } else {
-          toast.success("AI parsing successful!", { id: toastId })
+          const info = parseTraceId ? `AI parsing successful!（trace: ${parseTraceId}）` : 'AI parsing successful!'
+          toast.success(info, { id: toastId })
         }
       } else {
-        throw new Error(result.message || "AI parsing failed")
+        const err: any = new Error(result.message || "AI parsing failed")
+        if (parseTraceId) err.trace_id = parseTraceId
+        throw err
       }
     } catch (error) {
       console.error('Parsing failed:', error)
@@ -235,11 +245,18 @@ export default function SubmissionForm() {
           : error instanceof Error
             ? error.message
             : "AI parsing failed"
-      toast.error(message, { id: toastId })
+      const traceInError = (() => {
+        try {
+          if (typeof (error as any)?.trace_id === 'string' && (error as any).trace_id) return String((error as any).trace_id)
+        } catch {}
+        return ''
+      })()
+      const finalMessage = traceInError ? `${message}（trace: ${traceInError}）` : message
+      toast.error(finalMessage, { id: toastId })
       if (message.toLowerCase().includes('upload failed')) {
         setUploadError(message.replace('Upload failed: ', ''))
       } else {
-        setParseError(message)
+        setParseError(finalMessage)
       }
     } finally {
       setIsUploading(false)
