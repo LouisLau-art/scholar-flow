@@ -36,7 +36,7 @@ describe('ManuscriptTable precheck rendering', () => {
 
     render(<ManuscriptTable rows={rows} />)
 
-    expect(screen.getByText('technical (assistant editor)')).toBeInTheDocument()
+    expect(screen.getByText(/Pre-check:\s*technical \(assistant editor\)/i)).toBeInTheDocument()
     expect(screen.getByText('Alice Editor')).toBeInTheDocument()
   })
 
@@ -57,7 +57,7 @@ describe('ManuscriptTable precheck rendering', () => {
 
     const row = screen.getByText('ms-2').closest('tr')
     expect(row).not.toBeNull()
-    expect(within(row as HTMLTableRowElement).queryByText('technical (assistant editor)')).not.toBeInTheDocument()
+    expect(within(row as HTMLTableRowElement).queryByText(/Pre-check:\s*technical \(assistant editor\)/i)).not.toBeInTheDocument()
     expect(within(row as HTMLTableRowElement).getAllByText('—').length).toBeGreaterThan(0)
   })
 })
