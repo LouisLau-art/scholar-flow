@@ -7,7 +7,9 @@ import Link from 'next/link'
 import { Star, BookOpen, FileText, ArrowRight, Loader2 } from 'lucide-react'
 
 export default function JournalPage() {
-  const { slug } = useParams()
+  const params = useParams()
+  const slugParam = (params as Record<string, string | string[]> | null)?.slug
+  const slug = Array.isArray(slugParam) ? slugParam[0] : (slugParam || '')
   const [data, setData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
 

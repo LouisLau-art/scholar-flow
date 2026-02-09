@@ -19,10 +19,10 @@ export function ManuscriptsProcessPanel({
 }) {
   const searchParams = useSearchParams()
   const filters: ManuscriptsProcessFilters = useMemo(() => {
-    const q = (searchParams.get('q') || '').trim() || undefined
-    const journalId = searchParams.get('journal_id') || undefined
-    const editorId = searchParams.get('editor_id') || undefined
-    const rawStatuses = searchParams.getAll('status')
+    const q = (searchParams?.get('q') || '').trim() || undefined
+    const journalId = searchParams?.get('journal_id') || undefined
+    const editorId = searchParams?.get('editor_id') || undefined
+    const rawStatuses = searchParams?.getAll('status') || []
     const statuses =
       rawStatuses.length === 1 && rawStatuses[0]?.includes(',')
         ? rawStatuses[0].split(',').map((s) => s.trim()).filter(Boolean)

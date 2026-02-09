@@ -74,10 +74,17 @@ class ProductionService:
     - Published 必须显式执行 Payment Gate（+ 可选 Production Gate）。
     """
 
-    def __init__(self, *, editorial: EditorialService | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        editorial: EditorialService | None = None,
+        workspace: ProductionWorkspaceService | None = None,
+    ) -> None:
         self.editorial = editorial or EditorialService()
         self.client = supabase_admin
-        self.workspace = ProductionWorkspaceService()
+        self.workspace = workspace or ProductionWorkspaceService()
+        if hasattr(self.workspace, "client"):
+            self.workspace.client = self.client
 
     def _load_invoice(self, manuscript_id: str) -> dict[str, Any] | None:
         try:

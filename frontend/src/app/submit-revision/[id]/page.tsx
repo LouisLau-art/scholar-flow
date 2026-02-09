@@ -16,7 +16,7 @@ import { compressImage } from '@/lib/image-utils'
 export default function SubmitRevisionPage() {
   const params = useParams()
   const router = useRouter()
-  const manuscriptId = params.id as string
+  const manuscriptId = String((params as Record<string, string | string[]> | null)?.id || '')
   
   const [manuscript, setManuscript] = useState<any>(null)
   const [revisionRequest, setRevisionRequest] = useState<any>(null)

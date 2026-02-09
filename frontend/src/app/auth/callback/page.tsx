@@ -23,10 +23,10 @@ function AuthCallbackContent() {
     let cancelled = false
 
     async function run() {
-      const next = searchParams.get('next') || '/dashboard'
-      const code = searchParams.get('code')
-      const accessToken = searchParams.get('access_token')
-      const refreshToken = searchParams.get('refresh_token')
+      const next = searchParams?.get('next') || '/dashboard'
+      const code = searchParams?.get('code')
+      const accessToken = searchParams?.get('access_token')
+      const refreshToken = searchParams?.get('refresh_token')
 
       try {
         // 1) PKCE flow: ?code=...

@@ -33,6 +33,9 @@ class _FakeQuery:
     def limit(self, *_args, **_kwargs):
         return self
 
+    def order(self, *_args, **_kwargs):
+        return self
+
     def single(self, *_args, **_kwargs):
         self._single = True
         return self
@@ -147,4 +150,3 @@ def test_advance_rejects_non_post_acceptance_status(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         svc.advance(manuscript_id="m1", changed_by="u1")
     assert exc.value.status_code == 400
-

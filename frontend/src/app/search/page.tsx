@@ -10,8 +10,8 @@ import { authService } from '@/services/auth'
 
 function SearchContent() {
   const searchParams = useSearchParams()
-  const query = searchParams.get('q')
-  const mode = searchParams.get('mode')
+  const query = searchParams?.get('q')
+  const mode = searchParams?.get('mode')
   const [results, setResults] = useState<any[]>([])
   const [fallback, setFallback] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)

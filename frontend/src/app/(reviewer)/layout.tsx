@@ -12,7 +12,7 @@ function buildExitHref(pathname: string): string {
 }
 
 export default function ReviewerLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
+  const pathname = usePathname() ?? '/'
   const exitHref = buildExitHref(pathname)
 
   return (

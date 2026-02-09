@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 
 function DashboardPageContent() {
   const searchParams = useSearchParams()
-  const tabParam = searchParams.get('tab')
+  const tabParam = searchParams?.get('tab')
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)

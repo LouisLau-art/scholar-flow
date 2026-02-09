@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { siteConfig } from "@/config/site-config";
 
 export function SiteFooter() {
-  const pathname = usePathname()
+  const pathname = usePathname() ?? '/'
   if (pathname.startsWith('/reviewer/workspace/') || pathname.startsWith('/editor/decision/')) {
     return null
   }

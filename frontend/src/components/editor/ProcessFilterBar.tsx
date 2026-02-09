@@ -33,7 +33,7 @@ export function ProcessFilterBar({
   className?: string
 }) {
   const router = useRouter()
-  const pathname = usePathname()
+  const pathname = usePathname() ?? '/editor/process'
   const searchParams = useSearchParams()
 
   const [journals, setJournals] = useState<JournalOption[]>([])
@@ -43,10 +43,10 @@ export function ProcessFilterBar({
   const [loadingStaff, setLoadingStaff] = useState(false)
 
   const applied = useMemo(() => {
-    const q = (searchParams.get('q') || '').trim()
-    const journalId = searchParams.get('journal_id') || ''
-    const editorId = searchParams.get('editor_id') || ''
-    const rawStatuses = searchParams.getAll('status')
+    const q = (searchParams?.get('q') || '').trim()
+    const journalId = searchParams?.get('journal_id') || ''
+    const editorId = searchParams?.get('editor_id') || ''
+    const rawStatuses = searchParams?.getAll('status') || []
     const statuses =
       rawStatuses.length === 1 && rawStatuses[0]?.includes(',')
         ? rawStatuses[0].split(',').map((s) => s.trim()).filter(Boolean)
@@ -112,7 +112,7 @@ export function ProcessFilterBar({
   }, [applied.q, applied.journalId, applied.editorId, applied.statuses.join('|')])
 
   function updateUrl(partial: { q?: string | null; journalId?: string | null; editorId?: string | null; statuses?: string[] | null }) {
-    const next = new URLSearchParams(searchParams.toString())
+    const next = new URLSearchParams(searchParams?.toString() || '')
 
     if ('q' in partial) {
       const v = (partial.q || '').trim()
