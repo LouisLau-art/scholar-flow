@@ -9,6 +9,7 @@
  */
 
 import type {
+  AnalyticsManagementResponse,
   AnalyticsSummaryResponse,
   TrendsResponse,
   GeoResponse,
@@ -79,6 +80,20 @@ export const AnalyticsApi = {
    */
   async getGeo(): Promise<GeoResponse> {
     return fetchWithAuth<GeoResponse>('/api/v1/analytics/geo')
+  },
+
+  /**
+   * 获取管理视角数据（编辑效率 / 阶段耗时 / SLA 预警）
+   */
+  async getManagement(params?: {
+    rankingLimit?: number
+    slaLimit?: number
+  }): Promise<AnalyticsManagementResponse> {
+    const search = new URLSearchParams()
+    if (params?.rankingLimit) search.set('ranking_limit', String(params.rankingLimit))
+    if (params?.slaLimit) search.set('sla_limit', String(params.slaLimit))
+    const suffix = search.toString() ? `?${search.toString()}` : ''
+    return fetchWithAuth<AnalyticsManagementResponse>(`/api/v1/analytics/management${suffix}`)
   },
 
   /**

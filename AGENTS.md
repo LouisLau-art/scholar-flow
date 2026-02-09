@@ -281,6 +281,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 044（Pre-check Role Hardening）迁移**：云端需执行 `supabase/migrations/20260206150000_add_precheck_fields.sql`（新增 `assistant_editor_id`、`pre_check_status`）；若未迁移，`/api/v1/editor/manuscripts/process` 与相关集成测试可能出现 `PGRST204`（列缺失），测试会按约定 `skip`。
 - **Feature 045（Internal Collaboration Enhancement）迁移**：云端需执行 `supabase/migrations/20260209190000_internal_collaboration_mentions_tasks.sql`（新增 `internal_comment_mentions`、`internal_tasks`、`internal_task_activity_logs`）；若未迁移，`/api/v1/editor/manuscripts/{id}/comments` 提及、`/api/v1/editor/manuscripts/{id}/tasks*` 与 Process `overdue_only` 聚合会返回 “DB not migrated: ... table missing”。
 - **Feature 046（Finance Invoices Sync）迁移**：云端需执行 `supabase/migrations/20260209193000_finance_invoices_indexes.sql`（新增 `invoices.status/confirmed_at/created_at` 索引）；`/finance` 已改为真实数据接口 `GET /api/v1/editor/finance/invoices` 与 `GET /api/v1/editor/finance/invoices/export`，不再使用本地 demo 数据。
+- **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 灰度开关**：`JOURNAL_SCOPE_ENFORCEMENT` 默认 `0`（关闭强制 scope 拦截，保持兼容）；设为 `1` 后，对非 `admin` 启用 `journal_role_scopes` 严格隔离（process 裁剪 + 稿件级写操作 403）。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
@@ -297,6 +298,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **GAP-P1-03（Analytics 管理视角增强）**：新增 `GET /api/v1/analytics/management`，补齐管理下钻三件套：编辑效率排行（处理量/平均首次决定耗时）、阶段耗时分解（pre_check/under_review/decision/production）、超 SLA 稿件预警（逾期 internal tasks 聚合）；前端 `/editor/analytics` 新增管理洞察区块，后端补齐 RBAC（ME/EIC/Admin）+ journal-scope 裁剪。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成整体验收：新增 `GET /api/v1/editor/rbac/context`、服务层/路由层双重动作门禁、journal-scope 隔离（跨刊读写 403）、first/final decision 语义分离、以及 APC/Owner/legacy-final 的统一审计 payload（before/after/reason/source）；前端完成 capability 显隐与 `rbac-journal-scope.spec.ts` mocked E2E 回归。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
 - **GAP-P1-04（Review Policy Hardening）**：实现同刊 30 天冷却期（候选灰显拦截）、高权限显式 override（`override_cooldown` + `override_reason` + `status_transition_logs` 审计）、邀请模板变量扩展（reviewer/journal/due date）、以及 Process/详情共用 `ReviewerAssignModal` 的命中原因展示（cooldown/conflict/overdue risk）。
 - **Feature 034（Portal Scholar Toolbox）**：补齐公开文章结构化引用与学科聚合：新增 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`，文章页新增 BibTeX/RIS 下载按钮；`GET /api/v1/public/topics` 从已发表文章/期刊动态聚合 Subject Collections；`frontend/src/app/articles/[id]/page.tsx` 补 `citation_pdf_url`（指向公开 `/pdf` 入口）以改进 Scholar/SEO 抓取。
@@ -324,6 +326,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 047-analytics-management-insights: Added analytics management drilldown (editor efficiency ranking, stage duration breakdown, SLA overdue alerts) with `/api/v1/analytics/management`, RBAC + journal-scope filtering, and dashboard UI integration.
 - 048-role-matrix-journal-scope-rbac: Completed GAP-P1-05 end-to-end (role matrix + journal scope isolation + first/final decision semantics + high-risk audit payload + mocked E2E).
 - 047-portal-scholar-toolbox: Added article citation exports (BibTeX/RIS), dynamic subject collections API, and citation_pdf_url metadata wiring for Scholar/SEO
 - 046-finance-invoices-sync: Replaced `/finance` demo data with real invoices list/filter/export and unified Mark Paid conflict+audit flow across Finance and Editor Pipeline

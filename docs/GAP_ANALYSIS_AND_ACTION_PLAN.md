@@ -75,13 +75,15 @@
     - [x] Contract：`tests/contract/test_api_paths.py` `1 passed`
     - [x] Frontend：`tests/unit/citation.test.ts` `2 passed` + `next lint` 通过（仅既有 warning）
 
-- [ ] **GAP-P1-03：Analytics 管理视角增强（Feature 014 增量）**
-  - 现状：仪表盘已可用（KPI/趋势/导出）。
-  - 缺口：缺少“按编辑/按阶段”的下钻分析与 SLA 视图。
+- [x] **GAP-P1-03：Analytics 管理视角增强（Feature 014 增量）**
+  - 结果：已完成管理视角下钻，新增 `/api/v1/analytics/management` + 前端管理洞察区块（效率排行/阶段耗时/SLA 预警）。
   - 完成标准：
-    - [ ] 编辑个人效率排行（处理量/平均耗时）
-    - [ ] 阶段耗时分解（预审/外审/终审/生产）
-    - [ ] 异常预警（超 SLA 稿件）
+    - [x] 编辑个人效率排行（处理量/平均耗时）
+    - [x] 阶段耗时分解（预审/外审/终审/生产）
+    - [x] 异常预警（超 SLA 稿件）
+  - 验收记录：
+    - [x] Backend：`tests/test_analytics.py` + `tests/test_analytics_aggregation.py` + `tests/test_analytics_export.py` 共 `31 passed`
+    - [x] Frontend：`bun run lint` 通过（仅既有 warning）
 
 - [x] **GAP-P1-04：审稿邀请策略强化（Review Policy Hardening）**
   - 结果：已完成邀请策略硬化（冷却期拦截 + 高权限 override 审计 + due 窗口统一 + 模板变量 + 前端命中原因可视化）。
@@ -132,6 +134,7 @@
 ### Iteration 3（当前建议，先把“产品对标能力”补齐）
 
 - [x] 完成 GAP-P1-02（Portal 学术工具箱：BibTeX/RIS + Subject Collections + Scholar/SEO）
+- [x] 完成 GAP-P1-03（Analytics 管理视角增强：效率排行 + 阶段耗时 + SLA 预警）
 - [x] 完成 GAP-P1-04（审稿邀请策略：冷却期 + due date + 模板）
 - [x] 完成 GAP-P1-05（角色矩阵与 Journal-scope RBAC）
 
@@ -139,8 +142,8 @@
 
 ## 4. 立即下一步（单一建议）
 
-**当前建议：进入 `GAP-P1-03`（Analytics 管理视角增强）**。  
-`GAP-P1-05` 已完成并合入主干，下一步建议补齐编辑效率排行、阶段耗时分解与 SLA 异常预警。
+**当前建议：进入 `GAP-P2-01`（DOI/Crossref 真对接）**。  
+P1 缺口已全部收敛，下一步建议推进 DOI 注册、重试队列与回执状态追踪闭环。
 
 ---
 
@@ -153,9 +156,9 @@
 - [x] APC/Invoice 与发布门禁联动（已具备）
 - [x] 同刊 reviewer 冷却期（1 个月）与可视化拦截（已完成，映射 GAP-P1-04）
 - [x] reviewer 同意后 `due_date` 选择与窗口限制（已完成，映射 GAP-P1-04）
-- [ ] 角色层级细化与按期刊权限隔离（缺口，映射 GAP-P1-05）
-- [ ] `first decision` 与 `final decision` 的产品语义显式化（缺口，映射 GAP-P1-05）
-- [ ] APC 锁定与高权限 override 审计（缺口，映射 GAP-P1-05）
+- [x] 角色层级细化与按期刊权限隔离（已完成，映射 GAP-P1-05）
+- [x] `first decision` 与 `final decision` 的产品语义显式化（已完成，映射 GAP-P1-05）
+- [x] APC 锁定与高权限 override 审计（已完成，映射 GAP-P1-05）
 
 ---
 

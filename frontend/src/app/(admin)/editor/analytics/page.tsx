@@ -25,6 +25,7 @@ import {
 } from '@/components/analytics/EditorialCharts'
 import { AuthorGeoChart } from '@/components/analytics/AuthorGeoChart'
 import { ExportButton } from '@/components/analytics/ExportButton'
+import { ManagementInsights } from '@/components/analytics/ManagementInsights'
 import QueryProvider from '@/components/providers/QueryProvider'
 import SiteHeader from '@/components/layout/SiteHeader'
 import Link from 'next/link'
@@ -63,9 +64,18 @@ function AnalyticsDashboardContent() {
     queryFn: () => AnalyticsApi.getGeo(),
   })
 
+  const {
+    data: managementData,
+    isLoading: managementLoading,
+    error: managementError,
+  } = useQuery({
+    queryKey: ['analytics', 'management'],
+    queryFn: () => AnalyticsApi.getManagement({ rankingLimit: 10, slaLimit: 20 }),
+  })
+
   // 错误处理
-  if (summaryError || trendsError || geoError) {
-    const error = summaryError || trendsError || geoError
+  if (summaryError || trendsError || geoError || managementError) {
+    const error = summaryError || trendsError || geoError || managementError
     return (
       <div className="p-6">
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
@@ -176,6 +186,21 @@ function AnalyticsDashboardContent() {
           <div className="rounded-lg border p-8 text-center text-muted-foreground">
             暂无地理数据
           </div>
+        )}
+      </section>
+
+      <section>
+        {managementLoading ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <ChartSkeleton height={260} />
+            <ChartSkeleton height={260} />
+          </div>
+        ) : (
+          <ManagementInsights
+            ranking={managementData?.editor_ranking || []}
+            stageDurations={managementData?.stage_durations || []}
+            slaAlerts={managementData?.sla_alerts || []}
+          />
         )}
       </section>
     </div>

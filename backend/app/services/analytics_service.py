@@ -9,16 +9,22 @@ Analytics Service - 分析服务层
 """
 
 import os
-from typing import Optional
-from supabase import create_client, Client
+from typing import Literal, Optional, cast
+
+from supabase import Client, create_client
 
 from app.models.analytics import (
-    KPISummary,
-    TrendData,
-    GeoData,
-    PipelineData,
     DecisionData,
+    EditorEfficiencyItem,
+    GeoData,
+    KPISummary,
+    PipelineData,
+    SLAAlertItem,
+    StageDurationItem,
+    TrendData,
 )
+
+StageName = Literal["pre_check", "under_review", "decision", "production"]
 
 
 def get_supabase_client() -> Client:
@@ -52,6 +58,23 @@ class AnalyticsService:
         if self._client is None:
             self._client = get_supabase_client()
         return self._client
+
+    def _is_missing_rpc_error(self, error: Exception | str) -> bool:
+        text = str(error or "").lower()
+        return "function" in text and "does not exist" in text
+
+    def _to_sla_severity(self, *, overdue_tasks_count: int, max_overdue_days: float) -> str:
+        """
+        SLA 风险等级规则（显性）：
+        - high: 逾期任务 >=3 或最长逾期 >=7 天
+        - medium: 逾期任务 >=2 或最长逾期 >=3 天
+        - low: 其余
+        """
+        if overdue_tasks_count >= 3 or max_overdue_days >= 7:
+            return "high"
+        if overdue_tasks_count >= 2 or max_overdue_days >= 3:
+            return "medium"
+        return "low"
 
     async def get_kpi_summary(self) -> KPISummary:
         """
@@ -165,6 +188,123 @@ class AnalyticsService:
             )
             for row in response.data
         ]
+
+    async def get_editor_efficiency_ranking(
+        self,
+        *,
+        limit: int = 10,
+        journal_ids: list[str] | None = None,
+    ) -> list[EditorEfficiencyItem]:
+        """
+        获取编辑效率排行（处理量 + 平均首次决定耗时）。
+        """
+        params = {
+            "limit_count": int(max(1, limit)),
+            "journal_ids": journal_ids or None,
+        }
+        try:
+            response = self.client.rpc("get_editor_efficiency_ranking", params).execute()
+        except Exception as e:
+            if self._is_missing_rpc_error(e):
+                return []
+            raise
+
+        rows = response.data or []
+        return [
+            EditorEfficiencyItem(
+                editor_id=str(row.get("editor_id") or ""),
+                editor_name=str(row.get("editor_name") or "Unknown Editor"),
+                editor_email=row.get("editor_email"),
+                handled_count=int(row.get("handled_count") or 0),
+                avg_first_decision_days=float(row.get("avg_first_decision_days") or 0),
+            )
+            for row in rows
+            if row.get("editor_id")
+        ]
+
+    async def get_stage_duration_breakdown(
+        self,
+        *,
+        journal_ids: list[str] | None = None,
+    ) -> list[StageDurationItem]:
+        """
+        获取阶段耗时分解（预审/外审/终审/生产）。
+        """
+        params = {
+            "journal_ids": journal_ids or None,
+        }
+        try:
+            response = self.client.rpc("get_stage_duration_breakdown", params).execute()
+        except Exception as e:
+            if self._is_missing_rpc_error(e):
+                return []
+            raise
+
+        rows = response.data or []
+        out: list[StageDurationItem] = []
+        for row in rows:
+            stage = str(row.get("stage") or "").strip()
+            if stage not in {"pre_check", "under_review", "decision", "production"}:
+                continue
+            stage_value = cast(StageName, stage)
+            out.append(
+                StageDurationItem(
+                    stage=stage_value,
+                    avg_days=float(row.get("avg_days") or 0),
+                    sample_size=int(row.get("sample_size") or 0),
+                )
+            )
+        return out
+
+    async def get_sla_alerts(
+        self,
+        *,
+        limit: int = 20,
+        journal_ids: list[str] | None = None,
+    ) -> list[SLAAlertItem]:
+        """
+        获取超 SLA 稿件预警列表。
+        """
+        params = {
+            "limit_count": int(max(1, limit)),
+            "journal_ids": journal_ids or None,
+        }
+        try:
+            response = self.client.rpc("get_sla_overdue_manuscripts", params).execute()
+        except Exception as e:
+            if self._is_missing_rpc_error(e):
+                return []
+            raise
+
+        rows = response.data or []
+        out: list[SLAAlertItem] = []
+        for row in rows:
+            manuscript_id = str(row.get("manuscript_id") or "")
+            if not manuscript_id:
+                continue
+            overdue_tasks_count = int(row.get("overdue_tasks_count") or 0)
+            max_overdue_days = float(row.get("max_overdue_days") or 0)
+            out.append(
+                SLAAlertItem(
+                    manuscript_id=manuscript_id,
+                    title=str(row.get("title") or manuscript_id),
+                    status=str(row.get("status") or ""),
+                    journal_id=str(row.get("journal_id") or "") or None,
+                    journal_title=row.get("journal_title"),
+                    editor_id=str(row.get("editor_id") or "") or None,
+                    editor_name=row.get("editor_name"),
+                    owner_id=str(row.get("owner_id") or "") or None,
+                    owner_name=row.get("owner_name"),
+                    overdue_tasks_count=overdue_tasks_count,
+                    max_overdue_days=max_overdue_days,
+                    earliest_due_at=row.get("earliest_due_at"),
+                    severity=self._to_sla_severity(
+                        overdue_tasks_count=overdue_tasks_count,
+                        max_overdue_days=max_overdue_days,
+                    ),
+                )
+            )
+        return out
 
 
 # 单例服务实例（可选，用于依赖注入）

@@ -105,3 +105,39 @@ export interface TrendsResponse {
 export interface GeoResponse {
   countries: GeoData[]
 }
+
+export interface EditorEfficiencyItem {
+  editor_id: string
+  editor_name: string
+  editor_email?: string | null
+  handled_count: number
+  avg_first_decision_days: number
+}
+
+export interface StageDurationItem {
+  stage: 'pre_check' | 'under_review' | 'decision' | 'production'
+  avg_days: number
+  sample_size: number
+}
+
+export interface SLAAlertItem {
+  manuscript_id: string
+  title: string
+  status: string
+  journal_id?: string | null
+  journal_title?: string | null
+  editor_id?: string | null
+  editor_name?: string | null
+  owner_id?: string | null
+  owner_name?: string | null
+  overdue_tasks_count: number
+  max_overdue_days: number
+  earliest_due_at?: string | null
+  severity: 'low' | 'medium' | 'high'
+}
+
+export interface AnalyticsManagementResponse {
+  editor_ranking: EditorEfficiencyItem[]
+  stage_durations: StageDurationItem[]
+  sla_alerts: SLAAlertItem[]
+}

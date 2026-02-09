@@ -10,8 +10,10 @@ Analytics 数据模型 (Pydantic v2)
 - DecisionData: 决定分布数据，对应 view_decision_distribution 视图
 """
 
+from datetime import date, datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from datetime import date
 
 
 class KPISummary(BaseModel):
@@ -97,3 +99,59 @@ class GeoResponse(BaseModel):
     """
 
     countries: list[GeoData]
+
+
+class EditorEfficiencyItem(BaseModel):
+    """
+    编辑效率排行项
+    """
+
+    editor_id: str = Field(..., description="编辑用户 ID")
+    editor_name: str = Field(..., description="编辑姓名（缺失时兜底）")
+    editor_email: str | None = Field(None, description="编辑邮箱")
+    handled_count: int = Field(..., ge=0, description="已处理稿件数")
+    avg_first_decision_days: float = Field(
+        ..., ge=0, description="平均首次决定耗时（天）"
+    )
+
+
+class StageDurationItem(BaseModel):
+    """
+    阶段耗时分解项
+    """
+
+    stage: Literal["pre_check", "under_review", "decision", "production"] = Field(
+        ..., description="流程阶段"
+    )
+    avg_days: float = Field(..., ge=0, description="平均耗时（天）")
+    sample_size: int = Field(..., ge=0, description="样本量")
+
+
+class SLAAlertItem(BaseModel):
+    """
+    超 SLA 稿件预警项
+    """
+
+    manuscript_id: str = Field(..., description="稿件 ID")
+    title: str = Field(..., description="稿件标题")
+    status: str = Field(..., description="当前稿件状态")
+    journal_id: str | None = Field(None, description="期刊 ID")
+    journal_title: str | None = Field(None, description="期刊标题")
+    editor_id: str | None = Field(None, description="编辑 ID")
+    editor_name: str | None = Field(None, description="编辑姓名")
+    owner_id: str | None = Field(None, description="Owner ID")
+    owner_name: str | None = Field(None, description="Owner 姓名")
+    overdue_tasks_count: int = Field(..., ge=0, description="逾期任务数")
+    max_overdue_days: float = Field(..., ge=0, description="最长逾期天数")
+    earliest_due_at: datetime | None = Field(None, description="最早逾期截止时间")
+    severity: Literal["low", "medium", "high"] = Field(..., description="风险等级")
+
+
+class AnalyticsManagementResponse(BaseModel):
+    """
+    GET /api/v1/analytics/management 响应模型
+    """
+
+    editor_ranking: list[EditorEfficiencyItem]
+    stage_durations: list[StageDurationItem]
+    sla_alerts: list[SLAAlertItem]

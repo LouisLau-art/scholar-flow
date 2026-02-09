@@ -9,13 +9,18 @@ Analytics API 单元测试
 
 import pytest
 from unittest.mock import MagicMock, patch
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
 
 from app.models.analytics import (
-    KPISummary,
-    TrendData,
-    GeoData,
     PipelineData,
     DecisionData,
+    GeoData,
+    KPISummary,
+    SLAAlertItem,
+    StageDurationItem,
+    TrendData,
 )
 
 
@@ -73,6 +78,23 @@ class TestAnalyticsModels:
         """测试 DecisionData 模型"""
         decision = DecisionData(decision="accepted", count=8)
         assert decision.decision == "accepted"
+
+    def test_stage_duration_item_valid(self):
+        item = StageDurationItem(stage="decision", avg_days=5.2, sample_size=12)
+        assert item.stage == "decision"
+        assert item.sample_size == 12
+
+    def test_sla_alert_item_valid(self):
+        item = SLAAlertItem(
+            manuscript_id="m-1",
+            title="Test Manuscript",
+            status="under_review",
+            overdue_tasks_count=2,
+            max_overdue_days=4.5,
+            severity="medium",
+        )
+        assert item.manuscript_id == "m-1"
+        assert item.severity == "medium"
 
 
 class TestAnalyticsService:
@@ -161,6 +183,103 @@ class TestAnalyticsService:
         assert result[0].country == "China"
         assert result[0].submission_count == 50
 
+    @pytest.mark.asyncio
+    async def test_get_editor_efficiency_ranking(self, mock_supabase_client):
+        from app.services.analytics_service import AnalyticsService
+
+        mock_response = MagicMock()
+        mock_response.data = [
+            {
+                "editor_id": "e-1",
+                "editor_name": "ME A",
+                "editor_email": "me-a@example.com",
+                "handled_count": 18,
+                "avg_first_decision_days": 6.4,
+            }
+        ]
+        mock_supabase_client.rpc.return_value.execute.return_value = mock_response
+
+        service = AnalyticsService(supabase_client=mock_supabase_client)
+        rows = await service.get_editor_efficiency_ranking(limit=5, journal_ids=["j-1"])
+
+        assert len(rows) == 1
+        assert rows[0].editor_id == "e-1"
+        assert rows[0].handled_count == 18
+        mock_supabase_client.rpc.assert_called_with(
+            "get_editor_efficiency_ranking",
+            {"limit_count": 5, "journal_ids": ["j-1"]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_stage_duration_breakdown(self, mock_supabase_client):
+        from app.services.analytics_service import AnalyticsService
+
+        mock_response = MagicMock()
+        mock_response.data = [
+            {"stage": "pre_check", "avg_days": 1.8, "sample_size": 20},
+            {"stage": "under_review", "avg_days": 12.3, "sample_size": 15},
+            {"stage": "decision", "avg_days": 3.5, "sample_size": 11},
+            {"stage": "production", "avg_days": 6.0, "sample_size": 6},
+        ]
+        mock_supabase_client.rpc.return_value.execute.return_value = mock_response
+
+        service = AnalyticsService(supabase_client=mock_supabase_client)
+        rows = await service.get_stage_duration_breakdown(journal_ids=["j-2"])
+
+        assert len(rows) == 4
+        assert rows[0].stage == "pre_check"
+        assert rows[2].avg_days == 3.5
+        mock_supabase_client.rpc.assert_called_with(
+            "get_stage_duration_breakdown",
+            {"journal_ids": ["j-2"]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_sla_alerts_with_severity(self, mock_supabase_client):
+        from app.services.analytics_service import AnalyticsService
+
+        mock_response = MagicMock()
+        mock_response.data = [
+            {
+                "manuscript_id": "m-low",
+                "title": "Low",
+                "status": "under_review",
+                "overdue_tasks_count": 1,
+                "max_overdue_days": 1.2,
+            },
+            {
+                "manuscript_id": "m-high",
+                "title": "High",
+                "status": "decision",
+                "overdue_tasks_count": 3,
+                "max_overdue_days": 8.0,
+            },
+        ]
+        mock_supabase_client.rpc.return_value.execute.return_value = mock_response
+
+        service = AnalyticsService(supabase_client=mock_supabase_client)
+        rows = await service.get_sla_alerts(limit=10, journal_ids=None)
+
+        assert len(rows) == 2
+        assert rows[0].severity == "low"
+        assert rows[1].severity == "high"
+        mock_supabase_client.rpc.assert_called_with(
+            "get_sla_overdue_manuscripts",
+            {"limit_count": 10, "journal_ids": None},
+        )
+
+    @pytest.mark.asyncio
+    async def test_missing_management_rpc_degrades_to_empty(self, mock_supabase_client):
+        from app.services.analytics_service import AnalyticsService
+
+        mock_supabase_client.rpc.side_effect = RuntimeError(
+            'function public.get_stage_duration_breakdown does not exist'
+        )
+        service = AnalyticsService(supabase_client=mock_supabase_client)
+
+        rows = await service.get_stage_duration_breakdown()
+        assert rows == []
+
 
 class TestAnalyticsAPI:
     """测试 Analytics API 端点"""
@@ -184,5 +303,92 @@ class TestAnalyticsAPI:
             mock.return_value = service
             yield service
 
-    # 注意: 完整的 API 测试需要使用 TestClient 并配置 FastAPI app
-    # 这里只展示模型和服务层测试
+    def test_management_endpoint_requires_role(self):
+        from app.api.v1.analytics import router
+        from app.core.auth import get_current_user
+        from app.services.analytics_service import get_analytics_service
+
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "u-author",
+            "email": "author@example.com",
+            "roles": ["author"],
+        }
+        app.dependency_overrides[get_analytics_service] = lambda: MagicMock()
+
+        client = TestClient(app)
+        resp = client.get("/api/v1/analytics/management")
+        assert resp.status_code == 403
+        assert "Insufficient role" in str(resp.json().get("detail", ""))
+
+    def test_management_endpoint_returns_payload(self):
+        from app.api.v1.analytics import router
+        from app.core.auth import get_current_user
+        from app.services.analytics_service import get_analytics_service
+
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1")
+
+        fake_service = MagicMock()
+        fake_service.get_editor_efficiency_ranking = AsyncMock(
+            return_value=[
+                {
+                    "editor_id": "e1",
+                    "editor_name": "ME A",
+                    "editor_email": "me-a@example.com",
+                    "handled_count": 12,
+                    "avg_first_decision_days": 5.4,
+                }
+            ]
+        )
+        fake_service.get_stage_duration_breakdown = AsyncMock(
+            return_value=[
+                {"stage": "pre_check", "avg_days": 2.1, "sample_size": 8},
+                {"stage": "under_review", "avg_days": 9.5, "sample_size": 8},
+                {"stage": "decision", "avg_days": 3.0, "sample_size": 8},
+                {"stage": "production", "avg_days": 6.2, "sample_size": 4},
+            ]
+        )
+        fake_service.get_sla_alerts = AsyncMock(
+            return_value=[
+                {
+                    "manuscript_id": "m1",
+                    "title": "M1",
+                    "status": "under_review",
+                    "journal_id": "j1",
+                    "journal_title": "Journal A",
+                    "editor_id": "e1",
+                    "editor_name": "ME A",
+                    "owner_id": None,
+                    "owner_name": None,
+                    "overdue_tasks_count": 2,
+                    "max_overdue_days": 4.2,
+                    "earliest_due_at": None,
+                    "severity": "medium",
+                }
+            ]
+        )
+
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": "u-me",
+            "email": "me@example.com",
+            "roles": ["editor"],
+        }
+        app.dependency_overrides[get_analytics_service] = lambda: fake_service
+
+        client = TestClient(app)
+        resp = client.get("/api/v1/analytics/management?ranking_limit=5&sla_limit=10")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body["editor_ranking"]) == 1
+        assert len(body["stage_durations"]) == 4
+        assert len(body["sla_alerts"]) == 1
+        fake_service.get_editor_efficiency_ranking.assert_awaited_once_with(
+            limit=5,
+            journal_ids=None,
+        )
+        fake_service.get_sla_alerts.assert_awaited_once_with(
+            limit=10,
+            journal_ids=None,
+        )
