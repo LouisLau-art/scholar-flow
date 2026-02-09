@@ -16,10 +16,16 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
   const [aes, setAes] = useState<Array<{ id: string; full_name?: string | null; email?: string | null }>>([]);
   const [error, setError] = useState<string>('');
 
-  if (!isOpen) return null;
-
   React.useEffect(() => {
     let mounted = true;
+    if (!isOpen) {
+      setAes([]);
+      setSelectedAE('');
+      setError('');
+      return () => {
+        mounted = false;
+      };
+    }
     async function loadAEs() {
       setIsLoadingAEs(true);
       setError('');
@@ -45,6 +51,8 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
       mounted = false;
     };
   }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const handleAssign = async () => {
     if (!selectedAE) return;
