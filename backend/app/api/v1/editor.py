@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File, Form
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -20,6 +20,8 @@ from app.services.reviewer_service import ReviewerService
 from app.services.editor_service import EditorService, ProcessListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
+from app.models.production_workspace import CreateProductionCycleRequest
+from app.services.production_workspace_service import ProductionWorkspaceService
 from typing import Literal
 from uuid import uuid4
 
@@ -1636,6 +1638,115 @@ async def get_decision_attachment_signed_url_editor(
         profile_roles=profile.get("roles") or [],
     )
     return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.get("/manuscripts/{id}/production-workspace")
+async def get_production_workspace_context(
+    id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042: 编辑端生产工作间上下文。
+    """
+    data = ProductionWorkspaceService().get_workspace_context(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": data}
+
+
+@router.post("/manuscripts/{id}/production-cycles", status_code=201)
+async def create_production_cycle(
+    id: str,
+    payload: CreateProductionCycleRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042: 创建生产轮次。
+    """
+    data = ProductionWorkspaceService().create_cycle(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+    )
+    return {"success": True, "data": {"cycle": data}}
+
+
+@router.post("/manuscripts/{id}/production-cycles/{cycle_id}/galley")
+async def upload_production_galley(
+    id: str,
+    cycle_id: str,
+    file: UploadFile = File(...),
+    version_note: str = Form(...),
+    proof_due_at: str | None = Form(default=None),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042: 上传生产轮次清样并进入 awaiting_author。
+    """
+    due_dt: datetime | None = None
+    if proof_due_at:
+        try:
+            due_dt = datetime.fromisoformat(str(proof_due_at).replace("Z", "+00:00"))
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Invalid proof_due_at: {proof_due_at}") from e
+
+    raw = await file.read()
+    data = ProductionWorkspaceService().upload_galley(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        filename=file.filename or "proof.pdf",
+        content=raw,
+        version_note=version_note,
+        proof_due_at=due_dt,
+        content_type=file.content_type,
+    )
+    return {"success": True, "data": {"cycle": data}}
+
+
+@router.get("/manuscripts/{id}/production-cycles/{cycle_id}/galley-signed")
+async def get_production_galley_signed_url_editor(
+    id: str,
+    cycle_id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042: 编辑端获取清样 signed URL。
+    """
+    signed_url = ProductionWorkspaceService().get_galley_signed_url(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.post("/manuscripts/{id}/production-cycles/{cycle_id}/approve")
+async def approve_production_cycle(
+    id: str,
+    cycle_id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042: 编辑确认发布前核准（approved_for_publish）。
+    """
+    data = ProductionWorkspaceService().approve_cycle(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": data}
 
 
 @router.post("/decision")

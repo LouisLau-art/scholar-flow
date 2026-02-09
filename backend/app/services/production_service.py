@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.core.doi_generator import generate_mock_doi
 from app.lib.api_client import supabase_admin
 from app.services.editorial_service import EditorialService
+from app.services.production_workspace_service import ProductionWorkspaceService
 
 
 POST_ACCEPTANCE_CHAIN: Final[list[str]] = [
@@ -76,6 +77,7 @@ class ProductionService:
     def __init__(self, *, editorial: EditorialService | None = None) -> None:
         self.editorial = editorial or EditorialService()
         self.client = supabase_admin
+        self.workspace = ProductionWorkspaceService()
 
     def _load_invoice(self, manuscript_id: str) -> dict[str, Any] | None:
         try:
@@ -181,6 +183,8 @@ class ProductionService:
 
         # Publish：必须过门禁 + 填充 doi/published_at（尽力写入，缺列则降级为仅 status）
         self._payment_gate(manuscript_id, current)
+        # Feature 042：发布前应绑定到“已核准生产轮次”（严格模式可通过环境变量控制）
+        self.workspace.assert_publish_gate_ready(manuscript_id=manuscript_id)
         self._production_gate(ms)
 
         now = datetime.now(timezone.utc).isoformat()

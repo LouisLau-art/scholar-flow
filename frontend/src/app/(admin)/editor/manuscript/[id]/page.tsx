@@ -300,16 +300,28 @@ export default function EditorManuscriptDetailPage() {
 
                     {/* Status Transitions */}
                     {isPostAcceptance ? (
-                        <ProductionStatusCard
-                            manuscriptId={id}
-                            status={statusLower || 'approved'}
-                            finalPdfPath={ms?.final_pdf_path}
-                            invoice={ms?.invoice}
-                            onStatusChange={(next) => {
-                                setMs((prev) => (prev ? { ...prev, status: next } : prev))
-                            }}
-                            onReload={load}
-                        />
+                        <div className="space-y-3">
+                            <Button
+                              className="w-full justify-between"
+                              variant="secondary"
+                              onClick={() => {
+                                window.location.href = `/editor/production/${encodeURIComponent(id)}`
+                              }}
+                            >
+                              Open Production Workspace
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                            <ProductionStatusCard
+                                manuscriptId={id}
+                                status={statusLower || 'approved'}
+                                finalPdfPath={ms?.final_pdf_path}
+                                invoice={ms?.invoice}
+                                onStatusChange={(next) => {
+                                    setMs((prev) => (prev ? { ...prev, status: next } : prev))
+                                }}
+                                onReload={load}
+                            />
+                        </div>
                     ) : (
                         <div className="space-y-2">
                              <div className="text-xs font-semibold text-slate-500 mb-2">CHANGE STATUS</div>

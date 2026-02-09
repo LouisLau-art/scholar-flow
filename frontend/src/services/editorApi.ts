@@ -17,6 +17,12 @@ export type DecisionSubmissionPayload = {
   last_updated_at: string | null
 }
 
+export type ProductionCycleCreatePayload = {
+  layout_editor_id: string
+  proofreader_author_id: string
+  proof_due_at: string
+}
+
 async function authedFetch(input: RequestInfo, init?: RequestInit) {
   const token = await authService.getAccessToken()
   const headers: Record<string, string> = {
@@ -85,6 +91,56 @@ export const EditorApi = {
       `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-attachments/${encodeURIComponent(
         attachmentId
       )}/signed-url`
+    )
+    return res.json()
+  },
+
+  async getProductionWorkspaceContext(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-workspace`)
+    return res.json()
+  },
+
+  async createProductionCycle(manuscriptId: string, payload: ProductionCycleCreatePayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async uploadProductionGalley(
+    manuscriptId: string,
+    cycleId: string,
+    payload: { file: File; version_note: string; proof_due_at?: string }
+  ) {
+    const formData = new FormData()
+    formData.append('file', payload.file)
+    formData.append('version_note', payload.version_note)
+    if (payload.proof_due_at) formData.append('proof_due_at', payload.proof_due_at)
+    const res = await authedFetch(
+      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/galley`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    )
+    return res.json()
+  },
+
+  async getProductionGalleySignedUrl(manuscriptId: string, cycleId: string) {
+    const res = await authedFetch(
+      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/galley-signed`
+    )
+    return res.json()
+  },
+
+  async approveProductionCycle(manuscriptId: string, cycleId: string) {
+    const res = await authedFetch(
+      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/approve`,
+      {
+        method: 'POST',
+      }
     )
     return res.json()
   },
