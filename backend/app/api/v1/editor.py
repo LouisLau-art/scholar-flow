@@ -214,7 +214,7 @@ async def get_internal_comments(
             return {"success": True, "data": []}
         raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
     except Exception as e:
-        if _is_missing_table_error(e) and "internal_comments" in f"{str(e)} {repr(e)}".lower():
+        if _is_missing_table_error(e):
             return {"success": True, "data": []}
         print(f"[InternalComments] list failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch comments")

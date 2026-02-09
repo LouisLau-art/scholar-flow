@@ -92,8 +92,8 @@ def _missing_table_from_error(error: Exception | str | None) -> str | None:
         if f"public.{table}" in lowered and any(marker in lowered for marker in missing_markers):
             return table
 
-    # 兼容消息中出现 "table 'public.internal_comments'" 的场景
-    match = re.search(r"(?:table|relation)\s+'?public\.([a-z_]+)'?", lowered)
+    # 兼容消息中出现 table/relation + public.<table>，支持单引号/双引号/无引号
+    match = re.search(r"(?:table|relation)\s+['\"]?public\.([a-z_]+)['\"]?", lowered)
     if match:
         table_name = str(match.group(1) or "").strip()
         if table_name in {"internal_comments", "internal_comment_mentions", "internal_tasks", "internal_task_activity_logs"}:
@@ -183,6 +183,12 @@ class InternalCollaborationService:
             table = _missing_table_from_error(e)
             if table == "internal_comments":
                 return []
+            # 兼容部分 SDK 抛错文本不带明确表名，但已明确是 schema cache 缺表
+            lowered = _error_text_blob(e).lower()
+            if "could not find the table" in lowered and "schema cache" in lowered:
+                return []
+            if table:
+                raise InternalCollaborationSchemaMissingError(table=table) from e
             raise
 
         comments = _extract_rows(resp)

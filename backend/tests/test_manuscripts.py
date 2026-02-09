@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from unittest.mock import patch, MagicMock
 import uuid
 import os
+import re
 from jose import jwt
 
 # === 稿件业务核心测试 (真实行为模拟版) ===
@@ -219,6 +220,28 @@ async def test_upload_rejects_non_pdf(client: AsyncClient):
     files = {"file": ("note.txt", b"hello", "text/plain")}
     response = await client.post("/api/v1/manuscripts/upload", files=files)
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_upload_success_returns_trace_id(client: AsyncClient):
+    """验证上传成功时返回 trace_id，便于线上日志排查"""
+
+    async def fake_parse(_text: str, *, layout_lines=None):
+        return {"title": "AI Paper", "abstract": "A study", "authors": ["Alice"]}
+
+    with patch(
+        "app.api.v1.manuscripts.extract_text_and_layout_from_pdf",
+        return_value=("mocked text", []),
+    ), patch("app.api.v1.manuscripts.parse_manuscript_metadata", fake_parse):
+        files = {"file": ("paper.pdf", b"%PDF-1.4\n%mocked", "application/pdf")}
+        response = await client.post("/api/v1/manuscripts/upload", files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["title"] == "AI Paper"
+    assert isinstance(payload.get("trace_id"), str)
+    assert re.fullmatch(r"[0-9a-f]{8}", payload["trace_id"]) is not None
 
 
 @pytest.mark.asyncio

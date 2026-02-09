@@ -63,6 +63,32 @@ async def test_internal_comment_mentions_flow_with_dedup(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_internal_comments_endpoint_gracefully_degrades_when_table_missing(
+    client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    editor = make_user(email="editor_internal_missing_table@example.com")
+    set_admin_emails([editor.email])
+    manuscript_id = str(uuid4())
+
+    class _MissingTableService:
+        def list_comments(self, _manuscript_id: str):
+            raise RuntimeError('Could not find the table "public.internal_comments" in the schema cache')
+
+    monkeypatch.setattr("app.api.v1.editor.InternalCollaborationService", lambda: _MissingTableService())
+
+    res = await client.get(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/comments",
+        headers={"Authorization": f"Bearer {editor.token}"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json().get("success") is True
+    assert res.json().get("data") == []
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_internal_task_create_update_and_activity_flow(
     client,
     set_admin_emails,
