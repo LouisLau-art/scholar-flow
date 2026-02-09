@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 from app.services.reviewer_service import ReviewerService
 from app.services.editor_service import EditorService, ProcessListFilters
+from app.services.decision_service import DecisionService
+from app.models.decision import DecisionSubmitRequest
 from typing import Literal
 from uuid import uuid4
 
@@ -1557,6 +1559,83 @@ async def get_available_reviewers(
         if self_candidate:
             return {"success": True, "data": [self_candidate]}
         return {"success": True, "data": []}
+
+
+@router.get("/manuscripts/{id}/decision-context")
+async def get_decision_workspace_context(
+    id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 041: 获取决策工作台聚合上下文。
+    """
+    data = DecisionService().get_decision_context(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": data}
+
+
+@router.post("/manuscripts/{id}/submit-decision")
+async def submit_decision_workspace(
+    id: str,
+    payload: DecisionSubmitRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 041: 保存草稿或提交最终决策。
+    """
+    data = DecisionService().submit_decision(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+    )
+    return {"success": True, "data": data}
+
+
+@router.post("/manuscripts/{id}/decision-attachments")
+async def upload_decision_attachment(
+    id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 041: 决策信附件上传（编辑态）。
+    """
+    raw = await file.read()
+    data = DecisionService().upload_attachment(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        filename=file.filename or "decision-attachment",
+        content=raw,
+        content_type=file.content_type,
+    )
+    return {"success": True, "data": data}
+
+
+@router.get("/manuscripts/{id}/decision-attachments/{attachment_id}/signed-url")
+async def get_decision_attachment_signed_url_editor(
+    id: str,
+    attachment_id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 041: 编辑端获取决策附件 signed URL。
+    """
+    signed_url = DecisionService().get_attachment_signed_url_for_editor(
+        manuscript_id=id,
+        attachment_id=attachment_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": {"signed_url": signed_url}}
 
 
 @router.post("/decision")

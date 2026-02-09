@@ -1,0 +1,211 @@
+openapi: 3.0.3
+info:
+  title: Final Decision Workspace API
+  version: 1.1.0
+paths:
+  /api/v1/editor/manuscripts/{id}/decision-context:
+    get:
+      summary: Get aggregated context for decision workspace
+      description: |
+        Accessible by `editor_in_chief`, manuscript `assigned_editor`, or `admin`.
+        Returns manuscript info, submitted review reports, templates and latest draft.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      responses:
+        '200':
+          description: Decision context data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionContextResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/editor/manuscripts/{id}/submit-decision:
+    post:
+      summary: Save draft or submit final decision
+      description: |
+        Uses optimistic locking via `last_updated_at`.
+        Reject is only allowed when workflow stage is `decision` or `decision_done`.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitDecisionRequest'
+      responses:
+        '200':
+          description: Decision processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitDecisionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Optimistic locking conflict (stale draft)
+        '422':
+          description: Stage gate or payload validation failed
+
+  /api/v1/editor/manuscripts/{id}/decision-attachments:
+    post:
+      summary: Upload decision attachment
+      description: Attachments are linked to decision letters and stored in `decision-attachments`.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attachment_id, path]
+                properties:
+                  attachment_id:
+                    type: string
+                    format: uuid
+                  path:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/editor/manuscripts/{id}/decision-attachments/{attachment_id}/signed-url:
+    get:
+      summary: Get signed URL for decision attachment (editor preview)
+      description: |
+        Editor roles can read attachment for authorized manuscript context.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: Signed URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signed_url]
+                properties:
+                  signed_url:
+                    type: string
+                    format: uri
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/manuscripts/{id}/decision-attachments/{attachment_id}/signed-url:
+    get:
+      summary: Get signed URL for decision attachment (author final-only)
+      description: |
+        Author can access only when the linked decision letter is `status=final`.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: Signed URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signed_url]
+                properties:
+                  signed_url:
+                    type: string
+                    format: uri
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    ManuscriptId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AttachmentId:
+      name: attachment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Forbidden:
+      description: User is not authorized for this manuscript/action
+    NotFound:
+      description: Resource not found
+
+  schemas:
+    DecisionContextResponse:
+      type: object
+      required: [manuscript, reports, templates]
+      properties:
+        manuscript:
+          type: object
+        reports:
+          type: array
+          items:
+            type: object
+        draft:
+          type: object
+          nullable: true
+        templates:
+          type: array
+          items:
+            type: object
+
+    SubmitDecisionRequest:
+      type: object
+      required: [content, decision, is_final, last_updated_at]
+      properties:
+        content:
+          type: string
+          description: Markdown decision letter content
+        decision:
+          type: string
+          enum: [accept, reject, major_revision, minor_revision]
+        is_final:
+          type: boolean
+        attachment_paths:
+          type: array
+          items:
+            type: string
+        last_updated_at:
+          type: string
+          format: date-time
+
+    SubmitDecisionResponse:
+      type: object
+      required: [decision_letter_id, status, manuscript_status]
+      properties:
+        decision_letter_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, final]
+        manuscript_status:
+          type: string

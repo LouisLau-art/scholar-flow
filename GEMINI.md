@@ -274,6 +274,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
 - **Feature 033（Manuscript Files）迁移**：云端需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`（新增 `public.manuscript_files` 用于 editor 上传 peer review files），否则 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment` 会返回 “DB not migrated”。
+- **Feature 041（Final Decision Workspace）迁移**：云端需依次执行 `supabase/migrations/20260206160000_create_decision_letters.sql`、`supabase/migrations/20260206161000_decision_storage.sql`、`supabase/migrations/20260206162000_decision_letter_constraints.sql`（新增 `public.decision_letters` 与私有桶 `decision-attachments`），否则 `/api/v1/editor/manuscripts/{id}/decision-*` 接口会因 schema/storage 缺失失败。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
 - **分支发布约束（强制）**：GitHub 远端只保留 `main` 作为长期分支；功能开发可在本地短分支进行，但完成后必须合入 `main` 并删除本地/远端功能分支，禁止在 GitHub 长期保留 `0xx-*` 分支。
@@ -288,6 +289,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-06）
+- **Feature 041（Final Decision Workspace）**：新增 `/editor/decision/[id]` 三栏沉浸式终审工作台（审稿对比 + Markdown 决策信 + PDF 预览）；后端新增 decision context/submit/attachment API，落地 `decision_letters` 表与 `decision-attachments` 私有桶，支持草稿保存、乐观锁冲突与作者端 final-only 附件可见性。
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
 - **Feature 038（Pre-check 角色工作流）**：实现 ME → AE → EIC 三级预审体系（Intake → Technical → Academic）；新增 `assistant_editor_id` 与 `pre_check_status`（intake/technical/academic）字段；后端新增相关队列与处理接口，前端新增 ME/AE/EIC 专用视图与操作弹窗；补齐集成测试与 Mocked E2E。
@@ -308,10 +310,22 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 038-precheck-role-workflow: Added Python 3.14+, TypeScript 5.x + FastAPI, Supabase (PostgreSQL), Pydantic
+- 041-final-decision-workspace: Added immersive decision workspace + decision_letters schema/storage + draft/final decision APIs + RBAC/visibility/performance coverage
+- 040-reviewer-workspace: Dedicated reviewer workspace route + APIs + tests (immersive layout, dual comments, attachments, readonly-after-submit)
+- 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
+- 038-precheck-role-workflow: Spec for ME→AE→EIC pre-check role workflow + audit timestamps
 - 037-reviewer-invite-response: Implemented reviewer accept/decline + due date window + invite timeline + editor visibility + tests
-- 040-reviewer-workspace: Added Python 3.14+ (Backend), TypeScript 5.x (Frontend) + `react-pdf` or native iframe (Frontend), `fastapi` (Backend)
+- 036-internal-collaboration: Refactored detail page (2-col), added Internal Notebook, Audit Log, and centralized File Hub
+- 033-align-detail-layout: Align editor manuscript detail layout (header/files/invoice) + editor-only peer review file upload
+- 032-enhance-process-list: Process filters (URL-driven), quick pre-check, safer Playwright webServer behavior
+- 030-reviewer-library-management: Added Reviewer Library management + assignment UX fixes (search/index + soft delete)
+- 029-manuscript-details-invoice: Added Manuscript Details docs grouping + invoice metadata editing/audit payload
+- 028-workflow-status-standardization: Standardized `manuscripts.status` enum + transition logs + editor process view
+- 027-sentry-integration: Added Sentry (Next.js + FastAPI), fail-open, no request-body capture
+- 026-automated-invoice-pdf: Added WeasyPrint invoice PDF + Storage `invoices` bucket wiring
+- 022-core-logic-hardening: Financial Gate + reviewer dual comments + attachments
 
 ## Active Technologies
-- Python 3.14+, TypeScript 5.x + FastAPI, Supabase (PostgreSQL), Pydantic (038-precheck-role-workflow)
-- PostgreSQL (`manuscripts` table update, `status_transition_logs` usage) (038-precheck-role-workflow)
+- Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
+- Deploy runtime: Python 3.12-slim (HF Space Docker)
+- Supabase (PostgreSQL + Storage) – `decision_letters` + `decision-attachments` + `user_profiles` reviewer library extension + `invoices` bucket + status transition logs

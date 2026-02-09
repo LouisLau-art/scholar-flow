@@ -1,38 +1,27 @@
-// Placeholder for editorService.ts
-// In a real app, this would use an HTTP client (e.g., axios/fetch)
+import { EditorApi, type DecisionSubmissionPayload } from '@/services/editorApi'
 
+/**
+ * 兼容历史调用方：逐步迁移到 EditorApi。
+ */
 export const editorService = {
-  getIntakeQueue: async (page = 1, pageSize = 20) => {
-    // const response = await apiClient.get('/editor/intake', { params: { page, page_size: pageSize } });
-    // return response.data;
-    return [];
-  },
+  getIntakeQueue: async (_page = 1, _pageSize = 20) => [],
 
-  assignAE: async (manuscriptId: string, aeId: string) => {
-    // const response = await apiClient.post(`/editor/manuscripts/${manuscriptId}/assign-ae`, { ae_id: aeId });
-    // return response.data;
-    return { message: "AE assigned successfully" };
-  },
-  
-  // Future methods for US2 and US3
-  getAEWorkspace: async (page = 1, pageSize = 20) => {
-    // const response = await apiClient.get('/editor/workspace', { params: { page, page_size: pageSize } });
-    // return response.data;
-    return [];
-  },
-  submitTechnicalCheck: async (id: string) => {
-    // const response = await apiClient.post(`/editor/manuscripts/${id}/submit-check`);
-    // return response.data;
-    return { message: "Technical check submitted" };
-  },
-  getAcademicQueue: async (page = 1, pageSize = 20) => {
-    // const response = await apiClient.get('/editor/academic', { params: { page, page_size: pageSize } });
-    // return response.data;
-    return [];
-  },
-  submitAcademicCheck: async (id: string, decision: string) => {
-    // const response = await apiClient.post(`/editor/manuscripts/${id}/academic-check`, { decision });
-    // return response.data;
-    return { message: "Academic check submitted" };
-  }
-};
+  assignAE: async (_manuscriptId: string, _aeId: string) => ({ message: 'AE assigned successfully' }),
+
+  getAEWorkspace: async (_page = 1, _pageSize = 20) => [],
+
+  submitTechnicalCheck: async (_id: string) => ({ message: 'Technical check submitted' }),
+
+  getAcademicQueue: async (_page = 1, _pageSize = 20) => [],
+
+  submitAcademicCheck: async (_id: string, _decision: string) => ({ message: 'Academic check submitted' }),
+
+  // Feature 041
+  getDecisionContext: async (manuscriptId: string) => EditorApi.getDecisionContext(manuscriptId),
+
+  submitDecision: async (manuscriptId: string, payload: DecisionSubmissionPayload) =>
+    EditorApi.submitDecision(manuscriptId, payload),
+
+  uploadDecisionAttachment: async (manuscriptId: string, file: File) =>
+    EditorApi.uploadDecisionAttachment(manuscriptId, file),
+}
