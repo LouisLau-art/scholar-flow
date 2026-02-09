@@ -29,6 +29,8 @@ from app.services.invoice_pdf_service import (
 )
 from app.services.post_acceptance_service import publish_manuscript as publish_manuscript_post_acceptance
 from app.services.decision_service import DecisionService
+from app.services.production_workspace_service import ProductionWorkspaceService
+from app.models.production_workspace import SubmitProofreadingRequest
 from uuid import uuid4, UUID
 import shutil
 import os
@@ -175,6 +177,63 @@ async def get_decision_attachment_signed_url_for_author(
     signed_url = DecisionService().get_attachment_signed_url_for_author(
         manuscript_id=str(manuscript_id),
         attachment_id=attachment_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.get("/manuscripts/{manuscript_id}/proofreading-context")
+async def get_proofreading_context(
+    manuscript_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 042: 作者侧获取待校对清样上下文。
+    """
+    data = ProductionWorkspaceService().get_author_proofreading_context(
+        manuscript_id=str(manuscript_id),
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": data}
+
+
+@router.post("/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading")
+async def submit_proofreading_response(
+    manuscript_id: UUID,
+    cycle_id: str,
+    payload: SubmitProofreadingRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 042: 作者提交校对反馈（confirm_clean / submit_corrections）。
+    """
+    data = ProductionWorkspaceService().submit_proofreading(
+        manuscript_id=str(manuscript_id),
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+    )
+    return {"success": True, "data": data}
+
+
+@router.get("/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/galley-signed")
+async def get_production_galley_signed_url_for_author(
+    manuscript_id: UUID,
+    cycle_id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 042: 作者/内部角色获取 production galley 的 signed URL。
+    """
+    signed_url = ProductionWorkspaceService().get_galley_signed_url(
+        manuscript_id=str(manuscript_id),
+        cycle_id=cycle_id,
         user_id=str(current_user.get("id") or ""),
         profile_roles=profile.get("roles") or [],
     )

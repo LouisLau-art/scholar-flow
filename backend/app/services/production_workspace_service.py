@@ -1,0 +1,922 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+from typing import Any
+from uuid import uuid4
+
+from fastapi import HTTPException
+
+from app.lib.api_client import supabase_admin
+from app.models.manuscript import ManuscriptStatus, normalize_status
+from app.models.production_workspace import (
+    CreateProductionCycleRequest,
+    SubmitProofreadingRequest,
+)
+from app.services.notification_service import NotificationService
+
+
+POST_ACCEPTANCE_ALLOWED = {
+    ManuscriptStatus.APPROVED.value,
+    ManuscriptStatus.LAYOUT.value,
+    ManuscriptStatus.ENGLISH_EDITING.value,
+    ManuscriptStatus.PROOFREADING.value,
+}
+
+ACTIVE_CYCLE_STATUSES = {
+    "draft",
+    "awaiting_author",
+    "author_corrections_submitted",
+    "in_layout_revision",
+}
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utc_now_iso() -> str:
+    return _utc_now().isoformat()
+
+
+def _is_truthy_env(name: str, default: str = "0") -> bool:
+    return (os.getenv(name, default) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "y",
+    }
+
+
+def _is_table_missing_error(error: Exception, table_name: str) -> bool:
+    text = str(error).lower()
+    return table_name.lower() in text and "does not exist" in text
+
+
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    text = str(error).lower()
+    return column_name.lower() in text and ("column" in text or "schema cache" in text)
+
+
+def _safe_filename(filename: str) -> str:
+    return str(filename or "proof.pdf").replace("/", "_").replace("\\", "_")
+
+
+class ProductionWorkspaceService:
+    """
+    Feature 042: 录用后生产协作工作间。
+
+    中文注释:
+    - 管理 production cycle 生命周期。
+    - 处理作者校对提交（confirm/corrections）。
+    - 提供发布前核准门禁数据。
+    """
+
+    def __init__(self) -> None:
+        self.client = supabase_admin
+        self.notification = NotificationService()
+
+    def _roles(self, profile_roles: list[str] | None) -> set[str]:
+        return {str(r).strip().lower() for r in (profile_roles or []) if str(r).strip()}
+
+    def _ensure_bucket(self, bucket: str, *, public: bool = False) -> None:
+        storage = getattr(self.client, "storage", None)
+        if storage is None or not hasattr(storage, "get_bucket") or not hasattr(storage, "create_bucket"):
+            return
+        try:
+            storage.get_bucket(bucket)
+        except Exception:
+            try:
+                storage.create_bucket(bucket, options={"public": bool(public)})
+            except Exception:
+                return
+
+    def _signed_url(self, bucket: str, path: str, expires_in: int = 60 * 10) -> str | None:
+        p = str(path or "").strip()
+        if not p:
+            return None
+        try:
+            signed = self.client.storage.from_(bucket).create_signed_url(p, expires_in)
+            return (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
+        except Exception:
+            return None
+
+    def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
+        try:
+            try:
+                resp = (
+                    self.client.table("manuscripts")
+                    .select("id,title,status,author_id,editor_id,owner_id,file_path,final_pdf_path,updated_at")
+                    .eq("id", manuscript_id)
+                    .single()
+                    .execute()
+                )
+            except Exception as first_err:
+                if _is_missing_column_error(first_err, "final_pdf_path"):
+                    resp = (
+                        self.client.table("manuscripts")
+                        .select("id,title,status,author_id,editor_id,owner_id,file_path,updated_at")
+                        .eq("id", manuscript_id)
+                        .single()
+                        .execute()
+                    )
+                else:
+                    raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Manuscript not found") from e
+
+        row = getattr(resp, "data", None) or None
+        if not row:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        return row
+
+    def _ensure_editor_access(self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]) -> None:
+        if roles.intersection({"admin", "editor_in_chief"}):
+            return
+        if "editor" not in roles:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        allowed = {
+            str(manuscript.get("editor_id") or "").strip(),
+            str(manuscript.get("owner_id") or "").strip(),
+        }
+        if str(user_id) in {a for a in allowed if a}:
+            return
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    def _ensure_author_or_internal_access(
+        self,
+        *,
+        manuscript: dict[str, Any],
+        cycle: dict[str, Any],
+        user_id: str,
+        roles: set[str],
+    ) -> bool:
+        if roles.intersection({"admin", "editor", "editor_in_chief"}):
+            return True
+
+        proofreader_id = str(cycle.get("proofreader_author_id") or "").strip()
+        if proofreader_id and proofreader_id == str(user_id):
+            return False
+        if str(manuscript.get("author_id") or "").strip() == str(user_id):
+            return False
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    def _get_cycles(self, manuscript_id: str) -> list[dict[str, Any]]:
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .select(
+                    "id,manuscript_id,cycle_no,status,layout_editor_id,proofreader_author_id,"
+                    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
+                )
+                .eq("manuscript_id", manuscript_id)
+                .order("cycle_no", desc=True)
+                .execute()
+            )
+            return getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_cycles table missing",
+                ) from e
+            raise
+
+    def _get_cycle(self, *, manuscript_id: str, cycle_id: str) -> dict[str, Any]:
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .select(
+                    "id,manuscript_id,cycle_no,status,layout_editor_id,proofreader_author_id,"
+                    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
+                )
+                .eq("manuscript_id", manuscript_id)
+                .eq("id", cycle_id)
+                .single()
+                .execute()
+            )
+            row = getattr(resp, "data", None) or None
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_cycles table missing",
+                ) from e
+            raise HTTPException(status_code=404, detail="Production cycle not found") from e
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Production cycle not found")
+        return row
+
+    def _get_latest_response(self, cycle_id: str) -> dict[str, Any] | None:
+        try:
+            resp = (
+                self.client.table("production_proofreading_responses")
+                .select("id,cycle_id,manuscript_id,author_id,decision,summary,submitted_at,is_late,created_at")
+                .eq("cycle_id", cycle_id)
+                .order("submitted_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_table_missing_error(e, "production_proofreading_responses"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_proofreading_responses table missing",
+                ) from e
+            raise
+
+        if not rows:
+            return None
+
+        row = rows[0]
+        if str(row.get("decision") or "") == "submit_corrections":
+            try:
+                c = (
+                    self.client.table("production_correction_items")
+                    .select("id,line_ref,original_text,suggested_text,reason,sort_order")
+                    .eq("response_id", row.get("id"))
+                    .order("sort_order", desc=False)
+                    .execute()
+                )
+                row["corrections"] = getattr(c, "data", None) or []
+            except Exception:
+                row["corrections"] = []
+        else:
+            row["corrections"] = []
+        return row
+
+    def _format_cycle(self, row: dict[str, Any], *, include_signed_url: bool) -> dict[str, Any]:
+        bucket = str(row.get("galley_bucket") or "").strip()
+        path = str(row.get("galley_path") or "").strip()
+        return {
+            "id": row.get("id"),
+            "manuscript_id": row.get("manuscript_id"),
+            "cycle_no": row.get("cycle_no"),
+            "status": row.get("status"),
+            "layout_editor_id": row.get("layout_editor_id"),
+            "proofreader_author_id": row.get("proofreader_author_id"),
+            "galley_bucket": bucket or None,
+            "galley_path": path or None,
+            "galley_signed_url": self._signed_url(bucket, path) if include_signed_url and bucket and path else None,
+            "version_note": row.get("version_note"),
+            "proof_due_at": row.get("proof_due_at"),
+            "approved_by": row.get("approved_by"),
+            "approved_at": row.get("approved_at"),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "latest_response": self._get_latest_response(str(row.get("id") or "")),
+        }
+
+    def _next_cycle_no(self, manuscript_id: str) -> int:
+        cycles = self._get_cycles(manuscript_id)
+        if not cycles:
+            return 1
+        try:
+            return int(cycles[0].get("cycle_no") or 0) + 1
+        except Exception:
+            return 1
+
+    def _insert_log(
+        self,
+        *,
+        manuscript_id: str,
+        from_status: str | None,
+        to_status: str,
+        changed_by: str,
+        comment: str,
+        payload: dict[str, Any],
+    ) -> None:
+        base_payload = {
+            "manuscript_id": manuscript_id,
+            "from_status": from_status,
+            "to_status": to_status,
+            "comment": comment,
+            "changed_by": changed_by,
+            "created_at": _utc_now_iso(),
+            "payload": payload,
+        }
+        try:
+            self.client.table("status_transition_logs").insert(base_payload).execute()
+            return
+        except Exception as e:
+            if _is_missing_column_error(e, "payload"):
+                fallback = dict(base_payload)
+                fallback.pop("payload", None)
+                try:
+                    self.client.table("status_transition_logs").insert(fallback).execute()
+                except Exception:
+                    pass
+            return
+
+    def _notify(self, *, user_id: str | None, manuscript_id: str, title: str, content: str, action_url: str) -> None:
+        uid = str(user_id or "").strip()
+        if not uid:
+            return
+        self.notification.create_notification(
+            user_id=uid,
+            manuscript_id=manuscript_id,
+            action_url=action_url,
+            type="system",
+            title=title,
+            content=content,
+        )
+
+    def get_workspace_context(
+        self,
+        *,
+        manuscript_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+        cycles = self._get_cycles(manuscript_id)
+        active = next((c for c in cycles if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
+
+        manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
+        can_create = manuscript_status in POST_ACCEPTANCE_ALLOWED and active is None
+
+        return {
+            "manuscript": {
+                "id": manuscript.get("id"),
+                "title": manuscript.get("title") or "Untitled",
+                "status": manuscript.get("status"),
+                "author_id": manuscript.get("author_id"),
+                "editor_id": manuscript.get("editor_id"),
+                "owner_id": manuscript.get("owner_id"),
+                "pdf_url": self._signed_url("manuscripts", str(manuscript.get("file_path") or "")),
+            },
+            "active_cycle": self._format_cycle(active, include_signed_url=True) if active else None,
+            "cycle_history": [self._format_cycle(c, include_signed_url=False) for c in cycles],
+            "permissions": {
+                "can_create_cycle": can_create,
+                "can_upload_galley": bool(active and str(active.get("status") or "") in {"draft", "in_layout_revision", "author_corrections_submitted"}),
+                "can_approve": bool(active and str(active.get("status") or "") == "author_confirmed"),
+            },
+        }
+
+    def create_cycle(
+        self,
+        *,
+        manuscript_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        request: CreateProductionCycleRequest,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+        status = normalize_status(str(manuscript.get("status") or "")) or ""
+        if status not in POST_ACCEPTANCE_ALLOWED:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Production cycle requires status in {sorted(POST_ACCEPTANCE_ALLOWED)}",
+            )
+
+        if request.proof_due_at <= _utc_now():
+            raise HTTPException(status_code=422, detail="proof_due_at must be in the future")
+
+        active = next(
+            (c for c in self._get_cycles(manuscript_id) if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES),
+            None,
+        )
+        if active:
+            raise HTTPException(status_code=409, detail="An active production cycle already exists")
+
+        # MVP 约束：当前只支持稿件 owner(author_id) 作为责任作者。
+        manuscript_author = str(manuscript.get("author_id") or "").strip()
+        if manuscript_author and manuscript_author != str(request.proofreader_author_id):
+            raise HTTPException(
+                status_code=422,
+                detail="proofreader_author_id must match manuscript author_id in MVP",
+            )
+
+        now = _utc_now_iso()
+        payload = {
+            "manuscript_id": manuscript_id,
+            "cycle_no": self._next_cycle_no(manuscript_id),
+            "status": "draft",
+            "layout_editor_id": str(request.layout_editor_id),
+            "proofreader_author_id": str(request.proofreader_author_id),
+            "proof_due_at": request.proof_due_at.isoformat(),
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            resp = self.client.table("production_cycles").insert(payload).execute()
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to create production cycle")
+            row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_cycles table missing",
+                ) from e
+            if "idx_production_cycles_active_unique" in str(e):
+                raise HTTPException(status_code=409, detail="An active production cycle already exists") from e
+            raise HTTPException(status_code=500, detail=f"Failed to create production cycle: {e}") from e
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=None,
+            to_status="draft",
+            changed_by=user_id,
+            comment="production cycle created",
+            payload={
+                "event_type": "production_cycle_created",
+                "cycle_id": row.get("id"),
+                "proof_due_at": row.get("proof_due_at"),
+            },
+        )
+
+        return self._format_cycle(row, include_signed_url=False)
+
+    def upload_galley(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        filename: str,
+        content: bytes,
+        version_note: str,
+        proof_due_at: datetime | None,
+        content_type: str | None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+        if not content:
+            raise HTTPException(status_code=400, detail="Galley file is empty")
+        if len(content) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Galley file too large (max 50MB)")
+        if not str(filename or "").lower().endswith(".pdf"):
+            raise HTTPException(status_code=422, detail="Only PDF galley files are supported")
+
+        note = str(version_note or "").strip()
+        if not note:
+            raise HTTPException(status_code=422, detail="version_note is required")
+
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        old_status = str(cycle.get("status") or "")
+        if old_status not in {"draft", "in_layout_revision", "author_corrections_submitted"}:
+            raise HTTPException(status_code=409, detail=f"Cannot upload galley in cycle status '{old_status}'")
+
+        due = proof_due_at or None
+        if due is not None and due <= _utc_now():
+            raise HTTPException(status_code=422, detail="proof_due_at must be in the future")
+
+        self._ensure_bucket("production-proofs", public=False)
+        object_path = (
+            f"production_cycles/{manuscript_id}/"
+            f"cycle-{int(cycle.get('cycle_no') or 0)}/{uuid4()}_{_safe_filename(filename)}"
+        )
+
+        try:
+            self.client.storage.from_("production-proofs").upload(
+                object_path,
+                content,
+                {"content-type": content_type or "application/pdf"},
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload galley: {e}") from e
+
+        now = _utc_now_iso()
+        patch: dict[str, Any] = {
+            "status": "awaiting_author",
+            "galley_bucket": "production-proofs",
+            "galley_path": object_path,
+            "version_note": note,
+            "updated_at": now,
+        }
+        if due is not None:
+            patch["proof_due_at"] = due.isoformat()
+
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .update(patch)
+                .eq("id", cycle_id)
+                .eq("manuscript_id", manuscript_id)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to update cycle after galley upload")
+            row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update cycle: {e}") from e
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=old_status,
+            to_status="awaiting_author",
+            changed_by=user_id,
+            comment="galley uploaded",
+            payload={
+                "event_type": "galley_uploaded",
+                "cycle_id": cycle_id,
+                "galley_path": object_path,
+                "version_note": note,
+                "proof_due_at": row.get("proof_due_at"),
+            },
+        )
+
+        self._notify(
+            user_id=str(row.get("proofreader_author_id") or ""),
+            manuscript_id=manuscript_id,
+            title="Proofreading Required",
+            content=f"New galley proof is ready for manuscript '{manuscript.get('title') or manuscript_id}'.",
+            action_url=f"/proofreading/{manuscript_id}",
+        )
+
+        return self._format_cycle(row, include_signed_url=True)
+
+    def get_galley_signed_url(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+    ) -> str:
+        manuscript = self._get_manuscript(manuscript_id)
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        roles = self._roles(profile_roles)
+
+        is_internal = roles.intersection({"admin", "editor", "editor_in_chief"})
+        if is_internal:
+            self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        else:
+            self._ensure_author_or_internal_access(
+                manuscript=manuscript,
+                cycle=cycle,
+                user_id=user_id,
+                roles=roles,
+            )
+
+        bucket = str(cycle.get("galley_bucket") or "production-proofs")
+        path = str(cycle.get("galley_path") or "")
+        if not path:
+            raise HTTPException(status_code=404, detail="Galley proof not uploaded")
+        signed = self._signed_url(bucket, path)
+        if not signed:
+            raise HTTPException(status_code=500, detail="Failed to sign galley URL")
+        return signed
+
+    def get_author_proofreading_context(
+        self,
+        *,
+        manuscript_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+
+        # 作者侧默认读取最新 awaiting_author 轮次。
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .select(
+                    "id,manuscript_id,cycle_no,status,layout_editor_id,proofreader_author_id,"
+                    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
+                )
+                .eq("manuscript_id", manuscript_id)
+                .eq("status", "awaiting_author")
+                .order("cycle_no", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_cycles table missing",
+                ) from e
+            raise
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No proofreading task available")
+
+        cycle = rows[0]
+        self._ensure_author_or_internal_access(
+            manuscript=manuscript,
+            cycle=cycle,
+            user_id=user_id,
+            roles=roles,
+        )
+
+        latest = self._get_latest_response(str(cycle.get("id") or ""))
+        read_only = latest is not None
+
+        due_raw = cycle.get("proof_due_at")
+        due_at: datetime | None = None
+        if isinstance(due_raw, datetime):
+            due_at = due_raw
+        elif isinstance(due_raw, str) and due_raw:
+            try:
+                due_at = datetime.fromisoformat(due_raw.replace("Z", "+00:00"))
+            except Exception:
+                due_at = None
+
+        if due_at and due_at < _utc_now():
+            read_only = True
+
+        return {
+            "manuscript": {
+                "id": manuscript.get("id"),
+                "title": manuscript.get("title") or "Untitled",
+                "status": manuscript.get("status"),
+            },
+            "cycle": self._format_cycle(cycle, include_signed_url=True),
+            "can_submit": not read_only,
+            "is_read_only": read_only,
+        }
+
+    def submit_proofreading(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        request: SubmitProofreadingRequest,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        roles = self._roles(profile_roles)
+
+        is_internal = self._ensure_author_or_internal_access(
+            manuscript=manuscript,
+            cycle=cycle,
+            user_id=user_id,
+            roles=roles,
+        )
+        if is_internal:
+            raise HTTPException(status_code=403, detail="Internal users cannot submit author proofreading")
+
+        if str(cycle.get("status") or "") != "awaiting_author":
+            raise HTTPException(status_code=409, detail="Cycle is not awaiting author response")
+
+        existing = self._get_latest_response(str(cycle.get("id") or ""))
+        if existing:
+            raise HTTPException(status_code=409, detail="Proofreading response already submitted")
+
+        due_raw = cycle.get("proof_due_at")
+        due_at: datetime | None = None
+        if isinstance(due_raw, datetime):
+            due_at = due_raw
+        elif isinstance(due_raw, str) and due_raw:
+            try:
+                due_at = datetime.fromisoformat(due_raw.replace("Z", "+00:00"))
+            except Exception:
+                due_at = None
+
+        now = _utc_now()
+        if due_at and now > due_at:
+            raise HTTPException(status_code=422, detail="Proofreading deadline has passed")
+
+        decision = str(request.decision)
+        new_status = "author_confirmed" if decision == "confirm_clean" else "author_corrections_submitted"
+
+        submitted_at = now.isoformat()
+        response_payload = {
+            "cycle_id": cycle_id,
+            "manuscript_id": manuscript_id,
+            "author_id": user_id,
+            "decision": decision,
+            "summary": request.summary,
+            "submitted_at": submitted_at,
+            "is_late": bool(due_at and now > due_at),
+            "created_at": submitted_at,
+        }
+        try:
+            resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to save proofreading response")
+            response_row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as e:
+            if _is_table_missing_error(e, "production_proofreading_responses"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_proofreading_responses table missing",
+                ) from e
+            raise HTTPException(status_code=500, detail=f"Failed to save proofreading response: {e}") from e
+
+        if decision == "submit_corrections":
+            items = []
+            for idx, item in enumerate(request.corrections):
+                items.append(
+                    {
+                        "response_id": response_row.get("id"),
+                        "line_ref": item.line_ref,
+                        "original_text": item.original_text,
+                        "suggested_text": item.suggested_text,
+                        "reason": item.reason,
+                        "sort_order": idx,
+                    }
+                )
+            try:
+                if items:
+                    self.client.table("production_correction_items").insert(items).execute()
+            except Exception as e:
+                if _is_table_missing_error(e, "production_correction_items"):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="DB not migrated: production_correction_items table missing",
+                    ) from e
+                raise HTTPException(status_code=500, detail=f"Failed to save correction items: {e}") from e
+
+        try:
+            self.client.table("production_cycles").update(
+                {
+                    "status": new_status,
+                    "updated_at": submitted_at,
+                }
+            ).eq("id", cycle_id).eq("manuscript_id", manuscript_id).execute()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update cycle status: {e}") from e
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status="awaiting_author",
+            to_status=new_status,
+            changed_by=user_id,
+            comment="proofreading submitted",
+            payload={
+                "event_type": "proofreading_submitted",
+                "cycle_id": cycle_id,
+                "decision": decision,
+                "response_id": response_row.get("id"),
+            },
+        )
+
+        if decision == "submit_corrections":
+            self._notify(
+                user_id=str(cycle.get("layout_editor_id") or manuscript.get("editor_id") or ""),
+                manuscript_id=manuscript_id,
+                title="Proof Corrections Submitted",
+                content=f"Author submitted corrections for manuscript '{manuscript.get('title') or manuscript_id}'.",
+                action_url=f"/editor/production/{manuscript_id}",
+            )
+        else:
+            self._notify(
+                user_id=str(manuscript.get("editor_id") or manuscript.get("owner_id") or ""),
+                manuscript_id=manuscript_id,
+                title="Proofreading Confirmed",
+                content=f"Author confirmed galley proof for manuscript '{manuscript.get('title') or manuscript_id}'.",
+                action_url=f"/editor/production/{manuscript_id}",
+            )
+
+        return {
+            "response_id": response_row.get("id"),
+            "cycle_id": cycle_id,
+            "decision": decision,
+            "submitted_at": response_row.get("submitted_at") or submitted_at,
+        }
+
+    def approve_cycle(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        if str(cycle.get("status") or "") != "author_confirmed":
+            raise HTTPException(
+                status_code=422,
+                detail="Cycle can be approved only after author_confirmed",
+            )
+
+        galley_path = str(cycle.get("galley_path") or "").strip()
+        if not galley_path:
+            raise HTTPException(status_code=422, detail="Cannot approve cycle without galley proof")
+
+        now = _utc_now_iso()
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .update(
+                    {
+                        "status": "approved_for_publish",
+                        "approved_by": user_id,
+                        "approved_at": now,
+                        "updated_at": now,
+                    }
+                )
+                .eq("id", cycle_id)
+                .eq("manuscript_id", manuscript_id)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to approve cycle")
+            row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to approve cycle: {e}") from e
+
+        # 与现有 publish gate 对齐：尽量同步 final_pdf_path（若列缺失按环境降级）
+        try:
+            self.client.table("manuscripts").update({"final_pdf_path": galley_path}).eq(
+                "id", manuscript_id
+            ).execute()
+        except Exception as e:
+            if _is_missing_column_error(e, "final_pdf_path"):
+                if _is_truthy_env("PRODUCTION_GATE_ENABLED", "0"):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Database schema missing final_pdf_path while PRODUCTION_GATE_ENABLED=1",
+                    ) from e
+            else:
+                raise
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status="author_confirmed",
+            to_status="approved_for_publish",
+            changed_by=user_id,
+            comment="production cycle approved",
+            payload={
+                "event_type": "production_approved",
+                "cycle_id": cycle_id,
+                "galley_path": galley_path,
+            },
+        )
+
+        self._notify(
+            user_id=str(manuscript.get("author_id") or ""),
+            manuscript_id=manuscript_id,
+            title="Production Approved",
+            content=f"Your proofreading cycle was approved for publication: '{manuscript.get('title') or manuscript_id}'.",
+            action_url=f"/dashboard",
+        )
+
+        return {
+            "cycle_id": cycle_id,
+            "status": "approved_for_publish",
+            "approved_at": row.get("approved_at") or now,
+            "approved_by": str(row.get("approved_by") or user_id),
+        }
+
+    def assert_publish_gate_ready(self, *, manuscript_id: str) -> dict[str, Any] | None:
+        """
+        发布前核准门禁：
+        - 严格模式（PRODUCTION_CYCLE_STRICT=1）下，必须存在 approved_for_publish 轮次。
+        - 非严格模式下，若没有任何生产轮次则降级放行（兼容历史数据）。
+        """
+        strict = _is_truthy_env("PRODUCTION_CYCLE_STRICT", "0")
+
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .select("id,manuscript_id,cycle_no,status,galley_path,approved_at")
+                .eq("manuscript_id", manuscript_id)
+                .order("cycle_no", desc=True)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                return None
+            raise HTTPException(status_code=500, detail=f"Failed to validate production cycle gate: {e}") from e
+
+        if not rows:
+            if strict:
+                raise HTTPException(status_code=403, detail="Production approval required before publish")
+            return None
+
+        latest = rows[0]
+        if str(latest.get("status") or "") != "approved_for_publish":
+            raise HTTPException(status_code=403, detail="Latest production cycle is not approved for publish")
+        if not str(latest.get("galley_path") or "").strip():
+            raise HTTPException(status_code=403, detail="Approved production cycle is missing galley proof")
+        return latest

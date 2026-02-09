@@ -311,6 +311,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 042-production-pipeline: Added Python 3.14+ (local), Python 3.12 (HF Docker runtime), TypeScript 5.x + FastAPI, Pydantic v2, Supabase (PostgreSQL + Storage), Next.js 14 App Router, React 18, Tailwind CSS, Shadcn UI
 - 041-final-decision-workspace: Added immersive decision workspace + decision_letters schema/storage + draft/final decision APIs + RBAC/visibility/performance coverage
 - 040-reviewer-workspace: Dedicated reviewer workspace route + APIs + tests (immersive layout, dual comments, attachments, readonly-after-submit)
 - 039-reviewer-magic-link: Reviewer JWT Magic Link (middleware + httpOnly cookie) + backend scope-checked endpoints + tests
@@ -330,3 +331,5 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
 - Deploy runtime: Python 3.12-slim (HF Space Docker)
 - Supabase (PostgreSQL + Storage) – `decision_letters` + `decision-attachments` + `user_profiles` reviewer library extension + `invoices` bucket + status transition logs
+- Python 3.14+ (local), Python 3.12 (HF Docker runtime), TypeScript 5.x + FastAPI, Pydantic v2, Supabase (PostgreSQL + Storage), Next.js 14 App Router, React 18, Tailwind CSS, Shadcn UI (042-production-pipeline)
+- Supabase PostgreSQL (`manuscripts`, `status_transition_logs`, new `production_*` tables), Supabase Storage (private buckets: `manuscripts`, `production-proofs`) (042-production-pipeline)

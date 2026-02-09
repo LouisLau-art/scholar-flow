@@ -1,0 +1,409 @@
+openapi: 3.0.3
+info:
+  title: Production Pipeline Workspace API
+  version: 1.0.0
+
+paths:
+  /api/v1/editor/manuscripts/{id}/production-workspace:
+    get:
+      summary: Get production workspace context
+      description: |
+        Returns manuscript production context, active cycle, cycle history and latest author feedback.
+        Accessible by editor/admin roles with manuscript authorization.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      responses:
+        '200':
+          description: Production workspace context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionWorkspaceResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/editor/manuscripts/{id}/production-cycles:
+    post:
+      summary: Create a production cycle
+      description: |
+        Creates the next cycle for an accepted/post-acceptance manuscript.
+        Enforces one active cycle per manuscript.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCycleRequest'
+      responses:
+        '201':
+          description: Cycle created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: An active cycle already exists
+        '422':
+          description: Validation failed
+
+  /api/v1/editor/manuscripts/{id}/production-cycles/{cycle_id}/galley:
+    post:
+      summary: Upload galley proof for a cycle
+      description: |
+        Uploads a PDF galley proof, saves version note and moves cycle status to awaiting_author.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/CycleId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, version_note]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                version_note:
+                  type: string
+                proof_due_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Galley uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Invalid file type or invalid cycle state
+
+  /api/v1/editor/manuscripts/{id}/production-cycles/{cycle_id}/galley-signed:
+    get:
+      summary: Get signed URL for galley proof (editor/internal)
+      description: |
+        Returns signed URL for the cycle galley file.
+        Accessible by authorized editor/admin roles.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/CycleId'
+      responses:
+        '200':
+          description: Signed URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/manuscripts/{manuscript_id}/proofreading-context:
+    get:
+      summary: Get active author proofreading context
+      description: |
+        Returns the latest awaiting_author cycle and manuscript metadata for the assigned author.
+      parameters:
+        - $ref: '#/components/parameters/AuthorManuscriptId'
+      responses:
+        '200':
+          description: Author proofreading context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofreadingContextResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading:
+    post:
+      summary: Submit proofreading response (author)
+      description: |
+        Author submits either confirm_clean or submit_corrections for the assigned cycle.
+      parameters:
+        - $ref: '#/components/parameters/AuthorManuscriptId'
+        - $ref: '#/components/parameters/CycleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitProofreadingRequest'
+      responses:
+        '200':
+          description: Proofreading response submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofreadingResponsePayload'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Response already submitted or cycle not writable
+        '422':
+          description: Validation failed (e.g., corrections required)
+
+  /api/v1/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/galley-signed:
+    get:
+      summary: Get signed URL for galley proof (author)
+      description: |
+        Returns signed URL for current cycle galley file.
+        Accessible by assigned author or authorized internal users.
+      parameters:
+        - $ref: '#/components/parameters/AuthorManuscriptId'
+        - $ref: '#/components/parameters/CycleId'
+      responses:
+        '200':
+          description: Signed URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/editor/manuscripts/{id}/production-cycles/{cycle_id}/approve:
+    post:
+      summary: Approve cycle for publication
+      description: |
+        Marks cycle as approved_for_publish.
+        Requires author_confirmed status and editor authorization.
+      parameters:
+        - $ref: '#/components/parameters/ManuscriptId'
+        - $ref: '#/components/parameters/CycleId'
+      responses:
+        '200':
+          description: Cycle approved for publication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Cycle state conflict
+        '422':
+          description: Precondition not met
+
+components:
+  parameters:
+    ManuscriptId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CycleId:
+      name: cycle_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AuthorManuscriptId:
+      name: manuscript_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Forbidden:
+      description: User is not authorized for this manuscript/action
+    NotFound:
+      description: Resource not found
+
+  schemas:
+    ProductionWorkspaceResponse:
+      type: object
+      required: [manuscript, active_cycle, cycle_history, permissions]
+      properties:
+        manuscript:
+          type: object
+        active_cycle:
+          $ref: '#/components/schemas/CyclePayload'
+          nullable: true
+        cycle_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/CyclePayload'
+        permissions:
+          type: object
+          properties:
+            can_create_cycle:
+              type: boolean
+            can_upload_galley:
+              type: boolean
+            can_approve:
+              type: boolean
+
+    CreateCycleRequest:
+      type: object
+      required: [layout_editor_id, proofreader_author_id, proof_due_at]
+      properties:
+        layout_editor_id:
+          type: string
+          format: uuid
+        proofreader_author_id:
+          type: string
+          format: uuid
+        proof_due_at:
+          type: string
+          format: date-time
+
+    SubmitProofreadingRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [confirm_clean, submit_corrections]
+        summary:
+          type: string
+        corrections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorrectionItem'
+
+    CorrectionItem:
+      type: object
+      required: [suggested_text]
+      properties:
+        line_ref:
+          type: string
+        original_text:
+          type: string
+        suggested_text:
+          type: string
+        reason:
+          type: string
+
+    CyclePayload:
+      type: object
+      required: [id, manuscript_id, cycle_no, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        manuscript_id:
+          type: string
+          format: uuid
+        cycle_no:
+          type: integer
+        status:
+          type: string
+          enum:
+            - draft
+            - awaiting_author
+            - author_confirmed
+            - author_corrections_submitted
+            - in_layout_revision
+            - approved_for_publish
+            - cancelled
+        proof_due_at:
+          type: string
+          format: date-time
+        version_note:
+          type: string
+        galley_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CycleResponse:
+      type: object
+      required: [cycle]
+      properties:
+        cycle:
+          $ref: '#/components/schemas/CyclePayload'
+
+    ProofreadingResponsePayload:
+      type: object
+      required: [response_id, cycle_id, decision, submitted_at]
+      properties:
+        response_id:
+          type: string
+          format: uuid
+        cycle_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [confirm_clean, submit_corrections]
+        submitted_at:
+          type: string
+          format: date-time
+
+    SignedUrlResponse:
+      type: object
+      required: [signed_url]
+      properties:
+        signed_url:
+          type: string
+          format: uri
+
+    ProofreadingContextResponse:
+      type: object
+      required: [manuscript, cycle, can_submit, is_read_only]
+      properties:
+        manuscript:
+          type: object
+          required: [id, title, status]
+          properties:
+            id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            status:
+              type: string
+        cycle:
+          $ref: '#/components/schemas/CyclePayload'
+        can_submit:
+          type: boolean
+        is_read_only:
+          type: boolean
+
+    ApprovalResponse:
+      type: object
+      required: [cycle_id, status, approved_at, approved_by]
+      properties:
+        cycle_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [approved_for_publish]
+        approved_at:
+          type: string
+          format: date-time
+        approved_by:
+          type: string
+          format: uuid
+          format: date-time
+        approved_by:
+          type: string
+          format: uuid
