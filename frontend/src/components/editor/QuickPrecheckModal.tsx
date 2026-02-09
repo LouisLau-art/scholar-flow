@@ -12,6 +12,29 @@ import { Loader2 } from 'lucide-react'
 
 export type QuickPrecheckDecision = 'approve' | 'revision'
 
+function readDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const first = detail[0] as { msg?: unknown } | undefined
+    if (typeof first?.msg === 'string') return first.msg
+  }
+  return ''
+}
+
+function normalizeQuickPrecheckError(raw: unknown): string {
+  const msg = (typeof raw === 'string' ? raw : '').toLowerCase()
+  if (msg.includes('comment is required')) {
+    return '选择 Request Revision 时必须填写 Comment。'
+  }
+  if (msg.includes('only allowed') || msg.includes('conflict') || msg.includes('current:')) {
+    return '稿件状态已变化，请刷新列表后重试。'
+  }
+  if (msg.includes('forbidden') || msg.includes('not allowed')) {
+    return '你没有权限执行该操作。'
+  }
+  return typeof raw === 'string' && raw.trim() ? raw : 'Quick pre-check failed'
+}
+
 export function QuickPrecheckModal({
   open,
   onOpenChange,
@@ -50,14 +73,16 @@ export function QuickPrecheckModal({
         comment: comment.trim() || undefined,
       })
       if (!res?.success) {
-        throw new Error(res?.detail || res?.message || 'Quick pre-check failed')
+        const detail = readDetail(res?.detail)
+        throw new Error(normalizeQuickPrecheckError(detail || res?.message))
       }
       const updated = res.data || {}
       toast.success('Updated', { id: toastId })
       onUpdated?.({ id: updated.id || manuscriptId, status: updated.status, updated_at: updated.updated_at })
       onOpenChange(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Quick pre-check failed', { id: toastId })
+      const message = normalizeQuickPrecheckError(e instanceof Error ? e.message : '')
+      toast.error(message, { id: toastId })
     } finally {
       setSaving(false)
     }

@@ -1,4 +1,5 @@
 import { authService } from '@/services/auth'
+import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
 
 export type ManuscriptsProcessFilters = {
   q?: string
@@ -23,6 +24,23 @@ export type ProductionCycleCreatePayload = {
   proof_due_at: string
 }
 
+export type AssignAEPayload = {
+  ae_id: string
+  idempotency_key?: string
+}
+
+export type SubmitTechnicalCheckPayload = {
+  decision: TechnicalDecision
+  comment?: string
+  idempotency_key?: string
+}
+
+export type SubmitAcademicCheckPayload = {
+  decision: AcademicDecision
+  comment?: string
+  idempotency_key?: string
+}
+
 async function authedFetch(input: RequestInfo, init?: RequestInit) {
   const token = await authService.getAccessToken()
   const headers: Record<string, string> = {
@@ -41,6 +59,64 @@ export const EditorApi = {
   async listInternalStaff(search?: string) {
     const qs = search ? `?search=${encodeURIComponent(search)}` : ''
     const res = await authedFetch(`/api/v1/editor/internal-staff${qs}`)
+    return res.json()
+  },
+
+  // Feature 044: Pre-check role workflow
+  async listAssistantEditors(search?: string) {
+    const qs = search ? `?search=${encodeURIComponent(search)}` : ''
+    const res = await authedFetch(`/api/v1/editor/assistant-editors${qs}`)
+    return res.json()
+  },
+
+  async getIntakeQueue(page = 1, pageSize = 20) {
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    const res = await authedFetch(`/api/v1/editor/intake?${params.toString()}`)
+    return res.json()
+  },
+
+  async assignAE(manuscriptId: string, payload: AssignAEPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/assign-ae`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async getAEWorkspace(page = 1, pageSize = 20) {
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    const res = await authedFetch(`/api/v1/editor/workspace?${params.toString()}`)
+    return res.json()
+  },
+
+  async submitTechnicalCheck(manuscriptId: string, payload: SubmitTechnicalCheckPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/submit-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async getAcademicQueue(page = 1, pageSize = 20) {
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    const res = await authedFetch(`/api/v1/editor/academic?${params.toString()}`)
+    return res.json()
+  },
+
+  async submitAcademicCheck(manuscriptId: string, payload: SubmitAcademicCheckPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/academic-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
     return res.json()
   },
 

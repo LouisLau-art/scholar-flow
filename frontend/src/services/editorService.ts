@@ -1,20 +1,60 @@
 import { EditorApi, type DecisionSubmissionPayload } from '@/services/editorApi'
+import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
 
 /**
  * 兼容历史调用方：逐步迁移到 EditorApi。
  */
 export const editorService = {
-  getIntakeQueue: async (_page = 1, _pageSize = 20) => [],
+  getIntakeQueue: async (page = 1, pageSize = 20) => {
+    const res = await EditorApi.getIntakeQueue(page, pageSize)
+    if (!Array.isArray(res)) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch intake queue')
+    }
+    return res
+  },
 
-  assignAE: async (_manuscriptId: string, _aeId: string) => ({ message: 'AE assigned successfully' }),
+  assignAE: async (manuscriptId: string, aeId: string) => {
+    const res = await EditorApi.assignAE(manuscriptId, { ae_id: aeId })
+    if (!res?.message) {
+      throw new Error(res?.detail || res?.message || 'Failed to assign AE')
+    }
+    return res
+  },
 
-  getAEWorkspace: async (_page = 1, _pageSize = 20) => [],
+  getAEWorkspace: async (page = 1, pageSize = 20) => {
+    const res = await EditorApi.getAEWorkspace(page, pageSize)
+    if (!Array.isArray(res)) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch AE workspace')
+    }
+    return res
+  },
 
-  submitTechnicalCheck: async (_id: string) => ({ message: 'Technical check submitted' }),
+  submitTechnicalCheck: async (id: string, payload?: { decision?: TechnicalDecision; comment?: string }) => {
+    const res = await EditorApi.submitTechnicalCheck(id, {
+      decision: payload?.decision || 'pass',
+      comment: payload?.comment,
+    })
+    if (!res?.message) {
+      throw new Error(res?.detail || res?.message || 'Failed to submit technical check')
+    }
+    return res
+  },
 
-  getAcademicQueue: async (_page = 1, _pageSize = 20) => [],
+  getAcademicQueue: async (page = 1, pageSize = 20) => {
+    const res = await EditorApi.getAcademicQueue(page, pageSize)
+    if (!Array.isArray(res)) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch academic queue')
+    }
+    return res
+  },
 
-  submitAcademicCheck: async (_id: string, _decision: string) => ({ message: 'Academic check submitted' }),
+  submitAcademicCheck: async (id: string, decision: AcademicDecision, comment?: string) => {
+    const res = await EditorApi.submitAcademicCheck(id, { decision, comment })
+    if (!res?.message) {
+      throw new Error(res?.detail || res?.message || 'Failed to submit academic check')
+    }
+    return res
+  },
 
   // Feature 041
   getDecisionContext: async (manuscriptId: string) => EditorApi.getDecisionContext(manuscriptId),

@@ -49,7 +49,15 @@ async def test_me_intake_flow(client, mocker):
     
     # Mock service layer instead of raw DB for integration test focus on API/Controller logic
     mocker.patch("app.services.editor_service.EditorService.get_intake_queue", return_value=[mock_manuscript])
-    mocker.patch("app.services.editor_service.EditorService.assign_ae", return_value=True)
+    mocker.patch(
+        "app.services.editor_service.EditorService.assign_ae",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": MOCK_AE_ID,
+        },
+    )
 
     # 1. Test List Intake Queue
     response = await client.get("/api/v1/editor/intake")
@@ -86,7 +94,14 @@ async def test_ae_check_flow(client, mocker):
     }
 
     mocker.patch("app.services.editor_service.EditorService.get_ae_workspace", return_value=[mock_manuscript])
-    mocker.patch("app.services.editor_service.EditorService.submit_technical_check", return_value=True)
+    mocker.patch(
+        "app.services.editor_service.EditorService.submit_technical_check",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+        },
+    )
 
     # 1. Test List AE Workspace
     response = await client.get("/api/v1/editor/workspace")
@@ -96,7 +111,10 @@ async def test_ae_check_flow(client, mocker):
     assert data[0]["assistant_editor_id"] == MOCK_AE_ID
 
     # 2. Test Submit Check
-    response = await client.post(f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/submit-check")
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/submit-check",
+        json={"decision": "pass", "comment": "looks good"},
+    )
     assert response.status_code == 200
     assert response.json()["message"] == "Technical check submitted"
 
@@ -121,7 +139,13 @@ async def test_eic_check_flow(client, mocker):
     }
 
     mocker.patch("app.services.editor_service.EditorService.get_academic_queue", return_value=[mock_manuscript])
-    mocker.patch("app.services.editor_service.EditorService.submit_academic_check", return_value=True)
+    mocker.patch(
+        "app.services.editor_service.EditorService.submit_academic_check",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+        },
+    )
 
     # 1. Test List Academic Queue
     response = await client.get("/api/v1/editor/academic")

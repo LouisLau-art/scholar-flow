@@ -35,6 +35,19 @@ type ManuscriptDetail = {
   signed_files?: any
   files?: ManuscriptFile[] | null
   journals?: { title?: string } | null
+  role_queue?: {
+    current_role?: string | null
+    current_assignee?: { id: string; full_name?: string | null; email?: string | null } | null
+    assigned_at?: string | null
+    technical_completed_at?: string | null
+    academic_completed_at?: string | null
+  } | null
+  precheck_timeline?: Array<{
+    id: string
+    created_at?: string | null
+    payload?: { action?: string; decision?: string } | null
+    comment?: string | null
+  }> | null
   reviewer_invites?: Array<{
     id: string
     reviewer_name?: string | null
@@ -356,6 +369,68 @@ export default function EditorManuscriptDetailPage() {
                         </div>
                     )}
                 </CardContent>
+            </Card>
+
+            {/* Audit Log Timeline */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">Pre-check Role Queue</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="font-medium text-slate-700">Current Role:</span>{' '}
+                    <span className="text-slate-900">{(ms.role_queue?.current_role || '—').replaceAll('_', ' ')}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-700">Current Assignee:</span>{' '}
+                    <span className="text-slate-900">
+                      {ms.role_queue?.current_assignee?.full_name ||
+                        ms.role_queue?.current_assignee?.email ||
+                        ms.role_queue?.current_assignee?.id ||
+                        '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-700">Assigned At:</span>{' '}
+                    <span className="text-slate-900">
+                      {ms.role_queue?.assigned_at ? format(new Date(ms.role_queue.assigned_at), 'yyyy-MM-dd HH:mm') : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-700">Technical Completed:</span>{' '}
+                    <span className="text-slate-900">
+                      {ms.role_queue?.technical_completed_at
+                        ? format(new Date(ms.role_queue.technical_completed_at), 'yyyy-MM-dd HH:mm')
+                        : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-700">Academic Completed:</span>{' '}
+                    <span className="text-slate-900">
+                      {ms.role_queue?.academic_completed_at
+                        ? format(new Date(ms.role_queue.academic_completed_at), 'yyyy-MM-dd HH:mm')
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+                {(ms.precheck_timeline || []).length > 0 ? (
+                  <div className="mt-4 border-t pt-3 space-y-2">
+                    {(ms.precheck_timeline || []).map((event) => (
+                      <div key={event.id} className="rounded-md border border-slate-200 p-2 text-xs text-slate-600">
+                        <div className="font-medium text-slate-800">
+                          {event.payload?.action || 'precheck_event'}
+                          {event.payload?.decision ? ` (${event.payload.decision})` : ''}
+                        </div>
+                        <div>{event.created_at ? format(new Date(event.created_at), 'yyyy-MM-dd HH:mm') : '—'}</div>
+                        {event.comment ? <div className="mt-1">{event.comment}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-xs text-slate-400 italic">No pre-check timeline events.</div>
+                )}
+              </CardContent>
             </Card>
 
             {/* Audit Log Timeline */}

@@ -48,11 +48,19 @@ class QuickPrecheckPayload(BaseModel):
 
 class AssignAERequest(BaseModel):
     ae_id: UUID
+    idempotency_key: str | None = Field(default=None, max_length=64)
+
+
+class TechnicalCheckRequest(BaseModel):
+    decision: Literal["pass", "revision"]
+    comment: str | None = Field(default=None, max_length=2000)
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 class AcademicCheckRequest(BaseModel):
-    decision: str  # review, decision_phase
-    comment: str | None = None
+    decision: Literal["review", "decision_phase"]
+    comment: str | None = Field(default=None, max_length=2000)
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
@@ -330,6 +338,8 @@ async def get_intake_queue(
     """
     try:
         return EditorService().get_intake_queue(page, page_size)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[Intake] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch intake queue")
@@ -347,10 +357,13 @@ async def assign_ae(
     Moves manuscript from 'intake' to 'technical'.
     """
     try:
-        success = EditorService().assign_ae(id, request.ae_id, current_user["id"])
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to assign AE")
-        return {"message": "AE assigned successfully"}
+        updated = EditorService().assign_ae(
+            id,
+            request.ae_id,
+            current_user["id"],
+            idempotency_key=request.idempotency_key,
+        )
+        return {"message": "AE assigned successfully", "data": updated}
     except HTTPException:
         raise
     except Exception as e:
@@ -371,6 +384,8 @@ async def get_ae_workspace(
     """
     try:
         return EditorService().get_ae_workspace(current_user["id"], page, page_size)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[AEWorkspace] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch AE workspace")
@@ -379,6 +394,7 @@ async def get_ae_workspace(
 @router.post("/manuscripts/{id}/submit-check")
 async def submit_technical_check(
     id: UUID,
+    request: TechnicalCheckRequest,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["assistant_editor", "admin"])),
 ):
@@ -386,10 +402,14 @@ async def submit_technical_check(
     Submit technical check. Moves manuscript to Academic Check (EIC).
     """
     try:
-        success = EditorService().submit_technical_check(id, current_user["id"])
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to submit check")
-        return {"message": "Technical check submitted"}
+        updated = EditorService().submit_technical_check(
+            id,
+            current_user["id"],
+            decision=request.decision,
+            comment=request.comment,
+            idempotency_key=request.idempotency_key,
+        )
+        return {"message": "Technical check submitted", "data": updated}
     except HTTPException:
         raise
     except Exception as e:
@@ -409,6 +429,8 @@ async def get_academic_queue(
     """
     try:
         return EditorService().get_academic_queue(page, page_size)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[AcademicQueue] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch academic queue")
@@ -418,16 +440,21 @@ async def get_academic_queue(
 async def submit_academic_check(
     id: UUID,
     request: AcademicCheckRequest,
+    current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
 ):
     """
     Submit academic check. Routes to Review or Decision Phase.
     """
     try:
-        success = EditorService().submit_academic_check(id, request.decision, request.comment)
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to submit academic check")
-        return {"message": "Academic check submitted"}
+        updated = EditorService().submit_academic_check(
+            id,
+            request.decision,
+            request.comment,
+            changed_by=current_user.get("id"),
+            idempotency_key=request.idempotency_key,
+        )
+        return {"message": "Academic check submitted", "data": updated}
     except HTTPException:
         raise
     except Exception as e:
@@ -661,6 +688,56 @@ async def get_editor_manuscript_detail(
         if eid
         else None
     )
+
+    # 044: 预审队列可视化（详情页）
+    role_map = {
+        "intake": "managing_editor",
+        "technical": "assistant_editor",
+        "academic": "editor_in_chief",
+    }
+    pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
+    current_role = role_map.get(pre_stage, "managing_editor")
+    current_assignee = None
+    if pre_stage == "technical" and ms.get("assistant_editor_id"):
+        aid = str(ms.get("assistant_editor_id"))
+        aprof = profiles_map.get(aid) or {}
+        current_assignee = {"id": aid, "full_name": aprof.get("full_name"), "email": aprof.get("email")}
+
+    ms["precheck_timeline"] = []
+    assigned_at = None
+    technical_completed_at = None
+    academic_completed_at = None
+    try:
+        tl_resp = (
+            supabase_admin.table("status_transition_logs")
+            .select("id, manuscript_id, from_status, to_status, comment, changed_by, created_at, payload")
+            .eq("manuscript_id", id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        tl_rows = getattr(tl_resp, "data", None) or []
+        for row in tl_rows:
+            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            action = str(payload.get("action") or "")
+            if action.startswith("precheck_"):
+                ms["precheck_timeline"].append(row)
+                created_at = str(row.get("created_at") or "")
+                if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
+                    assigned_at = created_at or assigned_at
+                if action in {"precheck_technical_pass", "precheck_technical_revision"}:
+                    technical_completed_at = created_at or technical_completed_at
+                if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
+                    academic_completed_at = created_at or academic_completed_at
+    except Exception as e:
+        print(f"[PrecheckTimeline] load failed (ignored): {e}")
+
+    ms["role_queue"] = {
+        "current_role": current_role,
+        "current_assignee": current_assignee,
+        "assigned_at": assigned_at,
+        "technical_completed_at": technical_completed_at,
+        "academic_completed_at": academic_completed_at,
+    }
 
     # Feature 037: Reviewer invite timeline（Editor 可见）
     ms["reviewer_invites"] = []
@@ -1005,6 +1082,36 @@ async def list_internal_staff(
     except Exception as e:
         print(f"[OwnerBinding] 获取内部员工列表失败: {e}")
         raise HTTPException(status_code=500, detail="Failed to load internal staff")
+
+
+@router.get("/assistant-editors")
+async def list_assistant_editors(
+    search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    044: 提供 ME 分派 AE 的候选列表（assistant_editor + admin）。
+    """
+    try:
+        query = (
+            supabase_admin.table("user_profiles")
+            .select("id, email, full_name, roles")
+            .or_("roles.cs.{assistant_editor},roles.cs.{admin}")
+        )
+        resp = query.execute()
+        data = getattr(resp, "data", None) or []
+        if search.strip():
+            s = search.strip().lower()
+            data = [
+                row
+                for row in data
+                if s in (row.get("email") or "").lower() or s in (row.get("full_name") or "").lower()
+            ]
+        data.sort(key=lambda x: (0 if (x.get("full_name") or "").strip() else 1, (x.get("full_name") or x.get("email") or "")))
+        return {"success": True, "data": data}
+    except Exception as e:
+        print(f"[Precheck] 获取 assistant editors 失败: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load assistant editors")
 
 
 # ----------------------------

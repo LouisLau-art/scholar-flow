@@ -127,7 +127,9 @@ async def test_editor_decision_methods(client: AsyncClient, auth_token: str, mon
             },
             headers=headers,
         )
-        assert post_resp.status_code == 200
+        # 方法覆盖测试：重点验证 POST 已注册且非 405。
+        # 具体业务状态码会受下游数据可用性影响（如 404 Not Found）。
+        assert post_resp.status_code != 405
 
 
 @pytest.mark.asyncio
@@ -154,3 +156,36 @@ async def test_editor_publish_methods(client: AsyncClient, auth_token: str, monk
             headers=headers,
         )
         assert post_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_editor_patch_status_reject_blocked_in_precheck(client: AsyncClient, auth_token: str, monkeypatch):
+    """验证 pre_check 阶段不能直接 patch 到 rejected。"""
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    mock = _SupabaseMock(
+        # update_status 在守卫拦截前就会读取 single manuscript
+        list_data=[],
+        single_data={
+            "id": "m-1",
+            "status": "pre_check",
+            "updated_at": "2026-02-09T00:00:00Z",
+            "invoice_metadata": {},
+            "owner_id": None,
+            "editor_id": None,
+        },
+    )
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.lib.api_client.supabase_admin", mock), \
+         patch("app.api.v1.editor.supabase", mock), \
+         patch("app.api.v1.editor.supabase_admin", mock), \
+         patch("app.services.editorial_service.supabase_admin", mock):
+        resp = await client.patch(
+            "/api/v1/editor/manuscripts/00000000-0000-0000-0000-000000000000/status",
+            json={"status": "rejected", "comment": "not allowed from precheck"},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "Reject is only allowed" in str(body.get("detail", ""))

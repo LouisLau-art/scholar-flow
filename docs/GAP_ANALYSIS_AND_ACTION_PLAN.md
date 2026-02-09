@@ -24,13 +24,15 @@
 
 ## P0（下一阶段必须做）
 
-- [ ] **GAP-P0-01：预审角色工作流落地（Feature 038）**
-  - 现状：`specs/038-precheck-role-workflow/` 已有规格，但落地实现不足。
-  - 缺口：ME -> AE -> EIC 的队列、责任切换、时间戳审计、前端入口还不完整。
+- [x] **GAP-P0-01：预审角色工作流落地（Feature 038）**
+  - 结果：已按 `specs/044-precheck-role-hardening/` 完成 044 收敛实现，形成可回归的 ME -> AE -> EIC 闭环。
   - 完成标准：
-    - [ ] 后端状态流转与 RBAC 全量落地
-    - [ ] Process/详情页可视化角色队列
-    - [ ] E2E 覆盖 ME 分配、AE 质检、EIC 初审
+    - [x] 后端状态流转与 RBAC 全量落地
+    - [x] Process/详情页可视化角色队列
+    - [x] E2E 覆盖 ME 分配、AE 质检、EIC 初审
+  - 验收记录：
+    - [x] Backend：`18 passed, 3 skipped`（`test_api_paths` + `test_editor_http_methods` + `test_editor_service` + `test_precheck_flow` + `test_precheck_role_service`）
+    - [x] Frontend：Vitest `6 passed` + Playwright `precheck_workflow.spec.ts` `1 passed`
 
 - [x] **GAP-P0-02：Feature 042 云端迁移与真实环境回归**
   - 现状：已交付 Feature 043（Cloud Rollout Regression）作为放行门禁层，补齐 run/check 审计、internal API 与一键脚本。
@@ -89,11 +91,10 @@
 ### Iteration 1（本周，先把链路“可上线”）
 
 - [x] 完成 GAP-P0-02：云端迁移 + 真实环境回归（优先最高）
-- [ ] 启动并交付 GAP-P0-01 第一版（Feature 038 后端 + 基础 UI）
+- [x] 完成 GAP-P0-01：预审角色工作流落地（含 E2E + 审计可视化）
 
 ### Iteration 2（下周，先把“编辑团队提效”）
 
-- [ ] 完成 GAP-P0-01 剩余项（E2E + 审计完善）
 - [ ] 完成 GAP-P0-03（@mentions + 内部任务 + SLA 预警）
 - [ ] 启动 GAP-P1-01（Finance 真数据接入）
 
@@ -101,5 +102,5 @@
 
 ## 4. 立即下一步（单一建议）
 
-**建议立刻开工：`GAP-P0-01`（预审角色工作流落地）**。  
-原因：GAP-P0-02 已完成并补齐发布门禁，当前主路径瓶颈转移到 ME→AE→EIC 预审协作效率与审计完整性。
+**建议立刻开工：`GAP-P0-03`（内部协作增强）**。  
+原因：GAP-P0-01 与 GAP-P0-02 已完成，下一瓶颈在编辑团队内部协作效率（@mentions/任务化/SLA 预警）。

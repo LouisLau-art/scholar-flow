@@ -1,5 +1,6 @@
 import pytest
 from uuid import uuid4
+from postgrest.exceptions import APIError
 
 from .test_utils import make_user
 
@@ -16,6 +17,18 @@ def _cleanup(db, manuscript_ids: list[str], journal_id: str) -> None:
         pass
 
 
+def _require_precheck_visual_schema(db) -> None:
+    checks = [
+        ("manuscripts", "id,status,pre_check_status,assistant_editor_id,editor_id"),
+        ("status_transition_logs", "id,manuscript_id,payload,created_at"),
+    ]
+    for table, cols in checks:
+        try:
+            db.table(table).select(cols).limit(1).execute()
+        except APIError as e:
+            pytest.skip(f"数据库缺少 Feature 044 所需 schema（{table}/{cols}）：{getattr(e, 'message', str(e))}")
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_process_list_filters_by_q_and_multi_status(
@@ -25,6 +38,7 @@ async def test_process_list_filters_by_q_and_multi_status(
 ):
     editor = make_user(email="editor_process_filters@example.com")
     set_admin_emails([editor.email])
+    _require_precheck_visual_schema(supabase_admin_client)
 
     journal_id = str(uuid4())
     supabase_admin_client.table("journals").insert(
@@ -95,6 +109,7 @@ async def test_process_list_filters_by_editor_id(
 ):
     editor = make_user(email="editor_process_editor_filter@example.com")
     set_admin_emails([editor.email])
+    _require_precheck_visual_schema(supabase_admin_client)
 
     author_id = str(uuid4())
     journal_id = str(uuid4())
@@ -144,3 +159,96 @@ async def test_process_list_filters_by_editor_id(
     finally:
         _cleanup(supabase_admin_client, manuscript_ids, journal_id)
 
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_process_and_detail_include_precheck_visual_fields(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    editor = make_user(email="editor_precheck_visuals@example.com")
+    set_admin_emails([editor.email])
+    _require_precheck_visual_schema(supabase_admin_client)
+
+    journal_id = str(uuid4())
+    manuscript_id = str(uuid4())
+    author_id = str(uuid4())
+    ae_id = str(uuid4())
+
+    supabase_admin_client.table("journals").insert(
+        {"id": journal_id, "title": "Journal C", "slug": f"journal-c-{journal_id[:8]}"}
+    ).execute()
+    supabase_admin_client.table("user_profiles").insert(
+        {
+            "id": ae_id,
+            "email": "ae.precheck@example.com",
+            "full_name": "AE Precheck",
+            "roles": ["assistant_editor"],
+        }
+    ).execute()
+    supabase_admin_client.table("manuscripts").insert(
+        {
+            "id": manuscript_id,
+            "author_id": author_id,
+            "title": "Precheck Visualized Manuscript",
+            "abstract": "a",
+            "status": "pre_check",
+            "pre_check_status": "technical",
+            "assistant_editor_id": ae_id,
+            "version": 1,
+            "journal_id": journal_id,
+        }
+    ).execute()
+    supabase_admin_client.table("status_transition_logs").insert(
+        {
+            "manuscript_id": manuscript_id,
+            "from_status": "pre_check",
+            "to_status": "pre_check",
+            "comment": "assigned to ae",
+            "changed_by": None,
+            "payload": {
+                "action": "precheck_assign_ae",
+                "pre_check_from": "intake",
+                "pre_check_to": "technical",
+                "assistant_editor_after": ae_id,
+            },
+        }
+    ).execute()
+
+    try:
+        process_res = await client.get(
+            f"/api/v1/editor/manuscripts/process?manuscript_id={manuscript_id}",
+            headers={"Authorization": f"Bearer {editor.token}"},
+        )
+        assert process_res.status_code == 200, process_res.text
+        process_body = process_res.json()
+        rows = process_body.get("data") or []
+        assert rows, "expected one process row"
+        row = rows[0]
+        assert row.get("pre_check_status") == "technical"
+        assert row.get("current_role") == "assistant_editor"
+        assert (row.get("current_assignee") or {}).get("id") == ae_id
+        assert row.get("assigned_at") is not None
+
+        detail_res = await client.get(
+            f"/api/v1/editor/manuscripts/{manuscript_id}",
+            headers={"Authorization": f"Bearer {editor.token}"},
+        )
+        assert detail_res.status_code == 200, detail_res.text
+        detail = (detail_res.json().get("data") or {})
+        role_queue = detail.get("role_queue") or {}
+        assert role_queue.get("current_role") == "assistant_editor"
+        assert (role_queue.get("current_assignee") or {}).get("id") == ae_id
+        timeline = detail.get("precheck_timeline") or []
+        assert any((e.get("payload") or {}).get("action") == "precheck_assign_ae" for e in timeline)
+    finally:
+        try:
+            supabase_admin_client.table("status_transition_logs").delete().eq("manuscript_id", manuscript_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase_admin_client.table("user_profiles").delete().eq("id", ae_id).execute()
+        except Exception:
+            pass
+        _cleanup(supabase_admin_client, [manuscript_id], journal_id)
