@@ -6,7 +6,7 @@ import { siteConfig } from "@/config/site-config";
 
 export function SiteFooter() {
   const pathname = usePathname()
-  if (pathname.startsWith('/reviewer/workspace/')) {
+  if (pathname.startsWith('/reviewer/workspace/') || pathname.startsWith('/editor/decision/')) {
     return null
   }
 

@@ -120,6 +120,7 @@ class EditorialService:
         comment: str | None = None,
         allow_skip: bool = False,
         extra_updates: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         更新稿件状态并写入 transition log。
@@ -172,7 +173,7 @@ class EditorialService:
                 to_status=to_norm,
                 changed_by=changed_by,
                 comment=comment,
-                payload=None,
+                payload=payload,
                 created_at=now,
             ),
             manuscript_id=manuscript_id,

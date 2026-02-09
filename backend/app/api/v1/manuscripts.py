@@ -28,6 +28,7 @@ from app.services.invoice_pdf_service import (
     get_invoice_pdf_signed_url,
 )
 from app.services.post_acceptance_service import publish_manuscript as publish_manuscript_post_acceptance
+from app.services.decision_service import DecisionService
 from uuid import uuid4, UUID
 import shutil
 import os
@@ -158,6 +159,25 @@ async def get_manuscript_pdf_signed(
         raise HTTPException(status_code=403, detail="No permission to access this manuscript PDF")
 
     signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
+    return {"success": True, "data": {"signed_url": signed_url}}
+
+
+@router.get("/manuscripts/{manuscript_id}/decision-attachments/{attachment_id}/signed-url")
+async def get_decision_attachment_signed_url_for_author(
+    manuscript_id: UUID,
+    attachment_id: str,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 041: 作者侧下载决策附件（仅 final 可见）。
+    """
+    signed_url = DecisionService().get_attachment_signed_url_for_author(
+        manuscript_id=str(manuscript_id),
+        attachment_id=attachment_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+    )
     return {"success": True, "data": {"signed_url": signed_url}}
 
 

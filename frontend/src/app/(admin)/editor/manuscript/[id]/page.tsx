@@ -285,6 +285,19 @@ export default function EditorManuscriptDetailPage() {
                         </div>
                     )}
 
+                    {!isPostAcceptance && (
+                      <Button
+                        className="w-full justify-between"
+                        variant="secondary"
+                        onClick={() => {
+                          window.location.href = `/editor/decision/${encodeURIComponent(id)}`
+                        }}
+                      >
+                        Open Decision Workspace
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    )}
+
                     {/* Status Transitions */}
                     {isPostAcceptance ? (
                         <ProductionStatusCard

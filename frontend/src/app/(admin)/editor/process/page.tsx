@@ -73,8 +73,7 @@ export default function ManuscriptsProcessPage() {
               setIsAssignModalOpen(true)
             }}
             onDecide={(row) => {
-              window.location.href = `/dashboard?tab=editor` // 最小实现：回到编辑台用 Decisions 面板
-              console.log(row)
+              window.location.href = `/editor/decision/${encodeURIComponent(row.id)}`
             }}
           />
         </Suspense>

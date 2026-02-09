@@ -9,6 +9,14 @@ export type ManuscriptsProcessFilters = {
   editorId?: string
 }
 
+export type DecisionSubmissionPayload = {
+  content: string
+  decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision'
+  is_final: boolean
+  attachment_paths: string[]
+  last_updated_at: string | null
+}
+
 async function authedFetch(input: RequestInfo, init?: RequestInit) {
   const token = await authService.getAccessToken()
   const headers: Record<string, string> = {
@@ -45,6 +53,39 @@ export const EditorApi = {
 
   async getManuscriptDetail(manuscriptId: string) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}`)
+    return res.json()
+  },
+
+  async getDecisionContext(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-context`)
+    return res.json()
+  },
+
+  async submitDecision(manuscriptId: string, payload: DecisionSubmissionPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/submit-decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async uploadDecisionAttachment(manuscriptId: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-attachments`, {
+      method: 'POST',
+      body: formData,
+    })
+    return res.json()
+  },
+
+  async getDecisionAttachmentSignedUrl(manuscriptId: string, attachmentId: string) {
+    const res = await authedFetch(
+      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-attachments/${encodeURIComponent(
+        attachmentId
+      )}/signed-url`
+    )
     return res.json()
   },
 
