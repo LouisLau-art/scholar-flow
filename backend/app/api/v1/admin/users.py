@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from typing import List, Optional
+from typing import Any, List, Optional, Literal
 from uuid import UUID
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
 
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.services.user_management import UserManagementService
+from app.lib.api_client import supabase_admin
 from app.models.user_management import (
     UserListResponse, 
     UserResponse, 
@@ -24,6 +27,25 @@ editor_or_admin = require_any_role(["admin", "editor"])
 def get_user_management_service():
     return UserManagementService()
 
+
+class JournalScopeUpsertRequest(BaseModel):
+    user_id: UUID
+    journal_id: UUID
+    role: Literal["editor", "managing_editor", "assistant_editor", "editor_in_chief", "admin"]
+    is_active: bool = True
+
+
+class JournalScopeListItem(BaseModel):
+    id: UUID
+    user_id: UUID
+    journal_id: UUID
+    role: str
+    is_active: bool
+    created_by: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 @router.get("/admin/users", response_model=UserListResponse)
 async def get_users(
     page: int = Query(1, ge=1),
@@ -42,6 +64,106 @@ async def get_users(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.get("/admin/journal-scopes", response_model=List[JournalScopeListItem])
+async def list_journal_scopes(
+    user_id: Optional[UUID] = Query(None),
+    journal_id: Optional[UUID] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    GAP-P1-05: 查看 journal role scope 绑定（admin only）。
+    """
+    try:
+        query = supabase_admin.table("journal_role_scopes").select(
+            "id,user_id,journal_id,role,is_active,created_by,created_at,updated_at"
+        )
+        if user_id:
+            query = query.eq("user_id", str(user_id))
+        if journal_id:
+            query = query.eq("journal_id", str(journal_id))
+        if is_active is not None:
+            query = query.eq("is_active", bool(is_active))
+
+        resp = query.order("created_at", desc=True).execute()
+        rows = getattr(resp, "data", None) or []
+        return rows
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.post("/admin/journal-scopes", response_model=JournalScopeListItem, status_code=status.HTTP_201_CREATED)
+async def upsert_journal_scope(
+    request: JournalScopeUpsertRequest,
+    current_user: dict = Depends(get_current_user),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    GAP-P1-05: 创建/更新 journal role scope 绑定（admin only）。
+    """
+    payload: dict[str, Any] = {
+        "user_id": str(request.user_id),
+        "journal_id": str(request.journal_id),
+        "role": request.role,
+        "is_active": bool(request.is_active),
+        "created_by": str(current_user.get("id") or ""),
+    }
+
+    try:
+        resp = (
+            supabase_admin.table("journal_role_scopes")
+            .upsert(payload, on_conflict="user_id,journal_id,role")
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=500, detail="Failed to upsert journal scope")
+        return rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.delete("/admin/journal-scopes/{scope_id}", response_model=JournalScopeListItem)
+async def deactivate_journal_scope(
+    scope_id: UUID,
+    _admin: dict = Depends(admin_only),
+):
+    """
+    GAP-P1-05: 停用 journal role scope（软停用，admin only）。
+    """
+    try:
+        resp = (
+            supabase_admin.table("journal_role_scopes")
+            .update(
+                {
+                    "is_active": False,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .eq("id", str(scope_id))
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Journal scope not found")
+        return rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )
 
 @router.post("/admin/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

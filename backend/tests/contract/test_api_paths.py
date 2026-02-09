@@ -19,6 +19,7 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/editor/academic"),
     ("GET", "/api/v1/editor/finance/invoices"),
     ("GET", "/api/v1/editor/finance/invoices/export"),
+    ("GET", "/api/v1/editor/rbac/context"),
     ("GET", "/api/v1/editor/assistant-editors"),
     ("POST", "/api/v1/editor/manuscripts/{id}/assign-ae"),
     ("POST", "/api/v1/editor/manuscripts/{id}/submit-check"),
@@ -66,6 +67,9 @@ EXPECTED_ROUTES = {
     ("PUT", "/api/v1/admin/users/{user_id}/role"),
     ("GET", "/api/v1/admin/users/{user_id}/role-changes"),
     ("POST", "/api/v1/admin/users/invite-reviewer"),
+    ("GET", "/api/v1/admin/journal-scopes"),
+    ("POST", "/api/v1/admin/journal-scopes"),
+    ("DELETE", "/api/v1/admin/journal-scopes/{scope_id}"),
 }
 
 @pytest.mark.asyncio

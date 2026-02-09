@@ -14,10 +14,12 @@ export function BindingOwnerDropdown({
   manuscriptId,
   currentOwner,
   onBound,
+  disabled = false,
 }: {
   manuscriptId: string
   currentOwner?: { id: string; full_name?: string | null; email?: string | null } | null
   onBound?: () => void
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -61,7 +63,7 @@ export function BindingOwnerDropdown({
 
   return (
     <>
-      <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpen(true)} disabled={disabled}>
         <UserPlus className="h-4 w-4" />
         {currentOwnerId ? 'Change' : 'Bind'}
       </Button>
@@ -134,4 +136,3 @@ export function BindingOwnerDropdown({
     </>
   )
 }
-

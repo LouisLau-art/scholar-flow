@@ -7,6 +7,8 @@ import { ProcessFilterBar } from '@/components/editor/ProcessFilterBar'
 import { ManuscriptTable, type ProcessRow } from '@/components/editor/ManuscriptTable'
 import { EditorApi, type ManuscriptsProcessFilters } from '@/services/editorApi'
 import { Loader2 } from 'lucide-react'
+import type { EditorRbacContext } from '@/types/rbac'
+import { buildProcessScopeEmptyHint, deriveEditorCapability } from '@/lib/rbac'
 
 export function ManuscriptsProcessPanel({
   onAssign,
@@ -39,6 +41,13 @@ export function ManuscriptsProcessPanel({
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters])
   const [rows, setRows] = useState<ProcessRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
+  const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
+  const scopeHint = useMemo(() => buildProcessScopeEmptyHint(rbacContext), [rbacContext])
+  const emptyText =
+    scopeHint && rows.length === 0
+      ? 'No manuscript in your assigned journal scope.'
+      : 'No manuscripts found.'
 
   async function load(nextFilters: ManuscriptsProcessFilters) {
     try {
@@ -60,6 +69,27 @@ export function ManuscriptsProcessPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, filtersKey])
 
+  useEffect(() => {
+    let alive = true
+    async function loadRbac() {
+      try {
+        const res = await EditorApi.getRbacContext()
+        if (!alive) return
+        if (res?.success && res?.data) {
+          setRbacContext(res.data)
+          return
+        }
+        setRbacContext(null)
+      } catch {
+        if (alive) setRbacContext(null)
+      }
+    }
+    loadRbac()
+    return () => {
+      alive = false
+    }
+  }, [])
+
   function applyRowUpdate(updated: { id: string; status?: string; updated_at?: string }) {
     setRows((prev) => {
       const next = prev.map((r) =>
@@ -75,6 +105,11 @@ export function ManuscriptsProcessPanel({
   return (
     <div className="space-y-4">
       <ProcessFilterBar />
+      {scopeHint ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {scopeHint}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-10 text-sm text-slate-500 flex items-center justify-center gap-2">
@@ -83,9 +118,14 @@ export function ManuscriptsProcessPanel({
       ) : (
         <ManuscriptTable
           rows={rows}
+          emptyText={emptyText}
           onAssign={onAssign}
           onDecide={onDecide}
           onOwnerBound={() => load(filters)}
+          canBindOwner={capability.canBindOwner}
+          canAssign={capability.canViewProcess}
+          canDecide={capability.canRecordFirstDecision || capability.canSubmitFinalDecision}
+          canQuickPrecheck={capability.canRecordFirstDecision}
           onRowUpdated={(u) => {
             applyRowUpdate(u)
             // 轻量“后台同步”：避免本地状态与服务端过滤/排序偏离

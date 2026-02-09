@@ -41,12 +41,22 @@ export function ManuscriptTable({
   onDecide,
   onOwnerBound,
   onRowUpdated,
+  canBindOwner = true,
+  canAssign = true,
+  canDecide = true,
+  canQuickPrecheck = true,
+  emptyText = 'No manuscripts found.',
 }: {
   rows: ProcessRow[]
   onAssign?: (row: ProcessRow) => void
   onDecide?: (row: ProcessRow) => void
   onOwnerBound?: () => void
   onRowUpdated?: (updated: { id: string; status?: string; updated_at?: string }) => void
+  canBindOwner?: boolean
+  canAssign?: boolean
+  canDecide?: boolean
+  canQuickPrecheck?: boolean
+  emptyText?: string
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto" data-testid="editor-process-table">
@@ -70,7 +80,7 @@ export function ManuscriptTable({
           {rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={11} className="py-10 text-center text-sm text-slate-500">
-                No manuscripts found.
+                {emptyText}
               </TableCell>
             </TableRow>
           ) : (
@@ -129,11 +139,20 @@ export function ManuscriptTable({
                         manuscriptId={r.id}
                         currentOwner={r.owner}
                         onBound={onOwnerBound}
+                        disabled={!canBindOwner}
                       />
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <ManuscriptActions row={r} onAssign={onAssign} onDecide={onDecide} onRowUpdated={onRowUpdated} />
+                    <ManuscriptActions
+                      row={r}
+                      onAssign={onAssign}
+                      onDecide={onDecide}
+                      onRowUpdated={onRowUpdated}
+                      canAssign={canAssign}
+                      canDecide={canDecide}
+                      canQuickPrecheck={canQuickPrecheck}
+                    />
                   </TableCell>
                 </TableRow>
               )

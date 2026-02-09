@@ -13,6 +13,7 @@ import type {
   FinanceSortOrder,
   FinanceStatusFilter,
 } from '@/types/finance'
+import type { EditorRbacContext } from '@/types/rbac'
 
 export type ManuscriptsProcessFilters = {
   q?: string
@@ -31,6 +32,13 @@ export type FinanceInvoiceFilters = {
   pageSize?: number
   sortBy?: FinanceSortBy
   sortOrder?: FinanceSortOrder
+}
+
+export type EditorRbacContextResponse = {
+  success: boolean
+  data?: EditorRbacContext
+  detail?: string
+  message?: string
 }
 
 export type DecisionSubmissionPayload = {
@@ -122,6 +130,11 @@ export const EditorApi = {
 
   async listJournals() {
     const res = await authedFetch('/api/v1/editor/journals')
+    return res.json()
+  },
+
+  async getRbacContext(): Promise<EditorRbacContextResponse> {
+    const res = await authedFetch('/api/v1/editor/rbac/context')
     return res.json()
   },
 
@@ -393,10 +406,11 @@ export const EditorApi = {
     return res.json()
   },
 
-  async searchReviewerLibrary(query?: string, limit: number = 50) {
+  async searchReviewerLibrary(query?: string, limit: number = 50, manuscriptId?: string) {
     const params = new URLSearchParams()
     if (query) params.set('query', query)
     params.set('limit', String(limit))
+    if (manuscriptId) params.set('manuscript_id', manuscriptId)
     const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
     return res.json()
   },

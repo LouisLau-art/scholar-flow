@@ -19,6 +19,8 @@ import { AuditLogTimeline } from '@/components/editor/AuditLogTimeline'
 import { FileHubCard, type FileItem } from '@/components/editor/FileHubCard'
 import { filterFilesByType, type ManuscriptFile } from './utils'
 import { format } from 'date-fns'
+import type { EditorRbacContext } from '@/types/rbac'
+import { deriveEditorCapability } from '@/lib/rbac'
 
 // ... (Reuse types and logic)
 type ManuscriptDetail = {
@@ -88,6 +90,7 @@ export default function EditorManuscriptDetailPage() {
 
   const [loading, setLoading] = useState(true)
   const [ms, setMs] = useState<ManuscriptDetail | null>(null)
+  const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
   const [transitioning, setTransitioning] = useState<string | null>(null)
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -98,14 +101,23 @@ export default function EditorManuscriptDetailPage() {
     fundingInfo: '',
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
+  const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
 
   async function load() {
     try {
       setLoading(true)
-      const detailRes = await EditorApi.getManuscriptDetail(id)
+      const [detailRes, rbacRes] = await Promise.all([
+        EditorApi.getManuscriptDetail(id),
+        EditorApi.getRbacContext(),
+      ])
       if (!detailRes?.success) throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       const detail = detailRes.data
       setMs(detail)
+      if (rbacRes?.success && rbacRes?.data) {
+        setRbacContext(rbacRes.data)
+      } else {
+        setRbacContext(null)
+      }
 
       const meta = (detail?.invoice_metadata as any) || {}
       setInvoiceForm({
@@ -117,6 +129,7 @@ export default function EditorManuscriptDetailPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
+      setRbacContext(null)
     } finally {
       setLoading(false)
     }
@@ -230,7 +243,12 @@ export default function EditorManuscriptDetailPage() {
                         {/* Owner Binding */}
                         <div>
                             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Owner (Sales)</div>
-                            <BindingOwnerDropdown manuscriptId={id} currentOwner={ms.owner as any} onBound={load} />
+                            <BindingOwnerDropdown
+                              manuscriptId={id}
+                              currentOwner={ms.owner as any}
+                              onBound={load}
+                              disabled={!capability.canBindOwner}
+                            />
                         </div>
                         
                         {/* AE Info */}
@@ -251,7 +269,16 @@ export default function EditorManuscriptDetailPage() {
                         </div>
 
                         {/* Finance Status */}
-                        <div className="cursor-pointer hover:bg-slate-100 p-1 rounded -m-1 transition" onClick={() => setInvoiceOpen(true)}>
+                        <div
+                          className={`p-1 rounded -m-1 transition ${capability.canUpdateInvoiceInfo ? 'cursor-pointer hover:bg-slate-100' : 'cursor-not-allowed opacity-70'}`}
+                          onClick={() => {
+                            if (!capability.canUpdateInvoiceInfo) {
+                              toast.error('You do not have permission to edit invoice info.')
+                              return
+                            }
+                            setInvoiceOpen(true)
+                          }}
+                        >
                             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
                                 APC Status <DollarSign className="h-3 w-3" />
                             </div>
@@ -304,7 +331,11 @@ export default function EditorManuscriptDetailPage() {
                     {!isPostAcceptance && (
                         <div className="pt-2 pb-4 border-b border-slate-100">
                             <div className="text-xs font-semibold text-slate-500 mb-2">ASSIGN REVIEWERS</div>
-                            <ReviewerAssignmentSearch manuscriptId={id} onChanged={load} />
+                            <ReviewerAssignmentSearch
+                              manuscriptId={id}
+                              onChanged={load}
+                              disabled={!capability.canRecordFirstDecision}
+                            />
                         </div>
                     )}
 
@@ -312,6 +343,7 @@ export default function EditorManuscriptDetailPage() {
                       <Button
                         className="w-full justify-between"
                         variant="secondary"
+                        disabled={!(capability.canRecordFirstDecision || capability.canSubmitFinalDecision)}
                         onClick={() => {
                           window.location.href = `/editor/decision/${encodeURIComponent(id)}`
                         }}
@@ -517,6 +549,10 @@ export default function EditorManuscriptDetailPage() {
         onChange={(patch) => setInvoiceForm((prev) => ({ ...prev, ...patch }))}
         saving={invoiceSaving}
         onSave={async () => {
+          if (!capability.canUpdateInvoiceInfo) {
+            toast.error('You do not have permission to update invoice info.')
+            return
+          }
           try {
             setInvoiceSaving(true)
             const apc = invoiceForm.apcAmount.trim() ? Number(invoiceForm.apcAmount) : undefined

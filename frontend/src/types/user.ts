@@ -1,6 +1,13 @@
 // T020: Create TypeScript types for user management
 
-export type UserRole = 'author' | 'editor' | 'reviewer' | 'admin';
+export type UserRole =
+  | 'author'
+  | 'editor'
+  | 'reviewer'
+  | 'admin'
+  | 'managing_editor'
+  | 'assistant_editor'
+  | 'editor_in_chief';
 
 export interface User {
   id: string;

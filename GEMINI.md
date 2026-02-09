@@ -270,6 +270,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
+- **Portal Citation/Topics（Feature 034）**：公开文章引用导出统一走后端 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`；`/topics` 统一走 `GET /api/v1/public/topics` 动态聚合（基于已发表文章/期刊关键词推断，MVP 不依赖新增 subject 表字段）。
+- **Reviewer Invite Policy（GAP-P1-04）**：`POST /api/v1/reviews/assign` 已支持 `override_cooldown` + `override_reason`；冷却期默认 `REVIEW_INVITE_COOLDOWN_DAYS=30`，高权限覆盖角色由 `REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES` 控制（默认 `admin,managing_editor`）；审稿人接受邀请 due 窗口使用 `REVIEW_INVITE_DUE_MIN_DAYS` / `REVIEW_INVITE_DUE_MAX_DAYS` / `REVIEW_INVITE_DUE_DEFAULT_DAYS`（默认 `7/21/10`）。
 - **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
@@ -279,6 +281,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 044（Pre-check Role Hardening）迁移**：云端需执行 `supabase/migrations/20260206150000_add_precheck_fields.sql`（新增 `assistant_editor_id`、`pre_check_status`）；若未迁移，`/api/v1/editor/manuscripts/process` 与相关集成测试可能出现 `PGRST204`（列缺失），测试会按约定 `skip`。
 - **Feature 045（Internal Collaboration Enhancement）迁移**：云端需执行 `supabase/migrations/20260209190000_internal_collaboration_mentions_tasks.sql`（新增 `internal_comment_mentions`、`internal_tasks`、`internal_task_activity_logs`）；若未迁移，`/api/v1/editor/manuscripts/{id}/comments` 提及、`/api/v1/editor/manuscripts/{id}/tasks*` 与 Process `overdue_only` 聚合会返回 “DB not migrated: ... table missing”。
 - **Feature 046（Finance Invoices Sync）迁移**：云端需执行 `supabase/migrations/20260209193000_finance_invoices_indexes.sql`（新增 `invoices.status/confirmed_at/created_at` 索引）；`/finance` 已改为真实数据接口 `GET /api/v1/editor/finance/invoices` 与 `GET /api/v1/editor/finance/invoices/export`，不再使用本地 demo 数据。
+- **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
+- **GAP-P1-05 灰度开关**：`JOURNAL_SCOPE_ENFORCEMENT` 默认 `0`（关闭强制 scope 拦截，保持兼容）；设为 `1` 后，对非 `admin` 启用 `journal_role_scopes` 严格隔离（process 裁剪 + 稿件级写操作 403）。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
 - **分支发布约束（强制）**：GitHub 远端只保留 `main` 作为长期分支；功能开发可在本地短分支进行，但完成后必须合入 `main` 并删除本地/远端功能分支，禁止在 GitHub 长期保留 `0xx-*` 分支。
@@ -293,6 +297,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成第二批实现：新增 `GET /api/v1/editor/rbac/context`（返回角色动作 + scope）、前端 Process/Detail capability 显隐与高风险按钮禁用、`test_rbac_journal_scope.py`（角色拒绝 + process 跨刊裁剪 + 详情/写入跨刊 403）。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
+- **GAP-P1-04（Review Policy Hardening）**：实现同刊 30 天冷却期（候选灰显拦截）、高权限显式 override（`override_cooldown` + `override_reason` + `status_transition_logs` 审计）、邀请模板变量扩展（reviewer/journal/due date）、以及 Process/详情共用 `ReviewerAssignModal` 的命中原因展示（cooldown/conflict/overdue risk）。
+- **Feature 034（Portal Scholar Toolbox）**：补齐公开文章结构化引用与学科聚合：新增 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`，文章页新增 BibTeX/RIS 下载按钮；`GET /api/v1/public/topics` 从已发表文章/期刊动态聚合 Subject Collections；`frontend/src/app/articles/[id]/page.tsx` 补 `citation_pdf_url`（指向公开 `/pdf` 入口）以改进 Scholar/SEO 抓取。
 - **Feature 046（Finance Invoices Sync）**：`/finance` 切换为真实账单读模型（`invoices + manuscripts + user_profiles`），支持 `all/unpaid/paid/waived` 筛选与 CSV 导出（`X-Export-Snapshot-At` / `X-Export-Empty`）；确认支付与 Editor Pipeline 共用 `POST /api/v1/editor/invoices/confirm`，支持 `expected_status` 并发冲突 409 和 `status_transition_logs.payload.action=finance_invoice_confirm_paid` 审计。
 - **Feature 045（Internal Collaboration Enhancement）**：新增 Notebook `mention_user_ids` 校验与去重提醒、内部任务 CRUD + activity 轨迹、Process `overdue_only` + `is_overdue`/`overdue_tasks_count` 聚合；前端新增 `InternalTasksPanel`、Task SLA 摘要、Process 逾期开关与 mocked E2E 回归。
 - **Feature 043（Cloud Rollout Regression）**：新增发布验收审计域（`release_validation_runs` + `release_validation_checks`）、internal 验收接口（create/list/readiness/regression/finalize/report）与一键脚本 `scripts/validate-production-rollout.sh`；强制关键 regression 场景 `skip=0` 才可放行，失败自动进入 no-go/rollback_required。
@@ -317,6 +324,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 048-role-matrix-journal-scope-rbac: Added second GAP-P1-05 slice (editor RBAC context endpoint, frontend capability/scope visibility, stricter action gates, and integration tests for cross-journal 403 behavior).
+- 047-portal-scholar-toolbox: Added article citation exports (BibTeX/RIS), dynamic subject collections API, and citation_pdf_url metadata wiring for Scholar/SEO
 - 046-finance-invoices-sync: Replaced `/finance` demo data with real invoices list/filter/export and unified Mark Paid conflict+audit flow across Finance and Editor Pipeline
 - 045-internal-collaboration-enhancement: Added @mentions + internal tasks + overdue SLA filters (backend APIs, frontend panels, regression tests)
 - 044-precheck-role-hardening: Added Python 3.14+（本地开发）/ Python 3.12（HF Docker），TypeScript 5.x（Strict） + FastAPI 0.115+, Pydantic v2, Supabase-py v2, Next.js 14.2 (App Router), React 18, Tailwind + Shadcn

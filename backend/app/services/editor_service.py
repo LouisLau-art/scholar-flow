@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.core.journal_scope import filter_rows_by_journal_scope
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
 from app.services.editorial_service import EditorialService
@@ -611,7 +612,13 @@ class EditorService:
             "empty": len(filtered) == 0,
         }
 
-    def list_manuscripts_process(self, *, filters: ProcessListFilters) -> list[dict[str, Any]]:
+    def list_manuscripts_process(
+        self,
+        *,
+        filters: ProcessListFilters,
+        viewer_user_id: str | None = None,
+        viewer_roles: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         q = (
             self.client.table("manuscripts")
             .select(
@@ -687,6 +694,19 @@ class EditorService:
         rows = self._attach_overdue_snapshot(rows)
         if filters.overdue_only:
             rows = [row for row in rows if bool(row.get("is_overdue"))]
+
+        # GAP-P1-05: 同角色跨期刊默认隔离（admin bypass）。
+        # 中文注释:
+        # - 仅在调用方传入 viewer 上下文时启用作用域裁剪；
+        # - 旧调用路径不传上下文时保持兼容，避免一次性行为变更。
+        if viewer_user_id and viewer_roles is not None:
+            rows = filter_rows_by_journal_scope(
+                rows=rows,
+                user_id=str(viewer_user_id),
+                roles=viewer_roles,
+                journal_key="journal_id",
+                allow_admin_bypass=True,
+            )
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---

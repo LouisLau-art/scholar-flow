@@ -3,6 +3,12 @@ from fastapi.responses import StreamingResponse
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
+from app.core.journal_scope import (
+    ensure_manuscript_scope_access,
+    get_user_scope_journal_ids,
+    is_scope_enforcement_enabled,
+)
+from app.core.role_matrix import can_perform_action, list_allowed_actions, normalize_roles
 from datetime import datetime
 from app.services.notification_service import NotificationService
 from app.models.revision import RevisionCreate, RevisionRequestResponse
@@ -17,13 +23,13 @@ from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
 from pydantic import BaseModel, Field
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
-from app.services.reviewer_service import ReviewerService
+from app.services.reviewer_service import ReviewerService, ReviewPolicyService
 from app.services.editor_service import EditorService, ProcessListFilters, FinanceListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
 from app.models.production_workspace import CreateProductionCycleRequest
 from app.services.production_workspace_service import ProductionWorkspaceService
-from typing import Literal
+from typing import Any, Literal
 from io import BytesIO
 from uuid import uuid4
 from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
@@ -36,6 +42,20 @@ from app.services.internal_task_service import InternalTaskSchemaMissingError, I
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 INTERNAL_COLLAB_ALLOWED_ROLES = ["editor", "admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+EDITOR_SCOPE_COMPAT_ROLES = ["editor", "admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+EDITOR_DECISION_ROLES = ["editor", "admin", "managing_editor", "editor_in_chief"]
+
+
+def _require_action_or_403(*, action: str, roles: list[str] | None) -> None:
+    """
+    统一动作级权限拦截（角色矩阵）。
+
+    中文注释:
+    - 路由级 require_any_role 负责“是否内部角色”；
+    - 这里负责“内部角色中谁能做哪个动作”。
+    """
+    if not can_perform_action(action=action, roles=roles):
+        raise HTTPException(status_code=403, detail=f"Insufficient permission for action: {action}")
 
 
 class InternalCommentPayload(BaseModel):
@@ -402,6 +422,45 @@ def _is_missing_column_error(error_text: str) -> bool:
     )
 
 
+@router.get("/rbac/context")
+async def get_editor_rbac_context(
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
+):
+    """
+    GAP-P1-05: 返回当前用户的 RBAC 能力与 journal-scope 上下文（前端显隐使用）。
+    """
+    raw_roles = profile.get("roles") or []
+    normalized_roles = sorted(normalize_roles(raw_roles))
+    actions = sorted(list_allowed_actions(raw_roles))
+    is_admin = "admin" in normalized_roles
+    enforcement_enabled = bool(is_scope_enforcement_enabled())
+
+    allowed_journal_ids: list[str] = []
+    if enforcement_enabled and not is_admin:
+        allowed_journal_ids = sorted(
+            get_user_scope_journal_ids(
+                user_id=str(current_user.get("id") or ""),
+                roles=raw_roles,
+            )
+        )
+
+    return {
+        "success": True,
+        "data": {
+            "user_id": str(current_user.get("id") or ""),
+            "roles": raw_roles,
+            "normalized_roles": normalized_roles,
+            "allowed_actions": actions,
+            "journal_scope": {
+                "enforcement_enabled": enforcement_enabled,
+                "allowed_journal_ids": allowed_journal_ids,
+                "is_admin": is_admin,
+            },
+        },
+    }
+
+
 @router.get("/manuscripts/process")
 async def get_manuscripts_process(
     q: str | None = Query(None, description="搜索（Title / UUID 精确匹配，可选）"),
@@ -411,7 +470,8 @@ async def get_manuscripts_process(
     editor_id: str | None = Query(None, description="Assign Editor（可选）"),
     manuscript_id: str | None = Query(None, description="Manuscript ID 精确匹配（可选）"),
     overdue_only: bool = Query(False, description="仅看逾期稿件"),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
     Feature 028 / US1: Manuscripts Process 表格数据源。
@@ -421,6 +481,7 @@ async def get_manuscripts_process(
     - owner/editor 的 profile（full_name/email）
     """
     try:
+        _require_action_or_403(action="process:view", roles=profile.get("roles") or [])
         rows = EditorService().list_manuscripts_process(
             filters=ProcessListFilters(
                 q=q,
@@ -430,7 +491,9 @@ async def get_manuscripts_process(
                 owner_id=owner_id,
                 manuscript_id=manuscript_id,
                 overdue_only=bool(overdue_only),
-            )
+            ),
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
         )
         return {"success": True, "data": rows}
     except HTTPException:
@@ -693,11 +756,20 @@ async def quick_precheck(
 @router.get("/manuscripts/{id}")
 async def get_editor_manuscript_detail(
     id: str,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
     Feature 028 / US2: Editor 专用稿件详情（包含 invoice_metadata、owner/editor profile、journal 信息）。
     """
+    _require_action_or_403(action="manuscript:view_detail", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     try:
         resp = (
             supabase_admin.table("manuscripts")
@@ -1227,11 +1299,25 @@ async def put_manuscript_invoice_info(
     id: str,
     payload: InvoiceInfoUpdatePayload,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
     Feature 028 / US2: 更新 manuscripts.invoice_metadata。
     """
+    roles = profile.get("roles") or []
+    if not (
+        can_perform_action(action="invoice:update_info", roles=roles)
+        or can_perform_action(action="invoice:override_apc", roles=roles)
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permission for action: invoice:update_info")
+
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=roles,
+        allow_admin_bypass=True,
+    )
+
     updated = EditorialService().update_invoice_info(
         manuscript_id=id,
         authors=payload.authors,
@@ -1248,13 +1334,21 @@ async def bind_internal_owner(
     id: str,
     owner_id: str = Body(..., embed=True),
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
     Feature 028 / US3: 绑定 Internal Owner（仅 editor/admin 可操作）。
 
     显性逻辑：owner_id 必须属于内部员工（editor/admin）。
     """
+    _require_action_or_403(action="manuscript:bind_owner", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     try:
         validate_internal_owner_id(UUID(owner_id))
     except Exception:
@@ -1388,6 +1482,7 @@ async def add_reviewer_to_library(
 async def search_reviewer_library(
     query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
     limit: int = Query(50, ge=1, le=200),
+    manuscript_id: str | None = Query(None, description="可选：基于稿件上下文返回邀请策略命中信息"),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
 ):
     """
@@ -1396,7 +1491,40 @@ async def search_reviewer_library(
     """
     try:
         rows = ReviewerService().search(query=query, limit=limit)
-        return {"success": True, "data": rows}
+        meta: dict[str, Any] = {}
+        if manuscript_id:
+            ms_resp = (
+                supabase_admin.table("manuscripts")
+                .select("id,author_id,journal_id,status")
+                .eq("id", manuscript_id)
+                .single()
+                .execute()
+            )
+            manuscript = getattr(ms_resp, "data", None) or {}
+            if not manuscript:
+                raise HTTPException(status_code=404, detail="Manuscript not found")
+
+            policy_service = ReviewPolicyService()
+            reviewer_ids = [str(r.get("id") or "").strip() for r in rows if str(r.get("id") or "").strip()]
+            policy_map = policy_service.evaluate_candidates(manuscript=manuscript, reviewer_ids=reviewer_ids)
+            for row in rows:
+                rid = str(row.get("id") or "").strip()
+                row["invite_policy"] = policy_map.get(rid) or {
+                    "can_assign": True,
+                    "allow_override": False,
+                    "cooldown_active": False,
+                    "conflict": False,
+                    "overdue_risk": False,
+                    "overdue_open_count": 0,
+                    "hits": [],
+                }
+            meta = {
+                "cooldown_days": policy_service.cooldown_days(),
+                "override_roles": policy_service.cooldown_override_roles(),
+            }
+        return {"success": True, "data": rows, "policy": meta}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ReviewerLibrary] search failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to search reviewer library")
@@ -1918,11 +2046,19 @@ async def get_available_reviewers(
 async def get_decision_workspace_context(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
 ):
     """
     Feature 041: 获取决策工作台聚合上下文。
     """
+    _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     data = DecisionService().get_decision_context(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
@@ -1936,11 +2072,22 @@ async def submit_decision_workspace(
     id: str,
     payload: DecisionSubmitRequest,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
 ):
     """
     Feature 041: 保存草稿或提交最终决策。
     """
+    _require_action_or_403(
+        action="decision:submit_final" if payload.is_final else "decision:record_first",
+        roles=profile.get("roles") or [],
+    )
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     data = DecisionService().submit_decision(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
@@ -1955,11 +2102,19 @@ async def upload_decision_attachment(
     id: str,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
 ):
     """
     Feature 041: 决策信附件上传（编辑态）。
     """
+    _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     raw = await file.read()
     data = DecisionService().upload_attachment(
         manuscript_id=id,
@@ -1977,11 +2132,19 @@ async def get_decision_attachment_signed_url_editor(
     id: str,
     attachment_id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
 ):
     """
     Feature 041: 编辑端获取决策附件 signed URL。
     """
+    _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     signed_url = DecisionService().get_attachment_signed_url_for_editor(
         manuscript_id=id,
         attachment_id=attachment_id,
@@ -2104,7 +2267,7 @@ async def approve_production_cycle(
 async def submit_final_decision(
     background_tasks: BackgroundTasks = None,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
     manuscript_id: str = Body(..., embed=True),
     decision: str = Body(..., embed=True),
     comment: str = Body("", embed=True),
@@ -2122,6 +2285,15 @@ async def submit_final_decision(
             raise HTTPException(status_code=400, detail="apc_amount is required for accept")
         if apc_amount < 0:
             raise HTTPException(status_code=400, detail="apc_amount must be >= 0")
+
+    _require_action_or_403(action="decision:submit_final", roles=profile.get("roles") or [])
+
+    ensure_manuscript_scope_access(
+        manuscript_id=manuscript_id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
 
     try:
         try:
@@ -2467,7 +2639,7 @@ async def publish_manuscript_dev(
 @router.post("/invoices/confirm")
 async def confirm_invoice_paid(
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
     payload: ConfirmInvoicePaidPayload = Body(...),
 ):
     """
@@ -2477,10 +2649,18 @@ async def confirm_invoice_paid(
     - 支付渠道/自动对账后续再做；MVP 先提供一个“人工确认到账”入口。
     - Publish 时会做 Payment Gate 检查：amount>0 且 status!=paid -> 禁止发布。
     """
+    _require_action_or_403(action="invoice:override_apc", roles=profile.get("roles") or [])
     try:
         manuscript_id = str(payload.manuscript_id or "").strip()
         if not manuscript_id:
             raise HTTPException(status_code=422, detail="manuscript_id is required")
+
+        ensure_manuscript_scope_access(
+            manuscript_id=manuscript_id,
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+            allow_admin_bypass=True,
+        )
 
         expected_status = str(payload.expected_status or "").strip().lower() or None
         source = str(payload.source or "unknown").strip().lower() or "unknown"

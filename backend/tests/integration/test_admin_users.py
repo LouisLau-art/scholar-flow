@@ -323,3 +323,125 @@ async def test_invite_reviewer_success(client: AsyncClient, auth_token, mock_adm
     data = response.json()
     assert data["email"] == payload["email"]
     mock_admin_service.invite_reviewer.assert_called_once()
+
+
+# === GAP-P1-05: Journal Scope Admin APIs ===
+
+@pytest.mark.asyncio
+async def test_list_journal_scopes_unauthorized(client: AsyncClient, auth_token, mock_author_role):
+    response = await client.get(
+        "/api/v1/admin/journal-scopes",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_journal_scopes_success(client: AsyncClient, auth_token, mock_admin_role):
+    scope_id = str(uuid4())
+    user_id = str(uuid4())
+    journal_id = str(uuid4())
+    row = {
+        "id": scope_id,
+        "user_id": user_id,
+        "journal_id": journal_id,
+        "role": "managing_editor",
+        "is_active": True,
+        "created_by": str(uuid4()),
+        "created_at": "2026-02-10T00:00:00Z",
+        "updated_at": "2026-02-10T00:00:00Z",
+    }
+
+    with patch("app.api.v1.admin.users.supabase_admin") as mock_db:
+        table = MagicMock()
+        query = MagicMock()
+        mock_db.table.return_value = table
+        table.select.return_value = query
+        query.order.return_value = query
+        query.execute.return_value = MagicMock(data=[row])
+
+        response = await client.get(
+            "/api/v1/admin/journal-scopes",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == scope_id
+    assert data[0]["role"] == "managing_editor"
+
+
+@pytest.mark.asyncio
+async def test_upsert_journal_scope_validation(client: AsyncClient, auth_token, mock_admin_role):
+    payload = {
+        "user_id": str(uuid4()),
+        "journal_id": str(uuid4()),
+        "role": "invalid_role",
+        "is_active": True,
+    }
+    response = await client.post(
+        "/api/v1/admin/journal-scopes",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json=payload,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upsert_journal_scope_success(client: AsyncClient, auth_token, mock_admin_role):
+    payload = {
+        "user_id": str(uuid4()),
+        "journal_id": str(uuid4()),
+        "role": "assistant_editor",
+        "is_active": True,
+    }
+    row = {
+        "id": str(uuid4()),
+        "user_id": payload["user_id"],
+        "journal_id": payload["journal_id"],
+        "role": payload["role"],
+        "is_active": True,
+        "created_by": str(uuid4()),
+        "created_at": "2026-02-10T00:00:00Z",
+        "updated_at": "2026-02-10T00:00:00Z",
+    }
+
+    with patch("app.api.v1.admin.users.supabase_admin") as mock_db:
+        table = MagicMock()
+        upsert_q = MagicMock()
+        execute_q = MagicMock()
+        mock_db.table.return_value = table
+        table.upsert.return_value = upsert_q
+        upsert_q.execute.return_value = MagicMock(data=[row])
+
+        response = await client.post(
+            "/api/v1/admin/journal-scopes",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json=payload,
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["journal_id"] == payload["journal_id"]
+    assert data["role"] == payload["role"]
+
+
+@pytest.mark.asyncio
+async def test_deactivate_journal_scope_not_found(client: AsyncClient, auth_token, mock_admin_role):
+    scope_id = str(uuid4())
+    with patch("app.api.v1.admin.users.supabase_admin") as mock_db:
+        table = MagicMock()
+        update_q = MagicMock()
+        eq_q = MagicMock()
+        mock_db.table.return_value = table
+        table.update.return_value = update_q
+        update_q.eq.return_value = eq_q
+        eq_q.execute.return_value = MagicMock(data=[])
+
+        response = await client.delete(
+            f"/api/v1/admin/journal-scopes/{scope_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+    assert response.status_code == 404
