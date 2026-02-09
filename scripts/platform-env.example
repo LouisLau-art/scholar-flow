@@ -1,0 +1,69 @@
+# =============================
+# Platform Env Sync Template
+# 用法：复制到 deploy/platform.env 后填写
+#   cp scripts/platform-env.example deploy/platform.env
+#   vim deploy/platform.env
+# =============================
+
+# ---------- Hugging Face Space ----------
+# Space repo, 默认 LouisShawn/scholarflow-api，可不改
+HF_SPACE_REPO=LouisShawn/scholarflow-api
+
+# 必填（后端）
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_JWT_SECRET=YOUR_SUPABASE_JWT_SECRET
+
+FRONTEND_ORIGIN=https://scholar-flow-q1yw.vercel.app
+FRONTEND_BASE_URL=https://scholar-flow-q1yw.vercel.app
+GO_ENV=prod
+APP_ENV=staging
+
+# 内部接口鉴权
+ADMIN_API_KEY=CHANGE_ME_ADMIN_API_KEY
+MAGIC_LINK_JWT_SECRET=CHANGE_ME_MAGIC_LINK_SECRET
+
+# DOI / Crossref（GAP-P2-01）
+CROSSREF_DEPOSITOR_EMAIL=YOUR_CROSSREF_EMAIL
+CROSSREF_DEPOSITOR_PASSWORD=YOUR_CROSSREF_PASSWORD
+CROSSREF_DOI_PREFIX=10.12345
+CROSSREF_API_URL=https://test.crossref.org/servlet/deposit
+
+# 查重（GAP-P2-02）
+PLAGIARISM_CHECK_ENABLED=0
+PLAGIARISM_SIMILARITY_THRESHOLD=0.3
+PLAGIARISM_POLL_MAX_ATTEMPTS=5
+PLAGIARISM_POLL_INTERVAL_SEC=3
+PLAGIARISM_SUBMIT_DELAY_SEC=0.2
+
+# 可选
+PRODUCTION_GATE_ENABLED=0
+JOURNAL_SCOPE_ENFORCEMENT=0
+MATCHMAKING_WARMUP=1
+MATCHMAKING_LOCAL_FILES_ONLY=0
+
+# 邮件/Sentry（按需）
+SMTP_USER=
+SMTP_PASSWORD=
+RESEND_API_KEY=
+SENTRY_DSN=
+SENTRY_ENABLED=1
+SENTRY_ENVIRONMENT=uat
+SENTRY_TRACES_SAMPLE_RATE=1.0
+EMAIL_SENDER=ScholarFlow <no-reply@send.yourdomain.com>
+
+# ---------- Vercel ----------
+# 前端必填
+NEXT_PUBLIC_API_URL=https://louisshawn-scholarflow-api.hf.space
+BACKEND_ORIGIN=https://louisshawn-scholarflow-api.hf.space
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+NEXT_PUBLIC_APP_ENV=staging
+
+# Sentry（可选）
+NEXT_PUBLIC_SENTRY_DSN=
+NEXT_PUBLIC_SENTRY_ENVIRONMENT=staging
+SENTRY_AUTH_TOKEN=
+SENTRY_ORG=
+SENTRY_PROJECT=
