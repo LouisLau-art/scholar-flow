@@ -1,0 +1,414 @@
+openapi: 3.0.3
+info:
+  title: Release Validation Internal API
+  version: 1.0.0
+  description: |
+    GAP-P0-02: 用于云端上线前就绪检查、真实回归执行与验收报告读取。
+
+servers:
+  - url: /api/v1
+
+paths:
+  /internal/release-validation/runs:
+    post:
+      summary: Create validation run
+      description: 创建一次新的上线验收批次。
+      security:
+        - AdminKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '201':
+          description: Run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Another run is already running in same environment
+
+    get:
+      summary: List validation runs
+      description: 按环境和时间倒序查询最近验收批次。
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - in: query
+          name: environment
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Run list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /internal/release-validation/runs/{run_id}/readiness:
+    post:
+      summary: Execute readiness checks
+      description: 执行 schema/storage/permission/gate 等就绪检查。
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadinessRequest'
+      responses:
+        '200':
+          description: Readiness result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internal/release-validation/runs/{run_id}/regression:
+    post:
+      summary: Execute regression checks
+      description: 执行生产协作关键回归（要求关键场景 skip=0）。
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegressionRequest'
+      responses:
+        '200':
+          description: Regression result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegressionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internal/release-validation/runs/{run_id}/finalize:
+    post:
+      summary: Finalize run and build release report
+      description: 汇总 readiness + regression 结果并给出 go/no-go 结论。
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeRequest'
+      responses:
+        '200':
+          description: Final report ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalizeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internal/release-validation/runs/{run_id}/report:
+    get:
+      summary: Get validation report
+      description: 获取某次验收的完整可审计报告。
+      security:
+        - AdminKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Validation report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    AdminKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Invalid or missing X-Admin-Key
+    NotFound:
+      description: Run not found
+
+  schemas:
+    CreateRunRequest:
+      type: object
+      required: [feature_key, environment]
+      properties:
+        feature_key:
+          type: string
+          example: 042-production-pipeline
+        environment:
+          type: string
+          example: staging
+        manuscript_id:
+          type: string
+          format: uuid
+        triggered_by:
+          type: string
+        note:
+          type: string
+
+    ValidationRun:
+      type: object
+      required:
+        - id
+        - feature_key
+        - environment
+        - status
+        - blocking_count
+        - failed_count
+        - skipped_count
+        - started_at
+        - rollback_required
+        - rollback_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        feature_key:
+          type: string
+        environment:
+          type: string
+        manuscript_id:
+          type: string
+          format: uuid
+          nullable: true
+        triggered_by:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [running, passed, failed, blocked]
+        blocking_count:
+          type: integer
+        failed_count:
+          type: integer
+        skipped_count:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        rollback_required:
+          type: boolean
+        rollback_status:
+          type: string
+          enum: [not_required, pending, done]
+        note:
+          type: string
+          nullable: true
+
+    RunResponse:
+      type: object
+      required: [run]
+      properties:
+        run:
+          $ref: '#/components/schemas/ValidationRun'
+
+    ReadinessRequest:
+      type: object
+      properties:
+        check_keys:
+          type: array
+          items:
+            type: string
+        strict_blocking:
+          type: boolean
+          default: true
+
+    RegressionRequest:
+      type: object
+      properties:
+        scenario_keys:
+          type: array
+          items:
+            type: string
+        require_zero_skip:
+          type: boolean
+          default: true
+
+    ValidationCheck:
+      type: object
+      required: [id, phase, check_key, title, status, is_blocking]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phase:
+          type: string
+          enum: [readiness, regression, rollback]
+        check_key:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed, blocked, skipped]
+        is_blocking:
+          type: boolean
+        detail:
+          type: string
+        evidence:
+          type: object
+          additionalProperties: true
+
+    ReadinessResponse:
+      type: object
+      required: [run_id, result]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        result:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [passed, failed, blocked]
+            checks:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationCheck'
+
+    RegressionResponse:
+      type: object
+      required: [run_id, result]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        result:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [passed, failed, blocked]
+            checks:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationCheck'
+
+    FinalizeRequest:
+      type: object
+      properties:
+        force_no_go:
+          type: boolean
+          default: false
+        rollback_note:
+          type: string
+
+    FinalizeResponse:
+      type: object
+      required: [run_id, release_decision, report]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        release_decision:
+          type: string
+          enum: [go, no-go]
+        report:
+          $ref: '#/components/schemas/ValidationReport'
+
+    ValidationReport:
+      type: object
+      required: [run, readiness_checks, regression_checks, release_decision]
+      properties:
+        run:
+          $ref: '#/components/schemas/ValidationRun'
+        readiness_checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationCheck'
+        regression_checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationCheck'
+        rollback_plan:
+          $ref: '#/components/schemas/RollbackPlan'
+        release_decision:
+          type: string
+          enum: [go, no-go]
+
+    RollbackPlan:
+      type: object
+      required: [required, status, steps]
+      properties:
+        required:
+          type: boolean
+        status:
+          type: string
+          enum: [not_required, pending, done]
+        note:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
