@@ -159,48 +159,59 @@ RETURNS TABLE(
   max_overdue_days numeric,
   earliest_due_at timestamptz
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-WITH overdue AS (
+BEGIN
+  -- 兼容未应用 Feature 045 的环境：internal_tasks 缺失时返回空集合而非报错
+  IF to_regclass('public.internal_tasks') IS NULL THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY EXECUTE
+  $sql$
+  WITH overdue AS (
+    SELECT
+      t.manuscript_id,
+      COUNT(*)::int AS overdue_tasks_count,
+      COALESCE(
+        MAX(EXTRACT(EPOCH FROM (NOW() - t.due_at)) / 86400.0),
+        0
+      )::numeric(10,2) AS max_overdue_days,
+      MIN(t.due_at) AS earliest_due_at
+    FROM public.internal_tasks t
+    WHERE t.status <> 'done'
+      AND t.due_at < NOW()
+    GROUP BY t.manuscript_id
+  )
   SELECT
-    t.manuscript_id,
-    COUNT(*)::int AS overdue_tasks_count,
-    COALESCE(
-      MAX(EXTRACT(EPOCH FROM (NOW() - t.due_at)) / 86400.0),
-      0
-    )::numeric(10,2) AS max_overdue_days,
-    MIN(t.due_at) AS earliest_due_at
-  FROM public.internal_tasks t
-  WHERE t.status <> 'done'
-    AND t.due_at < NOW()
-  GROUP BY t.manuscript_id
-)
-SELECT
-  m.id AS manuscript_id,
-  COALESCE(NULLIF(TRIM(m.title), ''), m.id::text) AS title,
-  m.status::text AS status,
-  m.journal_id,
-  j.title AS journal_title,
-  m.editor_id,
-  COALESCE(NULLIF(TRIM(ep.full_name), ''), ep.email, NULL) AS editor_name,
-  m.owner_id,
-  COALESCE(NULLIF(TRIM(op.full_name), ''), op.email, NULL) AS owner_name,
-  o.overdue_tasks_count,
-  o.max_overdue_days,
-  o.earliest_due_at
-FROM overdue o
-JOIN public.manuscripts m ON m.id = o.manuscript_id
-LEFT JOIN public.journals j ON j.id = m.journal_id
-LEFT JOIN public.user_profiles ep ON ep.id = m.editor_id
-LEFT JOIN public.user_profiles op ON op.id = m.owner_id
-WHERE m.status::text NOT IN ('published', 'rejected')
-  AND (journal_ids IS NULL OR m.journal_id = ANY(journal_ids))
-ORDER BY
-  o.overdue_tasks_count DESC,
-  o.max_overdue_days DESC,
-  m.updated_at DESC
-LIMIT GREATEST(COALESCE(limit_count, 20), 1);
+    m.id AS manuscript_id,
+    COALESCE(NULLIF(TRIM(m.title), ''), m.id::text) AS title,
+    m.status::text AS status,
+    m.journal_id,
+    j.title AS journal_title,
+    m.editor_id,
+    COALESCE(NULLIF(TRIM(ep.full_name), ''), ep.email, NULL) AS editor_name,
+    m.owner_id,
+    COALESCE(NULLIF(TRIM(op.full_name), ''), op.email, NULL) AS owner_name,
+    o.overdue_tasks_count,
+    o.max_overdue_days,
+    o.earliest_due_at
+  FROM overdue o
+  JOIN public.manuscripts m ON m.id = o.manuscript_id
+  LEFT JOIN public.journals j ON j.id = m.journal_id
+  LEFT JOIN public.user_profiles ep ON ep.id = m.editor_id
+  LEFT JOIN public.user_profiles op ON op.id = m.owner_id
+  WHERE m.status::text NOT IN ('published', 'rejected')
+    AND ($2 IS NULL OR m.journal_id = ANY($2))
+  ORDER BY
+    o.overdue_tasks_count DESC,
+    o.max_overdue_days DESC,
+    m.updated_at DESC
+  LIMIT GREATEST(COALESCE($1, 20), 1)
+  $sql$
+  USING limit_count, journal_ids;
+END;
 $$;
 
 COMMENT ON FUNCTION public.get_sla_overdue_manuscripts(int, uuid[]) IS
