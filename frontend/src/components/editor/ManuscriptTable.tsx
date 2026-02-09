@@ -15,6 +15,12 @@ export type ProcessRow = {
   created_at?: string
   updated_at?: string
   status?: string
+  pre_check_status?: string | null
+  current_role?: string | null
+  current_assignee?: { id: string; full_name?: string | null; email?: string | null } | null
+  assigned_at?: string | null
+  technical_completed_at?: string | null
+  academic_completed_at?: string | null
   journals?: { title?: string; slug?: string } | null
   owner?: { id: string; full_name?: string | null; email?: string | null } | null
   editor?: { id: string; full_name?: string | null; email?: string | null } | null
@@ -49,8 +55,10 @@ export function ManuscriptTable({
             <TableHead className="whitespace-nowrap">Journal</TableHead>
             <TableHead className="whitespace-nowrap">Submitted</TableHead>
             <TableHead className="whitespace-nowrap">Status</TableHead>
+            <TableHead className="whitespace-nowrap">Pre-check</TableHead>
             <TableHead className="whitespace-nowrap">Updated</TableHead>
             <TableHead className="whitespace-nowrap">Assign Editor</TableHead>
+            <TableHead className="whitespace-nowrap">Current Assignee</TableHead>
             <TableHead className="whitespace-nowrap">Owner</TableHead>
             <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
           </TableRow>
@@ -58,13 +66,21 @@ export function ManuscriptTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={10} className="py-10 text-center text-sm text-slate-500">
                 No manuscripts found.
               </TableCell>
             </TableRow>
           ) : (
             rows.map((r) => {
               const status = r.status || ''
+              const stage = (r.pre_check_status || '').toLowerCase()
+              const isPrecheck = status.toLowerCase() === 'pre_check'
+              const precheckLabel =
+                isPrecheck && stage
+                  ? `${stage} (${(r.current_role || '').replaceAll('_', ' ') || 'unassigned'})`
+                  : '—'
+              const currentAssignee =
+                r.current_assignee?.full_name || r.current_assignee?.email || r.current_assignee?.id || '—'
               return (
                 <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
                   <TableCell className="font-mono text-[10px] sm:text-xs">
@@ -85,10 +101,12 @@ export function ManuscriptTable({
                       {getStatusLabel(status)}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-xs text-slate-600 whitespace-nowrap">{precheckLabel}</TableCell>
                   <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.updated_at)}</TableCell>
                   <TableCell className="text-sm text-slate-700 font-medium">
                     {r.editor?.full_name || r.editor?.email || '—'}
                   </TableCell>
+                  <TableCell className="text-sm text-slate-700 font-medium">{currentAssignee}</TableCell>
                   <TableCell className="text-sm text-slate-700">
                     <div className="flex items-center gap-2">
                       <div className="min-w-[100px] max-w-[150px] truncate font-medium">

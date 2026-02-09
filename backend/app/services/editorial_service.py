@@ -138,6 +138,17 @@ class EditorialService:
 
         from_norm = normalize_status(from_status) or ManuscriptStatus.PRE_CHECK.value
 
+        # 中文注释：流程强约束，预审/外审/修回阶段禁止直接拒稿。
+        if to_norm == ManuscriptStatus.REJECTED.value and from_norm in {
+            ManuscriptStatus.PRE_CHECK.value,
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.RESUBMITTED.value,
+        }:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Reject is only allowed in decision/decision_done flow. Current: {from_norm}",
+            )
+
         if not allow_skip:
             allowed = ManuscriptStatus.allowed_next(from_norm)
             if to_norm not in allowed:

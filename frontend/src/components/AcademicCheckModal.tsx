@@ -10,20 +10,22 @@ interface AcademicCheckModalProps {
 
 export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, onClose, manuscriptId, onSuccess }) => {
   const [decision, setDecision] = useState<string>('');
+  const [comment, setComment] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string>('');
 
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!decision) return;
     setIsSubmitting(true);
+    setError('');
     try {
-      await editorService.submitAcademicCheck(manuscriptId, decision);
+      await editorService.submitAcademicCheck(manuscriptId, decision as 'review' | 'decision_phase', comment || undefined);
       onSuccess();
       onClose();
     } catch (error) {
-      console.error("Failed to submit academic check", error);
-      alert("Failed to submit check");
+      setError(error instanceof Error ? error.message : 'Failed to submit check');
     } finally {
       setIsSubmitting(false);
     }
@@ -55,6 +57,19 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
             />
             <span>Proceed to Decision Phase (Reject/Revision)</span>
           </label>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Comment (Optional)</label>
+          <textarea
+            className="w-full border rounded p-2 min-h-[96px]"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={2000}
+            disabled={isSubmitting}
+            placeholder="Add context for review/decision route..."
+          />
+          {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
         </div>
 
         <div className="flex justify-end gap-2">

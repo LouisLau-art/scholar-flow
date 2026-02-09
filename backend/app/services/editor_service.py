@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
+from app.services.editorial_service import EditorialService
 
 
 @dataclass(frozen=True)
@@ -105,12 +106,198 @@ class EditorService:
 
     def __init__(self) -> None:
         self.client = supabase_admin
+        self.editorial = EditorialService()
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _safe_insert_transition_log(
+        self,
+        *,
+        manuscript_id: str,
+        from_status: str,
+        to_status: str,
+        changed_by: str | None,
+        comment: str | None = None,
+        payload: dict[str, Any] | None = None,
+        created_at: str | None = None,
+    ) -> None:
+        """
+        写入审计日志（失败降级，不阻断主流程）。
+
+        中文注释：
+        - 沿用项目“fail-open”策略：日志异常不影响业务主流程；
+        - 尝试包含 payload；若列不存在或外键限制失败，则自动降级重试。
+        """
+        row: dict[str, Any] = {
+            "manuscript_id": manuscript_id,
+            "from_status": from_status,
+            "to_status": to_status,
+            "comment": comment,
+            "changed_by": changed_by,
+            "created_at": created_at or self._now(),
+        }
+        if payload is not None:
+            row["payload"] = payload
+
+        candidates: list[dict[str, Any]] = [dict(row)]
+        # payload 可能未迁移
+        if "payload" in row:
+            fallback = dict(row)
+            fallback.pop("payload", None)
+            candidates.append(fallback)
+        # changed_by 外键兼容
+        if changed_by:
+            degraded = dict(row)
+            degraded["changed_by"] = None
+            if payload is not None and isinstance(payload, dict):
+                degraded["payload"] = {**payload, "changed_by_raw": changed_by}
+            candidates.append(degraded)
+            degraded_no_payload = dict(degraded)
+            degraded_no_payload.pop("payload", None)
+            candidates.append(degraded_no_payload)
+
+        for cand in candidates:
+            try:
+                self.client.table("status_transition_logs").insert(cand).execute()
+                return
+            except Exception:
+                continue
+
+    def _map_precheck_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        """
+        统一队列输出字段，便于前端列表/详情复用。
+        """
+        out = dict(row)
+        pre = str(row.get("pre_check_status") or PreCheckStatus.INTAKE.value)
+        pre = pre if pre in {PreCheckStatus.INTAKE.value, PreCheckStatus.TECHNICAL.value, PreCheckStatus.ACADEMIC.value} else PreCheckStatus.INTAKE.value
+        current_role = (
+            "managing_editor"
+            if pre == PreCheckStatus.INTAKE.value
+            else "assistant_editor"
+            if pre == PreCheckStatus.TECHNICAL.value
+            else "editor_in_chief"
+        )
+        out["pre_check_status"] = pre
+        out["current_role"] = current_role
+
+        ae_id = str(row.get("assistant_editor_id") or "")
+        if ae_id:
+            out["current_assignee"] = {"id": ae_id}
+        else:
+            out["current_assignee"] = None
+        return out
+
+    def _load_precheck_timeline_index(self, manuscript_ids: list[str]) -> dict[str, dict[str, str]]:
+        """
+        从审计日志汇总 assigned_at / technical_completed_at / academic_completed_at。
+        """
+        if not manuscript_ids:
+            return {}
+        index: dict[str, dict[str, str]] = {}
+        try:
+            resp = (
+                self.client.table("status_transition_logs")
+                .select("manuscript_id,created_at,payload")
+                .in_("manuscript_id", manuscript_ids)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception:
+            rows = []
+
+        for row in rows:
+            manuscript_id = str(row.get("manuscript_id") or "")
+            if not manuscript_id:
+                continue
+            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            action = str(payload.get("action") or "")
+            created_at = str(row.get("created_at") or "")
+            if not created_at:
+                continue
+
+            bucket = index.setdefault(manuscript_id, {})
+            if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
+                bucket["assigned_at"] = created_at
+            if action in {"precheck_technical_pass", "precheck_technical_revision"}:
+                bucket["technical_completed_at"] = created_at
+            if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
+                bucket["academic_completed_at"] = created_at
+        return index
+
+    def _enrich_precheck_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = [self._map_precheck_row(r) for r in rows]
+        ids = [str(r.get("id") or "") for r in out if r.get("id")]
+        timeline_index = self._load_precheck_timeline_index(ids)
+        assignee_ids = sorted(
+            {
+                str(r.get("assistant_editor_id") or "")
+                for r in out
+                if str(r.get("assistant_editor_id") or "")
+            }
+        )
+        assignee_map: dict[str, dict[str, Any]] = {}
+        if assignee_ids:
+            try:
+                resp = (
+                    self.client.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", assignee_ids)
+                    .execute()
+                )
+                for row in (getattr(resp, "data", None) or []):
+                    rid = str(row.get("id") or "")
+                    if rid:
+                        assignee_map[rid] = row
+            except Exception:
+                assignee_map = {}
+
+        for row in out:
+            manuscript_id = str(row.get("id") or "")
+            stamp = timeline_index.get(manuscript_id, {})
+            row["assigned_at"] = stamp.get("assigned_at")
+            row["technical_completed_at"] = stamp.get("technical_completed_at")
+            row["academic_completed_at"] = stamp.get("academic_completed_at")
+            ae_id = str(row.get("assistant_editor_id") or "")
+            if ae_id:
+                prof = assignee_map.get(ae_id) or {}
+                row["current_assignee"] = {
+                    "id": ae_id,
+                    "full_name": prof.get("full_name"),
+                    "email": prof.get("email"),
+                }
+            else:
+                row["current_assignee"] = None
+        return out
+
+    def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
+        try:
+            resp = (
+                self.client.table("manuscripts")
+                .select("id,status,pre_check_status,assistant_editor_id,updated_at")
+                .eq("id", manuscript_id)
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Manuscript not found") from e
+        row = getattr(resp, "data", None) or None
+        if not row:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        return row
+
+    def _normalize_precheck_status(self, value: str | None) -> str:
+        raw = str(value or "").strip().lower()
+        if raw in {PreCheckStatus.INTAKE.value, PreCheckStatus.TECHNICAL.value, PreCheckStatus.ACADEMIC.value}:
+            return raw
+        return PreCheckStatus.INTAKE.value
 
     def list_manuscripts_process(self, *, filters: ProcessListFilters) -> list[dict[str, Any]]:
         q = (
             self.client.table("manuscripts")
             .select(
-                "id,title,created_at,updated_at,status,owner_id,editor_id,journal_id,journals(title,slug)"
+                "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,editor_id,journal_id,journals(title,slug)"
             )
             .order("created_at", desc=True)
         )
@@ -163,6 +350,21 @@ class EditorService:
                 else None
             )
 
+        precheck_rows = [
+            r for r in rows if normalize_status(str(r.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+        ]
+        precheck_enriched = self._enrich_precheck_rows(precheck_rows)
+        by_id = {str(r.get("id") or ""): r for r in precheck_enriched}
+        for row in rows:
+            rid = str(row.get("id") or "")
+            if rid and rid in by_id:
+                enriched = by_id[rid]
+                row["pre_check_status"] = enriched.get("pre_check_status")
+                row["current_role"] = enriched.get("current_role")
+                row["current_assignee"] = enriched.get("current_assignee")
+                row["assigned_at"] = enriched.get("assigned_at")
+                row["technical_completed_at"] = enriched.get("technical_completed_at")
+                row["academic_completed_at"] = enriched.get("academic_completed_at")
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
@@ -180,24 +382,90 @@ class EditorService:
             .range((page - 1) * page_size, page * page_size - 1)
         )
         resp = q.execute()
-        return getattr(resp, "data", None) or []
+        rows = getattr(resp, "data", None) or []
+        return self._enrich_precheck_rows(rows)
 
-    def assign_ae(self, manuscript_id: UUID, ae_id: UUID, current_user_id: UUID) -> bool:
+    def assign_ae(
+        self,
+        manuscript_id: UUID,
+        ae_id: UUID,
+        current_user_id: UUID,
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Assign AE: Update assistant_editor_id and move to TECHNICAL
+        Assign/Reassign AE with state guard + audit trail.
         """
+        manuscript_id_str = str(manuscript_id)
+        ae_id_str = str(ae_id)
+        actor = str(current_user_id)
+        now = self._now()
+
+        ms = self._get_manuscript(manuscript_id_str)
+        status = normalize_status(str(ms.get("status") or ""))
+        pre = self._normalize_precheck_status(ms.get("pre_check_status"))
+        ae_before = str(ms.get("assistant_editor_id") or "")
+
+        if status != ManuscriptStatus.PRE_CHECK.value:
+            raise HTTPException(status_code=400, detail="AE assignment only allowed in pre_check")
+        if pre not in {PreCheckStatus.INTAKE.value, PreCheckStatus.TECHNICAL.value}:
+            raise HTTPException(status_code=409, detail=f"Invalid pre-check stage for assignment: {pre}")
+        if pre == PreCheckStatus.TECHNICAL.value and ae_before == ae_id_str:
+            # 幂等：同一 AE 重复分派
+            out = dict(ms)
+            out["pre_check_status"] = pre
+            out["assistant_editor_id"] = ae_id_str
+            out["updated_at"] = now
+            return self._map_precheck_row(out)
+
+        action = "precheck_reassign_ae" if pre == PreCheckStatus.TECHNICAL.value and ae_before else "precheck_assign_ae"
         data = {
-            "assistant_editor_id": str(ae_id),
+            "assistant_editor_id": ae_id_str,
             "pre_check_status": PreCheckStatus.TECHNICAL.value,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": now,
         }
-        resp = self.client.table("manuscripts").update(data).eq("id", str(manuscript_id)).execute()
-        
-        # Log transition (Simplified for MVP)
-        if getattr(resp, "data", None):
-            print(f"[038] Manuscript {manuscript_id} assigned to AE {ae_id} by {current_user_id}")
-            return True
-        return False
+        # 条件更新，避免并发覆盖
+        q = (
+            self.client.table("manuscripts")
+            .update(data)
+            .eq("id", manuscript_id_str)
+            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+        )
+        if pre == PreCheckStatus.INTAKE.value:
+            q = q.or_("pre_check_status.eq.intake,pre_check_status.is.null")
+        else:
+            q = q.eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+        resp = q.execute()
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            latest = self._get_manuscript(manuscript_id_str)
+            if (
+                normalize_status(str(latest.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+                and self._normalize_precheck_status(latest.get("pre_check_status")) == PreCheckStatus.TECHNICAL.value
+                and str(latest.get("assistant_editor_id") or "") == ae_id_str
+            ):
+                return self._map_precheck_row(latest)
+            raise HTTPException(status_code=409, detail="Assignment conflict: manuscript state changed")
+
+        updated = rows[0]
+        self._safe_insert_transition_log(
+            manuscript_id=manuscript_id_str,
+            from_status=ManuscriptStatus.PRE_CHECK.value,
+            to_status=ManuscriptStatus.PRE_CHECK.value,
+            changed_by=actor,
+            comment=f"assign ae: {ae_id_str}",
+            payload={
+                "action": action,
+                "pre_check_from": pre,
+                "pre_check_to": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_before": ae_before or None,
+                "assistant_editor_after": ae_id_str,
+                "decision": None,
+                "idempotency_key": idempotency_key,
+            },
+            created_at=now,
+        )
+        return self._map_precheck_row(updated)
 
     def get_ae_workspace(self, ae_id: UUID, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
         """
@@ -213,24 +481,114 @@ class EditorService:
             .range((page - 1) * page_size, page * page_size - 1)
         )
         resp = q.execute()
-        return getattr(resp, "data", None) or []
+        rows = getattr(resp, "data", None) or []
+        return self._enrich_precheck_rows(rows)
 
-    def submit_technical_check(self, manuscript_id: UUID, ae_id: UUID) -> bool:
+    def submit_technical_check(
+        self,
+        manuscript_id: UUID,
+        ae_id: UUID,
+        *,
+        decision: str,
+        comment: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Move to ACADEMIC check
+        AE technical check:
+        - pass -> pre_check/academic
+        - revision -> minor_revision
         """
-        data = {
-            "pre_check_status": PreCheckStatus.ACADEMIC.value,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        resp = (
-            self.client.table("manuscripts")
-            .update(data)
-            .eq("id", str(manuscript_id))
-            .eq("assistant_editor_id", str(ae_id))
-            .execute()
+        manuscript_id_str = str(manuscript_id)
+        ae_id_str = str(ae_id)
+        now = self._now()
+        normalized_decision = str(decision or "").strip().lower()
+        if normalized_decision not in {"pass", "revision"}:
+            raise HTTPException(status_code=422, detail="decision must be pass or revision")
+        comment_clean = (comment or "").strip() or None
+        if normalized_decision == "revision" and not comment_clean:
+            raise HTTPException(status_code=422, detail="comment is required for revision")
+
+        ms = self._get_manuscript(manuscript_id_str)
+        status = normalize_status(str(ms.get("status") or ""))
+        pre = self._normalize_precheck_status(ms.get("pre_check_status"))
+        owner_ae = str(ms.get("assistant_editor_id") or "")
+
+        if status != ManuscriptStatus.PRE_CHECK.value:
+            if normalized_decision == "revision" and status == ManuscriptStatus.MINOR_REVISION.value:
+                return dict(ms)
+            if normalized_decision == "pass" and pre == PreCheckStatus.ACADEMIC.value:
+                return self._map_precheck_row(ms)
+            raise HTTPException(status_code=409, detail="Technical check conflict: manuscript state changed")
+
+        if pre != PreCheckStatus.TECHNICAL.value:
+            if normalized_decision == "pass" and pre == PreCheckStatus.ACADEMIC.value:
+                return self._map_precheck_row(ms)
+            raise HTTPException(status_code=409, detail=f"Technical check only allowed in technical stage, current={pre}")
+
+        if owner_ae != ae_id_str:
+            raise HTTPException(status_code=403, detail="Only assigned assistant editor can submit technical check")
+
+        if normalized_decision == "pass":
+            data = {
+                "pre_check_status": PreCheckStatus.ACADEMIC.value,
+                "updated_at": now,
+            }
+            resp = (
+                self.client.table("manuscripts")
+                .update(data)
+                .eq("id", manuscript_id_str)
+                .eq("status", ManuscriptStatus.PRE_CHECK.value)
+                .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+                .eq("assistant_editor_id", ae_id_str)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                latest = self._get_manuscript(manuscript_id_str)
+                if (
+                    normalize_status(str(latest.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+                    and self._normalize_precheck_status(latest.get("pre_check_status")) == PreCheckStatus.ACADEMIC.value
+                ):
+                    return self._map_precheck_row(latest)
+                raise HTTPException(status_code=409, detail="Technical pass conflict: manuscript state changed")
+
+            updated = rows[0]
+            self._safe_insert_transition_log(
+                manuscript_id=manuscript_id_str,
+                from_status=ManuscriptStatus.PRE_CHECK.value,
+                to_status=ManuscriptStatus.PRE_CHECK.value,
+                changed_by=ae_id_str,
+                comment=comment_clean or "technical check passed",
+                payload={
+                    "action": "precheck_technical_pass",
+                    "pre_check_from": PreCheckStatus.TECHNICAL.value,
+                    "pre_check_to": PreCheckStatus.ACADEMIC.value,
+                    "assistant_editor_before": owner_ae or None,
+                    "assistant_editor_after": owner_ae or None,
+                    "decision": "pass",
+                    "idempotency_key": idempotency_key,
+                },
+                created_at=now,
+            )
+            return self._map_precheck_row(updated)
+
+        updated = self.editorial.update_status(
+            manuscript_id=manuscript_id_str,
+            to_status=ManuscriptStatus.MINOR_REVISION.value,
+            changed_by=ae_id_str,
+            comment=comment_clean,
+            allow_skip=False,
+            payload={
+                "action": "precheck_technical_revision",
+                "pre_check_from": PreCheckStatus.TECHNICAL.value,
+                "pre_check_to": None,
+                "assistant_editor_before": owner_ae or None,
+                "assistant_editor_after": owner_ae or None,
+                "decision": "revision",
+                "idempotency_key": idempotency_key,
+            },
         )
-        return bool(getattr(resp, "data", None))
+        return updated
 
     def get_academic_queue(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
         """
@@ -245,17 +603,55 @@ class EditorService:
             .range((page - 1) * page_size, page * page_size - 1)
         )
         resp = q.execute()
-        return getattr(resp, "data", None) or []
+        rows = getattr(resp, "data", None) or []
+        return self._enrich_precheck_rows(rows)
 
-    def submit_academic_check(self, manuscript_id: UUID, decision: str, comment: str | None = None) -> bool:
+    def submit_academic_check(
+        self,
+        manuscript_id: UUID,
+        decision: str,
+        comment: str | None = None,
+        *,
+        changed_by: UUID | str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Academic Decision: route to Review or Decision phase
+        EIC academic check:
+        - review -> under_review
+        - decision_phase -> decision
         """
-        new_status = ManuscriptStatus.UNDER_REVIEW.value if decision == "review" else ManuscriptStatus.DECISION.value
-        data = {
-            "status": new_status,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        resp = self.client.table("manuscripts").update(data).eq("id", str(manuscript_id)).execute()
-        return bool(getattr(resp, "data", None))
+        manuscript_id_str = str(manuscript_id)
+        actor = str(changed_by) if changed_by else None
+        d = str(decision or "").strip().lower()
+        if d not in {"review", "decision_phase"}:
+            raise HTTPException(status_code=422, detail="decision must be review or decision_phase")
+        to_status = ManuscriptStatus.UNDER_REVIEW.value if d == "review" else ManuscriptStatus.DECISION.value
 
+        ms = self._get_manuscript(manuscript_id_str)
+        status = normalize_status(str(ms.get("status") or ""))
+        pre = self._normalize_precheck_status(ms.get("pre_check_status"))
+        if status != ManuscriptStatus.PRE_CHECK.value:
+            if status == to_status:
+                return ms
+            raise HTTPException(status_code=409, detail="Academic check conflict: manuscript state changed")
+        if pre != PreCheckStatus.ACADEMIC.value:
+            raise HTTPException(status_code=409, detail=f"Academic check only allowed in academic stage, current={pre}")
+
+        payload_action = "precheck_academic_to_review" if d == "review" else "precheck_academic_to_decision"
+        updated = self.editorial.update_status(
+            manuscript_id=manuscript_id_str,
+            to_status=to_status,
+            changed_by=actor,
+            comment=(comment or "").strip() or None,
+            allow_skip=False,
+            payload={
+                "action": payload_action,
+                "pre_check_from": PreCheckStatus.ACADEMIC.value,
+                "pre_check_to": None,
+                "assistant_editor_before": str(ms.get("assistant_editor_id") or "") or None,
+                "assistant_editor_after": str(ms.get("assistant_editor_id") or "") or None,
+                "decision": d,
+                "idempotency_key": idempotency_key,
+            },
+        )
+        return updated

@@ -12,6 +12,10 @@ interface AuditLog {
   to_status: string
   comment: string | null
   created_at: string
+  payload?: {
+    action?: string
+    decision?: string
+  } | null
   user?: {
     full_name?: string
     email?: string
@@ -24,6 +28,13 @@ interface AuditLogTimelineProps {
 
 export function AuditLogTimeline({ manuscriptId }: AuditLogTimelineProps) {
   const [logs, setLogs] = useState<AuditLog[]>([])
+
+  const getActionLabel = (log: AuditLog) => {
+    const action = String(log.payload?.action || '')
+    if (!action.startsWith('precheck_')) return null
+    const decision = log.payload?.decision ? ` (${log.payload?.decision})` : ''
+    return `${action}${decision}`
+  }
 
   useEffect(() => {
     EditorApi.getAuditLogs(manuscriptId).then((res) => {
@@ -51,6 +62,9 @@ export function AuditLogTimeline({ manuscriptId }: AuditLogTimelineProps) {
               <div className="text-sm font-medium text-slate-900 capitalize">
                 {log.to_status?.replace('_', ' ') || 'Unknown'}
               </div>
+              {getActionLabel(log) ? (
+                <div className="text-[11px] text-indigo-600 font-medium mt-0.5">{getActionLabel(log)}</div>
+              ) : null}
               <div className="text-xs text-slate-500">
                 {format(new Date(log.created_at), 'yyyy-MM-dd HH:mm')} by{' '}
                 {log.user?.full_name || log.user?.email || 'System'}
