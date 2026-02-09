@@ -43,9 +43,9 @@ const sentryBuildOptions = {
     disable: !hasSentryAuth,
   },
   // 中文注释:
-  // - 使用 Sentry 官方 tunnelRoute：会自动把浏览器端上报改为同源 `/monitoring?...`
-  // - 同时自动注入 rewrite，把请求转发到对应 region 的 ingest 域名（绕过 Firefox ETP 等 tracker 拦截）
-  tunnelRoute: '/monitoring',
+  // - 使用 Sentry 官方 tunnelRoute：会自动把浏览器端上报改为同源路径
+  // - 将路径从 `/monitoring` 调整为更中性的内部路径，降低被广告/隐私插件误拦截概率
+  tunnelRoute: '/api/_sf_events',
   // 让客户端上传更多 bundle sourcemaps，方便定位
   widenClientFileUpload: true,
   // 不把 sourcemap 公开给用户（只上传到 Sentry）
