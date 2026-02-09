@@ -21,6 +21,19 @@
 2. Supabase 云端 migration 已同步（至少包含 workflow 与 process list 相关字段）。
 3. 浏览器禁用“强拦截”插件后再复测一次（`ERR_BLOCKED_BY_CLIENT` 常由插件引起，不一定是系统问题）。
 
+### 2.1 5 分钟前置检查（每轮回归前先做）
+
+1. 环境变量检查（本地）  
+   `./scripts/sync-platform-env.sh --env-file deploy/platform.env --dry-run`
+2. 发布门禁检查（UAT API）  
+   `scripts/validate-production-rollout.sh --api-base https://louisshawn-scholarflow-api.hf.space --readiness-only`
+3. 关键迁移已落库（至少以下几项）：
+   - `supabase/migrations/20260206150000_add_precheck_fields.sql`
+   - `supabase/migrations/20260209190000_internal_collaboration_mentions_tasks.sql`
+   - `supabase/migrations/20260210193000_doi_registration_manuscript_fk.sql`
+4. 如出现 PGRST 列/表缺失，执行迁移后补一条：  
+   `select pg_notify('pgrst', 'reload schema');`
+
 ## 3. 账号与数据准备
 
 建议至少准备以下账号：
@@ -178,6 +191,29 @@
 3. Footer/导航不再出现 `/contact` 404。
 4. Reviewer Magic Link 全流程可走通。
 5. Payment Gate：未支付不可发布，支付后可发布。
+
+## 6.1 常见问题速查（按错误关键字）
+
+1. `column manuscripts.pre_check_status does not exist`  
+   处理：
+   - 执行 `supabase/migrations/20260206150000_add_precheck_fields.sql`
+   - 执行 `select pg_notify('pgrst', 'reload schema');`
+   - 复测 `GET /api/v1/editor/manuscripts/process`
+2. `Could not find table public.internal_comments in schema cache`  
+   处理：
+   - 执行 `supabase/migrations/20260209190000_internal_collaboration_mentions_tasks.sql`
+   - 执行 `select pg_notify('pgrst', 'reload schema');`
+   - 复测 `GET /api/v1/editor/manuscripts/{id}/comments`
+3. 作者投稿卡在 AI 解析（前端一直转圈）  
+   处理：
+   - 浏览器 Network 确认卡住的是哪个接口（通常是上传后的解析请求）
+   - 查看 HF 运行日志中该请求是否进入后端
+   - 用小 PDF（<10MB）重试，排除超大文件/异常 PDF
+   - 若请求进入后端但长时间无响应，优先记录请求时间、manuscript_id、Sentry issue id 交由后端排查（避免前端无限等待）
+4. 只看到 HF 日志首行 `{"message":"ScholarFlow API is running","docs":"/docs"}`  
+   说明：
+   - 这是启动探活日志，不代表后续无请求。
+   - 需要在 Space Runtime Logs 中按时间刷新查看请求日志；若依然没有请求日志，先检查 `NEXT_PUBLIC_API_URL` 是否正确指向 HF Space。
 
 ## 7. 缺陷记录模板
 
