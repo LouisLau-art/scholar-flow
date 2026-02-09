@@ -93,12 +93,12 @@ export function ManuscriptTable({
               const showAssigneeLine = currentAssignee !== '—' && currentAssignee !== editorLabel
               return (
                 <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell className="font-mono text-[10px] sm:text-xs">
+                  <TableCell className="font-mono text-xs">
                     <Link
                       href={`/editor/manuscript/${r.id}`}
                       className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600 font-medium"
                     >
-                      <span className="truncate max-w-[150px]">{r.id}</span>
+                      <span className="block min-w-0 max-w-full truncate">{r.id}</span>
                       <ArrowRight className="h-3 w-3" />
                     </Link>
                   </TableCell>
@@ -111,14 +111,14 @@ export function ManuscriptTable({
                         {getStatusLabel(status)}
                       </Badge>
                       {precheckLabel !== '—' ? (
-                        <p className="text-[11px] text-slate-500 break-words">
+                        <p className="text-xs text-slate-500 break-words">
                           Pre-check: {precheckLabel}
                         </p>
                       ) : null}
                       {r.is_overdue ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
                           Overdue
-                          <span className="text-[11px]">({r.overdue_tasks_count || 0})</span>
+                          <span className="text-[0.7rem]">({r.overdue_tasks_count || 0})</span>
                         </span>
                       ) : (
                         <span className="text-xs text-slate-400">On track</span>
