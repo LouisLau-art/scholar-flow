@@ -103,7 +103,7 @@
 
 - [ ] T033 [US3] 在 `backend/app/services/decision_service.py` 增加 `first_decision` 草稿事件记录（不触发状态流转）
 - [ ] T034 [US3] 在 `backend/app/services/decision_service.py` 收紧 `final decision` 提交角色（`editor_in_chief/admin`）
-- [ ] T035 [US3] 在 `backend/app/api/v1/editor.py` 的 legacy `/editor/decision` 对齐 same rule（保留兼容）
+- [x] T035 [US3] 在 `backend/app/api/v1/editor.py` 的 legacy `/editor/decision` 对齐 same rule（保留兼容）
 - [ ] T036 [US3] 在 `backend/app/api/v1/editor.py` 为 APC/owner/final decision 写入统一审计 payload（before/after/reason/source）
 - [ ] T037 [US3] 在 `frontend/src/app/(admin)/editor/decision/[id]/page.tsx` 展示 first/final decision 语义提示
 - [ ] T038 [US3] 在 `frontend/src/components/DecisionPanel.tsx` 提交参数增加 `decision_stage`（first/final）
@@ -114,8 +114,8 @@
 
 ## Phase 6: Polish & Cross-cutting
 
-- [ ] T039 [P] 回写 `docs/GAP_ANALYSIS_AND_ACTION_PLAN.md` 的 GAP-P1-05 子项状态与验收记录
-- [ ] T040 [P] 更新 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 的“环境约定 + 近期快照”
+- [x] T039 [P] 回写 `docs/GAP_ANALYSIS_AND_ACTION_PLAN.md` 的 GAP-P1-05 子项状态与验收记录
+- [x] T040 [P] 更新 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 的“环境约定 + 近期快照”
 - [x] T041 执行后端测试：`pytest -o addopts= backend/tests/integration/test_rbac_journal_scope.py backend/tests/unit/test_role_matrix_scope.py`
 - [x] T042 执行前端测试：`bun run test:run frontend/tests/unit/rbac-visibility.test.tsx`
 - [ ] T043 执行 mocked E2E：`bun run test:e2e frontend/tests/e2e/specs/rbac-journal-scope.spec.ts --project=chromium`
