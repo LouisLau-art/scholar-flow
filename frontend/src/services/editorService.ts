@@ -1,11 +1,47 @@
 import { EditorApi, type DecisionSubmissionPayload } from '@/services/editorApi'
 import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
 import type { CreateInternalTaskPayload, InternalTaskStatus, UpdateInternalTaskPayload } from '@/types/internal-collaboration'
+import type { FinanceStatusFilter } from '@/types/finance'
 
 /**
  * 兼容历史调用方：逐步迁移到 EditorApi。
  */
 export const editorService = {
+  listFinanceInvoices: async (filters?: {
+    status?: FinanceStatusFilter
+    q?: string
+    page?: number
+    pageSize?: number
+    sortBy?: 'updated_at' | 'amount' | 'status'
+    sortOrder?: 'asc' | 'desc'
+  }) => {
+    const res = await EditorApi.listFinanceInvoices(filters)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch finance invoices')
+    }
+    return { data: res.data || [], meta: res.meta }
+  },
+
+  exportFinanceInvoices: async (filters?: {
+    status?: FinanceStatusFilter
+    q?: string
+    sortBy?: 'updated_at' | 'amount' | 'status'
+    sortOrder?: 'asc' | 'desc'
+  }) => {
+    return EditorApi.exportFinanceInvoices(filters)
+  },
+
+  confirmFinanceInvoicePaid: async (
+    manuscriptId: string,
+    payload?: { expectedStatus?: 'unpaid' | 'paid' | 'waived'; source?: 'editor_pipeline' | 'finance_page' | 'unknown' }
+  ) => {
+    const res = await EditorApi.confirmInvoicePaid(manuscriptId, payload)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to confirm invoice')
+    }
+    return res.data
+  },
+
   getIntakeQueue: async (page = 1, pageSize = 20) => {
     const res = await EditorApi.getIntakeQueue(page, pageSize)
     if (!Array.isArray(res)) {

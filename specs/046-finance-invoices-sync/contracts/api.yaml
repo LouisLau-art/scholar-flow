@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: Finance Invoices Sync API
+  version: 1.0.0
+  description: |
+    GAP-P1-01：Finance 页面接入真实 invoices 数据，支持状态筛选、对账导出，
+    并与 Editor Pipeline 的 Mark Paid 保持一致。
+
+servers:
+  - url: /api/v1
+
+security:
+  - BearerAuth: []
+
+paths:
+  /editor/finance/invoices:
+    get:
+      summary: 获取 Finance 账单列表（真实数据）
+      description: |
+        返回内部财务列表数据，支持状态筛选、搜索、分页和排序。
+        仅允许 editor/admin 访问。
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, unpaid, paid, waived]
+            default: all
+          description: 状态筛选
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+          description: 关键词（账单号 / 稿件标题）
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [updated_at, amount, status]
+            default: updated_at
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Finance invoice list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceInvoiceListResponse'
+              examples:
+                paid_filter:
+                  value:
+                    success: true
+                    data:
+                      - invoice_id: "9f22f74b-8ef0-4981-b2d1-8f8f2f593b7d"
+                        manuscript_id: "873f1a3f-fbb7-4496-9702-0044f6f8f9cf"
+                        invoice_number: "INV-202602-0001"
+                        manuscript_title: "Deep Learning in Medicine"
+                        authors: "Alice Smith; Bob Lee"
+                        amount: 1500
+                        currency: "USD"
+                        raw_status: "paid"
+                        effective_status: "paid"
+                        confirmed_at: "2026-02-09T08:30:00Z"
+                        updated_at: "2026-02-09T08:30:00Z"
+                        payment_gate_blocked: false
+                    meta:
+                      page: 1
+                      page_size: 20
+                      total: 1
+                      status_filter: "paid"
+                      snapshot_at: "2026-02-09T08:31:12Z"
+                      empty: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /editor/finance/invoices/export:
+    get:
+      summary: 导出当前筛选结果（CSV）
+      description: |
+        按与列表一致的筛选参数导出 CSV。
+        响应头会携带快照时间和空结果标记：
+        - X-Export-Snapshot-At
+        - X-Export-Empty
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, unpaid, paid, waived]
+            default: all
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [updated_at, amount, status]
+            default: updated_at
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: CSV file stream
+          headers:
+            Content-Disposition:
+              description: 下载文件名
+              schema:
+                type: string
+            X-Export-Snapshot-At:
+              description: 导出快照时间（UTC ISO8601）
+              schema:
+                type: string
+                format: date-time
+            X-Export-Empty:
+              description: 1=空结果导出，0=有数据
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: |
+                    invoice_id,manuscript_id,invoice_number,manuscript_title,authors,amount,currency,raw_status,effective_status,confirmed_at,updated_at
+                    9f22f74b-8ef0-4981-b2d1-8f8f2f593b7d,873f1a3f-fbb7-4496-9702-0044f6f8f9cf,INV-202602-0001,Deep Learning in Medicine,Alice Smith; Bob Lee,1500,USD,paid,paid,2026-02-09T08:30:00Z,2026-02-09T08:30:00Z
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /editor/invoices/confirm:
+    post:
+      summary: 确认账单已支付（与 Editor Pipeline 共用）
+      description: |
+        通过 manuscript_id 确认支付并更新 invoice 状态。
+        可选 `expected_status` 参与乐观并发控制，状态不匹配时返回 409。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmInvoicePaidRequest'
+            examples:
+              finance_confirm:
+                value:
+                  manuscript_id: "873f1a3f-fbb7-4496-9702-0044f6f8f9cf"
+                  expected_status: "unpaid"
+                  source: "finance_page"
+      responses:
+        '200':
+          description: Invoice confirmed as paid (or idempotent already paid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmInvoicePaidResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    data:
+                      invoice_id: "9f22f74b-8ef0-4981-b2d1-8f8f2f593b7d"
+                      manuscript_id: "873f1a3f-fbb7-4496-9702-0044f6f8f9cf"
+                      previous_status: "unpaid"
+                      current_status: "paid"
+                      confirmed_at: "2026-02-09T08:32:10Z"
+                      already_paid: false
+                      conflict: false
+                      source: "finance_page"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FinanceInvoiceListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinanceInvoiceRow'
+        meta:
+          $ref: '#/components/schemas/FinanceInvoiceListMeta'
+
+    FinanceInvoiceRow:
+      type: object
+      required:
+        - invoice_id
+        - manuscript_id
+        - manuscript_title
+        - amount
+        - currency
+        - raw_status
+        - effective_status
+        - updated_at
+        - payment_gate_blocked
+      properties:
+        invoice_id:
+          type: string
+          format: uuid
+        manuscript_id:
+          type: string
+          format: uuid
+        invoice_number:
+          type: string
+          nullable: true
+        manuscript_title:
+          type: string
+        authors:
+          type: string
+          nullable: true
+        amount:
+          type: number
+          format: float
+          minimum: 0
+        currency:
+          type: string
+          example: USD
+        raw_status:
+          type: string
+          example: unpaid
+        effective_status:
+          type: string
+          enum: [unpaid, paid, waived]
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        payment_gate_blocked:
+          type: boolean
+
+    FinanceInvoiceListMeta:
+      type: object
+      required: [page, page_size, total, status_filter, snapshot_at, empty]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+        status_filter:
+          type: string
+          enum: [all, unpaid, paid, waived]
+        snapshot_at:
+          type: string
+          format: date-time
+        empty:
+          type: boolean
+
+    ConfirmInvoicePaidRequest:
+      type: object
+      required: [manuscript_id]
+      properties:
+        manuscript_id:
+          type: string
+          format: uuid
+        expected_status:
+          type: string
+          enum: [unpaid, paid, waived]
+          nullable: true
+          description: 期望当前状态，用于并发冲突检测
+        source:
+          type: string
+          enum: [editor_pipeline, finance_page, unknown]
+          default: unknown
+
+    ConfirmInvoicePaidResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - invoice_id
+            - manuscript_id
+            - previous_status
+            - current_status
+            - confirmed_at
+            - already_paid
+            - conflict
+            - source
+          properties:
+            invoice_id:
+              type: string
+              format: uuid
+            manuscript_id:
+              type: string
+              format: uuid
+            previous_status:
+              type: string
+            current_status:
+              type: string
+              enum: [paid]
+            confirmed_at:
+              type: string
+              format: date-time
+            already_paid:
+              type: boolean
+            conflict:
+              type: boolean
+            source:
+              type: string
+              enum: [editor_pipeline, finance_page, unknown]
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+          nullable: true
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            token_missing:
+              value:
+                detail: Not authenticated
+    Forbidden:
+      description: Role not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            role_blocked:
+              value:
+                detail: Insufficient role
+    NotFound:
+      description: Invoice or manuscript not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Concurrent update conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            stale_status:
+              value:
+                detail: Invoice status changed by another operation
+                code: invoice_status_conflict
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Server failed to export
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

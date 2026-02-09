@@ -6,6 +6,13 @@ import type {
   UpdateInternalTaskPayload,
   InternalTaskStatus,
 } from '@/types/internal-collaboration'
+import type {
+  FinanceExportResponse,
+  FinanceInvoiceListResponse,
+  FinanceSortBy,
+  FinanceSortOrder,
+  FinanceStatusFilter,
+} from '@/types/finance'
 
 export type ManuscriptsProcessFilters = {
   q?: string
@@ -15,6 +22,15 @@ export type ManuscriptsProcessFilters = {
   ownerId?: string
   editorId?: string
   overdueOnly?: boolean
+}
+
+export type FinanceInvoiceFilters = {
+  status?: FinanceStatusFilter
+  q?: string
+  page?: number
+  pageSize?: number
+  sortBy?: FinanceSortBy
+  sortOrder?: FinanceSortOrder
 }
 
 export type DecisionSubmissionPayload = {
@@ -57,7 +73,53 @@ async function authedFetch(input: RequestInfo, init?: RequestInit) {
   return fetch(input, { ...init, headers })
 }
 
+function getFilenameFromContentDisposition(contentDisposition: string | null) {
+  if (!contentDisposition) return 'finance_invoices.csv'
+  const m = /filename="?([^"]+)"?/i.exec(contentDisposition)
+  return m?.[1] || 'finance_invoices.csv'
+}
+
 export const EditorApi = {
+  async listFinanceInvoices(filters: FinanceInvoiceFilters = {}): Promise<FinanceInvoiceListResponse> {
+    const params = new URLSearchParams()
+    if (filters.status) params.set('status', filters.status)
+    if (filters.q) params.set('q', filters.q)
+    if (typeof filters.page === 'number') params.set('page', String(filters.page))
+    if (typeof filters.pageSize === 'number') params.set('page_size', String(filters.pageSize))
+    if (filters.sortBy) params.set('sort_by', filters.sortBy)
+    if (filters.sortOrder) params.set('sort_order', filters.sortOrder)
+    const qs = params.toString()
+    const res = await authedFetch(`/api/v1/editor/finance/invoices${qs ? `?${qs}` : ''}`)
+    return res.json()
+  },
+
+  async exportFinanceInvoices(filters: FinanceInvoiceFilters = {}): Promise<FinanceExportResponse> {
+    const params = new URLSearchParams()
+    if (filters.status) params.set('status', filters.status)
+    if (filters.q) params.set('q', filters.q)
+    if (filters.sortBy) params.set('sort_by', filters.sortBy)
+    if (filters.sortOrder) params.set('sort_order', filters.sortOrder)
+    const qs = params.toString()
+    const res = await authedFetch(`/api/v1/editor/finance/invoices/export${qs ? `?${qs}` : ''}`)
+    if (!res.ok) {
+      let msg = 'Export failed'
+      try {
+        const j = await res.json()
+        msg = (j?.detail || j?.message || msg).toString()
+      } catch {
+        // ignore
+      }
+      throw new Error(msg)
+    }
+    const blob = await res.blob()
+    return {
+      blob,
+      filename: getFilenameFromContentDisposition(res.headers.get('content-disposition')),
+      snapshotAt: res.headers.get('x-export-snapshot-at') || undefined,
+      empty: res.headers.get('x-export-empty') === '1',
+    }
+  },
+
   async listJournals() {
     const res = await authedFetch('/api/v1/editor/journals')
     return res.json()
@@ -253,11 +315,21 @@ export const EditorApi = {
     return res.json()
   },
 
-  async confirmInvoicePaid(manuscriptId: string) {
+  async confirmInvoicePaid(
+    manuscriptId: string,
+    payload?: {
+      expectedStatus?: 'unpaid' | 'paid' | 'waived'
+      source?: 'editor_pipeline' | 'finance_page' | 'unknown'
+    }
+  ) {
     const res = await authedFetch('/api/v1/editor/invoices/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manuscript_id: manuscriptId }),
+      body: JSON.stringify({
+        manuscript_id: manuscriptId,
+        expected_status: payload?.expectedStatus,
+        source: payload?.source || 'unknown',
+      }),
     })
     return res.json()
   },

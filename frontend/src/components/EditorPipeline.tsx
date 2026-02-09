@@ -115,7 +115,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ manuscript_id: manuscriptId }),
+        body: JSON.stringify({ manuscript_id: manuscriptId, source: 'editor_pipeline' }),
       })
       const data = await response.json().catch(() => null)
       if (response.status === 403) {
