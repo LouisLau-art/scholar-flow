@@ -5,6 +5,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /usr/local/bin/uv
 # 中文注释:
 # - 部署环境建议使用 Python 3.12：生态 wheels 更齐全（3.14 仍可能缺少关键依赖的预编译包）。
 # - 这里安装的是 WeasyPrint / lxml 等常见依赖所需的系统库。
+# - Debian trixie 中使用 libgdk-pixbuf-xlib-2.0-0（替代旧包 libgdk-pixbuf2.0-0）。
 RUN apt-get update && apt-get install -y \
     build-essential \
     libxml2-dev \
@@ -12,7 +13,6 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
-    # Debian trixie: libgdk-pixbuf2.0-0 已被替代
     libgdk-pixbuf-xlib-2.0-0 \
     shared-mime-info \
     fonts-dejavu-core \
@@ -25,9 +25,15 @@ WORKDIR /app
 # 创建非 root 用户 (Hugging Face 安全要求)
 RUN useradd -m -u 1000 user
 
-# 创建缓存目录并授权
-RUN mkdir -p /app/.cache/huggingface && \
-    mkdir -p /app/.cache/sentence_transformers && \
+# 先以 root 安装系统 Python 依赖，避免 USER=user 时 --system 无权限写入
+COPY backend/requirements.txt .
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# 复制后端代码
+COPY --chown=user:user backend/ .
+
+# 创建缓存目录并授权（最后统一切换非 root）
+RUN mkdir -p /app/.cache/huggingface /app/.cache/sentence_transformers && \
     chown -R user:user /app
 
 # 环境变量
@@ -37,15 +43,6 @@ ENV PATH="/home/user/.local/bin:$PATH"
 
 # 切换用户
 USER user
-
-# 复制依赖并安装
-# 注意：这里假设构建上下文是项目根目录，所以路径带 backend/
-COPY --chown=user:user backend/requirements.txt .
-# 使用 uv 安装 Python 依赖（替换 pip，速度更快）
-RUN uv pip install --system --no-cache -r requirements.txt
-
-# 复制后端代码
-COPY --chown=user:user backend/ .
 
 # 暴露端口
 EXPOSE 7860
