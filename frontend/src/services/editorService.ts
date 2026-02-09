@@ -1,5 +1,6 @@
 import { EditorApi, type DecisionSubmissionPayload } from '@/services/editorApi'
 import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
+import type { CreateInternalTaskPayload, InternalTaskStatus, UpdateInternalTaskPayload } from '@/types/internal-collaboration'
 
 /**
  * 兼容历史调用方：逐步迁移到 EditorApi。
@@ -64,4 +65,59 @@ export const editorService = {
 
   uploadDecisionAttachment: async (manuscriptId: string, file: File) =>
     EditorApi.uploadDecisionAttachment(manuscriptId, file),
+
+  getInternalComments: async (manuscriptId: string) => {
+    const res = await EditorApi.getInternalComments(manuscriptId)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to load comments')
+    }
+    return res.data || []
+  },
+
+  postInternalComment: async (manuscriptId: string, content: string, mentionUserIds: string[] = []) => {
+    const res = await EditorApi.postInternalCommentWithMentions(manuscriptId, {
+      content,
+      mention_user_ids: mentionUserIds,
+    })
+    if (!res?.success) {
+      const detail = res?.detail
+      if (detail && typeof detail === 'object' && Array.isArray((detail as { invalid_user_ids?: unknown[] }).invalid_user_ids)) {
+        throw new Error('Contains invalid mentions')
+      }
+      throw new Error(res?.detail || res?.message || 'Failed to post comment')
+    }
+    return res.data
+  },
+
+  listInternalTasks: async (manuscriptId: string, filters?: { status?: InternalTaskStatus; overdueOnly?: boolean }) => {
+    const res = await EditorApi.listInternalTasks(manuscriptId, filters)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to load internal tasks')
+    }
+    return res.data || []
+  },
+
+  createInternalTask: async (manuscriptId: string, payload: CreateInternalTaskPayload) => {
+    const res = await EditorApi.createInternalTask(manuscriptId, payload)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to create internal task')
+    }
+    return res.data
+  },
+
+  patchInternalTask: async (manuscriptId: string, taskId: string, payload: UpdateInternalTaskPayload) => {
+    const res = await EditorApi.patchInternalTask(manuscriptId, taskId, payload)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to update internal task')
+    }
+    return res.data
+  },
+
+  getInternalTaskActivity: async (manuscriptId: string, taskId: string) => {
+    const res = await EditorApi.getInternalTaskActivity(manuscriptId, taskId)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to load internal task activity')
+    }
+    return res.data || []
+  },
 }

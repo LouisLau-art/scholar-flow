@@ -1,67 +1,130 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { toast } from 'sonner'
-import { EditorApi } from '@/services/editorApi'
-import { MessageSquare, Loader2, Send } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
+import { Loader2, MessageSquare, Send, UserRoundPlus } from 'lucide-react'
+import { toast } from 'sonner'
 
-interface InternalComment {
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { EditorApi } from '@/services/editorApi'
+import type { InternalComment } from '@/types/internal-collaboration'
+
+type StaffOption = {
   id: string
-  content: string
-  created_at: string
-  user?: {
-    full_name?: string
-    email?: string
-  }
+  full_name?: string
+  email?: string
 }
 
 interface InternalNotebookProps {
   manuscriptId: string
+  onCommentPosted?: () => void
 }
 
-export function InternalNotebook({ manuscriptId }: InternalNotebookProps) {
+function initials(value: string): string {
+  const clean = value.trim()
+  if (!clean) return '?'
+  return clean.slice(0, 2).toUpperCase()
+}
+
+export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNotebookProps) {
   const [comments, setComments] = useState<InternalComment[]>([])
   const [loading, setLoading] = useState(false)
   const [inputText, setInputText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [staff, setStaff] = useState<StaffOption[]>([])
+  const [mentionUserIds, setMentionUserIds] = useState<string[]>([])
+
+  const staffById = useMemo(() => {
+    const map = new Map<string, StaffOption>()
+    for (const member of staff) map.set(member.id, member)
+    return map
+  }, [staff])
+
+  const selectedMentionLabels = useMemo(
+    () =>
+      mentionUserIds.map((id) => {
+        const member = staffById.get(id)
+        return member?.full_name || member?.email || id
+      }),
+    [mentionUserIds, staffById]
+  )
 
   async function loadComments() {
     try {
       setLoading(true)
       const res = await EditorApi.getInternalComments(manuscriptId)
       if (res?.success) {
-        const next = Array.isArray(res.data) ? res.data : []
+        const next = Array.isArray(res.data) ? (res.data as InternalComment[]) : []
         setComments(next)
       }
-    } catch (e) {
-      console.error('Failed to load comments', e)
+    } catch (error) {
+      console.error('Failed to load comments', error)
     } finally {
       setLoading(false)
     }
   }
 
+  async function loadStaffOptions() {
+    try {
+      const res = await EditorApi.listInternalStaff('')
+      if (!res?.success) return
+      setStaff(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      // ignore and keep notebook usable without mention dropdown
+    }
+  }
+
   useEffect(() => {
     loadComments()
+    loadStaffOptions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manuscriptId])
 
+  function validateMentions(): string | null {
+    const unique = new Set(mentionUserIds)
+    if (unique.size !== mentionUserIds.length) {
+      return 'Duplicate mentions are not allowed.'
+    }
+    const invalid = mentionUserIds.filter((id) => !staffById.has(id))
+    if (invalid.length > 0) {
+      return 'Contains invalid mention targets.'
+    }
+    return null
+  }
+
   async function handlePost() {
-    if (!inputText.trim()) return
+    const content = inputText.trim()
+    if (!content) return
+
+    const mentionError = validateMentions()
+    if (mentionError) {
+      toast.error(mentionError)
+      return
+    }
+
     try {
       setSubmitting(true)
-      const res = await EditorApi.postInternalComment(manuscriptId, inputText)
+      const res = await EditorApi.postInternalCommentWithMentions(manuscriptId, {
+        content,
+        mention_user_ids: mentionUserIds,
+      })
       if (res?.success && res?.data) {
-        setComments((prev) => [...prev, res.data])
+        setComments((prev) => [...prev, res.data as InternalComment])
         setInputText('')
-        // Scroll to bottom?
+        setMentionUserIds([])
+        onCommentPosted?.()
       } else {
-        toast.error('Failed to post comment')
+        const detail = res?.detail
+        if (detail && typeof detail === 'object' && Array.isArray((detail as { invalid_user_ids?: string[] }).invalid_user_ids)) {
+          toast.error('Contains invalid mention targets.')
+        } else {
+          toast.error(res?.detail || res?.message || 'Failed to post comment')
+        }
       }
-    } catch (e) {
+    } catch {
       toast.error('Error posting comment')
     } finally {
       setSubmitting(false)
@@ -69,62 +132,105 @@ export function InternalNotebook({ manuscriptId }: InternalNotebookProps) {
   }
 
   return (
-    <Card className="h-full flex flex-col shadow-sm">
-      <CardHeader className="py-4 border-b">
-        <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-slate-700">
+    <Card className="flex h-full flex-col shadow-sm">
+      <CardHeader className="border-b py-4">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-700">
           <MessageSquare className="h-4 w-4" />
           Internal Notebook (Staff Only)
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-4 gap-4 h-[400px]">
-        {/* Comments List */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+      <CardContent className="flex h-[440px] flex-1 flex-col gap-3 p-4">
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Tip: select teammates below to create validated mentions. Duplicate and invalid mentions are blocked.
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto pr-2">
           {loading && comments.length === 0 ? (
             <div className="flex justify-center py-4">
               <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
           ) : comments.length === 0 ? (
-            <div className="text-center text-sm text-slate-400 py-8">No internal notes yet.</div>
+            <div className="py-8 text-center text-sm text-slate-400">No internal notes yet.</div>
           ) : (
-            comments.map((c) => (
-              <div key={c.id} className="flex gap-3 group">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0 uppercase">
-                  {(c.user?.full_name || c.user?.email || '?').substring(0, 2)}
+            comments.map((comment) => (
+              <div key={comment.id} className="group flex gap-3">
+                <div className="h-8 w-8 flex-shrink-0 rounded-full bg-blue-100 text-xs font-bold uppercase text-blue-600 flex items-center justify-center">
+                  {initials(comment.user?.full_name || comment.user?.email || '?')}
                 </div>
-                <div className="bg-slate-50 p-3 rounded-lg rounded-tl-none border border-slate-100 w-full hover:bg-slate-100 transition-colors">
-                  <div className="flex justify-between items-center mb-1">
+                <div className="w-full rounded-lg rounded-tl-none border border-slate-100 bg-slate-50 p-3 transition-colors hover:bg-slate-100">
+                  <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700">
-                      {c.user?.full_name || c.user?.email || 'Unknown'}
+                      {comment.user?.full_name || comment.user?.email || 'Unknown'}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      {format(new Date(c.created_at), 'MMM d, HH:mm')}
-                    </span>
+                    <span className="text-[10px] text-slate-400">{format(new Date(comment.created_at), 'MMM d, HH:mm')}</span>
                   </div>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.content}</p>
+                  <p className="whitespace-pre-wrap text-sm text-slate-700">{comment.content}</p>
+                  {(comment.mention_user_ids || []).length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1" data-testid="notebook-mentions">
+                      {(comment.mention_user_ids || []).map((uid) => {
+                        const member = staffById.get(uid)
+                        const text = member?.full_name || member?.email || uid
+                        return (
+                          <span
+                            key={`${comment.id}-${uid}`}
+                            className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+                          >
+                            @{text}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))
           )}
         </div>
 
-        {/* Input Area */}
-        <div className="flex gap-2 pt-2 border-t mt-auto">
-          <Input
-            placeholder="Type an internal note..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handlePost()
-              }
-            }}
-            disabled={submitting}
-            className="flex-1"
-          />
-          <Button onClick={handlePost} disabled={submitting || !inputText.trim()} size="icon">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+        <div className="mt-auto space-y-2 border-t pt-2">
+          <div>
+            <Label className="mb-1 inline-flex items-center gap-1 text-xs text-slate-600">
+              <UserRoundPlus className="h-3.5 w-3.5" /> Mention teammates
+            </Label>
+            <select
+              multiple
+              aria-label="Mention teammates"
+              value={mentionUserIds}
+              onChange={(e) => {
+                const next = Array.from(e.target.selectedOptions).map((option) => option.value)
+                setMentionUserIds(next)
+              }}
+              className="h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900"
+            >
+              {staff.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name || member.email || member.id}
+                </option>
+              ))}
+            </select>
+            {selectedMentionLabels.length > 0 ? (
+              <p className="mt-1 text-[11px] text-slate-500">Selected: {selectedMentionLabels.join(', ')}</p>
+            ) : null}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              placeholder="Type an internal note..."
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handlePost()
+                }
+              }}
+              disabled={submitting}
+              className="flex-1"
+            />
+            <Button onClick={handlePost} disabled={submitting || !inputText.trim()} size="icon">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

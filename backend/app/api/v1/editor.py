@@ -24,12 +24,39 @@ from app.models.production_workspace import CreateProductionCycleRequest
 from app.services.production_workspace_service import ProductionWorkspaceService
 from typing import Literal
 from uuid import uuid4
+from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
+from app.services.internal_collaboration_service import (
+    InternalCollaborationService,
+    InternalCollaborationSchemaMissingError,
+    MentionValidationError,
+)
+from app.services.internal_task_service import InternalTaskSchemaMissingError, InternalTaskService
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
+INTERNAL_COLLAB_ALLOWED_ROLES = ["editor", "admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 
 
 class InternalCommentPayload(BaseModel):
     content: str
+    mention_user_ids: list[str] = Field(default_factory=list)
+
+
+class InternalTaskCreatePayload(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    assignee_user_id: str
+    due_at: datetime
+    status: InternalTaskStatus = InternalTaskStatus.TODO
+    priority: InternalTaskPriority = InternalTaskPriority.MEDIUM
+
+
+class InternalTaskUpdatePayload(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    assignee_user_id: str | None = None
+    status: InternalTaskStatus | None = None
+    priority: InternalTaskPriority | None = None
+    due_at: datetime | None = None
 
 
 class InvoiceInfoUpdatePayload(BaseModel):
@@ -100,52 +127,35 @@ def _ensure_bucket_exists(bucket: str, *, public: bool = False) -> None:
 
 def _is_missing_table_error(error_text: str) -> bool:
     t = (error_text or "").lower()
-    return "does not exist" in t and "manuscript_files" in t
+    if "does not exist" not in t:
+        return False
+    return any(
+        name in t
+        for name in (
+            "manuscript_files",
+            "internal_comments",
+            "internal_comment_mentions",
+            "internal_tasks",
+            "internal_task_activity_logs",
+        )
+    )
 
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
     id: str,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Fetch internal notebook comments (Staff only).
     """
+    svc = InternalCollaborationService()
     try:
-        # Note: 'user:user_id(...)' requires foreign key relationship in Supabase
-        resp = (
-            supabase_admin.table("internal_comments")
-            .select("id, content, created_at, user_id")
-            .eq("manuscript_id", id)
-            .order("created_at", desc=False)
-            .execute()
-        )
-        comments = getattr(resp, "data", None) or []
-        
-        # Manually fetch user profiles to avoid complex join issues if FK name varies
-        user_ids = sorted(list(set(c["user_id"] for c in comments if c.get("user_id"))))
-        users_map = {}
-        if user_ids:
-            try:
-                u_resp = (
-                    supabase_admin.table("user_profiles")
-                    .select("id, full_name, email")
-                    .in_("id", user_ids)
-                    .execute()
-                )
-                for u in (getattr(u_resp, "data", None) or []):
-                    users_map[u["id"]] = u
-            except Exception:
-                pass
-        
-        for c in comments:
-            uid = c.get("user_id")
-            c["user"] = users_map.get(uid) or {"full_name": "Unknown", "email": ""}
-            
-        return {"success": True, "data": comments}
-    except Exception as e:
-        # If table missing (migration not run), return empty list instead of 500
-        if "does not exist" in str(e):
+        return {"success": True, "data": svc.list_comments(id)}
+    except InternalCollaborationSchemaMissingError as e:
+        if e.table == "internal_comments":
             return {"success": True, "data": []}
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except Exception as e:
         print(f"[InternalComments] list failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch comments")
 
@@ -155,53 +165,149 @@ async def create_internal_comment(
     id: str,
     payload: InternalCommentPayload,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Post internal comment.
     """
-    content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
-
+    svc = InternalCollaborationService()
     try:
-        data = {
-            "manuscript_id": id,
-            "user_id": str(current_user.get("id")),
-            "content": content,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        resp = supabase_admin.table("internal_comments").insert(data).execute()
-        new_comment = (getattr(resp, "data", None) or [{}])[0]
-        
-        # Return with user info for immediate UI update
-        user_info = {
-            "id": str(current_user.get("id")),
-            "email": current_user.get("email"),
-            "full_name": current_user.get("user_metadata", {}).get("full_name")
-        }
-        # Try to fetch profile for better name
-        try:
-             p_resp = supabase_admin.table("user_profiles").select("full_name").eq("id", user_info["id"]).single().execute()
-             p_data = getattr(p_resp, "data", None)
-             if p_data and p_data.get("full_name"):
-                 user_info["full_name"] = p_data.get("full_name")
-        except Exception:
-            pass
-            
-        new_comment["user"] = user_info
-        return {"success": True, "data": new_comment}
+        comment = svc.create_comment(
+            manuscript_id=id,
+            author_user_id=str(current_user.get("id")),
+            content=payload.content,
+            mention_user_ids=payload.mention_user_ids,
+        )
+        return {"success": True, "data": comment}
+    except MentionValidationError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Invalid mention_user_ids",
+                "invalid_user_ids": e.invalid_user_ids,
+            },
+        )
+    except InternalCollaborationSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
     except Exception as e:
-        if "does not exist" in str(e):
-             raise HTTPException(status_code=500, detail="Migration missing: internal_comments table not found")
         print(f"[InternalComments] create failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to post comment")
+
+
+@router.get("/manuscripts/{id}/tasks")
+async def list_internal_tasks(
+    id: str,
+    status: InternalTaskStatus | None = Query(None, description="任务状态筛选"),
+    overdue_only: bool = Query(False, description="仅返回逾期任务"),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    svc = InternalTaskService()
+    try:
+        rows = svc.list_tasks(
+            manuscript_id=id,
+            actor_user_id=str(current_user.get("id") or ""),
+            actor_roles=profile.get("roles") or [],
+            status=status,
+            overdue_only=bool(overdue_only),
+        )
+        return {"success": True, "data": rows}
+    except InternalTaskSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[InternalTasks] list failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch internal tasks")
+
+
+@router.post("/manuscripts/{id}/tasks")
+async def create_internal_task(
+    id: str,
+    payload: InternalTaskCreatePayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    svc = InternalTaskService()
+    try:
+        task = svc.create_task(
+            manuscript_id=id,
+            actor_user_id=str(current_user.get("id") or ""),
+            actor_roles=profile.get("roles") or [],
+            title=payload.title,
+            description=payload.description,
+            assignee_user_id=payload.assignee_user_id,
+            due_at=payload.due_at,
+            status=payload.status,
+            priority=payload.priority,
+        )
+        return {"success": True, "data": task}
+    except InternalTaskSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[InternalTasks] create failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create internal task")
+
+
+@router.patch("/manuscripts/{id}/tasks/{task_id}")
+async def patch_internal_task(
+    id: str,
+    task_id: str,
+    payload: InternalTaskUpdatePayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    svc = InternalTaskService()
+    try:
+        task = svc.update_task(
+            manuscript_id=id,
+            task_id=task_id,
+            actor_user_id=str(current_user.get("id") or ""),
+            actor_roles=profile.get("roles") or [],
+            title=payload.title,
+            description=payload.description,
+            assignee_user_id=payload.assignee_user_id,
+            status=payload.status,
+            priority=payload.priority,
+            due_at=payload.due_at,
+        )
+        return {"success": True, "data": task}
+    except InternalTaskSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[InternalTasks] patch failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update internal task")
+
+
+@router.get("/manuscripts/{id}/tasks/{task_id}/activity")
+async def get_internal_task_activity(
+    id: str,
+    task_id: str,
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    svc = InternalTaskService()
+    try:
+        rows = svc.list_activity(manuscript_id=id, task_id=task_id)
+        return {"success": True, "data": rows}
+    except InternalTaskSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[InternalTasks] activity failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch task activity")
 
 
 @router.get("/manuscripts/{id}/audit-logs")
 async def get_audit_logs(
     id: str,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Fetch status transition logs.
@@ -296,6 +402,7 @@ async def get_manuscripts_process(
     owner_id: str | None = Query(None, description="Internal Owner（可选）"),
     editor_id: str | None = Query(None, description="Assign Editor（可选）"),
     manuscript_id: str | None = Query(None, description="Manuscript ID 精确匹配（可选）"),
+    overdue_only: bool = Query(False, description="仅看逾期稿件"),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
 ):
     """
@@ -314,6 +421,7 @@ async def get_manuscripts_process(
                 editor_id=editor_id,
                 owner_id=owner_id,
                 manuscript_id=manuscript_id,
+                overdue_only=bool(overdue_only),
             )
         )
         return {"success": True, "data": rows}
@@ -819,6 +927,57 @@ async def get_editor_manuscript_detail(
     except Exception as e:
         print(f"[ReviewerInvites] load failed (ignored): {e}")
 
+    # Feature 045: 稿件级任务逾期摘要（详情页右侧摘要使用）
+    ms["task_summary"] = {
+        "open_tasks_count": 0,
+        "overdue_tasks_count": 0,
+        "is_overdue": False,
+        "nearest_due_at": None,
+    }
+    try:
+        t_resp = (
+            supabase_admin.table("internal_tasks")
+            .select("id,status,due_at")
+            .eq("manuscript_id", id)
+            .execute()
+        )
+        t_rows = getattr(t_resp, "data", None) or []
+        open_rows = [r for r in t_rows if str(r.get("status") or "").lower() != InternalTaskStatus.DONE.value]
+        overdue_count = 0
+        nearest_due: str | None = None
+        now = datetime.now(timezone.utc)
+        for row in open_rows:
+            due_raw = str(row.get("due_at") or "")
+            if not due_raw:
+                continue
+            try:
+                due_at = datetime.fromisoformat(due_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except Exception:
+                continue
+            if due_at < now:
+                overdue_count += 1
+            if not nearest_due:
+                nearest_due = due_at.isoformat()
+            else:
+                try:
+                    prev = datetime.fromisoformat(nearest_due.replace("Z", "+00:00")).astimezone(timezone.utc)
+                    if due_at < prev:
+                        nearest_due = due_at.isoformat()
+                except Exception:
+                    nearest_due = due_at.isoformat()
+
+        ms["task_summary"] = {
+            "open_tasks_count": len(open_rows),
+            "overdue_tasks_count": overdue_count,
+            "is_overdue": overdue_count > 0,
+            "nearest_due_at": nearest_due,
+        }
+    except Exception as e:
+        if _is_missing_table_error(str(e)):
+            pass
+        else:
+            print(f"[InternalTasks] task summary failed (ignored): {e}")
+
     return {"success": True, "data": ms}
 
 
@@ -1056,7 +1215,7 @@ async def bind_internal_owner(
 @router.get("/internal-staff")
 async def list_internal_staff(
     search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 023: 提供 Internal Owner 下拉框的数据源（仅 editor/admin）。
@@ -1065,7 +1224,9 @@ async def list_internal_staff(
         query = (
             supabase_admin.table("user_profiles")
             .select("id, email, full_name, roles")
-            .or_("roles.cs.{editor},roles.cs.{admin}")
+            .or_(
+                "roles.cs.{editor},roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
+            )
         )
         resp = query.execute()
         data = getattr(resp, "data", None) or []
