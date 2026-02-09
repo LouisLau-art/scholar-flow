@@ -86,12 +86,14 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
             ],
             "manuscripts": [
                 {
+                    "id": str(manuscript_id),
                     "author_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     "title": "Test Manuscript",
                     "version": 1,
                     "status": "pre_check",
                     "owner_id": editor_id,
                     "file_path": "manuscripts/x.pdf",
+                    "journal_id": None,
                 }
             ],
         }
@@ -101,6 +103,7 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
         {
             "review_assignments": [
                 [],  # existing check
+                [],  # policy check
                 [
                     {
                         "id": str(assignment_id),
@@ -127,6 +130,7 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
     with (
         patch("app.api.v1.reviews.supabase", supabase),
         patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
@@ -153,3 +157,180 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
     assert payload.manuscript_id == manuscript_id
     assert payload.assignment_id == assignment_id
 
+
+@pytest.mark.asyncio
+async def test_editor_assign_blocked_by_cooldown_without_override(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
+
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    now_iso = "2026-02-09T00:00:00+00:00"
+    cooldown_ms_id = "99999999-9999-9999-9999-999999999999"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["editor"]}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "author_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    "title": "Cooldown Manuscript",
+                    "version": 1,
+                    "status": "pre_check",
+                    "owner_id": editor_id,
+                    "file_path": "manuscripts/x.pdf",
+                    "journal_id": "journal-1",
+                }
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                [],  # existing check
+                [
+                    {
+                        "manuscript_id": cooldown_ms_id,
+                        "reviewer_id": str(reviewer_id),
+                        "status": "pending",
+                        "due_at": None,
+                        "invited_at": now_iso,
+                        "created_at": now_iso,
+                    }
+                ],  # policy check
+            ],
+            "manuscripts": [
+                [{"id": cooldown_ms_id, "journal_id": "journal-1"}],  # policy manuscript map
+            ],
+        }
+    )
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {"manuscript_id": str(manuscript_id), "reviewer_id": str(reviewer_id)}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
+    ):
+        resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
+        assert resp.status_code == 409
+        assert "cooldown" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
+
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaac")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbd")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccd")
+
+    now_iso = "2026-02-09T00:00:00+00:00"
+    cooldown_ms_id = "99999999-9999-9999-9999-999999999998"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["editor"]}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "author_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    "title": "Cooldown Override Manuscript",
+                    "version": 1,
+                    "status": "pre_check",
+                    "owner_id": editor_id,
+                    "file_path": "manuscripts/x.pdf",
+                    "journal_id": "journal-1",
+                }
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                [],  # existing check
+                [
+                    {
+                        "manuscript_id": cooldown_ms_id,
+                        "reviewer_id": str(reviewer_id),
+                        "status": "pending",
+                        "due_at": None,
+                        "invited_at": now_iso,
+                        "created_at": now_iso,
+                    }
+                ],  # policy check
+                [
+                    {
+                        "id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "status": "pending",
+                    }
+                ],  # insert
+            ],
+            "manuscripts": [
+                [{"id": cooldown_ms_id, "journal_id": "journal-1"}],  # policy manuscript map
+                [{}],  # update under_review
+            ],
+            "status_transition_logs": [
+                [{}],  # override audit insert
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "manuscript_id": str(manuscript_id),
+        "reviewer_id": str(reviewer_id),
+        "override_cooldown": True,
+        "override_reason": "Need niche expertise for this round",
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
+        patch("app.api.v1.reviews.email_service.send_email_background", send_mock),
+    ):
+        resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload.get("success") is True
+        assert payload.get("policy", {}).get("cooldown_active") is True
+
+    assert send_mock.call_count == 1

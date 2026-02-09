@@ -19,7 +19,10 @@ export default function EditorDashboard() {
   const [activeTab, setActiveTab] = useState<'pipeline' | 'reviewers' | 'decisions' | 'website'>('pipeline')
   const [pipelineRefresh, setPipelineRefresh] = useState(0)
 
-  const handleAssignReviewer = async (reviewerIds: string[]) => {
+  const handleAssignReviewer = async (
+    reviewerIds: string[],
+    options?: { overrides?: Array<{ reviewerId: string; reason: string }> }
+  ) => {
     if (!selectedManuscriptId) {
       toast.error('Please select a manuscript first.')
       return false
@@ -31,9 +34,13 @@ export default function EditorDashboard() {
         toast.error('Please sign in again.', { id: toastId })
         return false
       }
+      const overrideMap = new Map(
+        (options?.overrides || []).map((item) => [String(item.reviewerId), String(item.reason || '')])
+      )
       let failures = 0
       const failureMessages: string[] = []
       for (const reviewerId of reviewerIds) {
+        const overrideReason = overrideMap.get(String(reviewerId))
         const response = await fetch('/api/v1/reviews/assign', {
           method: 'POST',
           headers: {
@@ -43,6 +50,8 @@ export default function EditorDashboard() {
           body: JSON.stringify({
             manuscript_id: selectedManuscriptId,
             reviewer_id: reviewerId,
+            override_cooldown: Boolean(overrideReason),
+            override_reason: overrideReason || undefined,
           }),
         })
         const raw = await response.text().catch(() => '')
@@ -83,8 +92,7 @@ export default function EditorDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl">
+    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-6">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-serif font-bold text-slate-900">Editor Command Center</h1>
@@ -181,7 +189,6 @@ export default function EditorDashboard() {
             manuscriptId={selectedManuscriptId}
           />
         )}
-      </div>
     </div>
   )
 }

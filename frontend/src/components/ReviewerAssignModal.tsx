@@ -9,6 +9,38 @@ import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/m
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
 
+type InvitePolicyHit = {
+  code: 'cooldown' | 'conflict' | 'overdue_risk' | string
+  label?: string
+  severity?: 'error' | 'warning' | 'info' | string
+  blocking?: boolean
+  detail?: string
+}
+
+type InvitePolicy = {
+  can_assign?: boolean
+  allow_override?: boolean
+  cooldown_active?: boolean
+  conflict?: boolean
+  overdue_risk?: boolean
+  overdue_open_count?: number
+  cooldown_until?: string
+  hits?: InvitePolicyHit[]
+}
+
+type ReviewerWithPolicy = User & {
+  invite_policy?: InvitePolicy
+}
+
+type AssignOverride = {
+  reviewerId: string
+  reason: string
+}
+
+type AssignOptions = {
+  overrides?: AssignOverride[]
+}
+
 type StaffProfile = {
   id: string
   email?: string | null
@@ -19,7 +51,7 @@ type StaffProfile = {
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
-  onAssign: (reviewerIds: string[]) => Promise<boolean> | boolean | void // 统一为多选；返回 false 表示不要自动关闭
+  onAssign: (reviewerIds: string[], options?: AssignOptions) => Promise<boolean> | boolean | void // 统一为多选；返回 false 表示不要自动关闭
   manuscriptId: string
 }
 
@@ -29,11 +61,14 @@ export default function ReviewerAssignModal({
   onAssign,
   manuscriptId
 }: ReviewerAssignModalProps) {
-  const [reviewers, setReviewers] = useState<User[]>([])
+  const [reviewers, setReviewers] = useState<ReviewerWithPolicy[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [policyMeta, setPolicyMeta] = useState<{ cooldown_days?: number; override_roles?: string[] }>({})
+  const [myRoles, setMyRoles] = useState<string[]>([])
+  const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({})
   
   // AI State
   const [aiLoading, setAiLoading] = useState(false)
@@ -92,6 +127,16 @@ export default function ReviewerAssignModal({
     }
   }, [])
 
+  const fetchMyRoles = useCallback(async () => {
+    try {
+      const profile = await authService.getUserProfile()
+      const roles = Array.isArray(profile?.roles) ? profile.roles.map((r: any) => String(r).toLowerCase()) : []
+      setMyRoles(roles)
+    } catch {
+      setMyRoles([])
+    }
+  }, [])
+
   const fetchExistingReviewers = useCallback(async () => {
     if (!manuscriptId) return
     setLoadingExisting(true)
@@ -147,31 +192,59 @@ export default function ReviewerAssignModal({
   const fetchReviewers = useCallback(async () => {
     setIsLoading(true)
     try {
-      const payload = await EditorApi.searchReviewerLibrary(searchTerm, 120)
+      const payload = await EditorApi.searchReviewerLibrary(searchTerm, 120, manuscriptId)
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
-      setReviewers((payload.data || []) as User[])
+      setReviewers((payload.data || []) as ReviewerWithPolicy[])
+      setPolicyMeta(payload?.policy || {})
     } catch (error) {
       console.error('Failed to fetch reviewers:', error)
       toast.error('Failed to load reviewers')
     } finally {
       setIsLoading(false)
     }
-  }, [searchTerm])
+  }, [searchTerm, manuscriptId])
 
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('')
       setSelectedReviewers([])
+      setOverrideReasons({})
       setAiRecommendations([])
       setAiMessage(null)
       setPendingRemove(null)
       setOwnerSearch('')
+      setPolicyMeta({})
       fetchReviewers()
       fetchExistingReviewers()
       fetchOwner()
       fetchInternalStaff()
+      fetchMyRoles()
     }
-  }, [isOpen, fetchReviewers, fetchExistingReviewers, fetchOwner, fetchInternalStaff])
+  }, [isOpen, fetchReviewers, fetchExistingReviewers, fetchOwner, fetchInternalStaff, fetchMyRoles])
+
+  const canCurrentUserOverrideCooldown = useMemo(() => {
+    const allowRoles = (policyMeta.override_roles || ['admin', 'managing_editor']).map((r) => String(r).toLowerCase())
+    if (!allowRoles.length) return false
+    return myRoles.some((role) => allowRoles.includes(role))
+  }, [myRoles, policyMeta.override_roles])
+
+  const policyByReviewerId = useMemo(() => {
+    const index: Record<string, InvitePolicy> = {}
+    for (const reviewer of reviewers) {
+      if (!reviewer?.id) continue
+      index[String(reviewer.id)] = reviewer.invite_policy || {}
+    }
+    return index
+  }, [reviewers])
+
+  const selectedOverrideReviewers = useMemo(
+    () =>
+      selectedReviewers.filter((rid) => {
+        const policy = policyByReviewerId[rid] || {}
+        return Boolean(policy.cooldown_active && policy.allow_override)
+      }),
+    [selectedReviewers, policyByReviewerId]
+  )
 
   const handleAssign = async () => {
     if (selectedReviewers.length > 0) {
@@ -179,11 +252,29 @@ export default function ReviewerAssignModal({
         toast.error('请先绑定 Internal Owner（用于 KPI 归属），再分配审稿人。')
         return
       }
+      if (selectedOverrideReviewers.length > 0) {
+        if (!canCurrentUserOverrideCooldown) {
+          toast.error('当前账号没有 cooldown override 权限。')
+          return
+        }
+        const missingReason = selectedOverrideReviewers.find((rid) => !String(overrideReasons[rid] || '').trim())
+        if (missingReason) {
+          toast.error('请填写 cooldown override 原因后再提交。')
+          return
+        }
+      }
       setIsSubmitting(true)
       try {
-        const ret = await Promise.resolve(onAssign(selectedReviewers) as any)
+        const overrides: AssignOverride[] = selectedOverrideReviewers.map((rid) => ({
+          reviewerId: rid,
+          reason: String(overrideReasons[rid] || '').trim(),
+        }))
+        const ret = await Promise.resolve(
+          (overrides.length > 0 ? onAssign(selectedReviewers, { overrides }) : onAssign(selectedReviewers)) as any
+        )
         await fetchExistingReviewers()
         setSelectedReviewers([])
+        setOverrideReasons({})
         if (ret !== false) {
           onClose()
         }
@@ -219,7 +310,10 @@ export default function ReviewerAssignModal({
   }
 
   const handleInviteFromAi = (reviewerId: string) => {
-    // 选中该推荐人
+    if (isReviewerBlocked(reviewerId)) {
+      toast.error('This reviewer is blocked by current invite policy.')
+      return
+    }
     toggleReviewer(reviewerId)
   }
 
@@ -249,21 +343,35 @@ export default function ReviewerAssignModal({
     [existingReviewers]
   )
 
-  const toggleReviewer = (reviewerId: string) => {
-    // Prevent toggling if already assigned (though UI should disable it)
-    if (assignedIds.includes(reviewerId)) return
+  const isReviewerBlocked = useCallback(
+    (reviewerId: string) => {
+      const policy = policyByReviewerId[reviewerId] || {}
+      if (policy.conflict) return true
+      if (policy.cooldown_active) {
+        if (!(policy.allow_override && canCurrentUserOverrideCooldown)) return true
+      }
+      return false
+    },
+    [policyByReviewerId, canCurrentUserOverrideCooldown]
+  )
 
-    setSelectedReviewers((prev) =>
-      prev.includes(reviewerId)
-        ? prev.filter((id) => id !== reviewerId)
-        : [...prev, reviewerId]
-    )
+  const toggleReviewer = (reviewerId: string) => {
+    if (assignedIds.includes(reviewerId)) return
+    if (isReviewerBlocked(reviewerId)) return
+
+    setSelectedReviewers((prev) => {
+      const selected = prev.includes(reviewerId)
+      if (selected) {
+        return prev.filter((id) => id !== reviewerId)
+      }
+      return [...prev, reviewerId]
+    })
   }
 
-  const orderedReviewers: User[] = useMemo(() => {
+  const orderedReviewers: ReviewerWithPolicy[] = useMemo(() => {
     const assignedSet = new Set(assignedIds)
     const reviewerById = new Map(reviewers.map((r) => [r.id, r]))
-    const mergedList: User[] = [
+    const mergedList: ReviewerWithPolicy[] = [
       // 置顶：已分配的审稿人（即便不在 reviewer pool 里也要显示）
       ...pinnedAssignedUsers.map((u) => reviewerById.get(u.id) || u),
       // 其余候选（去重）
@@ -348,6 +456,18 @@ export default function ReviewerAssignModal({
     } finally {
       setSavingOwner(false)
     }
+  }
+
+  const getPolicyBadgeClass = (hit: InvitePolicyHit) => {
+    const severity = String(hit.severity || '').toLowerCase()
+    if (severity === 'error') return 'bg-rose-100 text-rose-700 border-rose-200'
+    if (severity === 'warning') return 'bg-amber-100 text-amber-700 border-amber-200'
+    return 'bg-sky-100 text-sky-700 border-sky-200'
+  }
+
+  const reviewerNeedsOverride = (reviewerId: string) => {
+    const policy = policyByReviewerId[reviewerId] || {}
+    return Boolean(policy.cooldown_active && policy.allow_override)
   }
 
   return (
@@ -487,29 +607,36 @@ export default function ReviewerAssignModal({
 
               {!aiLoading && aiRecommendations.length > 0 && (
                 <div className="mt-4 space-y-2" data-testid="ai-recommendations">
-                  {aiRecommendations.map((rec) => (
-                    <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                      <div className="min-w-0">
-                        <div className="font-medium text-slate-900 truncate">{rec.name || rec.email}</div>
-                        <div className="text-xs text-slate-500 truncate">{rec.email}</div>
-                        <div className="text-xs text-slate-400 mt-1">
-                          Match Score: {(rec.match_score * 100).toFixed(1)}%
+                  {aiRecommendations.map((rec) => {
+                    const isSelected = selectedReviewers.includes(rec.reviewer_id)
+                    const blocked = isReviewerBlocked(rec.reviewer_id)
+                    return (
+                      <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 truncate">{rec.name || rec.email}</div>
+                          <div className="text-xs text-slate-500 truncate">{rec.email}</div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            Match Score: {(rec.match_score * 100).toFixed(1)}%
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => handleInviteFromAi(rec.reviewer_id)}
+                          disabled={blocked}
+                          className={`ml-3 px-3 py-2 text-sm font-semibold rounded-md transition-colors ${
+                            blocked
+                              ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                              : isSelected
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          data-testid={`ai-invite-${rec.reviewer_id}`}
+                        >
+                          {blocked ? 'Blocked' : isSelected ? 'Selected' : 'Select'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleInviteFromAi(rec.reviewer_id)}
-                        className={`ml-3 px-3 py-2 text-sm font-semibold rounded-md transition-colors ${
-                          selectedReviewers.includes(rec.reviewer_id)
-                           ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                           : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
-                        data-testid={`ai-invite-${rec.reviewer_id}`}
-                      >
-                        {selectedReviewers.includes(rec.reviewer_id) ? 'Selected' : 'Select'}
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -536,6 +663,11 @@ export default function ReviewerAssignModal({
               </button>
             </div>
 
+            <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal), conflict-of-interest hard block, overdue risk warning.
+              {canCurrentUserOverrideCooldown ? ' You can override cooldown with audit reason.' : ' Cooldown override requires higher privilege.'}
+            </div>
+
             {isLoading ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -547,9 +679,13 @@ export default function ReviewerAssignModal({
             ) : (
               <div className="space-y-2" data-testid="reviewer-list">
                 {orderedReviewers.map((reviewer) => {
+                  const policy = reviewer.invite_policy || policyByReviewerId[reviewer.id] || {}
                   const isAssigned = assignedIds.includes(reviewer.id)
                   const isSelected = selectedReviewers.includes(reviewer.id)
                   const showAsSelected = isAssigned || isSelected
+                  const blockedByPolicy = !isAssigned && isReviewerBlocked(reviewer.id)
+                  const canOverride = !isAssigned && reviewerNeedsOverride(reviewer.id) && canCurrentUserOverrideCooldown
+                  const hits = (policy.hits || []).filter(Boolean)
                   
                   return (
                   <div
@@ -557,8 +693,10 @@ export default function ReviewerAssignModal({
                     data-testid={`reviewer-row-${reviewer.id}`}
                     onClick={() => !isAssigned && toggleReviewer(reviewer.id)}
                     className={`flex items-center justify-between p-3 rounded-lg transition-all border ${
-                      isAssigned 
+                      isAssigned
                         ? 'bg-blue-50 border-blue-200 shadow-sm cursor-not-allowed'
+                        : blockedByPolicy
+                          ? 'bg-rose-50 border-rose-200 cursor-not-allowed'
                         : isSelected
                           ? 'bg-blue-50 border-blue-200 shadow-sm cursor-pointer'
                           : 'hover:bg-slate-50 border-transparent hover:border-slate-200 cursor-pointer'
@@ -568,13 +706,30 @@ export default function ReviewerAssignModal({
                       <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
                         showAsSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {reviewer.full_name?.charAt(0) || reviewer.email.charAt(0)}
+                        {reviewer.full_name?.charAt(0) || (reviewer.email || '?').charAt(0)}
                       </div>
                       <div>
                         <div className={`font-medium ${showAsSelected ? 'text-blue-900' : 'text-slate-900'}`}>
                           {reviewer.full_name || 'Unnamed'}
                         </div>
                         <div className="text-sm text-slate-500">{reviewer.email}</div>
+                        {hits.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`policy-hits-${reviewer.id}`}>
+                            {hits.map((hit, idx) => (
+                              <span
+                                key={`${reviewer.id}-hit-${idx}-${hit.code}`}
+                                className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getPolicyBadgeClass(hit)}`}
+                              >
+                                {hit.label || hit.code}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {hits.length > 0 && (
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {hits.map((h) => h.detail).filter(Boolean).join(' ')}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -583,11 +738,53 @@ export default function ReviewerAssignModal({
                           Assigned
                         </span>
                       )}
+                      {blockedByPolicy && (
+                        <span className="text-xs font-semibold bg-rose-100 text-rose-700 px-2 py-1 rounded">
+                          Blocked
+                        </span>
+                      )}
+                      {canOverride && (
+                        <span className="text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                          Override
+                        </span>
+                      )}
                       {showAsSelected && <Check className="h-5 w-5 text-blue-600" />}
                     </div>
                   </div>
                   )
                 })}
+              </div>
+            )}
+
+            {selectedOverrideReviewers.length > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="text-sm font-semibold text-amber-800">Cooldown override required</div>
+                <div className="mt-1 text-xs text-amber-700">
+                  你已选择 {selectedOverrideReviewers.length} 位命中 cooldown 的审稿人。提交前请填写 override 原因（将写入审计日志）。
+                </div>
+                <div className="mt-3 space-y-2">
+                  {selectedOverrideReviewers.map((rid) => (
+                    <div key={`override-${rid}`}>
+                      <label className="mb-1 block text-xs font-medium text-amber-900" htmlFor={`override-reason-${rid}`}>
+                        Reviewer {rid}
+                      </label>
+                      <input
+                        id={`override-reason-${rid}`}
+                        type="text"
+                        value={overrideReasons[rid] || ''}
+                        onChange={(e) =>
+                          setOverrideReasons((prev) => ({
+                            ...prev,
+                            [rid]: e.target.value,
+                          }))
+                        }
+                        placeholder="Why is cooldown override justified?"
+                        className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        data-testid={`override-reason-${rid}`}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -605,7 +802,11 @@ export default function ReviewerAssignModal({
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
               data-testid="reviewer-assign"
             >
-               {isSubmitting ? 'Assigning...' : `Assign ${selectedReviewers.length || ''} Reviewer${selectedReviewers.length === 1 ? '' : 's'}`}
+               {isSubmitting
+                ? 'Assigning...'
+                : `Assign ${selectedReviewers.length || ''} Reviewer${selectedReviewers.length === 1 ? '' : 's'}${
+                    selectedOverrideReviewers.length ? ` (${selectedOverrideReviewers.length} override)` : ''
+                  }`}
             </button>
           </div>
         </div>

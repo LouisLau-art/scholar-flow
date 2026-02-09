@@ -16,7 +16,7 @@ from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
 from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, ReviewSubmission
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
-from app.services.reviewer_service import ReviewerInviteService, ReviewerWorkspaceService
+from app.services.reviewer_service import ReviewPolicyService, ReviewerInviteService, ReviewerWorkspaceService
 
 router = APIRouter(tags=["Reviews"])
 
@@ -115,6 +115,53 @@ def _is_foreign_key_user_error(err: Exception, *, constraint: str) -> bool:
         return False
     text = str(err).lower()
     return ("23503" in text or "foreign key" in text) and constraint.lower() in text
+
+
+def _safe_insert_invite_policy_audit(
+    *,
+    manuscript_id: str,
+    from_status: str,
+    to_status: str,
+    changed_by: str | None,
+    comment: str | None,
+    payload: dict[str, Any],
+) -> None:
+    """
+    邀请策略相关审计日志（fail-open，不影响主流程）。
+    """
+    base = {
+        "manuscript_id": manuscript_id,
+        "from_status": from_status,
+        "to_status": to_status,
+        "comment": comment,
+        "changed_by": changed_by,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "payload": payload,
+    }
+    candidates = [dict(base)]
+    no_payload = dict(base)
+    no_payload.pop("payload", None)
+    candidates.append(no_payload)
+    if changed_by:
+        changed_by_none = dict(base)
+        changed_by_none["changed_by"] = None
+        changed_by_none["payload"] = {**payload, "changed_by_raw": changed_by}
+        candidates.append(changed_by_none)
+        changed_by_none_no_payload = dict(changed_by_none)
+        changed_by_none_no_payload.pop("payload", None)
+        candidates.append(changed_by_none_no_payload)
+
+    for row in candidates:
+        try:
+            supabase_admin.table("status_transition_logs").insert(row).execute()
+            return
+        except Exception:
+            continue
+
+
+def _parse_roles(profile: dict | None) -> list[str]:
+    raw = (profile or {}).get("roles") or []
+    return [str(r).strip().lower() for r in raw if str(r).strip()]
 
 
 @router.get("/reviewer/assignments/{assignment_id}/workspace")
@@ -254,9 +301,11 @@ async def submit_reviewer_workspace_review(
 async def assign_reviewer(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
     reviewer_id: UUID = Body(..., embed=True),
+    override_cooldown: bool = Body(False, embed=True),
+    override_reason: str | None = Body(None, embed=True),
 ):
     """
     编辑分配审稿人
@@ -265,19 +314,28 @@ async def assign_reviewer(
     1. 校验逻辑: 确保 reviewer_id 不是稿件的作者 (通过 manuscripts 表查询)。
     2. 插入 review_assignments 表。
     """
-    # 模拟校验: 获取稿件信息
+    requester_roles = set(_parse_roles(profile))
+    policy_service = ReviewPolicyService()
+    reviewer_id_str = str(reviewer_id)
+    manuscript_id_str = str(manuscript_id)
+
+    # 读取稿件基础信息（含 journal_id 供冷却期策略判断）
     ms_res = (
         supabase.table("manuscripts")
-        .select("author_id, title, version, status, owner_id, file_path")
-        .eq("id", str(manuscript_id))
+        .select("id, author_id, title, version, status, owner_id, file_path, journal_id")
+        .eq("id", manuscript_id_str)
         .single()
         .execute()
     )
+    manuscript = ms_res.data or {}
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
 
     # 体验/数据兜底：没有 PDF 的稿件不允许分配审稿人，否则 reviewer 侧无法预览全文
-    file_path = (ms_res.data or {}).get("file_path")
+    file_path = manuscript.get("file_path")
     if not file_path:
         raise HTTPException(
             status_code=400,
@@ -286,27 +344,27 @@ async def assign_reviewer(
 
     # Feature 023: 初审阶段必须绑定 Internal Owner（KPI 归属人）
     # 中文注释: 分配审稿人会把稿件推进到 under_review，因此这里强制要求 owner_id 已设置。
-    owner_raw = (ms_res.data or {}).get("owner_id")
+    owner_raw = manuscript.get("owner_id")
     if not owner_raw:
         # 体验优化：若 Editor 尚未手动绑定，则默认绑定为当前 Editor（仍满足“初审阶段完成绑定”的业务要求）
         try:
             supabase_admin.table("manuscripts").update({"owner_id": str(current_user["id"])}).eq(
-                "id", str(manuscript_id)
+                "id", manuscript_id_str
             ).execute()
             owner_raw = str(current_user["id"])
         except Exception as e:
             print(f"[OwnerBinding] auto-bind owner_id failed: {e}")
             raise HTTPException(status_code=500, detail="Failed to bind Internal Owner")
 
-    current_version = ms_res.data.get("version", 1) if ms_res.data else 1
+    current_version = manuscript.get("version", 1) if manuscript else 1
 
     try:
         # 幂等保护：避免同一审稿人被重复指派（UI 可能因“已指派列表”加载失败而重复提交）
         existing = (
             supabase_admin.table("review_assignments")
             .select("id, status, due_at, reviewer_id, round_number")
-            .eq("manuscript_id", str(manuscript_id))
-            .eq("reviewer_id", str(reviewer_id))
+            .eq("manuscript_id", manuscript_id_str)
+            .eq("reviewer_id", reviewer_id_str)
             .eq("round_number", current_version)
             .order("created_at", desc=True)
             .limit(1)
@@ -317,17 +375,53 @@ async def assign_reviewer(
             return {
                 "success": True,
                 "data": existing.data[0],
+                "policy": policy_service.evaluate_candidates(manuscript=manuscript, reviewer_ids=[reviewer_id_str]).get(
+                    reviewer_id_str
+                )
+                or {},
                 "message": "Reviewer already assigned",
             }
 
-        # 中文注释: 默认给审稿任务 7 天期限，后续可改为按期刊/稿件类型配置
-        due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        policy = policy_service.evaluate_candidates(manuscript=manuscript, reviewer_ids=[reviewer_id_str]).get(
+            reviewer_id_str
+        ) or {
+            "can_assign": True,
+            "allow_override": False,
+            "cooldown_active": False,
+            "conflict": False,
+            "overdue_risk": False,
+            "overdue_open_count": 0,
+            "hits": [],
+        }
+        if policy.get("conflict"):
+            raise HTTPException(status_code=400, detail="Invitation blocked: conflict of interest")
+        if policy.get("cooldown_active"):
+            if not override_cooldown:
+                cooldown_until = str(policy.get("cooldown_until") or "")
+                msg = (
+                    f"Invitation blocked by cooldown policy ({policy_service.cooldown_days()} days in same journal)."
+                    f"{f' Cooldown until {cooldown_until}.' if cooldown_until else ''}"
+                )
+                raise HTTPException(status_code=409, detail=msg)
+            allowed_override_roles = {r.lower() for r in policy_service.cooldown_override_roles()}
+            if not requester_roles.intersection(allowed_override_roles):
+                raise HTTPException(status_code=403, detail="Only high-privilege roles can override cooldown policy")
+            reason_clean = str(override_reason or "").strip()
+            if not reason_clean:
+                raise HTTPException(status_code=422, detail="override_reason is required when override_cooldown=true")
+        elif override_cooldown:
+            raise HTTPException(status_code=400, detail="override_cooldown=true is only valid when cooldown is active")
+
+        # 默认邀请截止时间：+10 天（窗口可配置）
+        _min_days, _max_days, default_days = policy_service.due_window_days()
+        due_at = (datetime.now(timezone.utc) + timedelta(days=default_days)).isoformat()
+        invited_at = datetime.now(timezone.utc).isoformat()
         insert_payload = {
-            "manuscript_id": str(manuscript_id),
-            "reviewer_id": str(reviewer_id),
+            "manuscript_id": manuscript_id_str,
+            "reviewer_id": reviewer_id_str,
             "status": "pending",
             "due_at": due_at,
-            "invited_at": datetime.now(timezone.utc).isoformat(),
+            "invited_at": invited_at,
             "round_number": current_version,
         }
         try:
@@ -350,15 +444,32 @@ async def assign_reviewer(
                 raise
         # 更新稿件状态为评审中
         supabase_admin.table("manuscripts").update({"status": "under_review"}).eq(
-            "id", str(manuscript_id)
+            "id", manuscript_id_str
         ).execute()
+
+        if override_cooldown:
+            _safe_insert_invite_policy_audit(
+                manuscript_id=manuscript_id_str,
+                from_status=str(manuscript.get("status") or ""),
+                to_status="under_review",
+                changed_by=str(current_user.get("id") or ""),
+                comment="reviewer_invite_cooldown_override",
+                payload={
+                    "action": "reviewer_invite_cooldown_override",
+                    "reviewer_id": reviewer_id_str,
+                    "manuscript_id": manuscript_id_str,
+                    "override_reason": str(override_reason or "").strip(),
+                    "cooldown_days": policy_service.cooldown_days(),
+                    "policy_hits": policy.get("hits") or [],
+                },
+            )
 
         # === 通知中心 (Feature 011) ===
         # 站内信：审稿人收到邀请提醒
-        manuscript_title = (ms_res.data or {}).get("title") or "Manuscript"
+        manuscript_title = manuscript.get("title") or "Manuscript"
         NotificationService().create_notification(
-            user_id=str(reviewer_id),
-            manuscript_id=str(manuscript_id),
+            user_id=reviewer_id_str,
+            manuscript_id=manuscript_id_str,
             type="review_invite",
             title="Review Invitation",
             content=f"You have been invited to review '{manuscript_title}'.",
@@ -368,14 +479,32 @@ async def assign_reviewer(
         try:
             profile_res = (
                 supabase_admin.table("user_profiles")
-                .select("email")
-                .eq("id", str(reviewer_id))
+                .select("email,full_name")
+                .eq("id", reviewer_id_str)
                 .single()
                 .execute()
             )
-            reviewer_email = (getattr(profile_res, "data", None) or {}).get("email")
+            reviewer_profile = getattr(profile_res, "data", None) or {}
+            reviewer_email = reviewer_profile.get("email")
+            reviewer_name = reviewer_profile.get("full_name") or "Reviewer"
         except Exception:
             reviewer_email = None
+            reviewer_name = "Reviewer"
+
+        journal_title = "ScholarFlow Journal"
+        journal_id = str(manuscript.get("journal_id") or "").strip()
+        if journal_id:
+            try:
+                jr = (
+                    supabase_admin.table("journals")
+                    .select("title")
+                    .eq("id", journal_id)
+                    .single()
+                    .execute()
+                )
+                journal_title = str((getattr(jr, "data", None) or {}).get("title") or journal_title)
+            except Exception:
+                pass
 
         if reviewer_email:
             # Feature 039: Magic Link (JWT, 14-day default)
@@ -420,13 +549,19 @@ async def assign_reviewer(
                 template_name="invitation.html",
                 context={
                     "review_url": review_url,
+                    "reviewer_name": reviewer_name,
                     "manuscript_title": manuscript_title,
                     "manuscript_id": str(manuscript_id),
+                    "journal_title": journal_title,
                     "due_at": due_at,
+                    "due_date": str(due_at).split("T")[0],
                 },
             )
 
-        return {"success": True, "data": res.data[0]}
+        row = (getattr(res, "data", None) or [{}])[0]
+        return {"success": True, "data": row, "policy": policy}
+    except HTTPException:
+        raise
     except APIError as e:
         # 中文注释:
         # - reviewer_id 外键指向 auth.users(id)，如果前端列表里混入了“仅 user_profiles 的 mock reviewer”，这里会触发 23503。

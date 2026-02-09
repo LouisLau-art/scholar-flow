@@ -13,17 +13,75 @@ import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 
+type DashboardTab =
+  | 'author'
+  | 'reviewer'
+  | 'editor'
+  | 'managing_editor'
+  | 'assistant_editor'
+  | 'editor_in_chief'
+  | 'admin'
+
+const DASHBOARD_TABS: DashboardTab[] = [
+  'author',
+  'reviewer',
+  'editor',
+  'managing_editor',
+  'assistant_editor',
+  'editor_in_chief',
+  'admin',
+]
+
+function parseDashboardTab(raw: string | null): DashboardTab | null {
+  if (!raw) return null
+  return DASHBOARD_TABS.includes(raw as DashboardTab) ? (raw as DashboardTab) : null
+}
+
+function RoleWorkspacePanel({
+  title,
+  description,
+  actions,
+}: {
+  title: string
+  description: string
+  actions: Array<{ label: string; href: string; helper: string }>
+}) {
+  return (
+    <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div>
+        <h2 className="text-2xl font-serif font-bold text-slate-900">{title}</h2>
+        <p className="mt-1 text-slate-500">{description}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {actions.map((item) => (
+          <Link
+            key={`${title}-${item.href}`}
+            href={item.href}
+            className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-base font-semibold text-slate-900">{item.label}</p>
+              <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-blue-600" />
+            </div>
+            <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function DashboardPageContent() {
   const searchParams = useSearchParams()
-  const tabParam = searchParams?.get('tab')
+  const tabParam = searchParams?.get('tab') ?? null
   const [stats, setStats] = useState<any>(null)
   const [submissions, setSubmissions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [roles, setRoles] = useState<string[] | null>(null)
   const [rolesLoading, setRolesLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'author' | 'reviewer' | 'editor' | 'admin'>(() => {
-    const tab = tabParam
-    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') return tab
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
+    const tab = parseDashboardTab(tabParam)
+    if (tab) return tab
     return 'author'
   })
 
@@ -81,15 +139,20 @@ function DashboardPageContent() {
     { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-slate-600' },
   ]
 
-  const canSeeReviewer = Boolean(roles?.includes('reviewer') || roles?.includes('admin'))
-  const canSeeEditor = Boolean(roles?.includes('editor') || roles?.includes('admin'))
-  const canSeeAdmin = Boolean(roles?.includes('admin'))
+  const roleSet = new Set((roles || []).map((r) => String(r).toLowerCase()))
+  const canSeeAdmin = roleSet.has('admin')
+  const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
+  // 中文注释: legacy editor 继续保留，兼容历史 URL /dashboard?tab=editor
+  const canSeeEditor = canSeeAdmin || roleSet.has('editor')
+  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor') || roleSet.has('editor')
+  const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
+  const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
   const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
 
   // 支持 /dashboard?tab=reviewer 之类的深链
   useEffect(() => {
-    const tab = tabParam
-    if (tab === 'reviewer' || tab === 'editor' || tab === 'admin' || tab === 'author') {
+    const tab = parseDashboardTab(tabParam)
+    if (tab) {
       setActiveTab(tab)
     }
   }, [tabParam])
@@ -100,13 +163,25 @@ function DashboardPageContent() {
     if (activeTab === 'admin' && !canSeeAdmin) setActiveTab('author')
     if (activeTab === 'editor' && !canSeeEditor) setActiveTab('author')
     if (activeTab === 'reviewer' && !canSeeReviewer) setActiveTab('author')
-  }, [rolesLoading, activeTab, canSeeAdmin, canSeeEditor, canSeeReviewer])
+    if (activeTab === 'managing_editor' && !canSeeManagingEditor) setActiveTab('author')
+    if (activeTab === 'assistant_editor' && !canSeeAssistantEditor) setActiveTab('author')
+    if (activeTab === 'editor_in_chief' && !canSeeEditorInChief) setActiveTab('author')
+  }, [
+    rolesLoading,
+    activeTab,
+    canSeeAdmin,
+    canSeeEditor,
+    canSeeReviewer,
+    canSeeManagingEditor,
+    canSeeAssistantEditor,
+    canSeeEditorInChief,
+  ])
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12 sm:px-6 lg:px-8">
+      <main className="flex-1 mx-auto max-w-[1600px] w-full px-4 py-12 sm:px-6 lg:px-8">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             <div>
@@ -120,7 +195,7 @@ function DashboardPageContent() {
                 Loading roles...
               </div>
             ) : (
-              <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
+              <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-1 h-auto">
                 <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                   <LayoutDashboard className="h-4 w-4" /> Author
                 </TabsTrigger>
@@ -129,9 +204,24 @@ function DashboardPageContent() {
                     <Users className="h-4 w-4" /> Reviewer
                   </TabsTrigger>
                 )}
+                {canSeeManagingEditor && (
+                  <TabsTrigger value="managing_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Shield className="h-4 w-4" /> Managing Editor
+                  </TabsTrigger>
+                )}
+                {canSeeAssistantEditor && (
+                  <TabsTrigger value="assistant_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Shield className="h-4 w-4" /> Assistant Editor
+                  </TabsTrigger>
+                )}
+                {canSeeEditorInChief && (
+                  <TabsTrigger value="editor_in_chief" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Shield className="h-4 w-4" /> Editor-in-Chief
+                  </TabsTrigger>
+                )}
                 {canSeeEditor && (
                   <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                    <Shield className="h-4 w-4" /> Editor
+                    <Shield className="h-4 w-4" /> Editor (Legacy)
                   </TabsTrigger>
                 )}
                 {canSeeAdmin && (
@@ -248,6 +338,49 @@ function DashboardPageContent() {
           {canSeeReviewer && (
             <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <ReviewerDashboard />
+            </TabsContent>
+          )}
+
+          {canSeeManagingEditor && (
+            <TabsContent value="managing_editor">
+              <RoleWorkspacePanel
+                title="Managing Editor Workspace"
+                description="Handle intake routing, reviewer assignment coordination, and process oversight."
+                actions={[
+                  { label: 'Intake Queue', href: '/editor/intake', helper: 'Assign Assistant Editor for new submissions.' },
+                  { label: 'Manuscripts Process', href: '/editor/process', helper: 'Track full pipeline status and filter by journal.' },
+                  { label: 'Reviewer Library', href: '/editor/reviewers', helper: 'Manage reviewer pool and candidate metadata.' },
+                  { label: 'Analytics Dashboard', href: '/editor/analytics', helper: 'Review throughput and SLA indicators.' },
+                ]}
+              />
+            </TabsContent>
+          )}
+
+          {canSeeAssistantEditor && (
+            <TabsContent value="assistant_editor">
+              <RoleWorkspacePanel
+                title="Assistant Editor Workspace"
+                description="Execute technical checks and progress assigned manuscripts."
+                actions={[
+                  { label: 'AE Workspace', href: '/editor/workspace', helper: 'Complete technical pre-check decisions.' },
+                  { label: 'Manuscripts Process', href: '/editor/process', helper: 'Inspect current manuscript stage and owners.' },
+                  { label: 'Editor Dashboard', href: '/dashboard?tab=editor', helper: 'Open legacy editorial console when needed.' },
+                ]}
+              />
+            </TabsContent>
+          )}
+
+          {canSeeEditorInChief && (
+            <TabsContent value="editor_in_chief">
+              <RoleWorkspacePanel
+                title="Editor-in-Chief Workspace"
+                description="Perform academic checks and final editorial governance."
+                actions={[
+                  { label: 'Academic Queue', href: '/editor/academic', helper: 'Review AE outcomes and route to next stage.' },
+                  { label: 'Manuscripts Process', href: '/editor/process', helper: 'Monitor decision-stage manuscripts.' },
+                  { label: 'Analytics Dashboard', href: '/editor/analytics', helper: 'Track decision velocity and acceptance trends.' },
+                ]}
+              />
             </TabsContent>
           )}
 

@@ -16,17 +16,29 @@ export default function ManuscriptsProcessPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | undefined>()
 
-  const handleAssignReviewer = async (reviewerIds: string[]) => {
+  const handleAssignReviewer = async (
+    reviewerIds: string[],
+    options?: { overrides?: Array<{ reviewerId: string; reason: string }> }
+  ) => {
     if (!selectedManuscriptId) return false
     const toastId = toast.loading('Assigning reviewers...')
     try {
       const token = await authService.getAccessToken()
       if (!token) throw new Error('Please sign in again.')
+      const overrideMap = new Map(
+        (options?.overrides || []).map((item) => [String(item.reviewerId), String(item.reason || '')])
+      )
       for (const reviewerId of reviewerIds) {
+        const overrideReason = overrideMap.get(String(reviewerId))
         await fetch('/api/v1/reviews/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ manuscript_id: selectedManuscriptId, reviewer_id: reviewerId }),
+          body: JSON.stringify({
+            manuscript_id: selectedManuscriptId,
+            reviewer_id: reviewerId,
+            override_cooldown: Boolean(overrideReason),
+            override_reason: overrideReason || undefined,
+          }),
         })
       }
       toast.success('Assigned.', { id: toastId })

@@ -44,8 +44,40 @@ def _extract_single(resp: Any) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def _error_text_blob(error: Exception | str | None) -> str:
+    """
+    统一拼接异常文本，兼容部分 SDK 异常 str(e) 为空、但 repr/args 有内容的场景。
+    """
+    if error is None:
+        return ""
+    if isinstance(error, str):
+        return error
+    parts: list[str] = []
+    try:
+        s = str(error)
+        if s:
+            parts.append(s)
+    except Exception:
+        pass
+    try:
+        r = repr(error)
+        if r:
+            parts.append(r)
+    except Exception:
+        pass
+    try:
+        args = getattr(error, "args", None) or []
+        for item in args:
+            v = str(item)
+            if v:
+                parts.append(v)
+    except Exception:
+        pass
+    return " | ".join(parts)
+
+
 def _missing_table_from_error(error: Exception | str | None) -> str | None:
-    text = str(error or "")
+    text = _error_text_blob(error)
     lowered = text.lower()
     missing_markers = (
         "does not exist",

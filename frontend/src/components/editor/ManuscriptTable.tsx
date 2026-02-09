@@ -63,23 +63,18 @@ export function ManuscriptTable({
       <Table>
         <TableHeader>
           <TableRow className="bg-slate-50/50">
-            <TableHead className="w-[200px] whitespace-nowrap">Manuscript ID</TableHead>
+            <TableHead className="w-[180px] whitespace-nowrap">Manuscript ID</TableHead>
             <TableHead className="whitespace-nowrap">Journal</TableHead>
-            <TableHead className="whitespace-nowrap">Submitted</TableHead>
             <TableHead className="whitespace-nowrap">Status</TableHead>
-            <TableHead className="whitespace-nowrap">Pre-check</TableHead>
             <TableHead className="whitespace-nowrap">Updated</TableHead>
-            <TableHead className="whitespace-nowrap">SLA</TableHead>
-            <TableHead className="whitespace-nowrap">Assign Editor</TableHead>
-            <TableHead className="whitespace-nowrap">Current Assignee</TableHead>
-            <TableHead className="whitespace-nowrap">Owner</TableHead>
+            <TableHead className="whitespace-nowrap">People</TableHead>
             <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={11} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -92,8 +87,10 @@ export function ManuscriptTable({
                 isPrecheck && stage
                   ? `${stage} (${(r.current_role || '').replaceAll('_', ' ') || 'unassigned'})`
                   : '—'
-              const currentAssignee =
-                r.current_assignee?.full_name || r.current_assignee?.email || r.current_assignee?.id || '—'
+              const currentAssignee = r.current_assignee?.full_name || r.current_assignee?.email || r.current_assignee?.id || '—'
+              const ownerLabel = r.owner?.full_name || r.owner?.email || '—'
+              const editorLabel = r.editor?.full_name || r.editor?.email || '—'
+              const showAssigneeLine = currentAssignee !== '—' && currentAssignee !== editorLabel
               return (
                 <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
                   <TableCell className="font-mono text-[10px] sm:text-xs">
@@ -108,39 +105,51 @@ export function ManuscriptTable({
                   <TableCell className="text-sm text-slate-700 whitespace-nowrap">
                     {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.created_at)}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={getStatusBadgeClass(status)}>
-                      {getStatusLabel(status)}
-                    </Badge>
+                    <div className="space-y-1">
+                      <Badge variant="outline" className={getStatusBadgeClass(status)}>
+                        {getStatusLabel(status)}
+                      </Badge>
+                      {precheckLabel !== '—' ? (
+                        <p className="text-[11px] text-slate-500 whitespace-nowrap truncate max-w-[260px]">
+                          Pre-check: {precheckLabel}
+                        </p>
+                      ) : null}
+                      {r.is_overdue ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                          Overdue
+                          <span className="text-[11px]">({r.overdue_tasks_count || 0})</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">On track</span>
+                      )}
+                    </div>
                   </TableCell>
-                  <TableCell className="text-xs text-slate-600 whitespace-nowrap">{precheckLabel}</TableCell>
                   <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.updated_at)}</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {r.is_overdue ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
-                        Overdue
-                        <span className="text-[11px]">({r.overdue_tasks_count || 0})</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">On track</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-slate-700 font-medium">
-                    {r.editor?.full_name || r.editor?.email || '—'}
-                  </TableCell>
-                  <TableCell className="text-sm text-slate-700 font-medium">{currentAssignee}</TableCell>
                   <TableCell className="text-sm text-slate-700">
-                    <div className="flex items-center gap-2">
-                      <div className="min-w-[100px] max-w-[150px] truncate font-medium">
-                        {r.owner?.full_name || r.owner?.email || '—'}
+                    <div className="min-w-[210px] space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs">
+                          <span className="text-slate-500">Owner:</span>{' '}
+                          <span className="font-medium text-slate-700">{ownerLabel}</span>
+                        </p>
+                        <BindingOwnerDropdown
+                          manuscriptId={r.id}
+                          currentOwner={r.owner}
+                          onBound={onOwnerBound}
+                          disabled={!canBindOwner}
+                        />
                       </div>
-                      <BindingOwnerDropdown
-                        manuscriptId={r.id}
-                        currentOwner={r.owner}
-                        onBound={onOwnerBound}
-                        disabled={!canBindOwner}
-                      />
+                      <p className="truncate text-xs">
+                        <span className="text-slate-500">Editor:</span>{' '}
+                        <span className="font-medium text-slate-700">{editorLabel}</span>
+                      </p>
+                      {showAssigneeLine ? (
+                        <p className="truncate text-xs">
+                          <span className="text-slate-500">Assignee:</span>{' '}
+                          <span className="font-medium text-slate-700">{currentAssignee}</span>
+                        </p>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">

@@ -130,3 +130,13 @@ def test_list_comments_returns_empty_when_internal_comments_missing_in_schema_ca
 def test_missing_table_parser_supports_pgrst205_schema_cache_message():
     error = RuntimeError("Could not find the table 'public.internal_comments' in the schema cache")
     assert _missing_table_from_error(error) == "internal_comments"
+
+
+class _SilentError(Exception):
+    def __str__(self) -> str:  # pragma: no cover - 专用于模拟第三方异常行为
+        return ""
+
+
+def test_missing_table_parser_reads_error_args_when_str_is_empty():
+    error = _SilentError("Could not find the table 'public.internal_comments' in the schema cache")
+    assert _missing_table_from_error(error) == "internal_comments"

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -28,6 +29,7 @@ def _chain():
         "order",
         "or_",
         "neq",
+        "in_",
         "insert",
         "execute",
     ):
@@ -230,3 +232,52 @@ def test_submit_review_marks_assignment_completed(supabase_admin):
     assert assignments.update.called is True
     assert reports.insert.called is True
     assert manuscripts.update.called is True
+
+
+def test_review_policy_due_window_default_days(monkeypatch: pytest.MonkeyPatch, supabase_admin):
+    monkeypatch.setenv("REVIEW_INVITE_DUE_MIN_DAYS", "7")
+    monkeypatch.setenv("REVIEW_INVITE_DUE_MAX_DAYS", "14")
+    monkeypatch.setenv("REVIEW_INVITE_DUE_DEFAULT_DAYS", "10")
+    svc = reviewer_service_module.ReviewPolicyService()
+    min_days, max_days, default_days = svc.due_window_days()
+    assert min_days == 7
+    assert max_days == 14
+    assert default_days == 10
+
+
+def test_review_policy_marks_cooldown_conflict_and_overdue(monkeypatch: pytest.MonkeyPatch, supabase_admin):
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
+    svc = reviewer_service_module.ReviewPolicyService()
+
+    now = datetime.now(timezone.utc)
+    invited_recent = (now - timedelta(days=5)).isoformat()
+    overdue_due_at = (now - timedelta(days=2)).isoformat()
+
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.return_value = _Resp(
+        data=[
+            {
+                "manuscript_id": "m-prev-1",
+                "reviewer_id": "r-1",
+                "status": "pending",
+                "due_at": overdue_due_at,
+                "invited_at": invited_recent,
+                "created_at": invited_recent,
+            }
+        ]
+    )
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.return_value = _Resp(data=[{"id": "m-prev-1", "journal_id": "j-1"}])
+
+    policy = svc.evaluate_candidates(
+        manuscript={"id": "m-current", "journal_id": "j-1", "author_id": "author-1"},
+        reviewer_ids=["r-1", "author-1"],
+    )
+
+    assert policy["r-1"]["cooldown_active"] is True
+    assert policy["r-1"]["overdue_risk"] is True
+    assert policy["r-1"]["can_assign"] is False
+    assert policy["r-1"]["allow_override"] is True
+    assert policy["author-1"]["conflict"] is True
+    assert policy["author-1"]["can_assign"] is False

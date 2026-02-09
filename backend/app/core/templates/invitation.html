@@ -14,12 +14,13 @@
   <body>
     <div class="container">
       <h2>Invitation to Review</h2>
-      <p>Dear Reviewer,</p>
+      <p>Dear {{ reviewer_name or "Reviewer" }},</p>
 
       <div class="card">
+        <div><strong>Journal:</strong> {{ journal_title or "ScholarFlow Journal" }}</div>
         <div><strong>Title:</strong> {{ manuscript_title }}</div>
         <div><strong>Manuscript ID:</strong> <span class="mono">{{ manuscript_id }}</span></div>
-        {% if due_at %}<div><strong>Suggested deadline:</strong> {{ due_at }}</div>{% endif %}
+        {% if due_date %}<div><strong>Suggested deadline:</strong> {{ due_date }}</div>{% elif due_at %}<div><strong>Suggested deadline:</strong> {{ due_at }}</div>{% endif %}
       </div>
 
       <p style="margin-top: 18px;">
@@ -40,4 +41,3 @@
     </div>
   </body>
 </html>
-

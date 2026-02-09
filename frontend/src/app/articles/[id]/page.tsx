@@ -35,6 +35,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   // Convert article data to format expected by generateCitationMetadata
   // The API response structure needs to match what citation.ts expects
+  const origin = getBackendOrigin()
   const metaArticle = {
     title: article.title,
     authors: article.authors?.map((a: any) => ({
@@ -45,9 +46,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     publicationDate: article.published_at ? new Date(article.published_at).toISOString().split('T')[0] : '',
     journalTitle: article.journals?.title || 'Scholar Flow Journal',
     doi: article.doi || '',
-    // 中文注释: MVP 阶段不在 metadata 里承诺稳定可长期访问的 PDF URL（Storage 通常为私有 + signed url）。
-    // 若未来要支持 Google Scholar 更好抓取，可增加一个稳定的公开 PDF 入口（例如 /api/v1/manuscripts/articles/{id}/pdf）。
-    pdfUrl: undefined,
+    // 中文注释: 公开的 /pdf 入口会 302 到短期 signed URL，可用于 Scholar 抓取 citation_pdf_url。
+    pdfUrl: `${origin}/api/v1/manuscripts/articles/${encodeURIComponent(params.id)}/pdf`,
     abstract: article.abstract,
   }
 
