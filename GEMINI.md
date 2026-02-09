@@ -272,6 +272,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
 - **Portal Citation/Topics（Feature 034）**：公开文章引用导出统一走后端 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`；`/topics` 统一走 `GET /api/v1/public/topics` 动态聚合（基于已发表文章/期刊关键词推断，MVP 不依赖新增 subject 表字段）。
 - **Reviewer Invite Policy（GAP-P1-04）**：`POST /api/v1/reviews/assign` 已支持 `override_cooldown` + `override_reason`；冷却期默认 `REVIEW_INVITE_COOLDOWN_DAYS=30`，高权限覆盖角色由 `REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES` 控制（默认 `admin,managing_editor`）；审稿人接受邀请 due 窗口使用 `REVIEW_INVITE_DUE_MIN_DAYS` / `REVIEW_INVITE_DUE_MAX_DAYS` / `REVIEW_INVITE_DUE_DEFAULT_DAYS`（默认 `7/21/10`）。
+- **投稿上传超时策略（2026-02-09）**：`frontend/src/components/SubmissionForm.tsx` 对 Storage 上传增加 90s 超时、对元数据解析增加 25s 超时；解析请求优先直连 `NEXT_PUBLIC_API_URL`（HF Space），失败再回退 `/api/v1/manuscripts/upload` rewrite，降低 Vercel 代理链路卡住概率。
+- **PDF 本地解析降级开关（2026-02-09）**：后端 `POST /api/v1/manuscripts/upload` 支持按文件体积跳过版面提取：`PDF_LAYOUT_SKIP_FILE_MB`（默认 `8`，超过后 `layout_max_pages=0`）；元数据提取增加 `PDF_METADATA_TIMEOUT_SEC`（默认 `4`）超时降级为手填，避免长时间转圈。
+- **HF 日志可见性（2026-02-09）**：Docker 启用 `PYTHONUNBUFFERED=1` + `uvicorn --access-log --log-level info`，上传链路新增 trace 日志（`[UploadManuscript:<id>]`），便于在 Space Logs 定位卡点。
 - **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
@@ -298,6 +301,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **投稿上传卡住排障（Upload/AI Parse）**：修复作者端“Uploading and analyzing manuscript...”长时间转圈：前端增加双阶段超时（Storage 90s + Parse 25s）与直连 HF 优先策略；后端对大 PDF 自动跳过 layout 并为 metadata 提取加超时降级；同时补齐上传全链路 trace 日志，便于 HF 线上定位。
 - **GAP-P1-03（Analytics 管理视角增强）**：新增 `GET /api/v1/analytics/management`，补齐管理下钻三件套：编辑效率排行（处理量/平均首次决定耗时）、阶段耗时分解（pre_check/under_review/decision/production）、超 SLA 稿件预警（逾期 internal tasks 聚合）；前端 `/editor/analytics` 新增管理洞察区块，后端补齐 RBAC（ME/EIC/Admin）+ journal-scope 裁剪。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成整体验收：新增 `GET /api/v1/editor/rbac/context`、服务层/路由层双重动作门禁、journal-scope 隔离（跨刊读写 403）、first/final decision 语义分离、以及 APC/Owner/legacy-final 的统一审计 payload（before/after/reason/source）；前端完成 capability 显隐与 `rbac-journal-scope.spec.ts` mocked E2E 回归。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
 - **GAP-P1-04（Review Policy Hardening）**：实现同刊 30 天冷却期（候选灰显拦截）、高权限显式 override（`override_cooldown` + `override_reason` + `status_transition_logs` 审计）、邀请模板变量扩展（reviewer/journal/due date）、以及 Process/详情共用 `ReviewerAssignModal` 的命中原因展示（cooldown/conflict/overdue risk）。

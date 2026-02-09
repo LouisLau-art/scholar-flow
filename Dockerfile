@@ -40,6 +40,7 @@ RUN mkdir -p /app/.cache/huggingface /app/.cache/sentence_transformers && \
 ENV HF_HOME=/app/.cache/huggingface
 ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
 ENV PATH="/home/user/.local/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
 
 # 切换用户
 USER user
@@ -48,4 +49,4 @@ USER user
 EXPOSE 7860
 
 # 启动
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--access-log", "--log-level", "info"]

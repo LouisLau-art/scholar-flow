@@ -8,7 +8,7 @@ from fastapi import (
     Form,
     Depends,
 )
-from fastapi.responses import JSONResponse, Response, RedirectResponse
+from fastapi.responses import JSONResponse, Response, RedirectResponse, PlainTextResponse
 import httpx
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
@@ -88,6 +88,188 @@ def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 
             continue
 
     raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
+
+
+def _public_article_url(article_id: str) -> str:
+    origin = (os.environ.get("FRONTEND_ORIGIN") or "").strip().rstrip("/")
+    if origin:
+        return f"{origin}/articles/{article_id}"
+    return f"/articles/{article_id}"
+
+
+def _parse_iso_datetime(raw_value: str | None) -> datetime | None:
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+    try:
+        # 中文注释: 兼容数据库常见的 Z 结尾时间格式
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _resolve_public_author_names(article: dict) -> list[str]:
+    names: list[str] = []
+    raw_authors = article.get("authors")
+    if isinstance(raw_authors, list):
+        for item in raw_authors:
+            if isinstance(item, str):
+                if item.strip():
+                    names.append(item.strip())
+                continue
+            if not isinstance(item, dict):
+                continue
+            full_name = str(item.get("full_name") or "").strip()
+            first_name = str(item.get("first_name") or item.get("firstName") or "").strip()
+            last_name = str(item.get("last_name") or item.get("lastName") or "").strip()
+            composed = " ".join(part for part in (first_name, last_name) if part).strip()
+            label = full_name or composed
+            if label:
+                names.append(label)
+
+    if names:
+        # 中文注释: 去重并保持原顺序，避免导出引用里重复作者
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for name in names:
+            key = name.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(name.strip())
+        if deduped:
+            return deduped
+
+    author_id = str(article.get("author_id") or "").strip()
+    if author_id:
+        try:
+            resp = (
+                supabase_admin.table("user_profiles")
+                .select("id,full_name")
+                .eq("id", author_id)
+                .single()
+                .execute()
+            )
+            profile = getattr(resp, "data", None) or {}
+            full_name = str(profile.get("full_name") or "").strip()
+            if full_name:
+                return [full_name]
+        except Exception:
+            pass
+
+    return ["Author"]
+
+
+def _escape_bibtex_value(value: str) -> str:
+    return str(value or "").replace("{", "\\{").replace("}", "\\}").replace("\n", " ").strip()
+
+
+def _build_citation_payload(article: dict) -> dict:
+    article_id = str(article.get("id") or "")
+    published_raw = article.get("published_at") or article.get("created_at")
+    published_dt = _parse_iso_datetime(str(published_raw or ""))
+    if published_dt is None:
+        published_dt = datetime.now(timezone.utc)
+
+    year = str(published_dt.year)
+    month = f"{published_dt.month:02d}"
+    day = f"{published_dt.day:02d}"
+    journal_title = str((article.get("journals") or {}).get("title") or "ScholarFlow Journal")
+    title = str(article.get("title") or "Untitled")
+    doi = str(article.get("doi") or "").strip()
+    authors = _resolve_public_author_names(article)
+    key_id = "".join(ch for ch in article_id if ch.isalnum())[:8] or "article"
+    bibtex_key = f"scholarflow{year}{key_id}"
+
+    return {
+        "article_id": article_id,
+        "title": title,
+        "journal_title": journal_title,
+        "doi": doi,
+        "authors": authors,
+        "year": year,
+        "month": month,
+        "day": day,
+        "date_slash": f"{year}/{month}/{day}",
+        "url": _public_article_url(article_id),
+        "bibtex_key": bibtex_key,
+    }
+
+
+def _to_bibtex(payload: dict) -> str:
+    lines: list[str] = [f"@article{{{payload['bibtex_key']},"]
+    if payload.get("title"):
+        lines.append(f"  title = {{{_escape_bibtex_value(payload['title'])}}},")
+    if payload.get("journal_title"):
+        lines.append(f"  journal = {{{_escape_bibtex_value(payload['journal_title'])}}},")
+    if payload.get("authors"):
+        author_text = " and ".join(_escape_bibtex_value(author) for author in payload["authors"])
+        lines.append(f"  author = {{{author_text}}},")
+    if payload.get("year"):
+        lines.append(f"  year = {{{payload['year']}}},")
+    if payload.get("doi"):
+        lines.append(f"  doi = {{{_escape_bibtex_value(payload['doi'])}}},")
+    if payload.get("url"):
+        lines.append(f"  url = {{{_escape_bibtex_value(payload['url'])}}},")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _to_ris(payload: dict) -> str:
+    lines: list[str] = ["TY  - JOUR"]
+    if payload.get("title"):
+        lines.append(f"TI  - {payload['title']}")
+    for author in payload.get("authors") or []:
+        lines.append(f"AU  - {author}")
+    if payload.get("journal_title"):
+        lines.append(f"JO  - {payload['journal_title']}")
+    if payload.get("year"):
+        lines.append(f"PY  - {payload['year']}")
+    if payload.get("date_slash"):
+        lines.append(f"DA  - {payload['date_slash']}")
+    if payload.get("doi"):
+        lines.append(f"DO  - {payload['doi']}")
+    if payload.get("url"):
+        lines.append(f"UR  - {payload['url']}")
+    lines.append("ER  -")
+    return "\n".join(lines) + "\n"
+
+
+def _get_published_article_for_citation(article_id: UUID) -> dict:
+    try:
+        ms_resp = (
+            supabase_admin.table("manuscripts")
+            .select("*")
+            .eq("id", str(article_id))
+            .eq("status", "published")
+            .single()
+            .execute()
+        )
+        manuscript = getattr(ms_resp, "data", None) or {}
+    except Exception as e:
+        if _is_postgrest_single_no_rows_error(str(e)):
+            raise HTTPException(status_code=404, detail="Article not found")
+        raise
+
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    journal_id = manuscript.get("journal_id")
+    manuscript["journals"] = None
+    if journal_id:
+        try:
+            jr_resp = (
+                supabase_admin.table("journals")
+                .select("id,title,slug,issn")
+                .eq("id", str(journal_id))
+                .single()
+                .execute()
+            )
+            manuscript["journals"] = getattr(jr_resp, "data", None) or None
+        except Exception:
+            manuscript["journals"] = None
+
+    return manuscript
 
 
 @router.get("/manuscripts/{manuscript_id}/pdf-signed")
@@ -645,10 +827,18 @@ async def upload_manuscript(
     manuscript_id = uuid4()
     temp_path = None
     start = time.monotonic()
+    trace_id = str(manuscript_id)[:8]
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             temp_path = tmp.name
             shutil.copyfileobj(file.file, tmp)
+
+        file_size_bytes = os.path.getsize(temp_path) if temp_path and os.path.exists(temp_path) else 0
+        file_size_mb = file_size_bytes / (1024 * 1024) if file_size_bytes > 0 else 0.0
+        print(
+            f"[UploadManuscript:{trace_id}] start filename={file.filename} size_mb={file_size_mb:.2f}",
+            flush=True,
+        )
 
         try:
             timeout_sec = float(os.environ.get("PDF_PARSE_TIMEOUT_SEC", "8"))
@@ -666,12 +856,28 @@ async def upload_manuscript(
             max_chars = 20000
 
         try:
+            layout_skip_file_mb = int(os.environ.get("PDF_LAYOUT_SKIP_FILE_MB", "8"))
+        except Exception:
+            layout_skip_file_mb = 8
+        layout_max_pages_override = 0 if (layout_skip_file_mb > 0 and file_size_mb > layout_skip_file_mb) else None
+
+        try:
             text, layout_lines = await asyncio.wait_for(
-                asyncio.to_thread(extract_text_and_layout_from_pdf, temp_path, max_pages=max_pages, max_chars=max_chars),
+                asyncio.to_thread(
+                    extract_text_and_layout_from_pdf,
+                    temp_path,
+                    max_pages=max_pages,
+                    max_chars=max_chars,
+                    layout_max_pages=layout_max_pages_override,
+                ),
                 timeout=timeout_sec,
             )
         except asyncio.TimeoutError:
             # 超时直接降级：允许用户手动填写 title/abstract
+            print(
+                f"[UploadManuscript:{trace_id}] timeout in pdf extraction (> {timeout_sec:.1f}s), fallback manual fill",
+                flush=True,
+            )
             return {
                 "success": True,
                 "id": manuscript_id,
@@ -681,12 +887,29 @@ async def upload_manuscript(
 
         # 元数据提取：本地解析（无 HTTP），仅用于前端预填
         meta_start = time.monotonic()
-        metadata = await parse_manuscript_metadata(text or "", layout_lines=layout_lines or [])
+        try:
+            meta_timeout_sec = float(os.environ.get("PDF_METADATA_TIMEOUT_SEC", "4"))
+        except Exception:
+            meta_timeout_sec = 4.0
+
+        try:
+            metadata = await asyncio.wait_for(
+                parse_manuscript_metadata(text or "", layout_lines=layout_lines or []),
+                timeout=meta_timeout_sec,
+            )
+        except asyncio.TimeoutError:
+            print(
+                f"[UploadManuscript:{trace_id}] timeout in metadata parsing (> {meta_timeout_sec:.1f}s), fallback manual fill",
+                flush=True,
+            )
+            metadata = {"title": "", "abstract": "", "authors": []}
         meta_cost = time.monotonic() - meta_start
         total_cost = time.monotonic() - start
         print(
-            f"[UploadManuscript] parsed: pdf_timeout={timeout_sec:.1f}s max_pages={max_pages} "
-            f"max_chars={max_chars} meta_time={meta_cost:.2f}s total={total_cost:.2f}s"
+            f"[UploadManuscript:{trace_id}] parsed: pdf_timeout={timeout_sec:.1f}s max_pages={max_pages} "
+            f"max_chars={max_chars} layout_override={layout_max_pages_override} meta_time={meta_cost:.2f}s total={total_cost:.2f}s"
+            f" text_len={len(text or '')} layout_lines={len(layout_lines or [])}",
+            flush=True,
         )
 
         # 该接口仅用于前端预填元数据；查重属于“可选项”，且当前实现为 Mock，默认关闭以提速。
@@ -695,6 +918,7 @@ async def upload_manuscript(
             background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
         return {"success": True, "id": manuscript_id, "data": metadata}
     except Exception as e:
+        print(f"[UploadManuscript:{trace_id}] failed: {e}", flush=True)
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": str(e), "data": {"title": "", "abstract": "", "authors": []}},
@@ -1143,6 +1367,44 @@ async def get_article_detail(id: UUID):
     except Exception as e:
         print(f"文章详情查询失败: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch article detail")
+
+
+@router.get("/manuscripts/articles/{id}/citation.bib")
+async def download_article_citation_bib(id: UUID):
+    """
+    导出文章 BibTeX 引用（仅 published）。
+    """
+    article = _get_published_article_for_citation(id)
+    payload = _build_citation_payload(article)
+    content = _to_bibtex(payload)
+    filename = f"scholarflow-{payload['article_id'] or id}.bib"
+    return PlainTextResponse(
+        content=content,
+        media_type="application/x-bibtex; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/manuscripts/articles/{id}/citation.ris")
+async def download_article_citation_ris(id: UUID):
+    """
+    导出文章 RIS 引用（仅 published）。
+    """
+    article = _get_published_article_for_citation(id)
+    payload = _build_citation_payload(article)
+    content = _to_ris(payload)
+    filename = f"scholarflow-{payload['article_id'] or id}.ris"
+    return PlainTextResponse(
+        content=content,
+        media_type="application/x-research-info-systems; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/manuscripts/articles/{id}/pdf-signed")

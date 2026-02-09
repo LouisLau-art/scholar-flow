@@ -9,6 +9,36 @@ import { authService } from '@/services/auth'
 import { supabase } from '@/lib/supabase'
 import LoginPrompt from '@/components/LoginPrompt'
 
+const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
+const METADATA_PARSE_TIMEOUT_MS = 25_000
+const DIRECT_API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '')
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label} timeout after ${Math.round(ms / 1000)}s`))
+    }, ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
+function getUploadParseEndpoints(): string[] {
+  const candidates = [
+    DIRECT_API_ORIGIN ? `${DIRECT_API_ORIGIN}/api/v1/manuscripts/upload` : '',
+    '/api/v1/manuscripts/upload',
+  ].filter(Boolean)
+  return Array.from(new Set(candidates))
+}
+
 export default function SubmissionForm() {
   const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
@@ -84,36 +114,73 @@ export default function SubmissionForm() {
 
     try {
       const uploadPath = `${user.id}/${crypto.randomUUID()}.pdf`
-      const { error: uploadError } = await supabase.storage
-        .from('manuscripts')
-        .upload(uploadPath, selectedFile, {
-          contentType: 'application/pdf',
-          upsert: false,
-        })
+      const { error: uploadError } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: 'application/pdf',
+            upsert: false,
+          }),
+        STORAGE_UPLOAD_TIMEOUT_MS,
+        'Storage upload'
+      )
       if (uploadError) {
         throw new Error(`Upload failed: ${uploadError.message}`)
       }
       setUploadedPath(uploadPath)
+      toast.loading('File uploaded. Extracting metadata...', { id: toastId })
 
       const formData = new FormData()
       formData.append('file', selectedFile)
 
-      const controller = new AbortController()
-      const timeoutMs = 20000
-      const timer = window.setTimeout(() => controller.abort(), timeoutMs)
-
-      const response = await fetch('/api/v1/manuscripts/upload', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      }).finally(() => window.clearTimeout(timer))
-
-      const raw = await response.text()
+      let response: Response | null = null
+      let raw = ''
       let result: any = null
-      try {
-        result = raw ? JSON.parse(raw) : null
-      } catch {
-        result = null
+      let lastError: Error | null = null
+
+      const parseEndpoints = getUploadParseEndpoints()
+      for (let idx = 0; idx < parseEndpoints.length; idx += 1) {
+        const endpoint = parseEndpoints[idx]
+        const controller = new AbortController()
+        const timer = window.setTimeout(() => controller.abort(), METADATA_PARSE_TIMEOUT_MS)
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+          })
+          raw = await response.text()
+          try {
+            result = raw ? JSON.parse(raw) : null
+          } catch {
+            result = null
+          }
+
+          // 非 5xx（例如 400 文件格式错误）直接返回给用户，不再切换端点重试。
+          if (!response.ok && response.status < 500) {
+            break
+          }
+          if (response.ok) {
+            break
+          }
+          lastError = new Error(
+            result?.message ||
+              result?.detail ||
+              `Metadata parsing failed (${response.status})`
+          )
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error('Metadata parsing failed')
+        } finally {
+          window.clearTimeout(timer)
+        }
+
+        if (idx < parseEndpoints.length - 1) {
+          console.warn(`[Submission] parse endpoint failed, fallback to next: ${endpoint}`)
+        }
+      }
+
+      if (!response) {
+        throw (lastError || new Error('AI parsing failed'))
       }
 
       if (!response.ok) {
@@ -143,7 +210,7 @@ export default function SubmissionForm() {
       console.error('Parsing failed:', error)
       const message =
         error instanceof DOMException && error.name === 'AbortError'
-          ? '解析超时（>20s），已跳过 AI 预填，请手动填写标题与摘要。'
+          ? '解析超时（>25s），已跳过 AI 预填，请手动填写标题与摘要。'
           : error instanceof Error
             ? error.message
             : "AI parsing failed"
