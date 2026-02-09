@@ -54,12 +54,15 @@
 
 ## P1（P0 后立即推进）
 
-- [ ] **GAP-P1-01：Finance 页面接入真实 `invoices`（替换演示数据）**
-  - 现状：`/finance` 为 demo，不与云端同步。
+- [x] **GAP-P1-01：Finance 页面接入真实 `invoices`（替换演示数据）**
+  - 结果：已完成 Feature 046（Finance Real Invoices Sync），`/finance` 已切换为真实账单数据源。
   - 完成标准：
-    - [ ] 列表真实读取 `invoices`
-    - [ ] 支持筛选（unpaid/paid/waived）与对账导出
-    - [ ] 与 `/editor/manuscript/[id]` 的 Mark Paid 行为一致
+    - [x] 列表真实读取 `invoices`
+    - [x] 支持筛选（unpaid/paid/waived）与对账导出
+    - [x] 与 `/editor/manuscript/[id]` 的 Mark Paid 行为一致
+  - 验收记录：
+    - [x] Backend：`8 passed`（contract + unit + integration）
+    - [x] Frontend：Vitest `5 passed` + Playwright `1 passed` + lint 通过（仅既有 warning）
 
 - [ ] **GAP-P1-02：Portal 学术工具箱补齐（Feature 034）**
   - 现状：文章页有基础引用按钮，但无 BibTeX/RIS 下载与专题索引闭环。
@@ -98,11 +101,11 @@
 ### Iteration 2（下周，先把“编辑团队提效”）
 
 - [x] 完成 GAP-P0-03（@mentions + 内部任务 + SLA 预警）
-- [ ] 启动 GAP-P1-01（Finance 真数据接入）
+- [x] 完成 GAP-P1-01（Finance 真数据接入）
 
 ---
 
 ## 4. 立即下一步（单一建议）
 
-**建议立刻开工：`GAP-P1-01`（Finance 真数据接入）**。  
-原因：当前 P0 三项已完成，下一优先级瓶颈转为财务数据链路（`/finance` 仍为 demo）。
+**建议立刻开工：`GAP-P1-02`（Portal 学术工具箱补齐）**。  
+原因：Finance 真数据链路已落地，下一优先级缺口转为 Portal 文章工具能力（BibTeX/RIS + Subject Collections + Scholar/SEO）。

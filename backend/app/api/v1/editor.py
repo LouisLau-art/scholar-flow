@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -17,12 +18,13 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 from app.services.reviewer_service import ReviewerService
-from app.services.editor_service import EditorService, ProcessListFilters
+from app.services.editor_service import EditorService, ProcessListFilters, FinanceListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
 from app.models.production_workspace import CreateProductionCycleRequest
 from app.services.production_workspace_service import ProductionWorkspaceService
 from typing import Literal
+from io import BytesIO
 from uuid import uuid4
 from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
 from app.services.internal_collaboration_service import (
@@ -88,6 +90,12 @@ class AcademicCheckRequest(BaseModel):
     decision: Literal["review", "decision_phase"]
     comment: str | None = Field(default=None, max_length=2000)
     idempotency_key: str | None = Field(default=None, max_length=64)
+
+
+class ConfirmInvoicePaidPayload(BaseModel):
+    manuscript_id: str
+    expected_status: Literal["unpaid", "paid", "waived"] | None = None
+    source: Literal["editor_pipeline", "finance_page", "unknown"] = "unknown"
 
 
 def _get_signed_url(bucket: str, file_path: str, *, expires_in: int = 60 * 10) -> str | None:
@@ -430,6 +438,81 @@ async def get_manuscripts_process(
     except Exception as e:
         print(f"[Process] query failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch manuscripts process")
+
+
+@router.get("/finance/invoices")
+async def get_finance_invoices(
+    status: Literal["all", "unpaid", "paid", "waived"] = Query("all", description="状态筛选"),
+    q: str | None = Query(None, max_length=100, description="关键词（invoice number / manuscript title）"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sort_by: Literal["updated_at", "amount", "status"] = Query("updated_at"),
+    sort_order: Literal["asc", "desc"] = Query("desc"),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 046: Finance 页面真实账单列表（内部角色）。
+    """
+    try:
+        result = EditorService().list_finance_invoices(
+            filters=FinanceListFilters(
+                status=status,
+                q=q,
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+        )
+        return {"success": True, "data": result["rows"], "meta": result["meta"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Finance] list invoices failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch finance invoices")
+
+
+@router.get("/finance/invoices/export")
+async def export_finance_invoices_csv(
+    status: Literal["all", "unpaid", "paid", "waived"] = Query("all", description="状态筛选"),
+    q: str | None = Query(None, max_length=100, description="关键词（invoice number / manuscript title）"),
+    sort_by: Literal["updated_at", "amount", "status"] = Query("updated_at"),
+    sort_order: Literal["asc", "desc"] = Query("desc"),
+    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+):
+    """
+    Feature 046: 导出 Finance 当前筛选结果（CSV）。
+    """
+    try:
+        result = EditorService().export_finance_invoices_csv(
+            filters=FinanceListFilters(
+                status=status,
+                q=q,
+                page=1,
+                page_size=100,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+        )
+        csv_text = result.get("csv_text", "")
+        snapshot_at = str(result.get("snapshot_at") or datetime.now(timezone.utc).isoformat())
+        empty = bool(result.get("empty"))
+        filename = f"finance_invoices_{status}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.csv"
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Export-Snapshot-At": snapshot_at,
+            "X-Export-Empty": "1" if empty else "0",
+        }
+        return StreamingResponse(
+            BytesIO(csv_text.encode("utf-8")),
+            media_type="text/csv",
+            headers=headers,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Finance] export invoices failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to export finance invoices")
 
 
 # --- Feature 038: Pre-check Role Workflow Endpoints ---
@@ -2385,7 +2468,7 @@ async def publish_manuscript_dev(
 async def confirm_invoice_paid(
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["editor", "admin"])),
-    manuscript_id: str = Body(..., embed=True),
+    payload: ConfirmInvoicePaidPayload = Body(...),
 ):
     """
     MVP：财务确认到账（把 invoices.status 置为 paid）。
@@ -2395,9 +2478,16 @@ async def confirm_invoice_paid(
     - Publish 时会做 Payment Gate 检查：amount>0 且 status!=paid -> 禁止发布。
     """
     try:
+        manuscript_id = str(payload.manuscript_id or "").strip()
+        if not manuscript_id:
+            raise HTTPException(status_code=422, detail="manuscript_id is required")
+
+        expected_status = str(payload.expected_status or "").strip().lower() or None
+        source = str(payload.source or "unknown").strip().lower() or "unknown"
+
         inv_resp = (
             supabase_admin.table("invoices")
-            .select("id, amount, status")
+            .select("id, amount, status, confirmed_at")
             .eq("manuscript_id", manuscript_id)
             .limit(1)
             .execute()
@@ -2407,13 +2497,65 @@ async def confirm_invoice_paid(
             raise HTTPException(status_code=404, detail="Invoice not found")
         inv = inv_rows[0]
 
-        supabase_admin.table("invoices").update(
-            {"status": "paid", "confirmed_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", inv["id"]).execute()
+        previous_status = str(inv.get("status") or "").strip().lower() or "unpaid"
+        if expected_status and previous_status != expected_status:
+            raise HTTPException(status_code=409, detail="Invoice status changed by another operation")
+
+        if previous_status == "paid":
+            confirmed_at = str(inv.get("confirmed_at") or datetime.now(timezone.utc).isoformat())
+            return {
+                "success": True,
+                "data": {
+                    "invoice_id": inv["id"],
+                    "manuscript_id": manuscript_id,
+                    "previous_status": previous_status,
+                    "current_status": "paid",
+                    "confirmed_at": confirmed_at,
+                    "already_paid": True,
+                    "conflict": False,
+                    "source": source,
+                },
+            }
+
+        confirmed_at = datetime.now(timezone.utc).isoformat()
+        update_query = supabase_admin.table("invoices").update(
+            {"status": "paid", "confirmed_at": confirmed_at}
+        ).eq("id", inv["id"])
+        if expected_status:
+            update_query = update_query.eq("status", expected_status)
+        upd_resp = update_query.execute()
+        upd_rows = getattr(upd_resp, "data", None) or []
+        if expected_status and not upd_rows:
+            raise HTTPException(status_code=409, detail="Invoice status changed by another operation")
+
+        EditorService()._safe_insert_transition_log(
+            manuscript_id=manuscript_id,
+            from_status=f"invoice:{previous_status}",
+            to_status="invoice:paid",
+            changed_by=str(current_user.get("id") or ""),
+            comment="finance invoice confirmed paid",
+            payload={
+                "action": "finance_invoice_confirm_paid",
+                "invoice_id": str(inv.get("id") or ""),
+                "before_status": previous_status,
+                "after_status": "paid",
+                "source": source,
+            },
+            created_at=confirmed_at,
+        )
 
         return {
             "success": True,
-            "data": {"invoice_id": inv["id"], "manuscript_id": manuscript_id, "status": "paid"},
+            "data": {
+                "invoice_id": inv["id"],
+                "manuscript_id": manuscript_id,
+                "previous_status": previous_status,
+                "current_status": "paid",
+                "confirmed_at": confirmed_at,
+                "already_paid": False,
+                "conflict": False,
+                "source": source,
+            },
         }
     except HTTPException:
         raise

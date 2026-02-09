@@ -166,7 +166,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 4. 定义受保护路径
-  const protectedPaths = ['/dashboard', '/admin', '/submit', '/editor', '/proofreading']
+  const protectedPaths = ['/dashboard', '/admin', '/submit', '/editor', '/proofreading', '/finance']
   const isProtected = protectedPaths.some(path => 
     req.nextUrl.pathname.startsWith(path)
   )
@@ -207,6 +207,7 @@ export const config = {
     '/submit/:path*',
     '/editor/:path*',
     '/proofreading/:path*',
+    '/finance/:path*',
     '/favicon.ico',
     '/review/invite',
     // 也可以匹配所有，然后在逻辑里排除，但显式匹配受保护路径性能更好
