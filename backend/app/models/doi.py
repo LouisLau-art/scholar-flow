@@ -26,7 +26,10 @@ class DOITaskType(str, Enum):
 
 class DOIRegistrationBase(BaseModel):
     article_id: UUID
-    doi: Optional[str] = Field(None, pattern=r"^10\.\d{4,9}/[-._;()/:A-Z0-9]+$")
+    doi: Optional[str] = Field(
+        None,
+        pattern=r"(?i)^10\.\d{4,9}/[-._;()/:A-Z0-9]+$",
+    )
     status: DOIRegistrationStatus = DOIRegistrationStatus.PENDING
     attempts: int = 0
     crossref_batch_id: Optional[str] = None

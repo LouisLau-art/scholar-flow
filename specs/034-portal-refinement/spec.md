@@ -79,3 +79,9 @@ As a Visitor, I want to see a "Latest Articles" section on the homepage that dis
 - **SC-001**: Visitors can locate the "Submit Manuscript" button within 3 seconds of landing on the homepage.
 - **SC-002**: 100% of articles displayed in "Latest Articles" have `status='published'`.
 - **SC-003**: The homepage matches the visual structure of reference PDF P1 (professional academic theme).
+
+## OJS/Janeway 对标映射
+
+- **Portal 入口分层**：对齐 OJS/Janeway 的公开门户信息架构，保持 `Journals / Topics / Submit / About` 明确分区，避免“编辑后台入口”混入公开导航。
+- **Latest Articles 发布约束**：对齐两者“仅公开已发布内容”的基线，禁止 `approved/proofreading` 等中间态出现在公开流。
+- **引用/检索友好**：与 Janeway 的 Scholar 友好实践一致，要求文章卡片与详情在公开页保持 DOI/发布日期语义一致，避免元数据割裂。

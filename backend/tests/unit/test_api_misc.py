@@ -47,8 +47,14 @@ async def test_record_download_exception(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_plagiarism_download_url():
+async def test_plagiarism_download_url(monkeypatch):
     report_id = UUID(int=1)
+    class _FakeSvc:
+        def get_report_by_id(self, _id: str):
+            return {"id": _id, "report_url": f"https://reports.example/{_id}.pdf"}
+        def get_download_url(self, report):
+            return report["report_url"]
+    monkeypatch.setattr(plagiarism_api, "PlagiarismService", _FakeSvc)
 
     result = await plagiarism_api.get_report_download_url(report_id)
 
@@ -56,9 +62,15 @@ async def test_plagiarism_download_url():
 
 
 @pytest.mark.asyncio
-async def test_retry_plagiarism_check_adds_task():
+async def test_retry_plagiarism_check_adds_task(monkeypatch):
     import os
     os.environ["PLAGIARISM_CHECK_ENABLED"] = "1"
+    class _FakeSvc:
+        def get_report_by_manuscript(self, _mid: str):
+            return None
+        def ensure_report(self, manuscript_id: str, *, reset_status: bool = False):
+            return {"manuscript_id": manuscript_id, "status": "pending", "reset": reset_status}
+    monkeypatch.setattr(plagiarism_api, "PlagiarismService", _FakeSvc)
     request = PlagiarismRetryRequest(manuscript_id=UUID(int=2))
     tasks = BackgroundTasks()
 

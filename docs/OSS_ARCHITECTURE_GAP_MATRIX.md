@@ -18,10 +18,10 @@
 | 引用导出 | Janeway/OJS 都支持结构化元数据对外分发 | 已新增 BibTeX/RIS 导出接口 | 已对齐 | 补端到端回归与用户反馈 |
 | Subject Collections | Janeway repo/subject 体系 | 已由 `/api/v1/public/topics` 动态聚合 | MVP 对齐 | 后续引入真实 subject 字段替代关键词推断 |
 | Scholar/SEO 元数据 | Scholar/Crossref 友好 metadata | 已输出 citation tags，并补 `citation_pdf_url` | 基本对齐 | 后续增加自动校验脚本 |
-| DOI / Crossref | OJS/Janeway 均有成熟链路 | 当前仍为占位/部分能力 | 缺口 | `GAP-P2-01` |
-| 查重 | 常见平台为可插拔外部服务 | 默认关闭 | 缺口 | `GAP-P2-02` |
+| DOI / Crossref | OJS/Janeway 均有成熟链路 | 已完成落库+队列+审计+内部 cron 消费 | 已对齐（P2） | 持续做真实凭据回归 |
+| 查重 | 常见平台为可插拔外部服务 | 已完成可配置开关 + 状态留痕 + 失败降级 | 已对齐（P2） | 后续接入真实 provider 与性能基准 |
 
 ## 立即执行序列
 1. [x] 完成 `GAP-P1-04`：邀请策略（冷却期 + due date + 模板）。
 2. [x] 完成 `GAP-P1-05`：角色矩阵与期刊作用域 RBAC（含 `/editor/rbac/context`、前端 capability 显隐、跨刊 403 集成测试、mocked E2E）。
-3. [ ] 进入 `GAP-P1-03`：Analytics 管理视角增强（编辑效率排行 + 阶段耗时 + SLA 预警）。
+3. [x] 完成 `GAP-P2-01/P2-02`：DOI/Crossref 真对接 + 查重能力重启（可配置）。

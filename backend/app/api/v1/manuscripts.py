@@ -20,6 +20,7 @@ from app.core.auth_utils import get_current_user
 from app.core.mail import EmailService
 from app.services.notification_service import NotificationService
 from app.services.revision_service import RevisionService
+from app.services.plagiarism_service import PlagiarismService
 from app.models.revision import RevisionSubmitResponse, VersionHistoryResponse
 from app.core.roles import require_any_role, get_current_profile
 from app.services.owner_binding_service import get_profile_for_owner, validate_internal_owner_id
@@ -915,6 +916,12 @@ async def upload_manuscript(
         # 该接口仅用于前端预填元数据；查重属于“可选项”，且当前实现为 Mock，默认关闭以提速。
         # 如需开启：export PLAGIARISM_CHECK_ENABLED=1
         if _is_truthy_env("PLAGIARISM_CHECK_ENABLED", "0"):
+            try:
+                # 中文注释: 先落一条 pending 报告，便于前端状态轮询与错误追踪。
+                PlagiarismService().ensure_report(str(manuscript_id), reset_status=False)
+            except Exception as e:
+                # 不阻断投稿主链路，查重失败按“降级”处理。
+                print(f"[UploadManuscript:{trace_id}] init plagiarism report failed (ignored): {e}", flush=True)
             background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
         return {"success": True, "id": manuscript_id, "data": metadata}
     except Exception as e:

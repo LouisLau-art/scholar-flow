@@ -109,13 +109,20 @@
 
 ## P2（中期规划）
 
-- [ ] **GAP-P2-01：DOI/Crossref 真对接**
-  - 现状：仍以 mock/占位为主。
-  - 完成标准：注册、重试、回执状态可追踪。
+- [x] **GAP-P2-01：DOI/Crossref 真对接**
+  - 结果：已完成真实注册链路收敛（`doi_registrations` + `doi_tasks` + `doi_audit_log`），支持任务消费、失败重试、审计追踪。
+  - 完成标准：
+    - [x] 注册（`POST /api/v1/doi/register`）可落库并入队
+    - [x] 重试（`POST /api/v1/doi/{article_id}/retry`）幂等入队
+    - [x] 回执状态可追踪（`GET /api/v1/doi/{article_id}` + `GET /api/v1/doi/tasks*` + `doi_audit_log`）
+    - [x] 新增内部消费入口 `POST /api/v1/internal/cron/doi-tasks`（`ADMIN_API_KEY`）
 
-- [ ] **GAP-P2-02：查重能力重启（可配置）**
-  - 现状：默认关闭 `PLAGIARISM_CHECK_ENABLED=0`。
-  - 完成标准：开关、失败降级、报告留痕完整。
+- [x] **GAP-P2-02：查重能力重启（可配置）**
+  - 结果：已完成查重异步链路重启（状态查询 + 手动重试 + 报告下载 + 高相似度预警留痕）。
+  - 完成标准：
+    - [x] 开关保留并可配置（`PLAGIARISM_CHECK_ENABLED` + 阈值/轮询参数）
+    - [x] 失败降级（不阻断投稿主链路，落库 `failed` + `error_log`）
+    - [x] 报告留痕完整（`plagiarism_reports` 全生命周期状态 + 高相似度审计/通知）
 
 ---
 
@@ -142,8 +149,8 @@
 
 ## 4. 立即下一步（单一建议）
 
-**当前建议：进入 `GAP-P2-01`（DOI/Crossref 真对接）**。  
-P1 缺口已全部收敛，下一步建议推进 DOI 注册、重试队列与回执状态追踪闭环。
+**当前建议：进入 UAT 回归与上线验收**。  
+P0/P1/P2 清单已收敛，下一步建议按角色手册执行端到端冒烟并聚焦线上环境差异（迁移、配置、性能）。
 
 ---
 
@@ -168,4 +175,4 @@ P1 缺口已全部收敛，下一步建议推进 DOI 注册、重试队列与回
 - [x] 已验证可本地参考 Janeway 仓库结构（`/tmp/janeway`，Django 架构，含 workflow/role 文档）。
 - [x] 借鉴原则：抄“能力模型与流程颗粒度”，不抄“语言实现细节与源代码”。
 - [x] 输出多标杆对标矩阵：`docs/OSS_ARCHITECTURE_GAP_MATRIX.md`（逐项映射到 ScholarFlow 的 API/页面/测试）。
-- [ ] 将 OJS + Janeway 对标结果并入后续 spec（优先并入 GAP-P1-02/04/05），保证每个缺口有可验收标准。
+- [x] 已将 OJS + Janeway 对标结果并入相关 spec（`specs/034-portal-refinement/spec.md`、`specs/037-reviewer-invite-response/spec.md`、`specs/048-role-matrix-journal-scope-rbac/spec.md`），确保缺口项可验收。

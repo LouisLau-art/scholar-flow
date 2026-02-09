@@ -145,6 +145,22 @@ async def test_plagiarism_worker_success(monkeypatch, caplog):
     async def fast_sleep(*_args, **_kwargs):
         return None
 
+    class DummyService:
+        def ensure_report(self, *_args, **_kwargs):
+            return {}
+
+        def mark_running(self, *_args, **_kwargs):
+            return {}
+
+        def mark_completed(self, *_args, **_kwargs):
+            return {}
+
+        def record_high_similarity_alert(self, *_args, **_kwargs):
+            return None
+
+        def mark_failed(self, *_args, **_kwargs):
+            return {}
+
     class DummyClient:
         async def submit_manuscript(self, _path):
             return "ext-id"
@@ -152,6 +168,7 @@ async def test_plagiarism_worker_success(monkeypatch, caplog):
         async def get_check_status(self, _external_id):
             return {"status": "completed", "similarity_score": 0.2}
 
+    monkeypatch.setattr(plagiarism_worker, "PlagiarismService", DummyService)
     monkeypatch.setattr(plagiarism_worker, "CrossrefClient", DummyClient)
     monkeypatch.setattr(plagiarism_worker.asyncio, "sleep", fast_sleep)
 
@@ -166,6 +183,22 @@ async def test_plagiarism_worker_submit_failure(monkeypatch, caplog):
     async def fast_sleep(*_args, **_kwargs):
         return None
 
+    class DummyService:
+        def ensure_report(self, *_args, **_kwargs):
+            return {}
+
+        def mark_running(self, *_args, **_kwargs):
+            return {}
+
+        def mark_completed(self, *_args, **_kwargs):
+            return {}
+
+        def record_high_similarity_alert(self, *_args, **_kwargs):
+            return None
+
+        def mark_failed(self, *_args, **_kwargs):
+            return {}
+
     class DummyClient:
         async def submit_manuscript(self, _path):
             return None
@@ -173,6 +206,7 @@ async def test_plagiarism_worker_submit_failure(monkeypatch, caplog):
         async def get_check_status(self, _external_id):
             return {"status": "completed", "similarity_score": 0.2}
 
+    monkeypatch.setattr(plagiarism_worker, "PlagiarismService", DummyService)
     monkeypatch.setattr(plagiarism_worker, "CrossrefClient", DummyClient)
     monkeypatch.setattr(plagiarism_worker.asyncio, "sleep", fast_sleep)
 
@@ -187,6 +221,22 @@ async def test_plagiarism_worker_timeout(monkeypatch, caplog):
     async def fast_sleep(*_args, **_kwargs):
         return None
 
+    class DummyService:
+        def ensure_report(self, *_args, **_kwargs):
+            return {}
+
+        def mark_running(self, *_args, **_kwargs):
+            return {}
+
+        def mark_completed(self, *_args, **_kwargs):
+            return {}
+
+        def record_high_similarity_alert(self, *_args, **_kwargs):
+            return None
+
+        def mark_failed(self, *_args, **_kwargs):
+            return {}
+
     class DummyClient:
         async def submit_manuscript(self, _path):
             return "ext-id"
@@ -194,6 +244,7 @@ async def test_plagiarism_worker_timeout(monkeypatch, caplog):
         async def get_check_status(self, _external_id):
             return {"status": "running", "similarity_score": 0.2}
 
+    monkeypatch.setattr(plagiarism_worker, "PlagiarismService", DummyService)
     monkeypatch.setattr(plagiarism_worker, "CrossrefClient", DummyClient)
     monkeypatch.setattr(plagiarism_worker.asyncio, "sleep", fast_sleep)
 

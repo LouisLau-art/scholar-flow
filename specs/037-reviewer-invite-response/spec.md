@@ -122,3 +122,9 @@ As a Reviewer, I should never end up in a confusing or broken state if I click t
 - **SC-002**: 95%+ of Accept actions result in a valid due date stored within the allowed window (no invalid dates persisted).
 - **SC-003**: Editors can see each reviewer’s current invitation state and timeline within 5 seconds of page load (p95) during UAT.
 - **SC-004**: Reduce duplicate reviewer assignment incidents (same reviewer counted twice for the same manuscript) to near zero in UAT.
+
+## OJS/Janeway 对标映射
+
+- **邀请生命周期时间戳**：对齐 Janeway/OJS 的 invited/opened/accepted/declined/submitted 全链路记录，确保编辑可回放邀请历史。
+- **接受窗口与到期治理**：借鉴 Janeway 的 due date 操作习惯，明确“可选日期窗口 + 越界拦截 + 逾期可见性”。
+- **幂等与重复点击安全**：对齐 OJS 在邀请链接反复打开场景下的稳态行为，确保重复 Accept/Decline 不造成脏数据或双计数。

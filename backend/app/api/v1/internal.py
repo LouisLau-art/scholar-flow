@@ -11,6 +11,7 @@ from app.models.release_validation import (
     RegressionRequest,
 )
 from app.services.release_validation_service import ReleaseValidationService
+from app.services.doi_service import DOIService
 
 router = APIRouter(prefix="/internal", tags=["Internal"])
 
@@ -23,6 +24,21 @@ async def chase_reviews(_admin: None = Depends(require_admin_key)):
     scheduler = ChaseScheduler()
     result = scheduler.run()
     return {"success": True, **result}
+
+
+@router.post("/cron/doi-tasks")
+async def run_doi_tasks(
+    limit: int = Query(default=5, ge=1, le=50),
+    _admin: None = Depends(require_admin_key),
+):
+    """
+    触发 DOI 任务消费（内部接口）。
+
+    中文注释:
+    - 用于 Hugging Face / CI cron 定时调用，避免单独常驻 worker 进程。
+    """
+    result = await DOIService().process_due_tasks(limit=limit)
+    return {"success": True, "data": result}
 
 
 @router.get("/sentry/test-error")

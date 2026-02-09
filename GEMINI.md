@@ -275,6 +275,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **投稿上传超时策略（2026-02-09）**：`frontend/src/components/SubmissionForm.tsx` 对 Storage 上传增加 90s 超时、对元数据解析增加 25s 超时；解析请求优先直连 `NEXT_PUBLIC_API_URL`（HF Space），失败再回退 `/api/v1/manuscripts/upload` rewrite，降低 Vercel 代理链路卡住概率。
 - **PDF 本地解析降级开关（2026-02-09）**：后端 `POST /api/v1/manuscripts/upload` 支持按文件体积跳过版面提取：`PDF_LAYOUT_SKIP_FILE_MB`（默认 `8`，超过后 `layout_max_pages=0`）；元数据提取增加 `PDF_METADATA_TIMEOUT_SEC`（默认 `4`）超时降级为手填，避免长时间转圈。
 - **HF 日志可见性（2026-02-09）**：Docker 启用 `PYTHONUNBUFFERED=1` + `uvicorn --access-log --log-level info`，上传链路新增 trace 日志（`[UploadManuscript:<id>]`），便于在 Space Logs 定位卡点。
+- **GAP-P2-01（DOI/Crossref 真对接）迁移与配置**：云端需执行 `supabase/migrations/20260210193000_doi_registration_manuscript_fk.sql`（修复 `doi_registrations.article_id` 到 `manuscripts` 的兼容约束 + 任务索引）；后端需配置 `CROSSREF_DEPOSITOR_EMAIL` / `CROSSREF_DEPOSITOR_PASSWORD` / `CROSSREF_DOI_PREFIX` / `CROSSREF_API_URL`，并通过 `POST /api/v1/internal/cron/doi-tasks`（`ADMIN_API_KEY`）消费队列。
+- **GAP-P2-02（查重能力重启）开关约定**：默认仍可保持关闭（`PLAGIARISM_CHECK_ENABLED=0`）；启用时支持 `PLAGIARISM_SIMILARITY_THRESHOLD`、`PLAGIARISM_POLL_MAX_ATTEMPTS`、`PLAGIARISM_POLL_INTERVAL_SEC`、`PLAGIARISM_SUBMIT_DELAY_SEC` 调优。状态查询/重试/下载统一走 `/api/v1/plagiarism/status/{manuscript_id}`、`/api/v1/plagiarism/retry`、`/api/v1/plagiarism/report/{report_id}/download`。
 - **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
@@ -301,6 +303,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **GAP-P2-01（DOI/Crossref 真对接）**：重构 `DOIService` 为真实落库链路（`doi_registrations` + `doi_tasks` + `doi_audit_log`），补齐注册/重试/任务列表 API 与 `POST /api/v1/internal/cron/doi-tasks` 队列消费入口；`register_doi` 现已执行 Crossref XML 生成、提交回执解析、状态更新与审计落库。
+- **GAP-P2-02（查重能力重启）**：新增 `PlagiarismService`，实现 `plagiarism_reports` 全生命周期落库（pending/running/completed/failed）、高相似度预警审计与内部通知；补齐 `/api/v1/plagiarism/status/{manuscript_id}` 状态查询、`/retry` 幂等重试、`/report/{id}/download` 下载链路，并在投稿上传流程中先初始化 pending 报告再异步执行 Worker。
 - **投稿上传卡住排障（Upload/AI Parse）**：修复作者端“Uploading and analyzing manuscript...”长时间转圈：前端增加双阶段超时（Storage 90s + Parse 25s）与直连 HF 优先策略；后端对大 PDF 自动跳过 layout 并为 metadata 提取加超时降级；同时补齐上传全链路 trace 日志，便于 HF 线上定位。
 - **GAP-P1-03（Analytics 管理视角增强）**：新增 `GET /api/v1/analytics/management`，补齐管理下钻三件套：编辑效率排行（处理量/平均首次决定耗时）、阶段耗时分解（pre_check/under_review/decision/production）、超 SLA 稿件预警（逾期 internal tasks 聚合）；前端 `/editor/analytics` 新增管理洞察区块，后端补齐 RBAC（ME/EIC/Admin）+ journal-scope 裁剪。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成整体验收：新增 `GET /api/v1/editor/rbac/context`、服务层/路由层双重动作门禁、journal-scope 隔离（跨刊读写 403）、first/final decision 语义分离、以及 APC/Owner/legacy-final 的统一审计 payload（before/after/reason/source）；前端完成 capability 显隐与 `rbac-journal-scope.spec.ts` mocked E2E 回归。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
