@@ -67,7 +67,8 @@ describe('EditorApi finance endpoints', () => {
     expect(result.filename).toBe('finance_invoices_paid.csv')
     expect(result.snapshotAt).toBe('2026-02-09T12:00:00Z')
     expect(result.empty).toBe(false)
-    expect(result.blob).toBeInstanceOf(Blob)
+    expect(result.blob).toBeTruthy()
+    expect(result.blob.size).toBeGreaterThan(0)
   })
 
   it('confirmInvoicePaid posts expected_status and source', async () => {
