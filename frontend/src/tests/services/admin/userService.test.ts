@@ -108,13 +108,13 @@ describe('adminUserService', () => {
         json: async () => ({ id: '1', roles: ['admin'] }),
       });
 
-      await adminUserService.updateUserRole('1', { role: 'admin' });
+      await adminUserService.updateUserRole('1', { new_roles: ['admin', 'editor'], reason: 'Role matrix alignment' });
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/admin/users/1/role',
         expect.objectContaining({
           method: 'PUT',
-          body: JSON.stringify({ role: 'admin' }),
+          body: JSON.stringify({ new_roles: ['admin', 'editor'], reason: 'Role matrix alignment' }),
         })
       );
     });
@@ -125,7 +125,9 @@ describe('adminUserService', () => {
         json: async () => ({ detail: 'Update failed' }),
       });
 
-      await expect(adminUserService.updateUserRole('1', { role: 'admin' })).rejects.toThrow('Update failed');
+      await expect(
+        adminUserService.updateUserRole('1', { new_roles: ['admin'], reason: 'Valid reason text' })
+      ).rejects.toThrow('Update failed');
     });
   });
 

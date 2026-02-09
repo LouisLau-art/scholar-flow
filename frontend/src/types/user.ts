@@ -50,7 +50,8 @@ export interface CreateUserRequest {
 }
 
 export interface UpdateRoleRequest {
-  new_role: UserRole;
+  new_role?: UserRole;
+  new_roles?: UserRole[];
   reason: string;
 }
 

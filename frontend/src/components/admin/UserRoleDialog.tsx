@@ -7,19 +7,30 @@ import { Loader2, AlertTriangle } from 'lucide-react';
 interface UserRoleDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (userId: string, newRole: UserRole, reason: string) => Promise<void>;
+  onConfirm: (userId: string, newRoles: UserRole[], reason: string) => Promise<void>;
   user: User | null;
 }
 
+const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = [
+  { value: 'author', label: 'Author', helper: '投稿与修回' },
+  { value: 'reviewer', label: 'Reviewer', helper: '审稿工作台与意见提交' },
+  { value: 'assistant_editor', label: 'Assistant Editor', helper: 'Technical pre-check' },
+  { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配' },
+  { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: 'Academic pre-check / final decision' },
+  { value: 'editor', label: 'Editor', helper: 'Legacy editor pipeline' },
+  { value: 'admin', label: 'Admin', helper: '全局管理权限' },
+]
+
 export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDialogProps) {
-  const [role, setRole] = useState<UserRole>('author');
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>(['author']);
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && user) {
-      setRole(user.roles[0] || 'author');
+      const roles = (user.roles || []).filter(Boolean) as UserRole[]
+      setSelectedRoles(roles.length > 0 ? roles : ['author'])
       setReason('');
       setError(null);
     }
@@ -29,6 +40,10 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedRoles.length === 0) {
+      setError('Please select at least one role.')
+      return
+    }
     if (reason.trim().length < 10) {
       setError('Reason must be at least 10 characters long.');
       return;
@@ -36,7 +51,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
     setIsSubmitting(true);
     setError(null);
     try {
-      await onConfirm(user.id, role, reason);
+      await onConfirm(user.id, selectedRoles, reason);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update role');
@@ -45,11 +60,20 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
     }
   };
 
+  const toggleRole = (role: UserRole) => {
+    setSelectedRoles((prev) => {
+      if (prev.includes(role)) {
+        return prev.filter((r) => r !== role)
+      }
+      return [...prev, role]
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-background rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-border">
+      <div className="w-full max-w-xl bg-background rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-border">
         <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
-          <h3 className="font-bold text-lg text-foreground">Change User Role</h3>
+          <h3 className="font-bold text-lg text-foreground">Edit User Roles</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -57,13 +81,31 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
             <p className="text-sm text-primary/80"><span className="font-semibold">User:</span> {user.full_name} ({user.email})</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">New Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as UserRole)} className="w-full rounded-md border border-input bg-background py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-              <option value="author">Author</option>
-              <option value="reviewer">Reviewer</option>
-              <option value="editor">Editor</option>
-              <option value="admin">Admin</option>
-            </select>
+            <label className="block text-sm font-medium text-foreground mb-2">Roles (Multi-select)</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {ROLE_OPTIONS.map((role) => {
+                const checked = selectedRoles.includes(role.value)
+                return (
+                  <label
+                    key={role.value}
+                    className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                      checked ? 'border-primary bg-primary/5' : 'border-input'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRole(role.value)}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span>
+                      <span className="block font-medium text-foreground">{role.label}</span>
+                      <span className="block text-xs text-muted-foreground">{role.helper}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Reason <span className="text-destructive">*</span></label>

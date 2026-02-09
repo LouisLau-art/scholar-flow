@@ -4,6 +4,16 @@ from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
 
+ALLOWED_USER_ROLES = {
+    "author",
+    "reviewer",
+    "editor",
+    "managing_editor",
+    "assistant_editor",
+    "editor_in_chief",
+    "admin",
+}
+
 class UserManagementService:
     """
     Service for handling user management operations including:
@@ -133,7 +143,14 @@ class UserManagementService:
 
     # --- T057, T058, T059, T060: Implement role change logic ---
 
-    def update_user_role(self, target_user_id: UUID, new_role: str, reason: str, changed_by: UUID) -> Dict[str, Any]:
+    def update_user_role(
+        self,
+        target_user_id: UUID,
+        new_role: Optional[str],
+        reason: str,
+        changed_by: UUID,
+        new_roles: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         T057: Update user role in user_profiles.
         T058: Record audit log.
@@ -164,20 +181,19 @@ class UserManagementService:
             # It implies we can also change roles back.
             # But let's assume we allow it for now, but logged.
             
-            # Update roles
-            # Logic: We replace the role list with [new_role] OR append?
-            # Spec says "Promote to Editor". Usually roles are exclusive or additive.
-            # UserTable component shows "Roles" (plural).
-            # But the prompt says "Role Promotion... dropdown menu".
-            # Dropdown implies single selection?
-            # "Allow Admin to upgrade... to Editor OR Reviewer".
-            # This implies setting the primary role.
-            # Let's assume we REPLACE the roles list with [new_role] for simplicity,
-            # OR we ensure 'author' is always there?
-            # Let's strictly follow the request: `new_role` is passed.
-            # We will set roles = [new_role].
-            
-            updated_roles = [new_role]
+            requested = new_roles or ([new_role] if new_role else [])
+            updated_roles: List[str] = []
+            seen: set[str] = set()
+            for role in requested:
+                normalized = str(role or "").strip().lower()
+                if not normalized or normalized in seen:
+                    continue
+                if normalized not in ALLOWED_USER_ROLES:
+                    raise ValueError(f"Invalid role: {normalized}")
+                seen.add(normalized)
+                updated_roles.append(normalized)
+            if not updated_roles:
+                raise ValueError("At least one role is required")
             
             # Perform update
             update_resp = self.admin_client.table("user_profiles").update({
@@ -197,7 +213,7 @@ class UserManagementService:
                 user_id=target_user_id,
                 changed_by=changed_by,
                 old_role=old_role_str,
-                new_role=new_role,
+                new_role=", ".join(updated_roles),
                 reason=reason
             )
             

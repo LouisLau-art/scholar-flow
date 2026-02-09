@@ -1,10 +1,19 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 
 # --- Enums & Shared Types ---
 # (User roles are typically strings in Supabase: "author", "editor", "reviewer", "admin")
+ALLOWED_USER_ROLES = {
+    "author",
+    "reviewer",
+    "editor",
+    "managing_editor",
+    "assistant_editor",
+    "editor_in_chief",
+    "admin",
+}
 
 # --- Log Models (T008, T009, T010) ---
 
@@ -92,14 +101,38 @@ class CreateUserRequest(BaseModel):
     """
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(..., pattern="^(editor|reviewer|admin)$")  # 限制只能创建非 Author 角色
+    role: str = Field(..., pattern="^(editor|reviewer|managing_editor|assistant_editor|editor_in_chief|admin)$")
 
 class UpdateRoleRequest(BaseModel):
     """
     T012: 修改用户角色请求
     """
-    new_role: str = Field(..., pattern="^(author|editor|reviewer|admin)$")
+    new_role: Optional[str] = Field(default=None)
+    new_roles: Optional[List[str]] = Field(default=None)
     reason: str = Field(..., min_length=10, description="Reason for role change is mandatory for audit trail")
+
+    @model_validator(mode="after")
+    def validate_role_payload(self):
+        raw_roles = self.new_roles or ([self.new_role] if self.new_role else [])
+        roles = [str(r).strip().lower() for r in raw_roles if str(r).strip()]
+        if not roles:
+            raise ValueError("At least one role is required")
+        invalid = [r for r in roles if r not in ALLOWED_USER_ROLES]
+        if invalid:
+            raise ValueError(f"Invalid roles: {', '.join(sorted(set(invalid)))}")
+        return self
+
+    def resolved_roles(self) -> List[str]:
+        raw_roles = self.new_roles or ([self.new_role] if self.new_role else [])
+        dedup: List[str] = []
+        seen: set[str] = set()
+        for role in raw_roles:
+            normalized = str(role).strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            dedup.append(normalized)
+        return dedup
 
 class InviteReviewerRequest(BaseModel):
     """

@@ -110,10 +110,10 @@ export default function UserManagementPage() {
     setIsRoleDialogOpen(true);
   };
 
-  const handleRoleUpdate = async (userId: string, newRole: UserRole, reason: string) => {
+  const handleRoleUpdate = async (userId: string, newRoles: UserRole[], reason: string) => {
     try {
-      await adminUserService.updateUserRole(userId, { new_role: newRole, reason });
-      toast.success('User role updated successfully');
+      await adminUserService.updateUserRole(userId, { new_roles: newRoles, reason });
+      toast.success('User roles updated successfully');
       fetchUsers(); 
     } catch (error) {
       console.error('Update failed:', error);

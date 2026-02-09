@@ -209,6 +209,7 @@ async def update_user_role(
         return service.update_user_role(
             target_user_id=user_id,
             new_role=request.new_role,
+            new_roles=request.resolved_roles(),
             reason=request.reason,
             changed_by=UUID(current_user["id"])
         )
