@@ -24,13 +24,17 @@ ALTER TABLE public.internal_comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Internal staff can view comments"
   ON public.internal_comments FOR SELECT
   USING (auth.uid() IN (
-    SELECT id FROM public.user_profiles WHERE is_internal_staff = true
+    SELECT id
+    FROM public.user_profiles
+    WHERE coalesce(roles, '{}'::text[]) && ARRAY['admin','editor','assistant_editor','managing_editor','editor_in_chief']::text[]
   ));
 
 CREATE POLICY "Internal staff can insert comments"
   ON public.internal_comments FOR INSERT
   WITH CHECK (auth.uid() IN (
-    SELECT id FROM public.user_profiles WHERE is_internal_staff = true
+    SELECT id
+    FROM public.user_profiles
+    WHERE coalesce(roles, '{}'::text[]) && ARRAY['admin','editor','assistant_editor','managing_editor','editor_in_chief']::text[]
   ));
 
 CREATE POLICY "Staff can update their own comments"
