@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from postgrest.exceptions import APIError
 
 from app.core.roles import get_current_profile
 from main import app
+from .test_utils import insert_manuscript, make_user
 
 
 class _MockResponse:
@@ -115,6 +118,42 @@ def override_profile_role():
 
     yield _set
     app.dependency_overrides.pop(get_current_profile, None)
+
+
+def _require_decision_audit_schema(db) -> None:
+    checks = [
+        ("manuscripts", "id,status,editor_id,invoice_metadata"),
+        ("review_reports", "id,manuscript_id,status"),
+        ("decision_letters", "id,manuscript_id,status,updated_at"),
+        ("status_transition_logs", "id,manuscript_id,payload,created_at"),
+    ]
+    for table, cols in checks:
+        try:
+            db.table(table).select(cols).limit(1).execute()
+        except APIError as e:
+            pytest.skip(
+                f"数据库缺少 RBAC 决策审计测试所需 schema（{table}/{cols}）：{getattr(e, 'message', str(e))}"
+            )
+
+
+def _cleanup_decision_records(db, manuscript_id: str, user_ids: list[str]) -> None:
+    for table, column in (
+        ("notifications", "manuscript_id"),
+        ("status_transition_logs", "manuscript_id"),
+        ("decision_letters", "manuscript_id"),
+        ("review_reports", "manuscript_id"),
+        ("invoices", "manuscript_id"),
+        ("manuscripts", "id"),
+    ):
+        try:
+            db.table(table).delete().eq(column, manuscript_id).execute()
+        except Exception:
+            pass
+    for user_id in user_ids:
+        try:
+            db.table("user_profiles").delete().eq("id", user_id).execute()
+        except Exception:
+            pass
 
 
 @pytest.mark.asyncio
@@ -335,3 +374,265 @@ async def test_invoice_confirm_requires_override_permission(
     )
     assert response.status_code == 403
     assert "invoice:override_apc" in str(response.json().get("detail", ""))
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_first_decision_semantics_keeps_status_and_writes_audit_event(
+    client: AsyncClient,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    set_admin_emails([])
+    _require_decision_audit_schema(supabase_admin_client)
+
+    managing_editor = make_user(email="rbac_first_decision_me@example.com")
+    author = make_user(email="rbac_first_decision_author@example.com")
+    reviewer = make_user(email="rbac_first_decision_reviewer@example.com")
+    manuscript_id = str(uuid4())
+
+    try:
+        supabase_admin_client.table("user_profiles").upsert(
+            {
+                "id": managing_editor.id,
+                "email": managing_editor.email,
+                "roles": ["managing_editor"],
+            }
+        ).execute()
+        insert_manuscript(
+            supabase_admin_client,
+            manuscript_id=manuscript_id,
+            author_id=author.id,
+            status="decision",
+            title="RBAC First Decision Manuscript",
+            file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+        )
+        supabase_admin_client.table("manuscripts").update({"editor_id": managing_editor.id}).eq(
+            "id", manuscript_id
+        ).execute()
+        supabase_admin_client.table("review_reports").insert(
+            {
+                "manuscript_id": manuscript_id,
+                "reviewer_id": reviewer.id,
+                "status": "completed",
+                "content": "Looks good with minor edits.",
+                "score": 4,
+            }
+        ).execute()
+
+        res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/submit-decision",
+            headers={"Authorization": f"Bearer {managing_editor.token}"},
+            json={
+                "content": "First decision suggestion draft",
+                "decision": "minor_revision",
+                "is_final": False,
+                "decision_stage": "first",
+                "attachment_paths": [],
+                "last_updated_at": None,
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body.get("success") is True
+        assert body["data"]["status"] == "draft"
+        assert body["data"]["manuscript_status"] == "decision"
+
+        ms = (
+            supabase_admin_client.table("manuscripts")
+            .select("status")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert str(ms.get("status") or "") == "decision"
+
+        logs = (
+            supabase_admin_client.table("status_transition_logs")
+            .select("payload,created_at")
+            .eq("manuscript_id", manuscript_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = getattr(logs, "data", None) or []
+        assert any(
+            isinstance((r or {}).get("payload"), dict)
+            and (r["payload"] or {}).get("action") == "first_decision_workspace"
+            and (r["payload"] or {}).get("decision_stage") == "first"
+            for r in rows
+        )
+    finally:
+        _cleanup_decision_records(
+            supabase_admin_client,
+            manuscript_id,
+            [managing_editor.id, author.id, reviewer.id],
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_final_decision_requires_eic_or_admin(
+    client: AsyncClient,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    set_admin_emails([])
+    _require_decision_audit_schema(supabase_admin_client)
+
+    managing_editor = make_user(email="rbac_final_me@example.com")
+    eic = make_user(email="rbac_final_eic@example.com")
+    author = make_user(email="rbac_final_author@example.com")
+    reviewer = make_user(email="rbac_final_reviewer@example.com")
+    manuscript_id = str(uuid4())
+
+    try:
+        supabase_admin_client.table("user_profiles").upsert(
+            {"id": managing_editor.id, "email": managing_editor.email, "roles": ["managing_editor"]}
+        ).execute()
+        supabase_admin_client.table("user_profiles").upsert(
+            {"id": eic.id, "email": eic.email, "roles": ["editor_in_chief"]}
+        ).execute()
+        insert_manuscript(
+            supabase_admin_client,
+            manuscript_id=manuscript_id,
+            author_id=author.id,
+            status="decision",
+            title="RBAC Final Decision Manuscript",
+            file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+        )
+        supabase_admin_client.table("manuscripts").update({"editor_id": managing_editor.id}).eq(
+            "id", manuscript_id
+        ).execute()
+        supabase_admin_client.table("review_reports").insert(
+            {
+                "manuscript_id": manuscript_id,
+                "reviewer_id": reviewer.id,
+                "status": "completed",
+                "content": "Accept recommended.",
+                "score": 5,
+            }
+        ).execute()
+
+        me_res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/submit-decision",
+            headers={"Authorization": f"Bearer {managing_editor.token}"},
+            json={
+                "content": "ME final decision should be forbidden",
+                "decision": "accept",
+                "is_final": True,
+                "decision_stage": "final",
+                "attachment_paths": [],
+                "last_updated_at": None,
+            },
+        )
+        assert me_res.status_code == 403, me_res.text
+
+        eic_res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/submit-decision",
+            headers={"Authorization": f"Bearer {eic.token}"},
+            json={
+                "content": "EIC final decision",
+                "decision": "accept",
+                "is_final": True,
+                "decision_stage": "final",
+                "attachment_paths": [],
+                "last_updated_at": None,
+            },
+        )
+        assert eic_res.status_code == 200, eic_res.text
+        assert eic_res.json()["data"]["manuscript_status"] == "approved"
+
+        ms = (
+            supabase_admin_client.table("manuscripts")
+            .select("status")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert str(ms.get("status") or "") == "approved"
+    finally:
+        _cleanup_decision_records(
+            supabase_admin_client,
+            manuscript_id,
+            [managing_editor.id, eic.id, author.id, reviewer.id],
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_apc_override_audit_payload_contains_before_after_reason_source(
+    client: AsyncClient,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    set_admin_emails([])
+    _require_decision_audit_schema(supabase_admin_client)
+
+    eic = make_user(email="rbac_apc_eic@example.com")
+    author = make_user(email="rbac_apc_author@example.com")
+    manuscript_id = str(uuid4())
+
+    try:
+        supabase_admin_client.table("user_profiles").upsert(
+            {"id": eic.id, "email": eic.email, "roles": ["editor_in_chief"]}
+        ).execute()
+        insert_manuscript(
+            supabase_admin_client,
+            manuscript_id=manuscript_id,
+            author_id=author.id,
+            status="decision",
+            title="RBAC APC Audit Manuscript",
+            file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+        )
+        supabase_admin_client.table("manuscripts").update(
+            {
+                "editor_id": eic.id,
+                "invoice_metadata": {"authors": "Old Author", "apc_amount": 1200},
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", manuscript_id).execute()
+
+        res = await client.put(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/invoice-info",
+            headers={"Authorization": f"Bearer {eic.token}"},
+            json={
+                "authors": "Updated Author",
+                "apc_amount": 1800,
+                "reason": "manual override after committee approval",
+                "source": "editor_manuscript_detail",
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert res.json().get("success") is True
+
+        logs = (
+            supabase_admin_client.table("status_transition_logs")
+            .select("payload,created_at")
+            .eq("manuscript_id", manuscript_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = getattr(logs, "data", None) or []
+        hit = next(
+            (
+                r
+                for r in rows
+                if isinstance((r or {}).get("payload"), dict)
+                and (r["payload"] or {}).get("action") == "update_invoice_info"
+            ),
+            None,
+        )
+        assert hit is not None
+        payload = hit.get("payload") or {}
+        assert payload.get("source") == "editor_manuscript_detail"
+        assert payload.get("reason") == "manual override after committee approval"
+        assert int(float((payload.get("before") or {}).get("apc_amount") or 0)) == 1200
+        assert int(float((payload.get("after") or {}).get("apc_amount") or 0)) == 1800
+    finally:
+        _cleanup_decision_records(
+            supabase_admin_client,
+            manuscript_id,
+            [eic.id, author.id],
+        )

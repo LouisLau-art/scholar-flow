@@ -28,6 +28,14 @@ export function deriveEditorCapability(context?: EditorRbacContext | null): Edit
   }
 }
 
+export function canUseDecisionStage(
+  capability: EditorCapability,
+  stage: 'first' | 'final'
+): boolean {
+  if (stage === 'final') return capability.canSubmitFinalDecision
+  return capability.canRecordFirstDecision || capability.canSubmitFinalDecision
+}
+
 export function buildProcessScopeEmptyHint(context?: EditorRbacContext | null): string | null {
   if (!context?.journal_scope?.enforcement_enabled) return null
   if (context.journal_scope.is_admin) return null

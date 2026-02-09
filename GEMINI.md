@@ -297,7 +297,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
-- **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成第二批实现：新增 `GET /api/v1/editor/rbac/context`（返回角色动作 + scope）、前端 Process/Detail capability 显隐与高风险按钮禁用、`test_rbac_journal_scope.py`（角色拒绝 + process 跨刊裁剪 + 详情/写入跨刊 403）。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
+- **GAP-P1-05（Role Matrix + Journal Scope RBAC）**：已完成整体验收：新增 `GET /api/v1/editor/rbac/context`、服务层/路由层双重动作门禁、journal-scope 隔离（跨刊读写 403）、first/final decision 语义分离、以及 APC/Owner/legacy-final 的统一审计 payload（before/after/reason/source）；前端完成 capability 显隐与 `rbac-journal-scope.spec.ts` mocked E2E 回归。`JOURNAL_SCOPE_ENFORCEMENT=0` 默认灰度关闭，设为 `1` 后严格隔离。
 - **GAP-P1-04（Review Policy Hardening）**：实现同刊 30 天冷却期（候选灰显拦截）、高权限显式 override（`override_cooldown` + `override_reason` + `status_transition_logs` 审计）、邀请模板变量扩展（reviewer/journal/due date）、以及 Process/详情共用 `ReviewerAssignModal` 的命中原因展示（cooldown/conflict/overdue risk）。
 - **Feature 034（Portal Scholar Toolbox）**：补齐公开文章结构化引用与学科聚合：新增 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`，文章页新增 BibTeX/RIS 下载按钮；`GET /api/v1/public/topics` 从已发表文章/期刊动态聚合 Subject Collections；`frontend/src/app/articles/[id]/page.tsx` 补 `citation_pdf_url`（指向公开 `/pdf` 入口）以改进 Scholar/SEO 抓取。
 - **Feature 046（Finance Invoices Sync）**：`/finance` 切换为真实账单读模型（`invoices + manuscripts + user_profiles`），支持 `all/unpaid/paid/waived` 筛选与 CSV 导出（`X-Export-Snapshot-At` / `X-Export-Empty`）；确认支付与 Editor Pipeline 共用 `POST /api/v1/editor/invoices/confirm`，支持 `expected_status` 并发冲突 409 和 `status_transition_logs.payload.action=finance_invoice_confirm_paid` 审计。
@@ -324,7 +324,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 048-role-matrix-journal-scope-rbac: Added second GAP-P1-05 slice (editor RBAC context endpoint, frontend capability/scope visibility, stricter action gates, and integration tests for cross-journal 403 behavior).
+- 048-role-matrix-journal-scope-rbac: Completed GAP-P1-05 end-to-end (role matrix + journal scope isolation + first/final decision semantics + high-risk audit payload + mocked E2E).
 - 047-portal-scholar-toolbox: Added article citation exports (BibTeX/RIS), dynamic subject collections API, and citation_pdf_url metadata wiring for Scholar/SEO
 - 046-finance-invoices-sync: Replaced `/finance` demo data with real invoices list/filter/export and unified Mark Paid conflict+audit flow across Finance and Editor Pipeline
 - 045-internal-collaboration-enhancement: Added @mentions + internal tasks + overdue SLA filters (backend APIs, frontend panels, regression tests)

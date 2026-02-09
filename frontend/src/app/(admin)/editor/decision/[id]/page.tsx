@@ -87,19 +87,24 @@ export default function DecisionWorkspacePage() {
       }
       middle={<ReviewReportComparison reports={context.reports || []} />}
       right={
-        <DecisionEditor
-          manuscriptId={manuscriptId}
-          reports={context.reports || []}
-          initialDraft={context.draft || null}
-          templateContent={context.templates?.[0]?.content || ''}
-          canSubmit={Boolean(context.permissions?.can_submit)}
-          isReadOnly={Boolean(context.permissions?.is_read_only)}
-          onDirtyChange={setDirty}
-          onSubmitted={(_status) => {
-            setDirty(false)
-            void load()
-          }}
-        />
+        <div className="space-y-3">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+            <strong>First Decision</strong> 仅保存建议草稿；<strong>Final Decision</strong> 才会触发状态流转与作者通知。
+          </div>
+          <DecisionEditor
+            manuscriptId={manuscriptId}
+            reports={context.reports || []}
+            initialDraft={context.draft || null}
+            templateContent={context.templates?.[0]?.content || ''}
+            canSubmit={Boolean(context.permissions?.can_submit)}
+            isReadOnly={Boolean(context.permissions?.is_read_only)}
+            onDirtyChange={setDirty}
+            onSubmitted={(_status) => {
+              setDirty(false)
+              void load()
+            }}
+          />
+        </div>
       }
     />
   )

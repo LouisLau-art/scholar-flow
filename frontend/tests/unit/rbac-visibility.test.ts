@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildProcessScopeEmptyHint, deriveEditorCapability } from '@/lib/rbac'
+import { buildProcessScopeEmptyHint, canUseDecisionStage, deriveEditorCapability } from '@/lib/rbac'
 
 describe('rbac visibility helpers', () => {
   it('grants all capabilities for wildcard action', () => {
@@ -68,5 +68,35 @@ describe('rbac visibility helpers', () => {
       },
     })
     expect(hint).toBeNull()
+  })
+
+  it('enforces first/final decision stage availability', () => {
+    const meCapability = deriveEditorCapability({
+      user_id: 'u-5',
+      roles: ['managing_editor'],
+      normalized_roles: ['managing_editor'],
+      allowed_actions: ['decision:record_first'],
+      journal_scope: {
+        enforcement_enabled: false,
+        allowed_journal_ids: [],
+        is_admin: false,
+      },
+    })
+    expect(canUseDecisionStage(meCapability, 'first')).toBe(true)
+    expect(canUseDecisionStage(meCapability, 'final')).toBe(false)
+
+    const eicCapability = deriveEditorCapability({
+      user_id: 'u-6',
+      roles: ['editor_in_chief'],
+      normalized_roles: ['editor_in_chief'],
+      allowed_actions: ['decision:record_first', 'decision:submit_final'],
+      journal_scope: {
+        enforcement_enabled: false,
+        allowed_journal_ids: [],
+        is_admin: false,
+      },
+    })
+    expect(canUseDecisionStage(eicCapability, 'first')).toBe(true)
+    expect(canUseDecisionStage(eicCapability, 'final')).toBe(true)
   })
 })

@@ -86,6 +86,8 @@ class InvoiceInfoUpdatePayload(BaseModel):
     affiliation: str | None = None
     apc_amount: float | None = Field(default=None, ge=0)
     funding_info: str | None = None
+    reason: str | None = Field(default=None, max_length=2000)
+    source: str | None = Field(default=None, max_length=100)
 
 
 class QuickPrecheckPayload(BaseModel):
@@ -1325,6 +1327,8 @@ async def put_manuscript_invoice_info(
         apc_amount=payload.apc_amount,
         funding_info=payload.funding_info,
         changed_by=str(current_user.get("id")),
+        reason=payload.reason,
+        source=payload.source or "editor_manuscript_detail",
     )
     return {"success": True, "data": updated}
 
@@ -1354,6 +1358,23 @@ async def bind_internal_owner(
     except Exception:
         raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
 
+    before_owner_id: str | None = None
+    before_status: str | None = None
+    try:
+        before_resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,owner_id,status")
+            .eq("id", id)
+            .single()
+            .execute()
+        )
+        before_row = getattr(before_resp, "data", None) or {}
+        before_owner_id = str(before_row.get("owner_id") or "").strip() or None
+        before_status = str(before_row.get("status") or "").strip() or None
+    except Exception:
+        before_owner_id = None
+        before_status = None
+
     now = datetime.now(timezone.utc).isoformat()
     try:
         resp = (
@@ -1377,11 +1398,18 @@ async def bind_internal_owner(
         supabase_admin.table("status_transition_logs").insert(
             {
                 "manuscript_id": str(id),
-                "from_status": str(updated.get("status") or ""),
-                "to_status": str(updated.get("status") or ""),
+                "from_status": str(before_status or updated.get("status") or ""),
+                "to_status": str(updated.get("status") or before_status or ""),
                 "comment": f"owner bound: {owner_id}",
                 "changed_by": str(current_user.get("id")),
                 "created_at": now,
+                "payload": {
+                    "action": "bind_owner",
+                    "source": "editor_manuscript_detail",
+                    "reason": "manual_owner_binding",
+                    "before": {"owner_id": before_owner_id},
+                    "after": {"owner_id": str(owner_id)},
+                },
             }
         ).execute()
     except Exception:
@@ -2286,12 +2314,13 @@ async def submit_final_decision(
         if apc_amount < 0:
             raise HTTPException(status_code=400, detail="apc_amount must be >= 0")
 
-    _require_action_or_403(action="decision:submit_final", roles=profile.get("roles") or [])
+    roles = profile.get("roles") if isinstance(profile, dict) else ["admin"]
+    _require_action_or_403(action="decision:submit_final", roles=roles or ["admin"])
 
     ensure_manuscript_scope_access(
         manuscript_id=manuscript_id,
         user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
+        roles=roles or ["admin"],
         allow_admin_bypass=True,
     )
 
@@ -2509,6 +2538,37 @@ async def submit_final_decision(
                             "link": invoice_link
                         }
                     )
+
+        # GAP-P1-05 / US3: legacy final decision 审计对齐（before/after/reason/source）
+        try:
+            now_log = datetime.now(timezone.utc).isoformat()
+            supabase_admin.table("status_transition_logs").insert(
+                {
+                    "manuscript_id": manuscript_id,
+                    "from_status": current_status,
+                    "to_status": str(update_data.get("status") or current_status),
+                    "comment": f"legacy final decision: {decision}",
+                    "changed_by": str(current_user.get("id") or ""),
+                    "created_at": now_log,
+                    "payload": {
+                        "action": "final_decision_legacy",
+                        "decision_stage": "final",
+                        "source": "legacy_editor_decision_endpoint",
+                        "reason": "editor_submit_final_decision",
+                        "decision": decision,
+                        "before": {
+                            "status": current_status,
+                            "apc_amount": None,
+                        },
+                        "after": {
+                            "status": str(update_data.get("status") or current_status),
+                            "apc_amount": apc_amount if decision == "accept" else None,
+                        },
+                    },
+                }
+            ).execute()
+        except Exception:
+            pass
 
         return {
             "success": True,

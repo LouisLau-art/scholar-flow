@@ -29,7 +29,7 @@
 - [x] T006 在 `backend/app/core/role_matrix.py` 增加 legacy `editor -> managing_editor` 兼容映射函数
 - [x] T007 在 `backend/app/core/journal_scope.py` 增加 `ensure_manuscript_scope_access()`（admin bypass + 非 admin 严格 scope）
 - [x] T008 [P] 在 `backend/app/services/editor_service.py` 增加按 `allowed_journal_ids` 的 process 列表过滤能力
-- [ ] T009 [P] 在 `backend/app/services/decision_service.py` 抽离统一权限校验入口（角色 + scope）
+- [x] T009 [P] 在 `backend/app/services/decision_service.py` 抽离统一权限校验入口（角色 + scope）
 - [x] T010 [P] 在 `backend/tests/contract/test_api_paths.py` 增加 scope 管理/高风险接口契约占位
 
 **Checkpoint**: 具备统一权限底座后，再进入各用户故事实现。
@@ -54,7 +54,7 @@
 - [x] T015 [US1] 在 `backend/app/api/v1/admin/users.py` 新增 scope 管理接口（list/upsert/deactivate）
 - [x] T016 [US1] 在 `frontend/src/services/editorApi.ts` 增加 capability/scope 读取封装
 - [x] T017 [US1] 在 `frontend/src/app/(admin)/editor/manuscript/[id]/page.tsx` 按 capability 控制高风险按钮
-- [ ] T018 [US1] 在 `frontend/src/components/DecisionPanel.tsx` 区分“first decision 建议”与“final decision 提交”动作入口
+- [x] T018 [US1] 在 `frontend/src/components/DecisionPanel.tsx` 区分“first decision 建议”与“final decision 提交”动作入口
 
 **Checkpoint**: 角色矩阵在 UI 与 API 侧均可观测。
 
@@ -71,7 +71,7 @@
 - [x] T019 [P] [US2] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加“跨刊 process 列表裁剪”测试
 - [x] T020 [P] [US2] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加“跨刊详情读取 403”测试
 - [x] T021 [P] [US2] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加“跨刊 owner/APC 写入 403”测试
-- [ ] T022 [P] [US2] 新增 `frontend/tests/e2e/specs/rbac-journal-scope.spec.ts`（跨刊按钮不可用 + 后端拒绝）
+- [x] T022 [P] [US2] 新增 `frontend/tests/e2e/specs/rbac-journal-scope.spec.ts`（跨刊按钮不可用 + 后端拒绝）
 
 ### Implementation for US2
 
@@ -94,19 +94,19 @@
 
 ### Tests for US3
 
-- [ ] T029 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 first/final decision 语义测试
-- [ ] T030 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 final decision 最小权限测试（ME/AE 拒绝，EIC/Admin 允许）
-- [ ] T031 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 APC override 审计字段测试
-- [ ] T032 [P] [US3] 在 `frontend/tests/unit/rbac-visibility.test.tsx` 增加 first/final decision 按钮状态测试
+- [x] T029 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 first/final decision 语义测试
+- [x] T030 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 final decision 最小权限测试（ME/AE 拒绝，EIC/Admin 允许）
+- [x] T031 [P] [US3] 在 `backend/tests/integration/test_rbac_journal_scope.py` 增加 APC override 审计字段测试
+- [x] T032 [P] [US3] 在 `frontend/tests/unit/rbac-visibility.test.tsx` 增加 first/final decision 按钮状态测试
 
 ### Implementation for US3
 
-- [ ] T033 [US3] 在 `backend/app/services/decision_service.py` 增加 `first_decision` 草稿事件记录（不触发状态流转）
-- [ ] T034 [US3] 在 `backend/app/services/decision_service.py` 收紧 `final decision` 提交角色（`editor_in_chief/admin`）
+- [x] T033 [US3] 在 `backend/app/services/decision_service.py` 增加 `first_decision` 草稿事件记录（不触发状态流转）
+- [x] T034 [US3] 在 `backend/app/services/decision_service.py` 收紧 `final decision` 提交角色（`editor_in_chief/admin`）
 - [x] T035 [US3] 在 `backend/app/api/v1/editor.py` 的 legacy `/editor/decision` 对齐 same rule（保留兼容）
-- [ ] T036 [US3] 在 `backend/app/api/v1/editor.py` 为 APC/owner/final decision 写入统一审计 payload（before/after/reason/source）
-- [ ] T037 [US3] 在 `frontend/src/app/(admin)/editor/decision/[id]/page.tsx` 展示 first/final decision 语义提示
-- [ ] T038 [US3] 在 `frontend/src/components/DecisionPanel.tsx` 提交参数增加 `decision_stage`（first/final）
+- [x] T036 [US3] 在 `backend/app/api/v1/editor.py` 为 APC/owner/final decision 写入统一审计 payload（before/after/reason/source）
+- [x] T037 [US3] 在 `frontend/src/app/(admin)/editor/decision/[id]/page.tsx` 展示 first/final decision 语义提示
+- [x] T038 [US3] 在 `frontend/src/components/DecisionPanel.tsx` 提交参数增加 `decision_stage`（first/final）
 
 **Checkpoint**: 决策语义与高风险审计闭环完成。
 
@@ -118,7 +118,7 @@
 - [x] T040 [P] 更新 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 的“环境约定 + 近期快照”
 - [x] T041 执行后端测试：`pytest -o addopts= backend/tests/integration/test_rbac_journal_scope.py backend/tests/unit/test_role_matrix_scope.py`
 - [x] T042 执行前端测试：`bun run test:run frontend/tests/unit/rbac-visibility.test.tsx`
-- [ ] T043 执行 mocked E2E：`bun run test:e2e frontend/tests/e2e/specs/rbac-journal-scope.spec.ts --project=chromium`
+- [x] T043 执行 mocked E2E：`bun run test:e2e frontend/tests/e2e/specs/rbac-journal-scope.spec.ts --project=chromium`
 
 ---
 

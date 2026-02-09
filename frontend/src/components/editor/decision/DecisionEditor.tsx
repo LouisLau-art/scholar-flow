@@ -169,6 +169,7 @@ export function DecisionEditor({
         content,
         decision,
         is_final: isFinal,
+        decision_stage: isFinal ? 'final' : 'first',
         attachment_paths: attachments.map((item) => item.ref),
         last_updated_at: lastUpdatedAt,
       })

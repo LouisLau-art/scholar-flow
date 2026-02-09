@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, AlertCircle, FileText, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
+import { EditorApi } from '@/services/editorApi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ export default function DecisionPanel({
   manuscriptId,
   onSubmitted
 }: DecisionPanelProps) {
+  const [decisionStage, setDecisionStage] = useState<'first' | 'final'>('final')
   const [decision, setDecision] = useState<'accept' | 'reject' | 'revision' | null>(null)
   const [revisionType, setRevisionType] = useState<'major' | 'minor' | null>(null)
   const [comment, setComment] = useState('')
@@ -263,12 +265,20 @@ export default function DecisionPanel({
     return scores.reduce((sum, s) => sum + s, 0) / scores.length
   }, [reviews])
 
+  const toWorkspaceDecision = (
+    value: 'accept' | 'reject' | 'revision',
+    revision: 'major' | 'minor' | null
+  ): 'accept' | 'reject' | 'major_revision' | 'minor_revision' => {
+    if (value !== 'revision') return value
+    return revision === 'major' ? 'major_revision' : 'minor_revision'
+  }
+
   const handleSubmit = async () => {
     if (!decision || !manuscriptId) return
     // 中文注释:
-    // - accept/reject：避免“盲做决定”，至少需要 1 份已完成审稿意见
-    // - revision：允许在 resubmitted 等阶段直接退修（不强制有新审稿意见）
-    if (decision !== 'revision' && !canDecide) {
+    // - Final accept/reject：避免“盲做决定”，至少需要 1 份已完成审稿意见
+    // - First decision：允许先保存建议草稿（不触发状态流转）
+    if (decisionStage === 'final' && decision !== 'revision' && !canDecide) {
       toast.error('请先加载并查看审稿意见后再做决定。')
       return
     }
@@ -284,7 +294,7 @@ export default function DecisionPanel({
       }
     }
 
-    if (decision === 'accept') {
+    if (decision === 'accept' && decisionStage === 'final') {
       if (!Number.isFinite(apcAmount) || apcAmount < 0) {
         toast.error('请填写正确的 APC 金额（>= 0）。')
         return
@@ -300,6 +310,29 @@ export default function DecisionPanel({
         return
       }
 
+      // first decision：统一写入 decision workspace draft，不触发状态流转
+      if (decisionStage === 'first') {
+        const mappedDecision = toWorkspaceDecision(decision, revisionType)
+        const draftContent = (comment || '').trim() || `First decision suggestion: ${mappedDecision}`
+        const draftRes = await EditorApi.submitDecision(manuscriptId, {
+          content: draftContent,
+          decision: mappedDecision,
+          is_final: false,
+          decision_stage: 'first',
+          attachment_paths: [],
+          last_updated_at: null,
+        })
+        if (!draftRes?.success) {
+          throw new Error(draftRes?.detail || draftRes?.message || '保存 First Decision 建议失败')
+        }
+        setSubmitSuccess(true)
+        setSuccessMessage('已保存 First Decision 建议（草稿，不触发状态流转）。')
+        toast.success('First Decision 建议已保存。')
+        if (onSubmitted) onSubmitted()
+        return
+      }
+
+      // final decision：保持 legacy 链路（兼容现有业务）
       let endpoint = '/api/v1/editor/decision'
       let body: any = {
         manuscript_id: manuscriptId,
@@ -316,8 +349,11 @@ export default function DecisionPanel({
         body = {
           manuscript_id: manuscriptId,
           decision_type: revisionType,
+          decision_stage: 'final',
           comment
         }
+      } else {
+        body.decision_stage = 'final'
       }
 
       const response = await fetch(endpoint, {
@@ -340,11 +376,11 @@ export default function DecisionPanel({
       if (response.ok && data.success) {
         setSubmitSuccess(true)
         if (decision === 'revision') {
-          setSuccessMessage(`已发起退修（${revisionType === 'major' ? '大修' : '小修'}）。`)
+          setSuccessMessage(`已提交 Final Decision：退修（${revisionType === 'major' ? '大修' : '小修'}）。`)
         } else if (decision === 'accept') {
-          setSuccessMessage('稿件已录用（进入财务门禁阶段）。')
+          setSuccessMessage('已提交 Final Decision：稿件录用（进入财务门禁阶段）。')
         } else {
-          setSuccessMessage('稿件已拒稿。')
+          setSuccessMessage('已提交 Final Decision：稿件拒稿。')
         }
         toast.success('操作已保存。')
         if (onSubmitted) onSubmitted()
@@ -403,7 +439,7 @@ export default function DecisionPanel({
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
           <AlertCircle className="h-6 w-6 text-primary" />
-          <CardTitle>Final Decision</CardTitle>
+          <CardTitle>Decision Center</CardTitle>
         </div>
       </CardHeader>
 
@@ -553,10 +589,43 @@ export default function DecisionPanel({
           )}
         </div>
 
+        {/* Decision Stage */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium text-foreground">Decision Stage</h4>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setDecisionStage('first')}
+              disabled={isSubmitting}
+              className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                decisionStage === 'first'
+                  ? 'border-blue-500 bg-blue-50 text-blue-800'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <div className="font-semibold">First Decision Suggestion</div>
+              <div className="mt-1 text-xs opacity-80">保存草稿建议，不触发状态流转。</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDecisionStage('final')}
+              disabled={isSubmitting}
+              className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                decisionStage === 'final'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <div className="font-semibold">Final Decision Submit</div>
+              <div className="mt-1 text-xs opacity-80">触发状态机与通知/审计。</div>
+            </button>
+          </div>
+        </div>
+
         {/* Decision Options */}
         <div className="space-y-4">
           <h4 className="text-sm font-medium text-foreground">Select Decision</h4>
-          {!canDecide && (
+          {decisionStage === 'final' && !canDecide && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               录用/拒稿需要至少 1 份已提交审稿意见；如需退修可直接选择 “Request Revision”。
             </div>
@@ -565,7 +634,7 @@ export default function DecisionPanel({
             value={decision ?? ""}
             onValueChange={(value) => {
               // 允许在没有新审稿意见时直接退修（revision）；但 accept/reject 仍要求至少 1 份已提交意见
-              if (!canDecide && value !== 'revision') {
+              if (decisionStage === 'final' && !canDecide && value !== 'revision') {
                 toast.error('当前暂无可用审稿意见，暂不支持直接录用/拒稿；如需退修请选择“Request Revision”。')
                 return
               }
@@ -577,7 +646,7 @@ export default function DecisionPanel({
             {/* Accept */}
             <Label
               htmlFor="decision-accept"
-              className={!canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+              className={decisionStage === 'final' && !canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
             >
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
@@ -673,7 +742,7 @@ export default function DecisionPanel({
             {/* Reject */}
             <Label
               htmlFor="decision-reject"
-              className={!canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+              className={decisionStage === 'final' && !canDecide ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
             >
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
@@ -721,7 +790,7 @@ export default function DecisionPanel({
           disabled={
             isSubmitting ||
             !decision ||
-            (decision !== 'revision' && !canDecide) ||
+            (decisionStage === 'final' && decision !== 'revision' && !canDecide) ||
             (decision === 'revision' && (!revisionType || comment.trim().length < 10))
           }
           className="w-full"
@@ -729,10 +798,10 @@ export default function DecisionPanel({
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Submitting Decision...
+              {decisionStage === 'first' ? 'Saving First Decision...' : 'Submitting Final Decision...'}
             </>
           ) : (
-            "Submit Decision"
+            decisionStage === 'first' ? 'Save First Decision Suggestion' : 'Submit Final Decision'
           )}
         </Button>
       </CardContent>

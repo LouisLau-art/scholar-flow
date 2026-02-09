@@ -45,6 +45,7 @@ export type DecisionSubmissionPayload = {
   content: string
   decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision'
   is_final: boolean
+  decision_stage?: 'first' | 'final'
   attachment_paths: string[]
   last_updated_at: string | null
 }

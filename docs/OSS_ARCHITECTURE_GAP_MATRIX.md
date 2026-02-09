@@ -23,5 +23,5 @@
 
 ## 立即执行序列
 1. [x] 完成 `GAP-P1-04`：邀请策略（冷却期 + due date + 模板）。
-2. [~] 推进 `GAP-P1-05`：角色矩阵与期刊作用域 RBAC（已完成 `spec/plan/tasks` + 第二批实现：`/editor/rbac/context`、前端 capability 显隐、跨刊 403 集成测试）。
-3. [ ] 在 `GAP-P1-05` 子项补齐 mocked E2E（后端 contract/unit/integration 已补齐一轮）。
+2. [x] 完成 `GAP-P1-05`：角色矩阵与期刊作用域 RBAC（含 `/editor/rbac/context`、前端 capability 显隐、跨刊 403 集成测试、mocked E2E）。
+3. [ ] 进入 `GAP-P1-03`：Analytics 管理视角增强（编辑效率排行 + 阶段耗时 + SLA 预警）。

@@ -95,14 +95,14 @@
     - [x] Frontend：`src/components/ReviewerAssignModal.test.tsx` `4 passed`
     - [x] Lint：`frontend bun run lint` 通过（仅既有 warning）
 
-- [ ] **GAP-P1-05：角色矩阵与期刊作用域 RBAC 收敛**
+- [x] **GAP-P1-05：角色矩阵与期刊作用域 RBAC 收敛**
   - 现状：当前主要角色为 author/reviewer/editor/admin，已能运行但粒度偏粗。
   - 缺口：与对方目标角色体系（publisher / manager editor / SIE / assistant editor / academic editor）仍有距离。
-  - 当前推进：已完成第二批实现：新增 `GET /api/v1/editor/rbac/context`、前端 capability/scope 显隐、关键高风险按钮禁用、以及 `test_rbac_journal_scope.py`（角色拒绝 + process 跨刊裁剪 + 详情/写入跨刊 403）；`JOURNAL_SCOPE_ENFORCEMENT=0` 仍默认灰度关闭，开启后严格隔离。
+  - 当前推进：已完成完整实现：角色矩阵动作门禁 + journal-scope 隔离 + first/final decision 语义 + 高风险审计字段（before/after/reason/source）+ 前端 capability 显隐 + mocked E2E 回归。
   - 完成标准：
-    - [ ] 定义角色矩阵（页面、按钮、状态流转、可见字段）并固化到 `specs/*` + 测试用例
+    - [x] 定义角色矩阵（页面、按钮、状态流转、可见字段）并固化到 `specs/*` + 测试用例
     - [x] Journal-scope 权限落地（同角色跨期刊默认隔离）
-    - [ ] APC / Owner / Final Decision 等高风险操作支持“最小权限 + 审计追踪”
+    - [x] APC / Owner / Final Decision 等高风险操作支持“最小权限 + 审计追踪”
     - [x] 关键接口补齐 RBAC 回归测试（401/403/越权读取/越权写入）
 
 ## P2（中期规划）
@@ -133,14 +133,14 @@
 
 - [x] 完成 GAP-P1-02（Portal 学术工具箱：BibTeX/RIS + Subject Collections + Scholar/SEO）
 - [x] 完成 GAP-P1-04（审稿邀请策略：冷却期 + due date + 模板）
-- [ ] 完成 GAP-P1-05（角色矩阵与 Journal-scope RBAC）
+- [x] 完成 GAP-P1-05（角色矩阵与 Journal-scope RBAC）
 
 ---
 
 ## 4. 立即下一步（单一建议）
 
-**当前在做：`GAP-P1-05`（角色矩阵与 Journal-scope RBAC 收敛）**。  
-已完成 `spec/plan/tasks` 拆解，下一步进入实现顺序：先落角色矩阵与 scope 底座，再收口 high-risk 操作与回归测试。
+**当前建议：进入 `GAP-P1-03`（Analytics 管理视角增强）**。  
+`GAP-P1-05` 已完成并合入主干，下一步建议补齐编辑效率排行、阶段耗时分解与 SLA 异常预警。
 
 ---
 

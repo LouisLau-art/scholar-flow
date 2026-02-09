@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 DecisionValue = Literal["accept", "reject", "major_revision", "minor_revision"]
@@ -18,11 +18,25 @@ class DecisionSubmitRequest(BaseModel):
     content: str = Field("", description="Markdown 决策信正文")
     decision: DecisionValue = Field(..., description="决策结论")
     is_final: bool = Field(..., description="是否最终提交")
+    decision_stage: Literal["first", "final"] | None = Field(
+        default=None,
+        description="决策阶段（可选）。未提供时由 is_final 推导",
+    )
     attachment_paths: list[str] = Field(default_factory=list, description="附件引用列表")
     last_updated_at: datetime | None = Field(
         default=None,
         description="乐观锁字段。若提供则必须与服务端草稿 updated_at 一致",
     )
+
+    @model_validator(mode="after")
+    def _validate_decision_stage(self) -> "DecisionSubmitRequest":
+        inferred = "final" if self.is_final else "first"
+        if self.decision_stage is None:
+            self.decision_stage = inferred
+            return self
+        if self.decision_stage != inferred:
+            raise ValueError("decision_stage and is_final are inconsistent")
+        return self
 
 
 class DecisionLetterPayload(BaseModel):

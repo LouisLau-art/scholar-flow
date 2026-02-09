@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
 from app.models.decision import DecisionSubmitRequest
 from app.models.manuscript import ManuscriptStatus, normalize_status
@@ -120,6 +122,71 @@ class DecisionService:
         if str(manuscript.get("author_id") or "") == str(user_id):
             return False
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    def _ensure_internal_decision_access(
+        self,
+        *,
+        manuscript: dict[str, Any],
+        manuscript_id: str,
+        user_id: str,
+        roles: set[str],
+        action: str,
+    ) -> None:
+        """
+        统一的决策权限入口（角色动作 + journal scope + assigned editor）。
+
+        中文注释:
+        - route 层已经做过一次校验，这里再做 service 层防线，避免旁路调用绕过；
+        - 仅对内部编辑入口生效，作者入口仍走 _ensure_author_or_internal_access。
+        """
+        if not can_perform_action(action=action, roles=roles):
+            raise HTTPException(status_code=403, detail=f"Insufficient permission for action: {action}")
+        ensure_manuscript_scope_access(
+            manuscript_id=manuscript_id,
+            user_id=str(user_id),
+            roles=list(roles),
+            allow_admin_bypass=True,
+        )
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+    def _safe_insert_audit_log(
+        self,
+        *,
+        manuscript_id: str,
+        from_status: str,
+        to_status: str,
+        changed_by: str,
+        comment: str,
+        payload: dict[str, Any] | None,
+    ) -> None:
+        now = _utc_now_iso()
+        base_row: dict[str, Any] = {
+            "manuscript_id": manuscript_id,
+            "from_status": from_status,
+            "to_status": to_status,
+            "comment": comment,
+            "changed_by": changed_by,
+            "created_at": now,
+        }
+        rows: list[dict[str, Any]] = []
+        if payload is not None:
+            row = dict(base_row)
+            row["payload"] = payload
+            rows.append(row)
+        rows.append(dict(base_row))
+        row_without_fk = dict(base_row)
+        row_without_fk["changed_by"] = None
+        if payload is not None:
+            row_without_fk["payload"] = {**payload, "changed_by_raw": changed_by}
+        rows.append(row_without_fk)
+        rows.append({"manuscript_id": manuscript_id, "from_status": from_status, "to_status": to_status, "comment": comment, "changed_by": None, "created_at": now})
+
+        for row in rows:
+            try:
+                self.client.table("status_transition_logs").insert(row).execute()
+                return
+            except Exception:
+                continue
 
     def _signed_url(self, bucket: str, path: str, expires_in: int = 60 * 10) -> str | None:
         p = str(path or "").strip()
@@ -336,6 +403,21 @@ class DecisionService:
     ) -> str:
         norm = normalize_status(current_status) or ManuscriptStatus.PRE_CHECK.value
         comment = f"final_decision:{decision}"
+        target_status = (
+            ManuscriptStatus.REJECTED.value
+            if decision == "reject"
+            else ManuscriptStatus.APPROVED.value
+            if decision == "accept"
+            else ManuscriptStatus.MAJOR_REVISION.value
+            if decision == "major_revision"
+            else ManuscriptStatus.MINOR_REVISION.value
+        )
+        audit_payload = dict(transition_payload or {})
+        audit_payload.setdefault("source", "decision_workspace")
+        audit_payload.setdefault("reason", "editor_submit_final_decision")
+        audit_payload["decision_stage"] = "final"
+        audit_payload["before"] = {"status": norm}
+        audit_payload["after"] = {"status": target_status}
 
         if decision == "reject":
             if norm not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
@@ -357,7 +439,7 @@ class DecisionService:
                 changed_by=changed_by,
                 comment=comment,
                 allow_skip=False,
-                payload=transition_payload,
+                payload=audit_payload,
             )
             return str(updated.get("status") or ManuscriptStatus.REJECTED.value)
 
@@ -397,7 +479,7 @@ class DecisionService:
                 changed_by=changed_by,
                 comment=comment,
                 allow_skip=False,
-                payload=transition_payload,
+                payload=audit_payload,
             )
             return str(updated.get("status") or ManuscriptStatus.APPROVED.value)
 
@@ -414,7 +496,7 @@ class DecisionService:
                 changed_by=changed_by,
                 comment=comment,
                 allow_skip=False,
-                payload=transition_payload,
+                payload=audit_payload,
             )
         except HTTPException:
             updated = self.editorial.update_status(
@@ -423,7 +505,7 @@ class DecisionService:
                 changed_by=changed_by,
                 comment=comment,
                 allow_skip=True,
-                payload=transition_payload,
+                payload=audit_payload,
             )
         return str(updated.get("status") or to_status)
 
@@ -451,7 +533,13 @@ class DecisionService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        self._ensure_internal_decision_access(
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            user_id=user_id,
+            roles=roles,
+            action="decision:record_first",
+        )
 
         status = normalize_status(str(manuscript.get("status") or "")) or ""
         if status not in {
@@ -523,7 +611,14 @@ class DecisionService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        action = "decision:submit_final" if request.is_final else "decision:record_first"
+        self._ensure_internal_decision_access(
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            user_id=user_id,
+            roles=roles,
+            action=action,
+        )
 
         decision = str(request.decision).strip().lower()
         if decision not in {"accept", "reject", "major_revision", "minor_revision"}:
@@ -559,6 +654,9 @@ class DecisionService:
             transition_payload = {
                 "action": "final_decision_workspace",
                 "decision": decision,
+                "decision_stage": "final",
+                "source": "decision_workspace",
+                "reason": "editor_submit_final_decision",
                 "decision_letter": {
                     "id": row.get("id"),
                     "status": row.get("status"),
@@ -575,6 +673,29 @@ class DecisionService:
             )
             self._notify_author(
                 manuscript=manuscript, manuscript_id=manuscript_id, decision=decision
+            )
+        else:
+            # 中文注释: first decision 仅记录草稿审计事件，不触发状态流转。
+            self._safe_insert_audit_log(
+                manuscript_id=manuscript_id,
+                from_status=current_status,
+                to_status=current_status,
+                changed_by=user_id,
+                comment="first decision saved",
+                payload={
+                    "action": "first_decision_workspace",
+                    "decision_stage": "first",
+                    "source": "decision_workspace",
+                    "reason": "editor_save_first_decision",
+                    "decision": decision,
+                    "before": {"status": current_status},
+                    "after": {"status": current_status},
+                    "decision_letter": {
+                        "id": row.get("id"),
+                        "status": row.get("status"),
+                        "attachment_paths": row.get("attachment_paths") or [],
+                    },
+                },
             )
 
         return {
@@ -596,7 +717,13 @@ class DecisionService:
     ) -> dict[str, str]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        self._ensure_internal_decision_access(
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            user_id=user_id,
+            roles=roles,
+            action="decision:record_first",
+        )
 
         if not content:
             raise HTTPException(status_code=400, detail="Attachment cannot be empty")
@@ -663,7 +790,13 @@ class DecisionService:
     ) -> str:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        self._ensure_internal_decision_access(
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            user_id=user_id,
+            roles=roles,
+            action="decision:record_first",
+        )
         found = self._find_attachment(manuscript_id=manuscript_id, attachment_id=attachment_id)
         if not found:
             raise HTTPException(status_code=404, detail="Attachment not found")

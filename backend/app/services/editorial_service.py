@@ -200,6 +200,8 @@ class EditorialService:
         apc_amount: Optional[float] = None,
         funding_info: Optional[str] = None,
         changed_by: str | None,
+        reason: str | None = None,
+        source: str | None = None,
     ) -> dict[str, Any]:
         ms = self.get_manuscript(manuscript_id)
         before_meta: dict[str, Any] = {}
@@ -248,6 +250,8 @@ class EditorialService:
                 comment="invoice_metadata updated",
                 payload={
                     "action": "update_invoice_info",
+                    "source": str(source or "unknown"),
+                    "reason": reason,
                     "before": before_meta,
                     "after": meta,
                 },
