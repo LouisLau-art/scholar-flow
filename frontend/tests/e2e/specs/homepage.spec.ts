@@ -26,7 +26,7 @@ test.describe('Homepage Portal', () => {
     await expect(page.getByRole('link', { name: /Submit Manuscript/i })).toBeVisible()
     
     // Check Latest Articles
-    await expect(page.getByText('Latest Articles')).toBeVisible()
+    await expect(page.getByText('Latest Articles from ScholarFlow Journal')).toBeVisible()
     await expect(page.getByText('Mocked Published Article')).toBeVisible()
     
     // Check Footer
