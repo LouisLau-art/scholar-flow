@@ -133,6 +133,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
     let cancelled = false
 
     async function fetchArticle() {
+      let keepLoadingForIdentity = false
       setLoadError(null)
       if (!articleId) {
         setArticle(null)
@@ -172,9 +173,16 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         // 2) 非公开稿件：允许登录作者查看进度（受保护 by-id）
         const token = await authService.getAccessToken()
         if (!token) {
+          // 中文注释:
+          // 身份态尚未解析完成时，不应直接判定 404（否则会出现“作者已登录但偶发 Article not found”）。
+          // 等待 identityResolved=true 后再做最终判定。
+          if (!identityResolved) {
+            keepLoadingForIdentity = true
+            return
+          }
           if (cancelled) return
           setArticle(null)
-          setLoadError('Article not found.')
+          setLoadError('请先登录后查看该稿件。')
           return
         }
 
@@ -205,7 +213,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
           setLoadError('Failed to load article.')
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !keepLoadingForIdentity) {
           setIsLoading(false)
         }
       }
@@ -216,7 +224,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
     return () => {
       cancelled = true
     }
-  }, [articleId, initialArticle]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [articleId, initialArticle, identityResolved]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDownload(idForDownload: string) {
     try {

@@ -11,6 +11,7 @@ import LoginPrompt from '@/components/LoginPrompt'
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
 const METADATA_PARSE_TIMEOUT_MS = 25_000
+const METADATA_PARSE_TOTAL_TIMEOUT_MS = 35_000
 const DIRECT_API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '')
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -37,6 +38,12 @@ function getUploadParseEndpoints(): string[] {
     '/api/v1/manuscripts/upload',
   ].filter(Boolean)
   return Array.from(new Set(candidates))
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  const text = String((error as any)?.name || '') + ' ' + String((error as any)?.message || '')
+  return /abort/i.test(text)
 }
 
 export default function SubmissionForm() {
@@ -139,11 +146,18 @@ export default function SubmissionForm() {
       let lastError: Error | null = null
 
       const parseEndpoints = getUploadParseEndpoints()
+      const parseStartedAt = Date.now()
       for (let idx = 0; idx < parseEndpoints.length; idx += 1) {
+        if (Date.now() - parseStartedAt > METADATA_PARSE_TOTAL_TIMEOUT_MS) {
+          lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TOTAL_TIMEOUT_MS / 1000)}s`)
+          break
+        }
         const endpoint = parseEndpoints[idx]
         const controller = new AbortController()
         const timer = window.setTimeout(() => controller.abort(), METADATA_PARSE_TIMEOUT_MS)
         try {
+          const formData = new FormData()
+          formData.append('file', selectedFile)
           response = await fetch(endpoint, {
             method: 'POST',
             body: formData,
@@ -169,6 +183,12 @@ export default function SubmissionForm() {
               `Metadata parsing failed (${response.status})`
           )
         } catch (err) {
+          if (isAbortLikeError(err)) {
+            // 中文注释:
+            // 当前端点超时后直接结束（不再尝试下一个 endpoint），避免用户等待时间翻倍导致“一直转圈”的体感。
+            lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TIMEOUT_MS / 1000)}s`)
+            break
+          }
           lastError = err instanceof Error ? err : new Error('Metadata parsing failed')
         } finally {
           window.clearTimeout(timer)
@@ -208,8 +228,9 @@ export default function SubmissionForm() {
       }
     } catch (error) {
       console.error('Parsing failed:', error)
+      const lowered = String((error as any)?.message || '').toLowerCase()
       const message =
-        error instanceof DOMException && error.name === 'AbortError'
+        (error instanceof DOMException && error.name === 'AbortError') || lowered.includes('timeout')
           ? '解析超时（>25s），已跳过 AI 预填，请手动填写标题与摘要。'
           : error instanceof Error
             ? error.message

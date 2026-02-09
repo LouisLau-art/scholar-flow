@@ -882,6 +882,7 @@ async def upload_manuscript(
             return {
                 "success": True,
                 "id": manuscript_id,
+                "trace_id": trace_id,
                 "data": {"title": "", "abstract": "", "authors": []},
                 "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
             }
@@ -923,12 +924,18 @@ async def upload_manuscript(
                 # 不阻断投稿主链路，查重失败按“降级”处理。
                 print(f"[UploadManuscript:{trace_id}] init plagiarism report failed (ignored): {e}", flush=True)
             background_tasks.add_task(plagiarism_check_worker, str(manuscript_id))
-        return {"success": True, "id": manuscript_id, "data": metadata}
+        print(f"[UploadManuscript:{trace_id}] done", flush=True)
+        return {"success": True, "id": manuscript_id, "trace_id": trace_id, "data": metadata}
     except Exception as e:
         print(f"[UploadManuscript:{trace_id}] failed: {e}", flush=True)
         return JSONResponse(
             status_code=500,
-            content={"success": False, "message": str(e), "data": {"title": "", "abstract": "", "authors": []}},
+            content={
+                "success": False,
+                "trace_id": trace_id,
+                "message": str(e),
+                "data": {"title": "", "abstract": "", "authors": []},
+            },
         )
     finally:
         if temp_path and os.path.exists(temp_path):
