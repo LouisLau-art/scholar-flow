@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { EditorApi } from '@/services/editorApi'
-import { Loader2, Search, RotateCcw } from 'lucide-react'
+import { ChevronDown, Loader2, Search, RotateCcw } from 'lucide-react'
 
 type JournalOption = { id: string; title: string; slug?: string }
 type StaffOption = { id: string; email?: string; full_name?: string }
@@ -60,9 +60,11 @@ export function ProcessFilterBar({
   const [editorId, setEditorId] = useState(applied.editorId)
   const [statuses, setStatuses] = useState<string[]>(applied.statuses)
   const [overdueOnly, setOverdueOnly] = useState<boolean>(applied.overdueOnly)
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
 
   const qDebounceTimer = useRef<number | null>(null)
   const mountedRef = useRef(false)
+  const statusDropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -97,6 +99,19 @@ export function ProcessFilterBar({
     loadStaff()
     return () => {
       alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (!statusDropdownRef.current) return
+      if (!statusDropdownRef.current.contains(event.target as Node)) {
+        setStatusDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
     }
   }, [])
 
@@ -170,6 +185,15 @@ export function ProcessFilterBar({
     return statuses.map((s) => labels.get(s) || s).join(', ')
   }, [statuses])
 
+  function toggleStatus(statusValue: string) {
+    setStatuses((prev) => {
+      if (prev.includes(statusValue)) {
+        return prev.filter((s) => s !== statusValue)
+      }
+      return [...prev, statusValue]
+    })
+  }
+
   return (
     <div className={className ? className : 'rounded-xl border border-slate-200 bg-white p-4'}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
@@ -215,25 +239,53 @@ export function ProcessFilterBar({
         </div>
 
         <div className="md:col-span-2">
-          <Label className="text-xs text-slate-600">Status (multi-select)</Label>
-          <select
-            multiple
-            value={statuses}
-            onChange={(e) => {
-              const next: string[] = []
-              for (const opt of Array.from(e.target.selectedOptions)) next.push(opt.value)
-              setStatuses(next)
-            }}
-            className="mt-1 h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            aria-label="Statuses"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-400">{selectedStatusesText}</p>
+          <Label className="text-xs text-slate-600">Status</Label>
+          <div className="relative mt-1" ref={statusDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setStatusDropdownOpen((v) => !v)}
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              aria-haspopup="listbox"
+              aria-expanded={statusDropdownOpen}
+            >
+              <span className="block truncate pr-7">{selectedStatusesText}</span>
+              <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            </button>
+
+            {statusDropdownOpen ? (
+              <div className="absolute z-40 mt-2 w-full min-w-[230px] rounded-md border border-slate-200 bg-white shadow-lg">
+                <div className="max-h-56 overflow-auto p-2">
+                  {STATUS_OPTIONS.map((s) => (
+                    <label key={s.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={statuses.includes(s.value)}
+                        onChange={() => toggleStatus(s.value)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <span>{s.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 px-2 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatuses([])}
+                    className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusDropdownOpen(false)}
+                    className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="md:col-span-12 flex flex-wrap gap-2 pt-2">
@@ -247,7 +299,8 @@ export function ProcessFilterBar({
             Overdue only
           </label>
           <Button
-            onClick={() =>
+            onClick={() => {
+              setStatusDropdownOpen(false)
               updateUrl({
                 q,
                 journalId: journalId || null,
@@ -255,7 +308,7 @@ export function ProcessFilterBar({
                 statuses: statuses.length ? statuses : null,
                 overdueOnly,
               })
-            }
+            }}
             className="gap-2"
             disabled={loadingJournals || loadingStaff}
           >
@@ -274,6 +327,7 @@ export function ProcessFilterBar({
               setEditorId('')
               setStatuses([])
               setOverdueOnly(false)
+              setStatusDropdownOpen(false)
               updateUrl({ q: null, journalId: null, editorId: null, statuses: null, overdueOnly: null })
             }}
             className="gap-2"

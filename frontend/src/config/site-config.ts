@@ -5,7 +5,7 @@ export const siteConfig = {
   impact_factor: "3.2",
   links: {
     about: "/about",
-    contact: "/contact",
+    contact: "/about",
     submit: "/submit",
     dashboard: "/dashboard",
   },

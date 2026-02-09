@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 from io import StringIO
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal
 from uuid import UUID
@@ -76,6 +76,23 @@ def _normalize_statuses(values: Iterable[str] | None) -> list[str] | None:
     return out or None
 
 
+def _is_schema_drift_error(error_text: str) -> bool:
+    """
+    判断是否为“云端 schema 与代码不一致”导致的查询失败。
+
+    中文注释:
+    - 典型场景：列缺失、关系缺失、PostgREST schema cache 未刷新。
+    - 这些错误应触发 fallback，而不是直接让 Process API 返回 500。
+    """
+    lowered = (error_text or "").lower()
+    return (
+        ("does not exist" in lowered and ("column" in lowered or "table" in lowered or "relation" in lowered))
+        or "could not find the relationship" in lowered
+        or ("schema cache" in lowered and "pgrst" in lowered)
+        or "pgrst204" in lowered
+    )
+
+
 def apply_process_filters(query: Any, filters: ProcessListFilters) -> Any:
     """
     对 Supabase PostgREST Query 应用动态筛选（可单测）。
@@ -128,6 +145,105 @@ class EditorService:
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _build_process_query(self, *, filters: ProcessListFilters, select_clause: str):
+        q = (
+            self.client.table("manuscripts")
+            .select(select_clause)
+            .order("created_at", desc=True)
+        )
+        return apply_process_filters(q, filters)
+
+    def _list_process_rows_with_fallback(self, *, filters: ProcessListFilters) -> list[dict[str, Any]]:
+        """
+        兼容云端 schema 漂移的 Process 列表查询。
+
+        中文注释:
+        - 优先使用完整字段（含 pre_check_status / journals 关联）；
+        - 若遇到缺列/缺关系，自动逐级降级 select；
+        - 若筛选字段本身缺失（journal_id/editor_id/owner_id），自动移除该筛选并继续；
+        - 保证返回结构稳定，不让前端因缺 key 崩溃。
+        """
+        select_variants = [
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,editor_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,assistant_editor_id,owner_id,editor_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,owner_id,editor_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,owner_id,editor_id,journal_id",
+            "id,title,created_at,updated_at,status,journal_id",
+            "id,title,created_at,updated_at,status",
+        ]
+
+        current_filters = filters
+        dropped_filter_keys: set[str] = set()
+        last_error: Exception | None = None
+        idx = 0
+
+        while idx < len(select_variants):
+            select_clause = select_variants[idx]
+            try:
+                resp = self._build_process_query(filters=current_filters, select_clause=select_clause).execute()
+                rows: list[dict[str, Any]] = getattr(resp, "data", None) or []
+                for row in rows:
+                    row.setdefault("pre_check_status", None)
+                    row.setdefault("assistant_editor_id", None)
+                    row.setdefault("owner_id", None)
+                    row.setdefault("editor_id", None)
+                    row.setdefault("journal_id", None)
+                    row.setdefault("journals", None)
+                return rows
+            except HTTPException:
+                raise
+            except Exception as e:
+                last_error = e
+                lowered = str(e).lower()
+
+                # 兼容：筛选字段缺失时自动去掉该筛选，避免整个列表 500
+                if (
+                    "manuscripts.journal_id" in lowered
+                    and "does not exist" in lowered
+                    and current_filters.journal_id
+                    and "journal_id" not in dropped_filter_keys
+                ):
+                    current_filters = replace(current_filters, journal_id=None)
+                    dropped_filter_keys.add("journal_id")
+                    idx = 0
+                    print("[Process] fallback: drop journal_id filter due to missing column")
+                    continue
+
+                if (
+                    "manuscripts.editor_id" in lowered
+                    and "does not exist" in lowered
+                    and current_filters.editor_id
+                    and "editor_id" not in dropped_filter_keys
+                ):
+                    current_filters = replace(current_filters, editor_id=None)
+                    dropped_filter_keys.add("editor_id")
+                    idx = 0
+                    print("[Process] fallback: drop editor_id filter due to missing column")
+                    continue
+
+                if (
+                    "manuscripts.owner_id" in lowered
+                    and "does not exist" in lowered
+                    and current_filters.owner_id
+                    and "owner_id" not in dropped_filter_keys
+                ):
+                    current_filters = replace(current_filters, owner_id=None)
+                    dropped_filter_keys.add("owner_id")
+                    idx = 0
+                    print("[Process] fallback: drop owner_id filter due to missing column")
+                    continue
+
+                if _is_schema_drift_error(lowered):
+                    print(f"[Process] schema fallback level {idx + 1} failed: {e}")
+                    idx += 1
+                    continue
+
+                raise
+
+        if last_error:
+            raise last_error
+        return []
 
     def _safe_insert_transition_log(
         self,
@@ -619,16 +735,7 @@ class EditorService:
         viewer_user_id: str | None = None,
         viewer_roles: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        q = (
-            self.client.table("manuscripts")
-            .select(
-                "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,editor_id,journal_id,journals(title,slug)"
-            )
-            .order("created_at", desc=True)
-        )
-        q = apply_process_filters(q, filters)
-        resp = q.execute()
-        rows: list[dict[str, Any]] = getattr(resp, "data", None) or []
+        rows = self._list_process_rows_with_fallback(filters=filters)
 
         profile_ids: set[str] = set()
         for r in rows:
