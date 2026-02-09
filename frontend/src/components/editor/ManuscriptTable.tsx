@@ -59,16 +59,16 @@ export function ManuscriptTable({
   emptyText?: string
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto" data-testid="editor-process-table">
-      <Table>
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden" data-testid="editor-process-table">
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow className="bg-slate-50/50">
-            <TableHead className="w-[180px] whitespace-nowrap">Manuscript ID</TableHead>
-            <TableHead className="whitespace-nowrap">Journal</TableHead>
-            <TableHead className="whitespace-nowrap">Status</TableHead>
-            <TableHead className="whitespace-nowrap">Updated</TableHead>
-            <TableHead className="whitespace-nowrap">People</TableHead>
-            <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+            <TableHead className="w-[16%]">Manuscript ID</TableHead>
+            <TableHead className="w-[16%]">Journal</TableHead>
+            <TableHead className="w-[26%]">Status</TableHead>
+            <TableHead className="w-[14%]">Updated</TableHead>
+            <TableHead className="w-[20%]">People</TableHead>
+            <TableHead className="w-[8%] text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -102,7 +102,7 @@ export function ManuscriptTable({
                       <ArrowRight className="h-3 w-3" />
                     </Link>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-700 whitespace-nowrap">
+                  <TableCell className="text-sm text-slate-700">
                     {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
                   </TableCell>
                   <TableCell>
@@ -111,7 +111,7 @@ export function ManuscriptTable({
                         {getStatusLabel(status)}
                       </Badge>
                       {precheckLabel !== '—' ? (
-                        <p className="text-[11px] text-slate-500 whitespace-nowrap truncate max-w-[260px]">
+                        <p className="text-[11px] text-slate-500 break-words">
                           Pre-check: {precheckLabel}
                         </p>
                       ) : null}
@@ -125,11 +125,11 @@ export function ManuscriptTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-600 whitespace-nowrap">{fmt(r.updated_at)}</TableCell>
+                  <TableCell className="text-sm text-slate-600">{fmt(r.updated_at)}</TableCell>
                   <TableCell className="text-sm text-slate-700">
-                    <div className="min-w-[210px] space-y-1.5">
+                    <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-xs">
+                        <p className="truncate text-xs min-w-0">
                           <span className="text-slate-500">Owner:</span>{' '}
                           <span className="font-medium text-slate-700">{ownerLabel}</span>
                         </p>
@@ -140,10 +140,6 @@ export function ManuscriptTable({
                           disabled={!canBindOwner}
                         />
                       </div>
-                      <p className="truncate text-xs">
-                        <span className="text-slate-500">Editor:</span>{' '}
-                        <span className="font-medium text-slate-700">{editorLabel}</span>
-                      </p>
                       {showAssigneeLine ? (
                         <p className="truncate text-xs">
                           <span className="text-slate-500">Assignee:</span>{' '}
