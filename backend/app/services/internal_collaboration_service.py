@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from typing import Any, Iterable
 from uuid import UUID
 
@@ -44,10 +45,28 @@ def _extract_single(resp: Any) -> dict[str, Any] | None:
 
 
 def _missing_table_from_error(error: Exception | str | None) -> str | None:
-    text = str(error or "").lower()
+    text = str(error or "")
+    lowered = text.lower()
+    missing_markers = (
+        "does not exist",
+        "schema cache",
+        "could not find the table",
+        "pgrst205",
+    )
     for table in ("internal_comments", "internal_comment_mentions", "internal_tasks", "internal_task_activity_logs"):
-        if table in text and "does not exist" in text:
+        # 兼容 Postgres/PGRST 两类缺表错误文案
+        if table in lowered and any(marker in lowered for marker in missing_markers):
             return table
+        if f"public.{table}" in lowered and any(marker in lowered for marker in missing_markers):
+            return table
+
+    # 兼容消息中出现 "table 'public.internal_comments'" 的场景
+    match = re.search(r"(?:table|relation)\s+'?public\.([a-z_]+)'?", lowered)
+    if match:
+        table_name = str(match.group(1) or "").strip()
+        if table_name in {"internal_comments", "internal_comment_mentions", "internal_tasks", "internal_task_activity_logs"}:
+            if any(marker in lowered for marker in missing_markers):
+                return table_name
     return None
 
 

@@ -3,7 +3,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.services.internal_collaboration_service import InternalCollaborationService, MentionValidationError
+from app.services.internal_collaboration_service import (
+    InternalCollaborationService,
+    MentionValidationError,
+    _missing_table_from_error,
+)
 
 
 class _FakeNotifier:
@@ -96,3 +100,33 @@ def test_create_comment_rejects_invalid_mention_id():
         )
 
     assert ei.value.invalid_user_ids == ["not-a-uuid"]
+
+
+class _MissingCommentsTable:
+    def table(self, name: str):
+        return self
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        raise RuntimeError(
+            "Could not find the table 'public.internal_comments' in the schema cache (PGRST205)"
+        )
+
+
+def test_list_comments_returns_empty_when_internal_comments_missing_in_schema_cache():
+    svc = InternalCollaborationService(client=_MissingCommentsTable(), notification_service=_FakeNotifier())
+    rows = svc.list_comments(str(uuid4()))
+    assert rows == []
+
+
+def test_missing_table_parser_supports_pgrst205_schema_cache_message():
+    error = RuntimeError("Could not find the table 'public.internal_comments' in the schema cache")
+    assert _missing_table_from_error(error) == "internal_comments"

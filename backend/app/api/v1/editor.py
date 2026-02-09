@@ -157,7 +157,13 @@ def _ensure_bucket_exists(bucket: str, *, public: bool = False) -> None:
 
 def _is_missing_table_error(error_text: str) -> bool:
     t = (error_text or "").lower()
-    if "does not exist" not in t:
+    missing_markers = (
+        "does not exist",
+        "schema cache",
+        "could not find the table",
+        "pgrst205",
+    )
+    if not any(marker in t for marker in missing_markers):
         return False
     return any(
         name in t
@@ -186,6 +192,8 @@ async def get_internal_comments(
             return {"success": True, "data": []}
         raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
     except Exception as e:
+        if _is_missing_table_error(str(e)) and "internal_comments" in str(e).lower():
+            return {"success": True, "data": []}
         print(f"[InternalComments] list failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch comments")
 
