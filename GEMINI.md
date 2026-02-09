@@ -275,6 +275,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
 - **Feature 033（Manuscript Files）迁移**：云端需执行 `supabase/migrations/20260205130000_create_manuscript_files.sql`（新增 `public.manuscript_files` 用于 editor 上传 peer review files），否则 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment` 会返回 “DB not migrated”。
 - **Feature 041（Final Decision Workspace）迁移**：云端需依次执行 `supabase/migrations/20260206160000_create_decision_letters.sql`、`supabase/migrations/20260206161000_decision_storage.sql`、`supabase/migrations/20260206162000_decision_letter_constraints.sql`（新增 `public.decision_letters` 与私有桶 `decision-attachments`），否则 `/api/v1/editor/manuscripts/{id}/decision-*` 接口会因 schema/storage 缺失失败。
+- **Feature 043（Cloud Rollout Regression）迁移**：云端需执行 `supabase/migrations/20260209160000_release_validation_runs.sql`（新增 `release_validation_runs` / `release_validation_checks`）；发布前通过 `POST /api/v1/internal/release-validation/*` 或 `scripts/validate-production-rollout.sh` 执行 readiness + regression + finalize 放行门禁。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
 - **分支发布约束（强制）**：GitHub 远端只保留 `main` 作为长期分支；功能开发可在本地短分支进行，但完成后必须合入 `main` 并删除本地/远端功能分支，禁止在 GitHub 长期保留 `0xx-*` 分支。
@@ -288,7 +289,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Playwright WebServer 复用（重要）**：`frontend/playwright.config.ts` 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
-## 近期关键修复快照（2026-02-06）
+## 近期关键修复快照（2026-02-09）
+- **Feature 043（Cloud Rollout Regression）**：新增发布验收审计域（`release_validation_runs` + `release_validation_checks`）、internal 验收接口（create/list/readiness/regression/finalize/report）与一键脚本 `scripts/validate-production-rollout.sh`；强制关键 regression 场景 `skip=0` 才可放行，失败自动进入 no-go/rollback_required。
 - **Feature 041（Final Decision Workspace）**：新增 `/editor/decision/[id]` 三栏沉浸式终审工作台（审稿对比 + Markdown 决策信 + PDF 预览）；后端新增 decision context/submit/attachment API，落地 `decision_letters` 表与 `decision-attachments` 私有桶，支持草稿保存、乐观锁冲突与作者端 final-only 附件可见性。
 - **Feature 040（Reviewer Workspace）**：新增 `/reviewer/workspace/[id]` 沉浸式审稿界面（左侧 PDF + 右侧 Action Panel），支持双通道意见、附件上传、提交后只读与 `beforeunload` 脏表单保护；后端新增 `/api/v1/reviewer/assignments/{id}/workspace|attachments|submit`。
 - **Feature 039（Reviewer Magic Link）**：实现 `/review/invite?token=...`（JWT + httpOnly cookie）免登录审稿闭环；补齐 reviewer workspace 页面与 cookie-scope 校验接口；修复 mocked E2E 因空数据触发 ErrorBoundary。
@@ -310,6 +312,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 043-production-cloud-rollout: Added release validation run/check schema + internal rollout APIs + zero-skip regression gate + `validate-production-rollout.sh`
 - 042-production-pipeline: Added Python 3.14+ (local), Python 3.12 (HF Docker runtime), TypeScript 5.x + FastAPI, Pydantic v2, Supabase (PostgreSQL + Storage), Next.js 14 App Router, React 18, Tailwind CSS, Shadcn UI
 - 041-final-decision-workspace: Added immersive decision workspace + decision_letters schema/storage + draft/final decision APIs + RBAC/visibility/performance coverage
 - 040-reviewer-workspace: Dedicated reviewer workspace route + APIs + tests (immersive layout, dual comments, attachments, readonly-after-submit)
@@ -327,6 +330,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - 022-core-logic-hardening: Financial Gate + reviewer dual comments + attachments
 
 ## Active Technologies
+- Python 3.14+ (local), Python 3.12 (HF Docker), TypeScript 5.x + FastAPI, Pydantic v2, Supabase PostgreSQL/Storage, Next.js 14, pytest, Playwright (043-production-cloud-rollout)
+- Supabase PostgreSQL (`release_validation_runs`, `release_validation_checks`) + internal rollout validation APIs/scripts (043-production-cloud-rollout)
 - Python 3.14+ (local), TypeScript 5.x + FastAPI, Supabase, Next.js, Shadcn UI
 - Deploy runtime: Python 3.12-slim (HF Space Docker)
 - Supabase (PostgreSQL + Storage) – `decision_letters` + `decision-attachments` + `user_profiles` reviewer library extension + `invoices` bucket + status transition logs

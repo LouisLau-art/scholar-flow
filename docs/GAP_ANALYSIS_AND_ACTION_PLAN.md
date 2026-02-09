@@ -1,74 +1,105 @@
-# 项目差距分析与下一步行动计划书 (Gap Analysis & Action Plan)
+# 项目差距分析与行动清单（Todo 版）
 
-**日期**: 2026-02-06  
-**基于**: 鲁总（业务方）反馈、当前开发进度 (Feature 041 Finished)、系统架构现状
-
----
-
-## 1. 总体进度概览 (Status Overview)
-
-经过最近一轮冲刺（Feature 038 角色工作流、041 最终决策工作间、037/039/040 审稿人闭环），ScholarFlow 已经从一个“通用型 CMS”成功转型为**“符合学术出版规范的专业投审稿系统”**。
-
-- **核心闭环**: 投递 -> 预审(ME/AE/EIC) -> 外审(Invite/Review) -> 终审(Decision) -> 录用/账单 -> 出版门禁。这一主干链路已全部打通。
-- **关键合规**: 状态机已硬化（拒绝越级拒稿），审计日志已全覆盖，角色权限已隔离。
+**更新日期**: 2026-02-09  
+**基线分支**: `main`  
+**目的**: 这份文档直接作为执行清单，持续勾选推进。
 
 ---
 
-## 2. 差距分析 (Gap Analysis)
+## 1. 当前状态快照（已完成）
 
-这里对照鲁总（甲方）的业务要求与学术出版标准，列出目前系统的缺失项：
-
-| 维度 | 甲方/业务要求 | 当前现状 | 差距 (Gap) | 优先级 |
-| :--- | :--- | :--- | :--- | :--- |
-| **出版生产** | **“录用后要有排版、校对的协作流”**<br>不仅是状态变更，要有文件流转。 | 仅有 `layout`, `proofreading` 等状态枚举，缺乏专门的协作 UI。 | **缺失出版协作工作间**：排版师上传清样、作者在线校对确认的入口缺失。 | **High** |
-| **内部协作** | **“编辑部内部要能高效沟通”**<br>不要发微信/邮件，系统内要有留痕。 | 详情页有 Note，但缺乏通知机制；无法 @ 其他编辑。 | **缺失内部通知与指派**：Note 仅是“备忘录”，不是“沟通工具”。缺乏任务逾期预警。 | **Medium** |
-| **数据决策** | **“我要看编辑处理得快不快”**<br>宏观管理视角。 | 只有简单的“稿件列表”，没有“时效统计图表”。 | **缺失效能看板**：无法直观看到“平均初审用时”、“外审周转率”等关键 KPI。 | **Medium** |
-| **学术门户** | **“这得像个正经的期刊网站”**<br>展示要专业，方便引用。 | 基础的文章展示，缺乏学术分类和引用工具。 | **门户功能单薄**：缺少 Subject Area 分类索引，缺少 BibTeX/RIS 导出。 | **Low** |
-| **支付/财务** | **“财务要能对账”**<br>不仅是下载 PDF，要有流水记录。 | 已有 Invoice PDF 和 Payment Gate。 | **财务模块较轻**：目前混在编辑详情页中，缺乏独立的财务对账列表（Finance Dashboard）。 | **Low** |
-
----
-
-## 3. 下一步行动计划 (Action Plan)
-
-根据上述差距，建议接下来的开发按照 **"生产闭环 -> 内部提效 -> 数据管理"** 的顺序进行。
-
-### 🚀 第一阶段：生产协作闭环 (Production Pipeline)
-**目标**: 解决稿件“录用后”如何变成“最终 PDF”的问题，填补出版环节的 UI 空白。
-
-*   **Task 1 (Feature 031 - Production Workflow)**:
-    *   **排版端 (Layout Desk)**: 为“排版编辑”角色提供专用视图，上传 Galley Proof (清样 PDF)。
-    *   **校对端 (Author Proofreading)**: 作者收到校对通知，在线查看清样，提交 Correction List（或确认无误）。
-    *   **版本管理**: 区分 `Author Version` (原稿) 和 `Production Version` (排版稿)，最终发布时强制使用 Production Version。
-
-### 🛠 第二阶段：内部协作增强 (Internal Collaboration)
-**目标**: 让系统成为编辑部日常工作的核心平台，减少对外部沟通工具的依赖。
-
-*   **Task 2 (Feature 036 - Enhanced Collaboration)**:
-    *   **提及功能 (@Mentions)**: 在 Internal Comments 中支持 @同事，触发系统/邮件通知。
-    *   **任务指派 (Task Assignment)**: 除了指派稿件 Owner，支持指派细分任务（如“请核对图片版权”）。
-    *   **逾期红点**: 对超过 SLA（如预审 > 3天）的稿件在列表中高亮预警。
-
-### 📊 第三阶段：效能看板 (Efficiency Dashboard)
-**目标**: 满足管理层（鲁总）对团队效率的监控需求。
-
-*   **Task 3 (Feature 014 - Analytics Dashboard)**:
-    *   **时效统计**: 计算并展示 TTR (Time to Review), TTD (Time to Decision), TTP (Time to Publication)。
-    *   **工作量统计**: 统计每位编辑处理的稿件数量、拒稿率。
-    *   **漏斗分析**: 展示稿件在各阶段的流失情况。
-
-### 🎨 第四阶段：门户与体验精修 (Portal Polish)
-**目标**: 提升对外品牌形象。
-
-*   **Task 4 (Feature 034 - Portal Refinement)**:
-    *   **学术工具箱**: 增加 "Cite this article" (BibTeX/EndNote/RIS)。
-    *   **分类浏览**: 完善 Subject Collections 页面。
-    *   **SEO 优化**: 针对 Google Scholar 的 Meta Tags 优化。
+- [x] 核心主链路已打通：投稿 -> 预审/外审 -> 终审决策 -> 录用/账单 -> 出版门禁。
+- [x] Reviewer 闭环已完成（Invite Accept/Decline + Magic Link + Reviewer Workspace）。
+- [x] Final Decision Workspace 已完成（草稿/终稿/附件/审计）。
+- [x] 录用后生产协作闭环已完成（Feature 042）：
+  - [x] 编辑生产工作间 `/editor/production/[id]`
+  - [x] 作者校对页面 `/proofreading/[id]`
+  - [x] `production_cycles` / `production_proofreading_responses` / `production_correction_items`
+  - [x] 发布门禁与“已核准轮次”绑定
+- [x] 最新主干 CI 已恢复为绿色（`ScholarFlow CI` / `Sync to Hugging Face Hub`）。
 
 ---
 
-## 4. 立即执行建议 (Immediate Next Step)
+## 2. 差距清单（按优先级）
 
-鉴于 **Feature 041 (终审决策)** 刚刚完成，稿件已经可以顺利流转到 `approved` (录用) 状态。**目前的断点在于录用后如何生成最终出版物**。
+## P0（下一阶段必须做）
 
-**强烈建议立即启动：Feature 031 (Production Pipeline / 出版流水线)**。
-这将彻底打通从“录用”到“上线”的最后一公里，实现全流程的 100% 闭环。
+- [ ] **GAP-P0-01：预审角色工作流落地（Feature 038）**
+  - 现状：`specs/038-precheck-role-workflow/` 已有规格，但落地实现不足。
+  - 缺口：ME -> AE -> EIC 的队列、责任切换、时间戳审计、前端入口还不完整。
+  - 完成标准：
+    - [ ] 后端状态流转与 RBAC 全量落地
+    - [ ] Process/详情页可视化角色队列
+    - [ ] E2E 覆盖 ME 分配、AE 质检、EIC 初审
+
+- [x] **GAP-P0-02：Feature 042 云端迁移与真实环境回归**
+  - 现状：已交付 Feature 043（Cloud Rollout Regression）作为放行门禁层，补齐 run/check 审计、internal API 与一键脚本。
+  - 结果：
+    - [x] 新增迁移：`20260209160000_release_validation_runs.sql`（`release_validation_runs` + `release_validation_checks`）
+    - [x] 新增内部验收接口：`/api/v1/internal/release-validation/*`（create/list/readiness/regression/finalize/report）
+    - [x] 新增放行脚本：`scripts/validate-production-rollout.sh`（dry-run/readiness-only/统一退出码）
+    - [x] 新增测试：`test_release_validation_service.py`、`test_release_validation_api.py`，并验证 `15 passed`
+
+- [ ] **GAP-P0-03：内部协作增强（Feature 036 增量）**
+  - 现状：已有 Internal Notebook + Audit Timeline。
+  - 缺口：缺少 @mentions、可分配内部任务、SLA 逾期预警。
+  - 完成标准：
+    - [ ] Notebook 支持 @用户并触发站内通知
+    - [ ] 增加内部 task 字段（负责人、截止时间、状态）
+    - [ ] Process 列表显示 overdue 标识与筛选
+
+## P1（P0 后立即推进）
+
+- [ ] **GAP-P1-01：Finance 页面接入真实 `invoices`（替换演示数据）**
+  - 现状：`/finance` 为 demo，不与云端同步。
+  - 完成标准：
+    - [ ] 列表真实读取 `invoices`
+    - [ ] 支持筛选（unpaid/paid/waived）与对账导出
+    - [ ] 与 `/editor/manuscript/[id]` 的 Mark Paid 行为一致
+
+- [ ] **GAP-P1-02：Portal 学术工具箱补齐（Feature 034）**
+  - 现状：文章页有基础引用按钮，但无 BibTeX/RIS 下载与专题索引闭环。
+  - 完成标准：
+    - [ ] 文章页提供 BibTeX/RIS 导出
+    - [ ] Subject Collections 可按学科聚合浏览
+    - [ ] Scholar/SEO 元数据校验通过
+
+- [ ] **GAP-P1-03：Analytics 管理视角增强（Feature 014 增量）**
+  - 现状：仪表盘已可用（KPI/趋势/导出）。
+  - 缺口：缺少“按编辑/按阶段”的下钻分析与 SLA 视图。
+  - 完成标准：
+    - [ ] 编辑个人效率排行（处理量/平均耗时）
+    - [ ] 阶段耗时分解（预审/外审/终审/生产）
+    - [ ] 异常预警（超 SLA 稿件）
+
+## P2（中期规划）
+
+- [ ] **GAP-P2-01：DOI/Crossref 真对接**
+  - 现状：仍以 mock/占位为主。
+  - 完成标准：注册、重试、回执状态可追踪。
+
+- [ ] **GAP-P2-02：查重能力重启（可配置）**
+  - 现状：默认关闭 `PLAGIARISM_CHECK_ENABLED=0`。
+  - 完成标准：开关、失败降级、报告留痕完整。
+
+---
+
+## 3. 建议执行顺序（接下来 2 个迭代）
+
+### Iteration 1（本周，先把链路“可上线”）
+
+- [x] 完成 GAP-P0-02：云端迁移 + 真实环境回归（优先最高）
+- [ ] 启动并交付 GAP-P0-01 第一版（Feature 038 后端 + 基础 UI）
+
+### Iteration 2（下周，先把“编辑团队提效”）
+
+- [ ] 完成 GAP-P0-01 剩余项（E2E + 审计完善）
+- [ ] 完成 GAP-P0-03（@mentions + 内部任务 + SLA 预警）
+- [ ] 启动 GAP-P1-01（Finance 真数据接入）
+
+---
+
+## 4. 立即下一步（单一建议）
+
+**建议立刻开工：`GAP-P0-01`（预审角色工作流落地）**。  
+原因：GAP-P0-02 已完成并补齐发布门禁，当前主路径瓶颈转移到 ME→AE→EIC 预审协作效率与审计完整性。
