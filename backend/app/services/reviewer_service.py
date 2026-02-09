@@ -33,6 +33,203 @@ def _is_missing_column_error(err: Exception) -> bool:
     return "column" in msg or "does not exist" in msg or "pgrst" in msg
 
 
+def _parse_iso_datetime(raw: Any) -> datetime | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+class ReviewPolicyService:
+    """
+    审稿邀请策略服务：
+    - 冷却期（同刊同审稿人）
+    - 利益冲突（作者=审稿人）
+    - 逾期风险（该审稿人未完成且已逾期任务数）
+    - due date 默认/窗口配置
+    """
+
+    def __init__(self) -> None:
+        self.client = supabase_admin
+
+    @staticmethod
+    def _safe_int_env(name: str, default: int, *, min_value: int = 0) -> int:
+        try:
+            value = int((os.environ.get(name) or "").strip() or default)
+        except Exception:
+            value = default
+        return max(min_value, value)
+
+    def cooldown_days(self) -> int:
+        return self._safe_int_env("REVIEW_INVITE_COOLDOWN_DAYS", 30, min_value=1)
+
+    def cooldown_override_roles(self) -> list[str]:
+        raw = (os.environ.get("REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES") or "admin,managing_editor").strip()
+        roles = [r.strip() for r in raw.split(",") if r.strip()]
+        return roles or ["admin", "managing_editor"]
+
+    def due_window_days(self) -> tuple[int, int, int]:
+        min_days = self._safe_int_env("REVIEW_INVITE_DUE_MIN_DAYS", 7, min_value=1)
+        max_days = self._safe_int_env("REVIEW_INVITE_DUE_MAX_DAYS", 21, min_value=min_days)
+        default_days = self._safe_int_env("REVIEW_INVITE_DUE_DEFAULT_DAYS", 10, min_value=min_days)
+        if default_days > max_days:
+            default_days = max_days
+        return min_days, max_days, default_days
+
+    def _load_manuscript_journal_map(self, manuscript_ids: list[str]) -> dict[str, str]:
+        mids = sorted({str(x).strip() for x in manuscript_ids if str(x).strip()})
+        if not mids:
+            return {}
+        try:
+            resp = (
+                self.client.table("manuscripts")
+                .select("id,journal_id")
+                .in_("id", mids)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception:
+            rows = []
+        out: dict[str, str] = {}
+        for row in rows:
+            mid = str(row.get("id") or "").strip()
+            jid = str(row.get("journal_id") or "").strip()
+            if mid and jid:
+                out[mid] = jid
+        return out
+
+    def evaluate_candidates(self, *, manuscript: dict[str, Any], reviewer_ids: list[str]) -> dict[str, dict[str, Any]]:
+        reviewer_ids = sorted({str(x).strip() for x in reviewer_ids if str(x).strip()})
+        if not reviewer_ids:
+            return {}
+
+        manuscript_id = str(manuscript.get("id") or "").strip()
+        journal_id = str(manuscript.get("journal_id") or "").strip()
+        author_id = str(manuscript.get("author_id") or "").strip()
+
+        now = datetime.now(timezone.utc)
+        cooldown_days = self.cooldown_days()
+        cooldown_cutoff = now - timedelta(days=cooldown_days)
+        done_statuses = {"completed", "cancelled", "declined"}
+
+        base: dict[str, dict[str, Any]] = {
+            rid: {
+                "can_assign": True,
+                "allow_override": False,
+                "cooldown_active": False,
+                "conflict": False,
+                "overdue_risk": False,
+                "overdue_open_count": 0,
+                "hits": [],
+            }
+            for rid in reviewer_ids
+        }
+
+        for rid in reviewer_ids:
+            if author_id and rid == author_id:
+                base[rid]["conflict"] = True
+                base[rid]["can_assign"] = False
+                base[rid]["hits"].append(
+                    {
+                        "code": "conflict",
+                        "label": "Conflict of interest",
+                        "severity": "error",
+                        "blocking": True,
+                        "detail": "Reviewer is the manuscript author.",
+                    }
+                )
+
+        try:
+            ra_resp = (
+                self.client.table("review_assignments")
+                .select("manuscript_id,reviewer_id,status,due_at,invited_at,created_at")
+                .in_("reviewer_id", reviewer_ids)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            assignment_rows = getattr(ra_resp, "data", None) or []
+        except Exception:
+            assignment_rows = []
+
+        if journal_id and assignment_rows:
+            related_manuscript_ids = [
+                str(row.get("manuscript_id") or "").strip()
+                for row in assignment_rows
+                if str(row.get("manuscript_id") or "").strip() and str(row.get("manuscript_id") or "").strip() != manuscript_id
+            ]
+            journal_map = self._load_manuscript_journal_map(related_manuscript_ids)
+        else:
+            journal_map = {}
+
+        latest_cooldown_at: dict[str, datetime] = {}
+        overdue_count: dict[str, int] = {}
+
+        for row in assignment_rows:
+            rid = str(row.get("reviewer_id") or "").strip()
+            if rid not in base:
+                continue
+            status = str(row.get("status") or "").strip().lower()
+            due_dt = _parse_iso_datetime(row.get("due_at"))
+            if status not in done_statuses and due_dt and due_dt < now:
+                overdue_count[rid] = int(overdue_count.get(rid, 0)) + 1
+
+            if not journal_id:
+                continue
+            row_mid = str(row.get("manuscript_id") or "").strip()
+            if not row_mid or row_mid == manuscript_id:
+                continue
+            if journal_map.get(row_mid) != journal_id:
+                continue
+
+            invited_dt = _parse_iso_datetime(row.get("invited_at")) or _parse_iso_datetime(row.get("created_at"))
+            if not invited_dt or invited_dt < cooldown_cutoff:
+                continue
+            prev = latest_cooldown_at.get(rid)
+            if prev is None or invited_dt > prev:
+                latest_cooldown_at[rid] = invited_dt
+
+        for rid in reviewer_ids:
+            if rid in latest_cooldown_at:
+                hit_at = latest_cooldown_at[rid]
+                cooldown_until = (hit_at + timedelta(days=cooldown_days)).date().isoformat()
+                base[rid]["cooldown_active"] = True
+                base[rid]["can_assign"] = False
+                base[rid]["allow_override"] = not base[rid]["conflict"]
+                base[rid]["cooldown_last_invited_at"] = hit_at.isoformat()
+                base[rid]["cooldown_until"] = cooldown_until
+                base[rid]["hits"].append(
+                    {
+                        "code": "cooldown",
+                        "label": "Cooldown active",
+                        "severity": "warning",
+                        "blocking": True,
+                        "detail": f"Invited within {cooldown_days} days in the same journal. Cooldown until {cooldown_until}.",
+                    }
+                )
+
+            od = int(overdue_count.get(rid, 0))
+            if od > 0:
+                base[rid]["overdue_risk"] = True
+                base[rid]["overdue_open_count"] = od
+                base[rid]["hits"].append(
+                    {
+                        "code": "overdue_risk",
+                        "label": "Overdue risk",
+                        "severity": "info",
+                        "blocking": False,
+                        "detail": f"Reviewer has {od} overdue open assignment(s).",
+                    }
+                )
+
+        return base
+
+
 class ReviewerService:
     """
     Reviewer Library service:
@@ -230,25 +427,16 @@ class ReviewerInviteService:
     """
 
     def _due_window_days(self) -> tuple[int, int]:
-        try:
-            min_days = int((os.environ.get("REVIEW_INVITE_DUE_MIN_DAYS") or "7").strip())
-        except Exception:
-            min_days = 7
-        try:
-            max_days = int((os.environ.get("REVIEW_INVITE_DUE_MAX_DAYS") or "10").strip())
-        except Exception:
-            max_days = 10
-        min_days = max(1, min_days)
-        max_days = max(min_days, max_days)
+        min_days, max_days, _default_days = ReviewPolicyService().due_window_days()
         return min_days, max_days
 
     def _build_due_window(self) -> InviteActionWindow:
-        min_days, max_days = self._due_window_days()
+        min_days, max_days, default_days = ReviewPolicyService().due_window_days()
         today = datetime.now(timezone.utc).date()
         return InviteActionWindow(
             min_due_date=today + timedelta(days=min_days),
             max_due_date=today + timedelta(days=max_days),
-            default_due_date=today + timedelta(days=min_days),
+            default_due_date=today + timedelta(days=default_days),
         )
 
     def _derive_invite_state(self, assignment: Dict[str, Any]) -> str:
