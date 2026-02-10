@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Inbox, Loader2, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Inbox, Loader2, RotateCcw } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import QueryProvider from '@/components/providers/QueryProvider'
 import { Badge } from '@/components/ui/badge'
@@ -152,21 +152,19 @@ export default function MEIntakePage() {
                   manuscripts.map((m) => (
                     <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                       <td className="px-4 py-3 text-sm text-slate-900">
-                        <div className="line-clamp-2 font-medium">{m.title}</div>
+                        <Link
+                          href={`/editor/manuscript/${m.id}`}
+                          target="_blank"
+                          className="line-clamp-2 font-medium text-slate-900 hover:text-primary hover:underline"
+                        >
+                          {m.title}
+                        </Link>
                         <div className="mt-1 font-mono text-[11px] text-slate-500">{m.id}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{formatDate(m.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{renderIntakeStatus(m.pre_check_status)}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/editor/manuscript/${m.id}`}
-                            target="_blank"
-                            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-                          >
-                            <FileText className="h-4 w-4" />
-                            查看稿件包
-                          </Link>
                           <Button size="sm" onClick={() => openAssignModal(m.id)}>
                             Assign AE
                           </Button>
