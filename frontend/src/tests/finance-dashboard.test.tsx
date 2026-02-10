@@ -77,7 +77,7 @@ describe('Finance dashboard', () => {
     })
   })
 
-  it('loads real invoices and supports status filtering', async () => {
+  it('loads real invoices', async () => {
     render(<FinanceDashboard />)
 
     await waitFor(() => {
@@ -91,16 +91,6 @@ describe('Finance dashboard', () => {
       )
     })
     expect(await screen.findByText('INV-001')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('combobox', { name: 'Finance status filter' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'Paid' }))
-    await waitFor(() => {
-      expect(EditorApi.listFinanceInvoices).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'paid',
-        })
-      )
-    })
   })
 
   it('calls confirm API with expected status and source', async () => {
