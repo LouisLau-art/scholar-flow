@@ -26,7 +26,7 @@
 1. 环境变量检查（本地）  
    `./scripts/sync-platform-env.sh --env-file deploy/platform.env --dry-run`
 2. 发布门禁检查（UAT API）  
-   `scripts/validate-production-rollout.sh --api-base https://louisshawn-scholarflow-api.hf.space --readiness-only`
+   `ADMIN_API_KEY=<your_admin_api_key> scripts/validate-production-rollout.sh --base-url https://louisshawn-scholarflow-api.hf.space --readiness-only`
 3. 关键迁移已落库（至少以下几项）：
    - `supabase/migrations/20260206150000_add_precheck_fields.sql`
    - `supabase/migrations/20260209190000_internal_collaboration_mentions_tasks.sql`

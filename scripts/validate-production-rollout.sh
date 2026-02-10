@@ -27,6 +27,7 @@ Usage: scripts/validate-production-rollout.sh [options]
 
 Options:
   --base-url <url>           Backend base URL (e.g. https://xxx.hf.space)
+  --api-base <url>           Alias of --base-url (backward compatible)
   --admin-key <key>          ADMIN_API_KEY value
   --feature-key <key>        Feature key (default: 042-production-pipeline)
   --environment <name>       Validation environment (default: staging)
@@ -48,7 +49,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base-url)
+    --base-url|--api-base)
       BASE_URL="${2:-}"
       shift 2
       ;;
