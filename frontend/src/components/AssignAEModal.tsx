@@ -84,7 +84,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             className="w-full border rounded p-2"
             value={selectedAE}
             onChange={(e) => setSelectedAE(e.target.value)}
-            disabled={isSubmitting || (isLoadingAEs && aes.length === 0)}
+            disabled={isSubmitting}
           >
             <option value="">
               {isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'}
