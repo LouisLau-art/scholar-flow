@@ -7,6 +7,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
 import { AssignAEModal } from '@/components/AssignAEModal'
+import { getAssistantEditors } from '@/services/assistantEditorsCache'
 
 // Mock types
 interface Manuscript {
@@ -36,6 +37,8 @@ export default function MEIntakePage() {
 
   useEffect(() => {
     fetchQueue()
+    // 中文注释：预取 AE 列表，避免首次点击 Assign AE 时才触发网络请求导致卡顿
+    void getAssistantEditors().catch(() => {})
   }, [])
 
   const openAssignModal = (id: string) => {

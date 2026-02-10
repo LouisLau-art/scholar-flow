@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { editorService } from '../services/editorService';
-import { EditorApi } from '@/services/editorApi';
+import { getAssistantEditors, peekAssistantEditorsCache, type AssistantEditorOption } from '@/services/assistantEditorsCache';
 
 interface AssignAEModalProps {
   isOpen: boolean;
@@ -13,34 +13,38 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
   const [selectedAE, setSelectedAE] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingAEs, setIsLoadingAEs] = useState(false);
-  const [aes, setAes] = useState<Array<{ id: string; full_name?: string | null; email?: string | null }>>([]);
+  const [aes, setAes] = useState<AssistantEditorOption[]>([]);
   const [error, setError] = useState<string>('');
 
   React.useEffect(() => {
     let mounted = true;
     if (!isOpen) {
-      setAes([]);
       setSelectedAE('');
       setError('');
       return () => {
         mounted = false;
       };
     }
+
+    const cached = peekAssistantEditorsCache();
+    if (cached && cached.length) {
+      setAes(cached);
+    }
+
     async function loadAEs() {
-      setIsLoadingAEs(true);
+      const hasCached = Boolean(cached && cached.length);
+      // 只有“完全无缓存”时才阻塞下拉；有缓存就允许立即选择
+      setIsLoadingAEs(!hasCached);
       setError('');
       try {
-        const res = await EditorApi.listAssistantEditors();
-        if (!res?.success) {
-          throw new Error(res?.detail || res?.message || 'Failed to load assistant editors');
-        }
+        const rows = await getAssistantEditors();
         if (mounted) {
-          setAes((res.data || []) as Array<{ id: string; full_name?: string | null; email?: string | null }>);
+          setAes(rows);
         }
       } catch (e) {
         if (mounted) {
           setError(e instanceof Error ? e.message : 'Failed to load assistant editors');
-          setAes([]);
+          if (!cached?.length) setAes([]);
         }
       } finally {
         if (mounted) setIsLoadingAEs(false);
@@ -80,9 +84,11 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             className="w-full border rounded p-2"
             value={selectedAE}
             onChange={(e) => setSelectedAE(e.target.value)}
-            disabled={isLoadingAEs || isSubmitting}
+            disabled={isSubmitting || (isLoadingAEs && aes.length === 0)}
           >
-            <option value="">-- Select --</option>
+            <option value="">
+              {isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'}
+            </option>
             {aes.map(ae => (
               <option key={ae.id} value={ae.id}>{ae.full_name || ae.email || ae.id}</option>
             ))}
