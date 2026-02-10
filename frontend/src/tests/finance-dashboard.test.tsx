@@ -90,11 +90,10 @@ describe('Finance dashboard', () => {
         })
       )
     })
-    expect(screen.getByText('INV-001')).toBeInTheDocument()
+    expect(await screen.findByText('INV-001')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Finance status filter'), {
-      target: { value: 'paid' },
-    })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Finance status filter' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Paid' }))
     await waitFor(() => {
       expect(EditorApi.listFinanceInvoices).toHaveBeenCalledWith(
         expect.objectContaining({
