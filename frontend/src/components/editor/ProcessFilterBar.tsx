@@ -10,6 +10,10 @@ import { ChevronDown, Loader2, Search, RotateCcw } from 'lucide-react'
 
 type JournalOption = { id: string; title: string; slug?: string }
 type StaffOption = { id: string; email?: string; full_name?: string }
+const FILTER_META_CACHE_TTL_MS = 300_000
+
+let journalsCache: { data: JournalOption[]; cachedAt: number } | null = null
+let staffCache: { data: StaffOption[]; cachedAt: number } | null = null
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'pre_check', label: 'Pre-check' },
@@ -35,6 +39,7 @@ export function ProcessFilterBar({
   const router = useRouter()
   const pathname = usePathname() ?? '/editor/process'
   const searchParams = useSearchParams()
+  const searchKey = searchParams?.toString() || ''
 
   const [journals, setJournals] = useState<JournalOption[]>([])
   const [loadingJournals, setLoadingJournals] = useState(false)
@@ -43,17 +48,18 @@ export function ProcessFilterBar({
   const [loadingStaff, setLoadingStaff] = useState(false)
 
   const applied = useMemo(() => {
-    const q = (searchParams?.get('q') || '').trim()
-    const journalId = searchParams?.get('journal_id') || ''
-    const editorId = searchParams?.get('editor_id') || ''
-    const overdueOnly = ['1', 'true', 'yes', 'on'].includes((searchParams?.get('overdue_only') || '').toLowerCase())
-    const rawStatuses = searchParams?.getAll('status') || []
+    const parsed = new URLSearchParams(searchKey)
+    const q = (parsed.get('q') || '').trim()
+    const journalId = parsed.get('journal_id') || ''
+    const editorId = parsed.get('editor_id') || ''
+    const overdueOnly = ['1', 'true', 'yes', 'on'].includes((parsed.get('overdue_only') || '').toLowerCase())
+    const rawStatuses = parsed.getAll('status')
     const statuses =
       rawStatuses.length === 1 && rawStatuses[0]?.includes(',')
         ? rawStatuses[0].split(',').map((s) => s.trim()).filter(Boolean)
         : rawStatuses
     return { q, journalId, editorId, statuses, overdueOnly }
-  }, [searchParams])
+  }, [searchKey])
 
   const [q, setQ] = useState(applied.q)
   const [journalId, setJournalId] = useState(applied.journalId)
@@ -68,12 +74,23 @@ export function ProcessFilterBar({
 
   useEffect(() => {
     let alive = true
+    const now = Date.now()
+    const cacheValid = Boolean(journalsCache && now - journalsCache.cachedAt < FILTER_META_CACHE_TTL_MS)
+    if (cacheValid && journalsCache) {
+      setJournals(journalsCache.data)
+      setLoadingJournals(false)
+    }
+
     async function load() {
       try {
-        setLoadingJournals(true)
+        if (!cacheValid) setLoadingJournals(true)
         const res = await EditorApi.listJournals()
         if (!alive) return
-        if (res?.success) setJournals(res.data || [])
+        if (res?.success) {
+          const nextRows = res.data || []
+          journalsCache = { data: nextRows, cachedAt: Date.now() }
+          setJournals(nextRows)
+        }
       } finally {
         if (alive) setLoadingJournals(false)
       }
@@ -86,12 +103,23 @@ export function ProcessFilterBar({
 
   useEffect(() => {
     let alive = true
+    const now = Date.now()
+    const cacheValid = Boolean(staffCache && now - staffCache.cachedAt < FILTER_META_CACHE_TTL_MS)
+    if (cacheValid && staffCache) {
+      setStaff(staffCache.data)
+      setLoadingStaff(false)
+    }
+
     async function loadStaff() {
       try {
-        setLoadingStaff(true)
+        if (!cacheValid) setLoadingStaff(true)
         const res = await EditorApi.listInternalStaff('')
         if (!alive) return
-        if (res?.success) setStaff(res.data || [])
+        if (res?.success) {
+          const nextRows = res.data || []
+          staffCache = { data: nextRows, cachedAt: Date.now() }
+          setStaff(nextRows)
+        }
       } finally {
         if (alive) setLoadingStaff(false)
       }

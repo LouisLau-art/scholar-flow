@@ -5,6 +5,7 @@ import type { Notification } from '@/types'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
+import { resolveNotificationUrl } from '@/lib/notification-url'
 
 type Props = {
   notification: Notification
@@ -12,7 +13,7 @@ type Props = {
 }
 
 export function NotificationItem({ notification, onMarkRead }: Props) {
-  const href = notification.action_url || '/dashboard/notifications'
+  const href = resolveNotificationUrl(notification.action_url, '/dashboard/notifications')
   const router = useRouter()
 
   const createdAt = notification.created_at ? new Date(notification.created_at) : null

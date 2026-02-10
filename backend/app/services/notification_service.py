@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from app.lib.api_client import create_user_supabase_client, supabase_admin
 from postgrest.exceptions import APIError
@@ -14,6 +15,28 @@ class NotificationService:
     1) 写入使用 supabase_admin（service_role），避免 RLS 导致写入失败。
     2) 用户读取/更新使用“用户态 client”（注入 JWT），确保 RLS 生效，防止越权。
     """
+
+    @staticmethod
+    def _normalize_action_url(action_url: Optional[str]) -> Optional[str]:
+        raw = str(action_url or "").strip()
+        if not raw:
+            return None
+        if raw.startswith("/"):
+            return raw
+        if raw.startswith("./"):
+            return f"/{raw[2:]}"
+        try:
+            parsed = urlparse(raw)
+        except Exception:
+            return None
+        if parsed.scheme not in {"http", "https"}:
+            return None
+        path = parsed.path or "/"
+        if not path.startswith("/"):
+            return None
+        query = f"?{parsed.query}" if parsed.query else ""
+        fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+        return f"{path}{query}{fragment}"
 
     def create_notification(
         self,
@@ -39,10 +62,12 @@ class NotificationService:
                 else:
                     action_url = "/dashboard/notifications"
 
+            normalized_action_url = self._normalize_action_url(action_url) or "/dashboard/notifications"
+
             payload = {
                 "user_id": user_id,
                 "manuscript_id": manuscript_id,
-                "action_url": action_url,
+                "action_url": normalized_action_url,
                 "type": type,
                 "title": title,
                 "content": content,

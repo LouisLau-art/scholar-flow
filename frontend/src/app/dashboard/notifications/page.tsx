@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { resolveNotificationUrl } from '@/lib/notification-url'
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -81,54 +82,57 @@ export default function NotificationsPage() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {notifications.map((n) => (
-                  <Link
-                    key={n.id} 
-                    href={n.action_url || '/dashboard/notifications'}
-                    onClick={() => {
-                      if (!n.is_read) markAsRead(n.id)
-                    }}
-                    className={`p-6 flex items-start justify-between transition-all ${!n.is_read ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}
-                  >
-                    <div className="flex gap-4">
-                      <div className={`p-3 rounded-2xl ${!n.is_read ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                        <Bell className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className={`font-bold ${!n.is_read ? 'text-slate-900' : 'text-slate-600'}`}>
-                            {n.title}
-                          </p>
-                          {!n.is_read && (
-                            <span className="w-2 h-2 rounded-full bg-blue-600" />
-                          )}
+                {notifications.map((n) => {
+                  const href = resolveNotificationUrl(n.action_url, '/dashboard/notifications')
+                  return (
+                    <Link
+                      key={n.id}
+                      href={href}
+                      onClick={() => {
+                        if (!n.is_read) markAsRead(n.id)
+                      }}
+                      className={`p-6 flex items-start justify-between transition-all ${!n.is_read ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}
+                    >
+                      <div className="flex gap-4">
+                        <div className={`p-3 rounded-2xl ${!n.is_read ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <Bell className="h-6 w-6" />
                         </div>
-                        <p className={`mt-1 text-sm ${!n.is_read ? 'text-slate-700' : 'text-slate-500'}`}>
-                          {n.content}
-                        </p>
-                        <p className="mt-2 text-xs text-slate-400 font-medium uppercase tracking-wider">
-                          {new Date(n.created_at).toLocaleString()}
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className={`font-bold ${!n.is_read ? 'text-slate-900' : 'text-slate-600'}`}>
+                              {n.title}
+                            </p>
+                            {!n.is_read && (
+                              <span className="w-2 h-2 rounded-full bg-blue-600" />
+                            )}
+                          </div>
+                          <p className={`mt-1 text-sm ${!n.is_read ? 'text-slate-700' : 'text-slate-500'}`}>
+                            {n.content}
+                          </p>
+                          <p className="mt-2 text-xs text-slate-400 font-medium uppercase tracking-wider">
+                            {new Date(n.created_at).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {!n.is_read && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          markAsRead(n.id)
-                        }}
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Mark as read
-                      </Button>
-                    )}
-                  </Link>
-                ))}
+
+                      {!n.is_read && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            markAsRead(n.id)
+                          }}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Mark as read
+                        </Button>
+                      )}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>

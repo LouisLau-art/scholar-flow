@@ -10,8 +10,10 @@ import { Suspense, useState } from 'react'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import { toast } from 'sonner'
 import { authService } from '@/services/auth'
+import { useRouter } from 'next/navigation'
 
 export default function ManuscriptsProcessPage() {
+  const router = useRouter()
   const [refreshKey, setRefreshKey] = useState(0)
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | undefined>()
@@ -85,7 +87,7 @@ export default function ManuscriptsProcessPage() {
               setIsAssignModalOpen(true)
             }}
             onDecide={(row) => {
-              window.location.href = `/editor/decision/${encodeURIComponent(row.id)}`
+              router.push(`/editor/decision/${encodeURIComponent(row.id)}`)
             }}
           />
         </Suspense>
