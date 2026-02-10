@@ -611,7 +611,7 @@ export default function EditorManuscriptDetailPage() {
 
             <Card className="shadow-sm border-slate-200">
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Author Resubmission Comment</CardTitle>
+                    <CardTitle className="text-base">Latest Author Resubmission Comment</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {latestAuthorResponse ? (
@@ -623,10 +623,16 @@ export default function EditorManuscriptDetailPage() {
                           {typeof latestAuthorResponse.round === 'number'
                             ? ` · Round ${latestAuthorResponse.round}`
                             : ''}
+                          {authorResponseHistory.length > 0 ? ` · Total ${authorResponseHistory.length}` : ''}
                         </div>
                         <div className="max-h-44 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
                           {latestAuthorResponse.text}
                         </div>
+                        {authorResponseHistory.length > 1 ? (
+                          <div className="text-xs text-slate-500">
+                            Complete timeline is shown in the left card: <span className="font-medium text-slate-700">Author Resubmission History</span>.
+                          </div>
+                        ) : null}
                       </div>
                     ) : (
                       <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
