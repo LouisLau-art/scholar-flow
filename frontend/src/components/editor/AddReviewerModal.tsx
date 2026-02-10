@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TagInput } from '@/components/ui/TagInput'
+import { Select } from '@/components/ui/select'
 
 type Mode = 'create' | 'edit'
 
@@ -110,17 +111,16 @@ export function AddReviewerModal(props: {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-2">
               <label className="text-sm font-medium">Title</label>
-              <select
+              <Select
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
                 {TITLE_OPTIONS.map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Full Name</label>
@@ -170,4 +170,3 @@ export function AddReviewerModal(props: {
     </Dialog>
   )
 }
-
