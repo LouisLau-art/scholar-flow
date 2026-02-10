@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
@@ -285,6 +286,14 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [ms?.files])
 
+  const handleBack = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push('/editor/process')
+  }, [router])
+
 
   if (loading) {
     return (
@@ -301,7 +310,18 @@ export default function EditorManuscriptDetailPage() {
     return (
       <div className="min-h-screen bg-slate-50">
         <SiteHeader />
-        <div className="mx-auto max-w-7xl px-4 py-16 text-slate-600">Manuscript not found.</div>
+        <div className="mx-auto max-w-7xl px-4 py-16 space-y-4">
+          <div className="text-slate-600">Manuscript not found.</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4" />
+              返回上一页
+            </Button>
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/editor/process">回到 Process 列表</Link>
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -323,9 +343,23 @@ export default function EditorManuscriptDetailPage() {
                 {getStatusLabel(status)}
             </span>
         </div>
-        <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4" />
+              返回上一页
+            </Button>
+            <Button asChild variant="secondary" size="sm" className="gap-1.5">
+              <Link href="/editor/process">回到 Process 列表</Link>
+            </Button>
+          </div>
+          <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">
             <Calendar className="h-3 w-3" />
-            Updated: <span className="font-mono font-medium text-slate-700">{ms.updated_at ? format(new Date(ms.updated_at), 'yyyy-MM-dd HH:mm') : '-'}</span>
+            Updated:{' '}
+            <span className="font-mono font-medium text-slate-700">
+              {ms.updated_at ? format(new Date(ms.updated_at), 'yyyy-MM-dd HH:mm') : '-'}
+            </span>
+          </div>
         </div>
       </header>
 
