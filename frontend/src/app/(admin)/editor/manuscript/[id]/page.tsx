@@ -555,6 +555,31 @@ export default function EditorManuscriptDetailPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <Card className="shadow-sm border-slate-200">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Author Resubmission Comment</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {latestAuthorResponseText ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500">
+                          {ms?.latest_author_response_submitted_at
+                            ? `Submitted at ${format(new Date(ms.latest_author_response_submitted_at), 'yyyy-MM-dd HH:mm')}`
+                            : 'Submitted time unavailable'}
+                          {typeof ms?.latest_author_response_round === 'number'
+                            ? ` · Round ${ms.latest_author_response_round}`
+                            : ''}
+                        </div>
+                        <div className="max-h-44 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
+                          {latestAuthorResponseText}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
+                    )}
+                </CardContent>
+            </Card>
             
             {/* Action Panel / Workflow */}
             <Card className="border-t-4 border-t-purple-500 shadow-sm">

@@ -1173,6 +1173,17 @@ async def submit_revision(
                 inbox_title = "Revision Returned to Technical Check"
                 inbox_content = f"Author resubmitted '{manuscript.get('title')}'. Please continue technical check."
 
+        # 中文注释:
+        # - 这类“作者修回已提交”的内部通知，点击后应优先回到具体稿件上下文，
+        #   避免默认 /dashboard?tab=editor 丢失当前待办定位。
+        # - from 参数用于详情页“返回上一页”回退到对应队列。
+        if updated_status == "pre_check" and updated_pre_stage == "intake":
+            editor_action_url = f"/editor/manuscript/{manuscript_id}?from=intake"
+        elif updated_status == "pre_check" and updated_pre_stage == "technical":
+            editor_action_url = f"/editor/manuscript/{manuscript_id}?from=workspace"
+        else:
+            editor_action_url = f"/editor/manuscript/{manuscript_id}?from=process"
+
         for uid in sorted(recipients):
             notification_service.create_notification(
                 user_id=uid,
@@ -1180,6 +1191,7 @@ async def submit_revision(
                 type="system",
                 title=inbox_title,
                 content=inbox_content,
+                action_url=editor_action_url,
             )
 
     except Exception as e:
