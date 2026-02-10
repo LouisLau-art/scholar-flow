@@ -54,6 +54,7 @@ describe('InternalNotebook mentions', () => {
       expect(EditorApi.listInternalStaff).toHaveBeenCalledWith('', { excludeCurrentUser: true })
     })
 
+    fireEvent.click(screen.getByRole('button', { name: /expand/i }))
     fireEvent.click(screen.getByLabelText('Mention Alice Editor'))
     fireEvent.click(screen.getByLabelText('Mention Bob Editor'))
 

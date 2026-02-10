@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { Check, Loader2, MessageSquare, Search, Send, UserRoundPlus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, Search, Send, UserRoundPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
   const [staff, setStaff] = useState<StaffOption[]>([])
   const [mentionUserIds, setMentionUserIds] = useState<string[]>([])
   const [staffSearch, setStaffSearch] = useState('')
+  const [mentionPanelOpen, setMentionPanelOpen] = useState(false)
   const [sessionUserId, setSessionUserId] = useState('')
   const [sessionUserEmail, setSessionUserEmail] = useState('')
 
@@ -188,7 +189,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
           Internal Notebook (Staff Only)
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex h-[440px] flex-1 flex-col gap-3 p-4">
+      <CardContent className="flex h-[560px] flex-1 flex-col gap-3 p-4">
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           Tip: select teammates below to create validated mentions. Duplicate and invalid mentions are blocked.
         </div>
@@ -238,10 +239,35 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
 
         <div className="mt-auto space-y-2 border-t pt-2">
           <div>
-            <Label className="mb-1 inline-flex items-center gap-1 text-xs text-slate-600">
-              <UserRoundPlus className="h-3.5 w-3.5" /> Mention teammates
-            </Label>
-            <div className="rounded-md border border-slate-200 bg-white p-2">
+            <div className="mb-1 flex items-center justify-between">
+              <Label className="inline-flex items-center gap-1 text-xs text-slate-600">
+                <UserRoundPlus className="h-3.5 w-3.5" /> Mention teammates
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-[11px]"
+                onClick={() => setMentionPanelOpen((prev) => !prev)}
+              >
+                {mentionPanelOpen ? (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5" /> Collapse
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5" /> Expand
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="mb-2 text-[11px] text-slate-500">
+              Selected {selectedMentionLabels.length} teammate(s).
+            </div>
+
+            {mentionPanelOpen ? (
+              <div className="rounded-md border border-slate-200 bg-white p-2">
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                 <Search className="h-3.5 w-3.5 text-slate-500" />
                 <Input
@@ -305,8 +331,6 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                 )}
               </div>
             </div>
-            {selectedMentionLabels.length > 0 ? (
-              <p className="mt-1 text-[11px] text-slate-500">Selected {selectedMentionLabels.length} teammate(s).</p>
             ) : null}
           </div>
 

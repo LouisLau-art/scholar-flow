@@ -429,7 +429,7 @@ export default function EditorManuscriptDetailPage() {
             />
 
             {/* 3. Internal Notebook */}
-            <div className="h-[500px]">
+            <div className="h-[620px]">
                 <InternalNotebook
                   manuscriptId={id}
                   currentUserId={rbacContext?.user_id}
