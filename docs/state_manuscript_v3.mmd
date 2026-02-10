@@ -1,4 +1,20 @@
 stateDiagram-v2
+    state "投稿" as submitted
+    state "ME技术审查" as me_precheck
+    state "退回修改" as returned
+    state "已分配AE" as ae_assigned
+    state "外审中" as under_review
+    state "待决策" as decision
+    state "小修" as revision_minor
+    state "大修" as revision_major
+    state "小修重提" as resubmitted_minor
+    state "大修重提" as resubmitted_major
+    state "接收" as approved
+    state "拒稿" as rejected
+    state "校对完成" as proof_ready
+    state "已支付" as paid
+    state "已发布" as published
+
     [*] --> submitted
     submitted --> me_precheck
     me_precheck --> returned: 技术不通过

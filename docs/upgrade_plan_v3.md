@@ -44,6 +44,8 @@ title: "ScholarFlow 期刊投稿与审稿系统升级方案（v3.0）"
 ![稿件状态机（v3）](state_manuscript_v3.svg)
 
 > 约束强调：`under_review` 不允许直接拒稿，必须进入 `decision` 节点由学术角色做最终判断。
+>
+> 状态码映射：投稿`submitted`，ME技术审查`me_precheck`，外审中`under_review`，待决策`decision`，小修`revision_minor`，大修`revision_major`，小修重提`resubmitted_minor`，大修重提`resubmitted_major`，接收`approved`，拒稿`rejected`，校对完成`proof_ready`，已支付`paid`，已发布`published`。
 
 ---
 
