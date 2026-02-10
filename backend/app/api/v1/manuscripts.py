@@ -61,6 +61,20 @@ def _is_missing_column_error(error_text: str) -> bool:
         or "reject_comment" in lowered
     )
 
+
+def _is_missing_table_error(error_text: str, table_name: str) -> bool:
+    if not error_text:
+        return False
+    lowered = error_text.lower()
+    table = str(table_name or "").strip().lower()
+    if not table:
+        return False
+    return table in lowered and (
+        "does not exist" in lowered
+        or "schema cache" in lowered
+        or "pgrst205" in lowered
+    )
+
 def _is_postgrest_single_no_rows_error(error_text: str) -> bool:
     if not error_text:
         return False
@@ -1541,6 +1555,26 @@ async def create_manuscript(
     try:
         # 生成新的稿件 ID
         manuscript_id = uuid4()
+        current_user_id = str(current_user.get("id") or "").strip()
+
+        cover_letter_path = str(manuscript.cover_letter_path or "").strip()
+        cover_letter_filename = str(manuscript.cover_letter_filename or "").strip() or None
+        cover_letter_content_type = str(manuscript.cover_letter_content_type or "").strip() or None
+
+        if cover_letter_path:
+            # 中文注释: 防止恶意构造 path 绑定他人文件或目录穿越路径
+            if ".." in cover_letter_path or cover_letter_path.startswith("/"):
+                raise HTTPException(status_code=422, detail="Invalid cover_letter_path")
+            if current_user_id and not cover_letter_path.startswith(f"{current_user_id}/"):
+                raise HTTPException(status_code=422, detail="cover_letter_path must belong to current user")
+            lowered_cover_path = cover_letter_path.lower()
+            if not (
+                lowered_cover_path.endswith(".pdf")
+                or lowered_cover_path.endswith(".doc")
+                or lowered_cover_path.endswith(".docx")
+            ):
+                raise HTTPException(status_code=422, detail="Cover letter only supports .pdf/.doc/.docx")
+
         # 使用当前登录用户的 ID，而不是传入的 author_id
         data = {
             "id": str(manuscript_id),
@@ -1549,7 +1583,7 @@ async def create_manuscript(
             "file_path": manuscript.file_path,
             "dataset_url": manuscript.dataset_url,
             "source_code_url": manuscript.source_code_url,
-            "author_id": current_user["id"],  # 使用真实的用户 ID
+            "author_id": current_user_id,  # 使用真实的用户 ID
             "status": "pre_check",
             "owner_id": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1561,6 +1595,32 @@ async def create_manuscript(
 
         if response.data:
             created = response.data[0]
+
+            if cover_letter_path:
+                try:
+                    supabase_admin.table("manuscript_files").upsert(
+                        {
+                            "manuscript_id": str(manuscript_id),
+                            "file_type": "cover_letter",
+                            "bucket": "manuscripts",
+                            "path": cover_letter_path,
+                            "original_filename": cover_letter_filename,
+                            "content_type": cover_letter_content_type,
+                            "uploaded_by": current_user_id or None,
+                        },
+                        on_conflict="bucket,path",
+                    ).execute()
+                except Exception as e:
+                    # 中文注释: cover letter 元数据写入失败时回滚稿件，避免出现“稿件已提交但附件丢失”
+                    try:
+                        supabase_admin.table("manuscripts").delete().eq("id", str(manuscript_id)).execute()
+                    except Exception as rollback_error:
+                        print(f"[CoverLetter] rollback manuscript failed: {rollback_error}")
+
+                    if _is_missing_table_error(str(e), "manuscript_files"):
+                        raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
+                    print(f"[CoverLetter] persist failed: {e}")
+                    raise HTTPException(status_code=500, detail="Failed to save cover letter metadata")
 
             # === 通知中心 (Feature 011) ===
             # 中文注释:
@@ -1606,6 +1666,8 @@ async def create_manuscript(
         else:
             return {"success": False, "message": "Failed to create manuscript"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"创建稿件失败: {str(e)}")
         return {"success": False, "message": str(e)}

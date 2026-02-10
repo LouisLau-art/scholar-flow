@@ -259,6 +259,74 @@ describe('SubmissionForm Component', () => {
     })
   })
 
+  it('includes cover letter metadata in submission payload when uploaded', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const manuscriptInput = screen.getByTestId('submission-file') as HTMLInputElement
+    const manuscriptFile = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+    fireEvent.change(manuscriptInput, { target: { files: [manuscriptFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
+    const coverFile = new File(['cover'], 'cover.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(coverInput, { target: { files: [coverFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find((call) => call[0] === '/api/v1/manuscripts')
+      expect(createCall).toBeTruthy()
+      const body = JSON.parse(createCall?.[1]?.body as string)
+      expect(body.cover_letter_path).toContain('u1/cover-letters/')
+      expect(body.cover_letter_filename).toBe('cover.docx')
+      expect(body.cover_letter_content_type).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+    })
+
+    expect(storageUploadMock).toHaveBeenCalledTimes(2)
+  })
+
   it('shows error when submission fails', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },

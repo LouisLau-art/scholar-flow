@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import LoginPrompt from '@/components/LoginPrompt'
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
+const COVER_LETTER_UPLOAD_TIMEOUT_MS = 60_000
 const METADATA_PARSE_TIMEOUT_MS = 25_000
 const METADATA_PARSE_TOTAL_TIMEOUT_MS = 35_000
 const DIRECT_API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '')
@@ -46,6 +47,15 @@ function isAbortLikeError(error: unknown): boolean {
   return /abort/i.test(text)
 }
 
+function isSupportedCoverLetter(file: File): boolean {
+  const name = String(file.name || '').toLowerCase()
+  return name.endsWith('.pdf') || name.endsWith('.doc') || name.endsWith('.docx')
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
 export default function SubmissionForm() {
   const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
@@ -53,6 +63,10 @@ export default function SubmissionForm() {
   const [metadata, setMetadata] = useState({ title: '', abstract: '', authors: [] as string[] })
   const [file, setFile] = useState<File | null>(null)
   const [uploadedPath, setUploadedPath] = useState<string | null>(null)
+  const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null)
+  const [coverLetterPath, setCoverLetterPath] = useState<string | null>(null)
+  const [isUploadingCoverLetter, setIsUploadingCoverLetter] = useState(false)
+  const [coverLetterUploadError, setCoverLetterUploadError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
   const [touched, setTouched] = useState({ title: false, abstract: false, datasetUrl: false, sourceCodeUrl: false })
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -263,6 +277,63 @@ export default function SubmissionForm() {
     }
   }
 
+  const handleCoverLetterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (!selectedFile) {
+      setCoverLetterFile(null)
+      setCoverLetterPath(null)
+      setCoverLetterUploadError(null)
+      return
+    }
+
+    if (!isSupportedCoverLetter(selectedFile)) {
+      setCoverLetterFile(null)
+      setCoverLetterPath(null)
+      setCoverLetterUploadError(null)
+      e.currentTarget.value = ''
+      toast.error('Cover letter only supports .pdf/.doc/.docx files.')
+      return
+    }
+
+    if (!user) {
+      toast.error('Please log in to upload a cover letter.')
+      return
+    }
+
+    setCoverLetterFile(selectedFile)
+    setCoverLetterPath(null)
+    setCoverLetterUploadError(null)
+    setIsUploadingCoverLetter(true)
+    const toastId = toast.loading('Uploading cover letter...')
+
+    try {
+      const safeName = sanitizeFilename(selectedFile.name || 'cover_letter')
+      const uploadPath = `${user.id}/cover-letters/${crypto.randomUUID()}_${safeName}`
+      const { error: uploadError } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: selectedFile.type || 'application/octet-stream',
+            upsert: false,
+          }),
+        COVER_LETTER_UPLOAD_TIMEOUT_MS,
+        'Cover letter upload'
+      )
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`)
+      }
+
+      setCoverLetterPath(uploadPath)
+      toast.success('Cover letter uploaded.', { id: toastId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Cover letter upload failed.'
+      setCoverLetterUploadError(message.replace('Upload failed: ', ''))
+      toast.error(message, { id: toastId })
+    } finally {
+      setIsUploadingCoverLetter(false)
+    }
+  }
+
   const handleFinalize = async () => {
     if (!file) {
       toast.error('Please select a PDF file before submitting.')
@@ -317,6 +388,9 @@ export default function SubmissionForm() {
           abstract: metadata.abstract,
           author_id: user.id,  // 使用真实的用户 ID
           file_path: uploadedPath,
+          cover_letter_path: coverLetterPath,
+          cover_letter_filename: coverLetterFile?.name || null,
+          cover_letter_content_type: coverLetterFile?.type || null,
           dataset_url: datasetValue || null,
           source_code_url: sourceCodeValue || null
         }),
@@ -362,6 +436,38 @@ export default function SubmissionForm() {
           {file ? file.name : 'Drag and drop your PDF here'}
         </p>
         {isUploading && <Loader2 className="mt-2 h-6 w-6 animate-spin text-blue-600" />}
+      </div>
+
+      {/* Cover Letter 上传区域（可选） */}
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <label className="block text-sm font-semibold text-slate-900 mb-2">Cover Letter (Optional)</label>
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={handleCoverLetterUpload}
+          disabled={isUploadingCoverLetter}
+          data-testid="submission-cover-letter-file"
+          className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+        />
+        <div className="mt-2 text-xs text-slate-500">
+          Accepted formats: `.pdf`, `.doc`, `.docx`.
+        </div>
+        {isUploadingCoverLetter && (
+          <div className="mt-2 inline-flex items-center gap-2 text-xs text-blue-600">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Uploading cover letter...
+          </div>
+        )}
+        {!isUploadingCoverLetter && coverLetterPath && (
+          <div className="mt-2 text-xs text-emerald-700">
+            Cover letter uploaded: {coverLetterFile?.name || 'file'}
+          </div>
+        )}
+        {coverLetterUploadError && (
+          <div className="mt-2 text-xs text-red-600">
+            Cover letter upload failed: {coverLetterUploadError}
+          </div>
+        )}
       </div>
 
       {/* 元数据展示/编辑区域 */}
@@ -465,7 +571,17 @@ export default function SubmissionForm() {
         )}
         <button
           onClick={handleFinalize}
-          disabled={!fileValid || !titleValid || !abstractValid || !datasetUrlValid || !sourceCodeUrlValid || isUploading || isSubmitting || !user}
+          disabled={
+            !fileValid ||
+            !titleValid ||
+            !abstractValid ||
+            !datasetUrlValid ||
+            !sourceCodeUrlValid ||
+            isUploading ||
+            isUploadingCoverLetter ||
+            isSubmitting ||
+            !user
+          }
           className="w-full rounded-md bg-slate-900 py-3 text-white font-semibold shadow-md hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           data-testid="submission-finalize"
         >

@@ -11,6 +11,9 @@ class ManuscriptBase(BaseModel):
     title: str = Field(..., min_length=5, max_length=500, description="稿件标题")
     abstract: str = Field(..., min_length=30, max_length=5000, description="稿件摘要")
     file_path: Optional[str] = Field(None, description="Supabase Storage 路径")
+    cover_letter_path: Optional[str] = Field(None, max_length=1000, description="Cover Letter 在 Storage 中的路径")
+    cover_letter_filename: Optional[str] = Field(None, max_length=255, description="Cover Letter 原始文件名")
+    cover_letter_content_type: Optional[str] = Field(None, max_length=255, description="Cover Letter MIME 类型")
     dataset_url: Optional[str] = Field(None, max_length=1000, description="外部数据集链接")
     source_code_url: Optional[str] = Field(None, max_length=1000, description="代码仓库链接")
 
@@ -31,6 +34,17 @@ class ManuscriptBase(BaseModel):
         if len(trimmed) < 30:
             raise ValueError("abstract must be at least 30 characters")
         return trimmed
+
+    @field_validator("file_path", "cover_letter_path", "cover_letter_filename", "cover_letter_content_type", mode="before")
+    @classmethod
+    def normalize_optional_strings(cls, value):
+        # 中文注释: 允许可选字段为空字符串；写入前统一做 trim
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
 
     @field_validator("dataset_url", "source_code_url", mode="before")
     @classmethod
