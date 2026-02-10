@@ -1080,17 +1080,21 @@ async def get_editor_manuscript_detail(
     ms["latest_author_response_letter"] = None
     ms["latest_author_response_submitted_at"] = None
     ms["latest_author_response_round"] = None
-    revision_selects = [
-        "id,response_letter,submitted_at,updated_at,round",
-        "id,response_letter,updated_at",
+    # 中文注释:
+    # - 云端历史 schema 可能无 revisions.updated_at，仅有 created_at；
+    # - 这里按“排序列 + select”双重降级，确保 response_letter 可回显。
+    revision_query_variants = [
+        ("updated_at", "id,response_letter,submitted_at,updated_at,round"),
+        ("created_at", "id,response_letter,submitted_at,created_at,round"),
+        ("created_at", "id,response_letter,created_at"),
     ]
-    for select_clause in revision_selects:
+    for order_key, select_clause in revision_query_variants:
         try:
             revision_resp = (
                 supabase_admin.table("revisions")
                 .select(select_clause)
                 .eq("manuscript_id", id)
-                .order("updated_at", desc=True)
+                .order(order_key, desc=True)
                 .limit(30)
                 .execute()
             )
@@ -1100,7 +1104,11 @@ async def get_editor_manuscript_detail(
                 if not response_letter:
                     continue
                 ms["latest_author_response_letter"] = response_letter
-                ms["latest_author_response_submitted_at"] = row.get("submitted_at") or row.get("updated_at")
+                ms["latest_author_response_submitted_at"] = (
+                    row.get("submitted_at")
+                    or row.get("updated_at")
+                    or row.get("created_at")
+                )
                 ms["latest_author_response_round"] = row.get("round")
                 break
             break

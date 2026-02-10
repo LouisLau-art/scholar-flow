@@ -1420,6 +1420,9 @@ async def get_manuscript_detail(
     latest_feedback_comment: str | None = None
     latest_feedback_at: str | None = None
     latest_feedback_source: str | None = None
+    latest_author_response_letter: str | None = None
+    latest_author_response_at: str | None = None
+    latest_author_response_round: int | None = None
 
     # 中文注释:
     # 1) 优先读取 revisions.editor_comment（正式修回请求）；
@@ -1444,6 +1447,44 @@ async def get_manuscript_detail(
             break
     except Exception as e:
         print(f"[ById] revisions feedback fallback failed (ignored): {e}")
+
+    # 中文注释:
+    # - 作者修回时提交的 response_letter 需要可追溯；
+    # - 这里返回最近一条非空 response_letter，供作者/编辑视图快速展示。
+    revision_selects = [
+        "response_letter,submitted_at,updated_at,round",
+        "response_letter,updated_at",
+    ]
+    for select_clause in revision_selects:
+        try:
+            response_resp = (
+                supabase_admin.table("revisions")
+                .select(select_clause)
+                .eq("manuscript_id", manuscript_id_str)
+                .order("updated_at", desc=True)
+                .limit(30)
+                .execute()
+            )
+            response_rows = getattr(response_resp, "data", None) or []
+            for row in response_rows:
+                response_letter = str(row.get("response_letter") or "").strip()
+                if not response_letter:
+                    continue
+                latest_author_response_letter = response_letter
+                latest_author_response_at = str(row.get("submitted_at") or row.get("updated_at") or "")
+                raw_round = row.get("round")
+                try:
+                    latest_author_response_round = int(raw_round) if raw_round is not None else None
+                except Exception:
+                    latest_author_response_round = None
+                break
+            break
+        except Exception as e:
+            lowered = str(e).lower()
+            if "schema cache" in lowered or "column" in lowered or "pgrst" in lowered:
+                continue
+            print(f"[ById] latest author response fallback failed (ignored): {e}")
+            break
 
     try:
         logs_resp = (
@@ -1489,6 +1530,9 @@ async def get_manuscript_detail(
     enriched["author_latest_feedback_comment"] = latest_feedback_comment
     enriched["author_latest_feedback_at"] = latest_feedback_at
     enriched["author_latest_feedback_source"] = latest_feedback_source
+    enriched["author_latest_response_letter"] = latest_author_response_letter
+    enriched["author_latest_response_at"] = latest_author_response_at
+    enriched["author_latest_response_round"] = latest_author_response_round
     return {"success": True, "data": enriched}
 
 
