@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { useParams } from 'next/navigation'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { Button } from '@/components/ui/button'
@@ -153,6 +153,7 @@ function getNextActionCard(
 
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const id = String((params as any).id || '')
 
   const [loading, setLoading] = useState(true)
@@ -170,21 +171,47 @@ export default function EditorManuscriptDetailPage() {
   const [invoiceSaving, setInvoiceSaving] = useState(false)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
 
+  const loadRbacContext = useCallback(async () => {
+    const rbacRes = await EditorApi.getRbacContext()
+    if (rbacRes?.success && rbacRes?.data) {
+      setRbacContext(rbacRes.data)
+    } else {
+      setRbacContext(null)
+    }
+  }, [])
+
+  const refreshDetail = useCallback(async () => {
+    if (!id) return
+    try {
+      const detailRes = await EditorApi.getManuscriptDetail(id)
+      if (!detailRes?.success) {
+        throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
+      }
+      const detail = detailRes.data
+      setMs(detail)
+
+      const meta = (detail?.invoice_metadata as any) || {}
+      const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
+      setInvoiceForm({
+        authors: String(meta.authors || ownerFallback || ''),
+        affiliation: String(meta.affiliation || ''),
+        apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
+        fundingInfo: String(meta.funding_info || ''),
+      })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
+      setMs(null)
+    }
+  }, [id])
+
   async function load() {
     try {
       setLoading(true)
-      const [detailRes, rbacRes] = await Promise.all([
-        EditorApi.getManuscriptDetail(id),
-        EditorApi.getRbacContext(),
-      ])
+      const detailRes = await EditorApi.getManuscriptDetail(id)
       if (!detailRes?.success) throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       const detail = detailRes.data
       setMs(detail)
-      if (rbacRes?.success && rbacRes?.data) {
-        setRbacContext(rbacRes.data)
-      } else {
-        setRbacContext(null)
-      }
+      await loadRbacContext()
 
       const meta = (detail?.invoice_metadata as any) || {}
       const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
@@ -387,11 +414,11 @@ export default function EditorManuscriptDetailPage() {
 
             {/* 3. Internal Notebook */}
             <div className="h-[500px]">
-                <InternalNotebook manuscriptId={id} onCommentPosted={load} />
+                <InternalNotebook manuscriptId={id} onCommentPosted={refreshDetail} />
             </div>
 
             {/* 4. Internal Tasks */}
-            <InternalTasksPanel manuscriptId={id} onChanged={load} />
+            <InternalTasksPanel manuscriptId={id} onChanged={refreshDetail} />
 
         </div>
 
@@ -452,7 +479,7 @@ export default function EditorManuscriptDetailPage() {
                         variant="secondary"
                         disabled={!(capability.canRecordFirstDecision || capability.canSubmitFinalDecision)}
                         onClick={() => {
-                          window.location.href = `/editor/decision/${encodeURIComponent(id)}`
+                          router.push(`/editor/decision/${encodeURIComponent(id)}`)
                         }}
                       >
                         Open Decision Workspace
@@ -472,7 +499,7 @@ export default function EditorManuscriptDetailPage() {
                               className="w-full justify-between"
                               variant="secondary"
                               onClick={() => {
-                                window.location.href = `/editor/production/${encodeURIComponent(id)}`
+                                router.push(`/editor/production/${encodeURIComponent(id)}`)
                               }}
                             >
                               Open Production Workspace
@@ -518,7 +545,7 @@ export default function EditorManuscriptDetailPage() {
                                                 const res = await EditorApi.patchManuscriptStatus(id, s, comment)
                                                 if (!res?.success) throw new Error(res?.detail || res?.message || 'Failed')
                                                 toast.success(`Moved to ${getStatusLabel(s)}`)
-                                                await load()
+                                                await refreshDetail()
                                             } catch (e) {
                                                 toast.error(e instanceof Error ? e.message : 'Transition failed')
                                             } finally {
@@ -692,7 +719,7 @@ export default function EditorManuscriptDetailPage() {
             if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
             toast.success('Invoice info updated')
             setInvoiceOpen(false)
-            await load()
+            await refreshDetail()
           } catch (e) {
             toast.error(e instanceof Error ? e.message : 'Save failed')
           } finally {

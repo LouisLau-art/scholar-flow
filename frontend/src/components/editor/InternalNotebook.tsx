@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { EditorApi } from '@/services/editorApi'
 import type { InternalComment } from '@/types/internal-collaboration'
 
@@ -276,18 +277,18 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
           </div>
 
           <div className="flex gap-2">
-            <Input
-              placeholder="Type an internal note..."
+            <Textarea
+              placeholder="Type an internal note... (Ctrl/Cmd + Enter to send)"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault()
                   handlePost()
                 }
               }}
               disabled={submitting}
-              className="flex-1"
+              className="min-h-[72px] flex-1 resize-y"
             />
             <Button aria-label="Post internal note" onClick={handlePost} disabled={submitting || !inputText.trim()} size="icon">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

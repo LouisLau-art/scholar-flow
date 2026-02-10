@@ -57,7 +57,7 @@ describe('InternalNotebook mentions', () => {
     fireEvent.click(screen.getByLabelText('Mention Alice Editor'))
     fireEvent.click(screen.getByLabelText('Mention Bob Editor'))
 
-    fireEvent.change(screen.getByPlaceholderText('Type an internal note...'), { target: { value: 'Please help' } })
+    fireEvent.change(screen.getByPlaceholderText(/Type an internal note/i), { target: { value: 'Please help' } })
     fireEvent.click(screen.getByLabelText('Post internal note'))
 
     await waitFor(() => {
