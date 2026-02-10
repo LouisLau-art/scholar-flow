@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant AE as 助理编辑 (AE)
+    participant Lib as 审稿人库 (Library)
+    participant Sys as 系统 (ScholarFlow)
+    participant Mail as 邮件系统
+    participant Rev as 审稿人 (Reviewer)
+
+    Note over AE, Lib: 步骤1: 建立私有审稿人库
+    AE->>Lib: 搜索审稿人 (Search)
+    alt 库中不存在
+        AE->>Lib: 手动添加 (Add Reviewer)<br/>输入姓名/邮箱/机构/兴趣
+    end
+    
+    Note over AE, Rev: 步骤2: 发起邀请
+    AE->>Sys: 发起邀请 (Assign)
+    Sys->>Sys: 生成唯一 Token (有效期7-10天)
+    Sys->>Mail: 发送邀请邮件 (含 Magic Link)
+    Mail-->>Rev: 收到邮件
+    
+    Note over Rev, Sys: 步骤3: 审稿人操作 (无感知登录)
+    Rev->>Sys: 点击 Magic Link (Agree/Decline)
+    
+    alt 同意审稿 (Agree)
+        Sys->>Rev: 展示稿件 PDF 下载 & 评审表单
+        Rev->>Sys: 提交评审意见 (Submit Review)
+        Sys->>AE: 通知编辑 "Review Completed"
+    else 拒绝 (Decline)
+        Rev->>Sys: 选择拒绝原因 (No time/Topic mismatch)
+        Sys->>AE: 通知编辑，建议重选
+    end

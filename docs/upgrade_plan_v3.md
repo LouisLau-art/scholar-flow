@@ -51,7 +51,7 @@ title: "ScholarFlow 期刊投稿与审稿系统升级方案（v3.0）"
 
 ## 5. 审稿邀请机制（Magic Link）
 
-![审稿人邀请机制](doc_artifacts/seq_invite.svg)
+![审稿人邀请机制](seq_invite_v3.svg)
 
 ---
 
