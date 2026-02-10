@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
@@ -317,8 +316,8 @@ export default function EditorManuscriptDetailPage() {
               <ArrowLeft className="h-4 w-4" />
               返回上一页
             </Button>
-            <Button asChild variant="secondary" size="sm">
-              <Link href="/editor/process">回到 Process 列表</Link>
+            <Button variant="secondary" size="sm" onClick={() => router.push('/editor/process')}>
+              回到 Process 列表
             </Button>
           </div>
         </div>
@@ -349,8 +348,8 @@ export default function EditorManuscriptDetailPage() {
               <ArrowLeft className="h-4 w-4" />
               返回上一页
             </Button>
-            <Button asChild variant="secondary" size="sm" className="gap-1.5">
-              <Link href="/editor/process">回到 Process 列表</Link>
+            <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => router.push('/editor/process')}>
+              回到 Process 列表
             </Button>
           </div>
           <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">
