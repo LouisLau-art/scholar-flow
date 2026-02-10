@@ -354,7 +354,7 @@ class EditorService:
             bucket = index.setdefault(manuscript_id, {})
             if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
                 bucket["assigned_at"] = created_at
-            if action in {"precheck_technical_pass", "precheck_technical_revision"}:
+            if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
                 bucket["technical_completed_at"] = created_at
             if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
                 bucket["academic_completed_at"] = created_at
@@ -1074,18 +1074,79 @@ class EditorService:
         """
         AE Workspace: Status=PRE_CHECK, PreCheckStatus=TECHNICAL, assigned to ae_id
         """
-        q = (
-            self.client.table("manuscripts")
-            .select("*")
-            .eq("status", ManuscriptStatus.PRE_CHECK.value)
-            .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
-            .eq("assistant_editor_id", str(ae_id))
-            .order("created_at", desc=True)
-            .range((page - 1) * page_size, page * page_size - 1)
-        )
-        resp = q.execute()
-        rows = getattr(resp, "data", None) or []
-        return self._enrich_precheck_rows(rows)
+        selects = [
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id",
+        ]
+
+        rows: list[dict[str, Any]] = []
+        last_error: Exception | None = None
+        for select_clause in selects:
+            try:
+                q = (
+                    self.client.table("manuscripts")
+                    .select(select_clause)
+                    .eq("status", ManuscriptStatus.PRE_CHECK.value)
+                    .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+                    .eq("assistant_editor_id", str(ae_id))
+                    .order("created_at", desc=True)
+                    .range((page - 1) * page_size, page * page_size - 1)
+                )
+                resp = q.execute()
+                rows = getattr(resp, "data", None) or []
+                break
+            except Exception as e:
+                last_error = e
+                lowered = str(e).lower()
+                if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
+                    continue
+                raise
+        if not rows and last_error:
+            lowered = str(last_error).lower()
+            if "schema cache" in lowered or "could not find" in lowered:
+                raise last_error
+
+        out = self._enrich_precheck_rows(rows)
+
+        owner_ids = sorted({str(r.get("owner_id") or "") for r in out if str(r.get("owner_id") or "")})
+        owner_map: dict[str, dict[str, Any]] = {}
+        if owner_ids:
+            try:
+                prof = (
+                    self.client.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", owner_ids)
+                    .execute()
+                )
+                for p in (getattr(prof, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        owner_map[pid] = p
+            except Exception as e:
+                print(f"[AEWorkspace] load owner profiles failed (ignored): {e}")
+
+        for row in out:
+            oid = str(row.get("owner_id") or "")
+            row["owner"] = (
+                {
+                    "id": oid,
+                    "full_name": (owner_map.get(oid) or {}).get("full_name"),
+                    "email": (owner_map.get(oid) or {}).get("email"),
+                }
+                if oid
+                else None
+            )
+            journal = row.get("journals")
+            if isinstance(journal, list):
+                row["journal"] = journal[0] if journal else None
+            elif isinstance(journal, dict):
+                row["journal"] = journal
+            else:
+                row["journal"] = None
+
+        return out
 
     def submit_technical_check(
         self,
@@ -1098,7 +1159,7 @@ class EditorService:
     ) -> dict[str, Any]:
         """
         AE technical check:
-        - pass -> pre_check/academic
+        - pass -> under_review
         - revision -> minor_revision
         """
         manuscript_id_str = str(manuscript_id)
@@ -1119,61 +1180,35 @@ class EditorService:
         if status != ManuscriptStatus.PRE_CHECK.value:
             if normalized_decision == "revision" and status == ManuscriptStatus.MINOR_REVISION.value:
                 return dict(ms)
-            if normalized_decision == "pass" and pre == PreCheckStatus.ACADEMIC.value:
-                return self._map_precheck_row(ms)
+            if normalized_decision == "pass" and status == ManuscriptStatus.UNDER_REVIEW.value:
+                return dict(ms)
             raise HTTPException(status_code=409, detail="Technical check conflict: manuscript state changed")
 
         if pre != PreCheckStatus.TECHNICAL.value:
-            if normalized_decision == "pass" and pre == PreCheckStatus.ACADEMIC.value:
-                return self._map_precheck_row(ms)
             raise HTTPException(status_code=409, detail=f"Technical check only allowed in technical stage, current={pre}")
 
         if owner_ae != ae_id_str:
             raise HTTPException(status_code=403, detail="Only assigned assistant editor can submit technical check")
 
         if normalized_decision == "pass":
-            data = {
-                "pre_check_status": PreCheckStatus.ACADEMIC.value,
-                "updated_at": now,
-            }
-            resp = (
-                self.client.table("manuscripts")
-                .update(data)
-                .eq("id", manuscript_id_str)
-                .eq("status", ManuscriptStatus.PRE_CHECK.value)
-                .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
-                .eq("assistant_editor_id", ae_id_str)
-                .execute()
-            )
-            rows = getattr(resp, "data", None) or []
-            if not rows:
-                latest = self._get_manuscript(manuscript_id_str)
-                if (
-                    normalize_status(str(latest.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
-                    and self._normalize_precheck_status(latest.get("pre_check_status")) == PreCheckStatus.ACADEMIC.value
-                ):
-                    return self._map_precheck_row(latest)
-                raise HTTPException(status_code=409, detail="Technical pass conflict: manuscript state changed")
-
-            updated = rows[0]
-            self._safe_insert_transition_log(
+            updated = self.editorial.update_status(
                 manuscript_id=manuscript_id_str,
-                from_status=ManuscriptStatus.PRE_CHECK.value,
-                to_status=ManuscriptStatus.PRE_CHECK.value,
+                to_status=ManuscriptStatus.UNDER_REVIEW.value,
                 changed_by=ae_id_str,
-                comment=comment_clean or "technical check passed",
+                comment=comment_clean or "technical check passed, moved to under_review",
+                allow_skip=False,
+                extra_updates={"pre_check_status": None},
                 payload={
-                    "action": "precheck_technical_pass",
+                    "action": "precheck_technical_to_under_review",
                     "pre_check_from": PreCheckStatus.TECHNICAL.value,
-                    "pre_check_to": PreCheckStatus.ACADEMIC.value,
+                    "pre_check_to": None,
                     "assistant_editor_before": owner_ae or None,
                     "assistant_editor_after": owner_ae or None,
                     "decision": "pass",
                     "idempotency_key": idempotency_key,
                 },
-                created_at=now,
             )
-            return self._map_precheck_row(updated)
+            return updated
 
         updated = self.editorial.update_status(
             manuscript_id=manuscript_id_str,

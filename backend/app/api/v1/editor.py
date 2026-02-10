@@ -1076,6 +1076,41 @@ async def get_editor_manuscript_detail(
     except Exception as e:
         print(f"[SignedFiles] load review attachments failed (ignored): {e}")
 
+    # 作者最近一次修回说明（Response Letter），用于 editor 详情页快速查看。
+    ms["latest_author_response_letter"] = None
+    ms["latest_author_response_submitted_at"] = None
+    ms["latest_author_response_round"] = None
+    revision_selects = [
+        "id,response_letter,submitted_at,updated_at,round",
+        "id,response_letter,updated_at",
+    ]
+    for select_clause in revision_selects:
+        try:
+            revision_resp = (
+                supabase_admin.table("revisions")
+                .select(select_clause)
+                .eq("manuscript_id", id)
+                .order("updated_at", desc=True)
+                .limit(30)
+                .execute()
+            )
+            revision_rows = getattr(revision_resp, "data", None) or []
+            for row in revision_rows:
+                response_letter = str(row.get("response_letter") or "").strip()
+                if not response_letter:
+                    continue
+                ms["latest_author_response_letter"] = response_letter
+                ms["latest_author_response_submitted_at"] = row.get("submitted_at") or row.get("updated_at")
+                ms["latest_author_response_round"] = row.get("round")
+                break
+            break
+        except Exception as e:
+            lowered = str(e).lower()
+            if "schema cache" in lowered or "column" in lowered or "pgrst" in lowered:
+                continue
+            print(f"[Revisions] load latest response letter failed (ignored): {e}")
+            break
+
     profile_ids: list[str] = []
     if ms.get("owner_id"):
         profile_ids.append(str(ms["owner_id"]))
@@ -1146,7 +1181,7 @@ async def get_editor_manuscript_detail(
                 created_at = str(row.get("created_at") or "")
                 if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
                     assigned_at = created_at or assigned_at
-                if action in {"precheck_technical_pass", "precheck_technical_revision"}:
+                if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
                     technical_completed_at = created_at or technical_completed_at
                 if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
                     academic_completed_at = created_at or academic_completed_at

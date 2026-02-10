@@ -170,7 +170,7 @@ def test_submit_technical_check_forbidden_for_unassigned_ae():
     assert ei.value.status_code == 403
 
 
-def test_submit_technical_check_pass_to_academic():
+def test_submit_technical_check_pass_routes_to_under_review():
     svc = _new_service()
     manuscript_id = uuid4()
     ae_id = uuid4()
@@ -182,23 +182,21 @@ def test_submit_technical_check_pass_to_academic():
             "assistant_editor_id": str(ae_id),
         }
     )
-    svc.client = _ClientStub(
-        [
-            {
-                "table": "manuscripts",
-                "data": [
-                    {
-                        "id": str(manuscript_id),
-                        "status": ManuscriptStatus.PRE_CHECK.value,
-                        "pre_check_status": PreCheckStatus.ACADEMIC.value,
-                        "assistant_editor_id": str(ae_id),
-                    }
-                ],
-            }
-        ]
-    )
+    editorial_mock = Mock()
+    editorial_mock.update_status.return_value = {
+        "id": str(manuscript_id),
+        "status": ManuscriptStatus.UNDER_REVIEW.value,
+        "pre_check_status": None,
+        "assistant_editor_id": str(ae_id),
+    }
+    svc.editorial = editorial_mock
+
     out = svc.submit_technical_check(manuscript_id, ae_id, decision="pass", comment="ok")
-    assert out["pre_check_status"] == PreCheckStatus.ACADEMIC.value
+    assert out["status"] == ManuscriptStatus.UNDER_REVIEW.value
+    kwargs = editorial_mock.update_status.call_args.kwargs
+    assert kwargs["to_status"] == ManuscriptStatus.UNDER_REVIEW.value
+    assert kwargs["extra_updates"] == {"pre_check_status": None}
+    assert kwargs["payload"]["action"] == "precheck_technical_to_under_review"
 
 
 def test_request_intake_revision_requires_comment():

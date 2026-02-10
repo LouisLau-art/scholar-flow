@@ -72,6 +72,9 @@ type ManuscriptDetail = {
     is_overdue?: boolean
     nearest_due_at?: string | null
   } | null
+  latest_author_response_letter?: string | null
+  latest_author_response_submitted_at?: string | null
+  latest_author_response_round?: number | null
 }
 
 function allowedNext(status: string): string[] {
@@ -276,6 +279,17 @@ export default function EditorManuscriptDetailPage() {
     String(ms?.owner?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
+  const latestAuthorResponseText = useMemo(() => {
+    const raw = String(ms?.latest_author_response_letter || '').trim()
+    if (!raw) return ''
+    return raw
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim()
+  }, [ms?.latest_author_response_letter])
 
   // --- File Processing ---
   const mapFile = (f: ManuscriptFile, type: FileItem['type']): FileItem => ({
@@ -471,7 +485,35 @@ export default function EditorManuscriptDetailPage() {
                 onUploadReviewFile={load}
             />
 
-            {/* 3. Internal Notebook */}
+            {/* 3. Latest Author Response Letter */}
+            <Card className="shadow-sm">
+              <CardHeader className="py-4 border-b bg-slate-50/30">
+                <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                  Latest Author Response Letter
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5">
+                {latestAuthorResponseText ? (
+                  <div className="space-y-3">
+                    <div className="text-xs text-slate-500">
+                      {ms?.latest_author_response_submitted_at
+                        ? `Submitted at ${format(new Date(ms.latest_author_response_submitted_at), 'yyyy-MM-dd HH:mm')}`
+                        : 'Submitted time unavailable'}
+                      {typeof ms?.latest_author_response_round === 'number'
+                        ? ` · Round ${ms.latest_author_response_round}`
+                        : ''}
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
+                      {latestAuthorResponseText}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">No author response letter submitted yet.</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 4. Internal Notebook */}
             <div className="h-[620px]">
                 <InternalNotebook
                   manuscriptId={id}
@@ -481,7 +523,7 @@ export default function EditorManuscriptDetailPage() {
                 />
             </div>
 
-            {/* 4. Internal Tasks */}
+            {/* 5. Internal Tasks */}
             <InternalTasksPanel manuscriptId={id} onChanged={refreshDetail} />
 
         </div>
