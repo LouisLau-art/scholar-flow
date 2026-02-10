@@ -53,6 +53,26 @@ class _FakeDB:
         return _FakeTable(self, name)
 
 
+class _FakeFKTable(_FakeTable):
+    def execute(self):
+        if self._op == "insert" and self.name == "internal_comments":
+            row = dict(self._payload)
+            row["id"] = self.db.comment_id
+            return SimpleNamespace(data=[row])
+        if self._op == "insert" and self.name == "internal_comment_mentions":
+            raise RuntimeError(
+                'insert or update on table "internal_comment_mentions" violates foreign key constraint '
+                '"internal_comment_mentions_mentioned_user_id_fkey"; '
+                "Key (mentioned_user_id)=(00000000-0000-0000-0000-000000000001) is not present in table \"users\"."
+            )
+        return SimpleNamespace(data=[])
+
+
+class _FakeFKDB(_FakeDB):
+    def table(self, name: str):
+        return _FakeFKTable(self, name)
+
+
 def test_create_comment_dedups_mentions_and_notifies_once(monkeypatch: pytest.MonkeyPatch):
     author_id = str(uuid4())
     mentioned_id = str(uuid4())
@@ -100,6 +120,31 @@ def test_create_comment_rejects_invalid_mention_id():
         )
 
     assert ei.value.invalid_user_ids == ["not-a-uuid"]
+
+
+def test_create_comment_maps_fk_violation_to_invalid_mentions(monkeypatch: pytest.MonkeyPatch):
+    author_id = str(uuid4())
+    mentioned_id = str(uuid4())
+    svc = InternalCollaborationService(
+        client=_FakeFKDB(comment_id=str(uuid4())),
+        notification_service=_FakeNotifier(),
+    )
+    monkeypatch.setattr(svc, "_validate_mention_targets", lambda ids: ids)
+    monkeypatch.setattr(
+        svc,
+        "_load_profiles_map",
+        lambda _ids: {author_id: {"id": author_id, "full_name": "Editor A", "email": "editor@example.com"}},
+    )
+
+    with pytest.raises(MentionValidationError) as ei:
+        svc.create_comment(
+            manuscript_id=str(uuid4()),
+            author_user_id=author_id,
+            content="please check",
+            mention_user_ids=[mentioned_id],
+        )
+
+    assert ei.value.invalid_user_ids == ["00000000-0000-0000-0000-000000000001"]
 
 
 class _MissingCommentsTable:

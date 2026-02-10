@@ -21,6 +21,7 @@ type StaffOption = {
 
 interface InternalNotebookProps {
   manuscriptId: string
+  currentUserId?: string
   onCommentPosted?: () => void
 }
 
@@ -30,7 +31,7 @@ function initials(value: string): string {
   return clean.slice(0, 2).toUpperCase()
 }
 
-export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNotebookProps) {
+export function InternalNotebook({ manuscriptId, currentUserId, onCommentPosted }: InternalNotebookProps) {
   const [comments, setComments] = useState<InternalComment[]>([])
   const [loading, setLoading] = useState(false)
   const [inputText, setInputText] = useState('')
@@ -80,9 +81,11 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
 
   async function loadStaffOptions() {
     try {
-      const res = await EditorApi.listInternalStaff('')
+      const res = await EditorApi.listInternalStaff('', { excludeCurrentUser: true })
       if (!res?.success) return
-      setStaff(Array.isArray(res.data) ? res.data : [])
+      const rows = Array.isArray(res.data) ? res.data : []
+      const myId = String(currentUserId || '').trim()
+      setStaff(myId ? rows.filter((row) => String(row?.id || '') !== myId) : rows)
     } catch {
       // ignore and keep notebook usable without mention dropdown
     }
@@ -92,7 +95,7 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
     loadComments()
     loadStaffOptions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manuscriptId])
+  }, [manuscriptId, currentUserId])
 
   function validateMentions(): string | null {
     const unique = new Set(mentionUserIds)

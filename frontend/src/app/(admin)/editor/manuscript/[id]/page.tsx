@@ -414,7 +414,7 @@ export default function EditorManuscriptDetailPage() {
 
             {/* 3. Internal Notebook */}
             <div className="h-[500px]">
-                <InternalNotebook manuscriptId={id} onCommentPosted={refreshDetail} />
+                <InternalNotebook manuscriptId={id} currentUserId={rbacContext?.user_id} onCommentPosted={refreshDetail} />
             </div>
 
             {/* 4. Internal Tasks */}

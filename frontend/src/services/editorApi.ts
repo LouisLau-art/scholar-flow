@@ -144,9 +144,12 @@ export const EditorApi = {
     return res.json()
   },
 
-  async listInternalStaff(search?: string) {
-    const qs = search ? `?search=${encodeURIComponent(search)}` : ''
-    const res = await authedFetch(`/api/v1/editor/internal-staff${qs}`)
+  async listInternalStaff(search?: string, options?: { excludeCurrentUser?: boolean }) {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    if (options?.excludeCurrentUser) params.set('exclude_current_user', 'true')
+    const qs = params.toString()
+    const res = await authedFetch(`/api/v1/editor/internal-staff${qs ? `?${qs}` : ''}`)
     return res.json()
   },
 

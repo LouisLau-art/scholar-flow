@@ -51,7 +51,7 @@ describe('InternalNotebook mentions', () => {
 
     await waitFor(() => {
       expect(EditorApi.getInternalComments).toHaveBeenCalledWith('m1')
-      expect(EditorApi.listInternalStaff).toHaveBeenCalled()
+      expect(EditorApi.listInternalStaff).toHaveBeenCalledWith('', { excludeCurrentUser: true })
     })
 
     fireEvent.click(screen.getByLabelText('Mention Alice Editor'))

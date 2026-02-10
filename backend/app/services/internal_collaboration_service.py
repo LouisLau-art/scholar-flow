@@ -102,6 +102,23 @@ def _missing_table_from_error(error: Exception | str | None) -> str | None:
     return None
 
 
+def _extract_missing_mentioned_user_id_from_fk_error(error: Exception | str | None) -> str | None:
+    """
+    解析 FK 报错中的 mentioned_user_id，便于返回可读的 422。
+    典型文案:
+    Key (mentioned_user_id)=(<uuid>) is not present in table "users".
+    """
+    text = _error_text_blob(error)
+    match = re.search(r"mentioned_user_id\)=\(([0-9a-fA-F-]{36})\)", text)
+    if not match:
+        return None
+    value = str(match.group(1) or "").strip()
+    try:
+        return str(UUID(value))
+    except Exception:
+        return None
+
+
 class InternalCollaborationService:
     """
     Feature 045: Internal notebook mentions + mention notifications.
@@ -282,6 +299,15 @@ class InternalCollaborationService:
                 try:
                     self.client.table("internal_comment_mentions").insert(mention_rows).execute()
                 except Exception as e:
+                    text = _error_text_blob(e).lower()
+                    if (
+                        "23503" in text
+                        and "internal_comment_mentions_mentioned_user_id_fkey" in text
+                    ) or ("foreign key" in text and "mentioned_user_id" in text):
+                        missing_uid = _extract_missing_mentioned_user_id_from_fk_error(e)
+                        if missing_uid:
+                            raise MentionValidationError(invalid_user_ids=[missing_uid]) from e
+                        raise MentionValidationError(invalid_user_ids=validated_mentions) from e
                     table = _missing_table_from_error(e)
                     if table:
                         raise InternalCollaborationSchemaMissingError(table=table) from e

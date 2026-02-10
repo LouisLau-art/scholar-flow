@@ -203,6 +203,50 @@ def _is_missing_table_error(error: Any) -> bool:
         )
     )
 
+
+def _list_auth_user_id_set() -> set[str]:
+    """
+    列出当前项目中真实存在于 auth.users 的用户 ID 集合。
+    """
+    try:
+        res = supabase_admin.auth.admin.list_users()
+        users = getattr(res, "users", None)
+        if users is None and isinstance(res, dict):
+            users = res.get("users") or res.get("data")
+        if users is None and isinstance(res, list):
+            users = res
+        if not isinstance(users, list):
+            users = []
+        out: set[str] = set()
+        for user in users:
+            uid = None
+            if isinstance(user, dict):
+                uid = user.get("id")
+            else:
+                uid = getattr(user, "id", None)
+            if uid:
+                out.add(str(uid))
+        return out
+    except Exception as e:
+        print(f"[InternalStaff] list auth users failed: {e}")
+        return set()
+
+
+def _auth_user_exists(user_id: str) -> bool:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return False
+    try:
+        res = supabase_admin.auth.admin.get_user_by_id(uid)
+        user = getattr(res, "user", None)
+        if user is None and isinstance(res, dict):
+            user = res.get("user") or res.get("data")
+        if isinstance(user, dict):
+            return str(user.get("id") or "") == uid
+        return bool(user) and str(getattr(user, "id", "") or "") == uid
+    except Exception:
+        return False
+
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
     id: str,
@@ -1483,6 +1527,8 @@ async def bind_internal_owner(
 @router.get("/internal-staff")
 async def list_internal_staff(
     search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
+    exclude_current_user: bool = Query(False, description="是否排除当前用户（用于 mention 候选）"),
+    current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
@@ -1498,6 +1544,24 @@ async def list_internal_staff(
         )
         resp = query.execute()
         data = getattr(resp, "data", None) or []
+        # 只保留真实存在于 auth.users 的账号，避免后续写入外键表时报 23503。
+        auth_user_ids = _list_auth_user_id_set()
+        if auth_user_ids:
+            data = [row for row in data if str(row.get("id") or "") in auth_user_ids]
+        else:
+            # SDK 返回异常时兜底逐个校验，避免把 mock profile 放进候选。
+            verified: list[dict[str, Any]] = []
+            for row in data:
+                uid = str(row.get("id") or "")
+                if uid and _auth_user_exists(uid):
+                    verified.append(row)
+            data = verified
+
+        if exclude_current_user:
+            my_id = str(current_user.get("id") or "")
+            if my_id:
+                data = [row for row in data if str(row.get("id") or "") != my_id]
+
         if search.strip():
             s = search.strip().lower()
             data = [
