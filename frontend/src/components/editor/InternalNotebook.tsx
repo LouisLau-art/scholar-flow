@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EditorApi } from '@/services/editorApi'
+import { authService } from '@/services/auth'
 import type { InternalComment } from '@/types/internal-collaboration'
 
 type StaffOption = {
@@ -22,6 +23,7 @@ type StaffOption = {
 interface InternalNotebookProps {
   manuscriptId: string
   currentUserId?: string
+  currentUserEmail?: string
   onCommentPosted?: () => void
 }
 
@@ -31,7 +33,7 @@ function initials(value: string): string {
   return clean.slice(0, 2).toUpperCase()
 }
 
-export function InternalNotebook({ manuscriptId, currentUserId, onCommentPosted }: InternalNotebookProps) {
+export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail, onCommentPosted }: InternalNotebookProps) {
   const [comments, setComments] = useState<InternalComment[]>([])
   const [loading, setLoading] = useState(false)
   const [inputText, setInputText] = useState('')
@@ -39,6 +41,11 @@ export function InternalNotebook({ manuscriptId, currentUserId, onCommentPosted 
   const [staff, setStaff] = useState<StaffOption[]>([])
   const [mentionUserIds, setMentionUserIds] = useState<string[]>([])
   const [staffSearch, setStaffSearch] = useState('')
+  const [sessionUserId, setSessionUserId] = useState('')
+  const [sessionUserEmail, setSessionUserEmail] = useState('')
+
+  const activeUserId = String(currentUserId || sessionUserId || '').trim()
+  const activeUserEmail = String(currentUserEmail || sessionUserEmail || '').trim().toLowerCase()
 
   const staffById = useMemo(() => {
     const map = new Map<string, StaffOption>()
@@ -84,18 +91,42 @@ export function InternalNotebook({ manuscriptId, currentUserId, onCommentPosted 
       const res = await EditorApi.listInternalStaff('', { excludeCurrentUser: true })
       if (!res?.success) return
       const rows = Array.isArray(res.data) ? res.data : []
-      const myId = String(currentUserId || '').trim()
-      setStaff(myId ? rows.filter((row) => String(row?.id || '') !== myId) : rows)
+      setStaff(
+        rows.filter((row) => {
+          const rowId = String(row?.id || '').trim()
+          const rowEmail = String(row?.email || '').trim().toLowerCase()
+          if (activeUserId && rowId === activeUserId) return false
+          if (activeUserEmail && rowEmail && rowEmail === activeUserEmail) return false
+          return true
+        })
+      )
     } catch {
       // ignore and keep notebook usable without mention dropdown
     }
   }
 
+  async function loadSessionUser() {
+    try {
+      const session = await authService.getSession()
+      const uid = String(session?.user?.id || '').trim()
+      const email = String(session?.user?.email || '').trim().toLowerCase()
+      if (uid) setSessionUserId(uid)
+      if (email) setSessionUserEmail(email)
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    loadSessionUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     loadComments()
     loadStaffOptions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manuscriptId, currentUserId])
+  }, [manuscriptId, currentUserId, currentUserEmail, sessionUserId, sessionUserEmail])
 
   function validateMentions(): string | null {
     const unique = new Set(mentionUserIds)

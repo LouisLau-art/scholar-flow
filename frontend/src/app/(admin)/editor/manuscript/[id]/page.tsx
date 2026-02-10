@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
+import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -160,6 +161,7 @@ export default function EditorManuscriptDetailPage() {
   const [ms, setMs] = useState<ManuscriptDetail | null>(null)
   const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
   const [transitioning, setTransitioning] = useState<string | null>(null)
+  const [viewerEmail, setViewerEmail] = useState<string>('')
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceInfoForm>({
@@ -235,6 +237,20 @@ export default function EditorManuscriptDetailPage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    let mounted = true
+    authService
+      .getSession()
+      .then((session) => {
+        if (!mounted) return
+        setViewerEmail(String(session?.user?.email || '').trim())
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // --- Derived State ---
   const status = String(ms?.status || '')
@@ -414,7 +430,12 @@ export default function EditorManuscriptDetailPage() {
 
             {/* 3. Internal Notebook */}
             <div className="h-[500px]">
-                <InternalNotebook manuscriptId={id} currentUserId={rbacContext?.user_id} onCommentPosted={refreshDetail} />
+                <InternalNotebook
+                  manuscriptId={id}
+                  currentUserId={rbacContext?.user_id}
+                  currentUserEmail={viewerEmail}
+                  onCommentPosted={refreshDetail}
+                />
             </div>
 
             {/* 4. Internal Tasks */}
