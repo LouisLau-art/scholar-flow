@@ -58,8 +58,8 @@ describe('InternalTasksPanel', () => {
     })
 
     expect(screen.getByText('Only the assignee or internal editor can update this task.')).toBeInTheDocument()
-    const select = screen.getByLabelText('Task Locked Task status') as HTMLSelectElement
-    expect(select.disabled).toBe(true)
+    const selectTrigger = screen.getByRole('combobox', { name: 'Task Locked Task status' })
+    expect(selectTrigger).toBeDisabled()
   })
 
   it('updates task status when editor changes status', async () => {
@@ -99,16 +99,16 @@ describe('InternalTasksPanel', () => {
 
     render(<InternalTasksPanel manuscriptId="m1" />)
 
-    const select = (await screen.findByLabelText('Task Follow up status')) as HTMLSelectElement
-    fireEvent.change(select, { target: { value: 'done' } })
+    const selectTrigger = await screen.findByRole('combobox', { name: 'Task Follow up status' })
+    fireEvent.click(selectTrigger)
+    fireEvent.click(await screen.findByRole('option', { name: 'Done' }))
 
     await waitFor(() => {
       expect(EditorApi.patchInternalTask).toHaveBeenCalledWith('m1', 't2', { status: 'done' })
     })
 
     await waitFor(() => {
-      const updatedSelect = screen.getByLabelText('Task Follow up status') as HTMLSelectElement
-      expect(updatedSelect.value).toBe('done')
+      expect(screen.getByRole('combobox', { name: 'Task Follow up status' })).toHaveTextContent('Done')
     })
   })
 })

@@ -15,6 +15,13 @@ class ResizeObserver {
 
 globalThis.ResizeObserver = ResizeObserver
 
+if (!HTMLElement.prototype.scrollIntoView) {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: vi.fn(),
+    writable: true,
+  })
+}
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),

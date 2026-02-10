@@ -7,8 +7,10 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { TaskStatusBadge } from '@/components/editor/TaskStatusBadge'
 import { EditorApi } from '@/services/editorApi'
@@ -215,36 +217,37 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
             </div>
             <div>
               <Label className="text-xs text-slate-600">Assignee</Label>
-              <select
-                value={assigneeUserId}
-                onChange={(e) => setAssigneeUserId(e.target.value)}
-                className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              >
-                <option value="">Select assignee</option>
-                {staff.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.full_name || option.email || option.id}
-                  </option>
-                ))}
-              </select>
+              <Select value={assigneeUserId} onValueChange={setAssigneeUserId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staff.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.full_name || option.email || option.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs text-slate-600">Due At</Label>
-              <Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+              <DateTimePicker value={dueAt} onChange={setDueAt} className="mt-1" />
             </div>
             <div>
               <Label className="text-xs text-slate-600">Priority</Label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as InternalTaskPriority)}
-                className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              >
-                {PRIORITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={priority} onValueChange={(value) => setPriority(value as InternalTaskPriority)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="md:col-span-2">
               <Label className="text-xs text-slate-600">Description (optional)</Label>
@@ -301,19 +304,22 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2">
-                      <select
-                        aria-label={`Task ${task.title} status`}
+                      <Select
                         value={task.status}
-                        onChange={(e) => handleUpdateStatus(task, e.target.value as InternalTaskStatus)}
+                        onValueChange={(value) => handleUpdateStatus(task, value as InternalTaskStatus)}
                         disabled={updatingTaskId === task.id || !canEdit}
-                        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
                       >
-                        {STATUS_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger aria-label={`Task ${task.title} status`} className="h-9 w-[160px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button variant="outline" size="sm" onClick={() => toggleActivity(task.id)}>
                         {expandedTaskId === task.id ? 'Hide Activity' : 'Activity'}
                       </Button>

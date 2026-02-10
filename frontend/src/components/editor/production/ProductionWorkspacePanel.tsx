@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
+import { Button } from '@/components/ui/button'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import type { ProductionCycle, ProductionWorkspaceContext } from '@/types/production'
 
 type StaffOption = {
@@ -154,40 +160,35 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">Create Production Cycle</h3>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Layout Editor</label>
-            <select
-              value={layoutEditorId}
-              onChange={(event) => setLayoutEditorId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select editor</option>
-              {staff.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name || item.email || item.id}
-                </option>
-              ))}
-            </select>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Layout Editor</Label>
+            <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select editor" />
+              </SelectTrigger>
+              <SelectContent>
+                {staff.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name || item.email || item.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Proof Due At</label>
-            <input
-              type="datetime-local"
-              value={proofDueAt}
-              onChange={(event) => setProofDueAt(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Proof Due At</Label>
+            <DateTimePicker value={proofDueAt} onChange={setProofDueAt} />
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={() => void handleCreateCycle()}
             disabled={createLoading || !context.permissions?.can_create_cycle}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="w-full gap-2"
           >
             {createLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Create Cycle
-          </button>
+          </Button>
           {!context.permissions?.can_create_cycle ? (
             <p className="text-xs text-amber-700">当前状态或活跃轮次限制，暂不可创建新轮次。</p>
           ) : null}
@@ -200,45 +201,40 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             <p>Due: <span className="font-semibold">{formatDate(activeCycle.proof_due_at)}</span></p>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => void handleOpenGalley(activeCycle)}
             disabled={!activeCycle.galley_path}
-            className="inline-flex w-full items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            className="w-full"
           >
             Open Current Galley
-          </button>
+          </Button>
 
           <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Upload / Replace Galley</p>
-            <input
+            <Input
               type="file"
               accept="application/pdf,.pdf"
               onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-              className="block w-full text-xs text-slate-600"
+              className="w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-slate-800"
             />
-            <textarea
+            <Textarea
               value={versionNote}
               onChange={(event) => setVersionNote(event.target.value)}
               rows={3}
               placeholder="版本说明（例如：修复图表排版 + 统一参考文献样式）"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
-            <input
-              type="datetime-local"
-              value={uploadDueAt}
-              onChange={(event) => setUploadDueAt(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-            <button
+            <DateTimePicker value={uploadDueAt} onChange={setUploadDueAt} />
+            <Button
               type="button"
               onClick={() => void handleUploadGalley()}
               disabled={uploadLoading || !context.permissions?.can_upload_galley}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="w-full gap-2"
             >
               {uploadLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Upload Galley
-            </button>
+            </Button>
           </div>
         </div>
       )}

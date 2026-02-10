@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { DatePicker } from '@/components/ui/date-picker'
+import { Label } from '@/components/ui/label'
 
 type AcceptFormProps = {
   assignmentId: string
@@ -46,31 +49,20 @@ export function AcceptForm({
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <h2 className="text-base font-semibold text-slate-900">Accept Invitation</h2>
       <p className="mt-1 text-sm text-slate-600">Pick a due date before entering the review workspace.</p>
-      <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="due_date">
-        Due date
-      </label>
-      <input
-        id="due_date"
-        type="date"
-        value={dueDate}
-        min={minDueDate}
-        max={maxDueDate}
-        onChange={(e) => setDueDate(e.target.value)}
-        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      />
+      <Label className="mt-4 block text-sm font-medium text-slate-700">Due date</Label>
+      <DatePicker value={dueDate} minDate={minDueDate} maxDate={maxDueDate} onChange={setDueDate} className="mt-1" />
       <p className="mt-1 text-xs text-slate-500">
         Allowed window: {minDueDate} to {maxDueDate}
       </p>
       {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-      <button
+      <Button
         type="button"
         disabled={submitting}
         onClick={() => void handleAccept()}
-        className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        className="mt-4 w-full"
       >
         {submitting ? 'Accepting...' : 'Accept & Continue'}
-      </button>
+      </Button>
     </div>
   )
 }
-
