@@ -219,8 +219,11 @@ fi
 
 READINESS_STATUS="$(echo "${HTTP_BODY}" | jq -er '.result.status')"
 READINESS_BLOCKING_COUNT="$(echo "${HTTP_BODY}" | jq '[.result.checks[]? | select(.is_blocking == true and (.status == "failed" or .status == "blocked"))] | length')"
-echo "[validate-rollout] readiness status=${READINESS_STATUS} blocking=${READINESS_BLOCKING_COUNT}"
+READINESS_SKIPPED_COUNT="$(echo "${HTTP_BODY}" | jq '[.result.checks[]? | select(.status == "skipped")] | length')"
+READINESS_NOT_PASSED="$(echo "${HTTP_BODY}" | jq -c '[.result.checks[]? | select(.status != "passed") | {key: .check_key, status: .status, blocking: .is_blocking, detail: .detail}]')"
+echo "[validate-rollout] readiness status=${READINESS_STATUS} blocking=${READINESS_BLOCKING_COUNT} skipped=${READINESS_SKIPPED_COUNT}"
 if [[ "${READINESS_STATUS}" != "passed" ]]; then
+  echo "[validate-rollout] readiness non-passed checks=${READINESS_NOT_PASSED}"
   NO_GO=1
 fi
 
