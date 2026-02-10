@@ -33,18 +33,18 @@ function parseLocalDateTime(value?: string): Date | undefined {
 }
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-const MINUTE_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'))
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
 
 export function DateTimePicker({
   value,
   onChange,
-  placeholder = 'Pick a date and time',
+  placeholder = '选择日期和时间',
   disabled = false,
   className,
 }: DateTimePickerProps) {
   const selected = parseLocalDateTime(value)
   const currentHour = selected ? String(selected.getHours()).padStart(2, '0') : '09'
-  const currentMinute = selected ? String(Math.floor(selected.getMinutes() / 5) * 5).padStart(2, '0') : '00'
+  const currentMinute = selected ? String(selected.getMinutes()).padStart(2, '0') : '00'
 
   const updateTime = (nextHour: string, nextMinute: string) => {
     const base = selected || new Date()
@@ -83,12 +83,12 @@ export function DateTimePicker({
         </div>
         <div className="grid grid-cols-2 gap-2 p-3">
           <div className="space-y-1">
-            <div className="text-xs font-medium text-slate-600">Hour</div>
+            <div className="text-xs font-medium text-slate-600">小时</div>
             <Select value={currentHour} onValueChange={(hour) => updateTime(hour, currentMinute)}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60">
                 {HOUR_OPTIONS.map((hour) => (
                   <SelectItem key={hour} value={hour}>
                     {hour}
@@ -98,12 +98,12 @@ export function DateTimePicker({
             </Select>
           </div>
           <div className="space-y-1">
-            <div className="text-xs font-medium text-slate-600">Minute</div>
+            <div className="text-xs font-medium text-slate-600">分钟</div>
             <Select value={currentMinute} onValueChange={(minute) => updateTime(currentHour, minute)}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60">
                 {MINUTE_OPTIONS.map((minute) => (
                   <SelectItem key={minute} value={minute}>
                     {minute}
