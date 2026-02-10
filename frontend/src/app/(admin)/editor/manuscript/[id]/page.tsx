@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Loader2, Calendar, User, DollarSign, ArrowRight } from 'lucide-react'
+import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignmentSearch'
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
@@ -74,14 +75,80 @@ type ManuscriptDetail = {
 
 function allowedNext(status: string): string[] {
   const s = (status || '').toLowerCase()
-  // ... (Same logic as before)
   if (s === 'pre_check') return ['under_review', 'minor_revision']
-  if (s === 'under_review') return ['decision', 'major_revision', 'minor_revision']
-  if (s === 'major_revision' || s === 'minor_revision') return ['resubmitted']
-  if (s === 'resubmitted') return ['under_review', 'decision', 'major_revision', 'minor_revision']
+  if (s === 'under_review') return ['decision']
+  if (s === 'resubmitted') return ['under_review', 'decision']
   if (s === 'decision') return ['decision_done']
-  if (s === 'decision_done') return ['approved', 'rejected']
-  return [] // Production handled separately
+  if (s === 'decision_done') return ['approved', 'major_revision', 'minor_revision', 'rejected']
+  return []
+}
+
+function getNextActionCard(
+  manuscript: ManuscriptDetail,
+  capability: ReturnType<typeof deriveEditorCapability>
+): { phase: string; title: string; description: string; blockers: string[] } {
+  const status = String(manuscript.status || '').toLowerCase()
+  const blockers: string[] = []
+  const amount = Number(manuscript.invoice?.amount ?? manuscript.invoice_metadata?.apc_amount ?? 0)
+  const invoiceStatus = String(manuscript.invoice?.status || '').toLowerCase()
+
+  if (status === 'pre_check') {
+    return {
+      phase: 'Pre-check',
+      title: '先完成入口技术审查，再决定分配 AE 或退回作者',
+      description: '当前阶段不应直接进入终审动作。请先确认材料完整性与格式规范。',
+      blockers,
+    }
+  }
+
+  if (status === 'under_review' || status === 'resubmitted') {
+    if ((manuscript.reviewer_invites || []).length === 0) blockers.push('尚未发出审稿邀请')
+    return {
+      phase: 'External Review',
+      title: '推进外审并收集可决策意见',
+      description: 'AE 需跟进邀请接受率与审稿提交率，达到阈值后进入 Decision。',
+      blockers,
+    }
+  }
+
+  if (status === 'decision' || status === 'decision_done') {
+    if (!(capability.canRecordFirstDecision || capability.canSubmitFinalDecision)) {
+      blockers.push('当前账号无决策权限')
+    }
+    return {
+      phase: 'Decision',
+      title: '在 Decision Workspace 完成首轮/终轮学术决策',
+      description: '请确保审稿依据充分并写明决策理由，关键状态流转需保留审计痕迹。',
+      blockers,
+    }
+  }
+
+  if (['approved', 'layout', 'english_editing', 'proofreading'].includes(status)) {
+    if (amount > 0 && invoiceStatus !== 'paid') blockers.push('Payment Gate 未满足（发票未确认 paid）')
+    if (!manuscript.final_pdf_path) blockers.push('Proof Gate 未满足（final PDF 尚未上传）')
+    return {
+      phase: 'Production',
+      title: '并行推进 Production 与 Finance，满足双门禁后发布',
+      description: '发布前必须同时满足付款确认与校对完成条件。',
+      blockers,
+    }
+  }
+
+  if (status === 'published') {
+    return {
+      phase: 'Published',
+      title: '稿件已发布',
+      description: '当前进入公开传播阶段，可继续跟踪下载与引用。',
+      blockers,
+    }
+  }
+
+  return {
+    phase: 'Workflow',
+    title: '请按当前状态继续推进流程',
+    description: '若出现状态异常，请先在审计日志核对最近一次流转。',
+    blockers,
+  }
 }
 
 export default function EditorManuscriptDetailPage() {
@@ -120,8 +187,9 @@ export default function EditorManuscriptDetailPage() {
       }
 
       const meta = (detail?.invoice_metadata as any) || {}
+      const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
       setInvoiceForm({
-        authors: String(meta.authors || ''),
+        authors: String(meta.authors || ownerFallback || ''),
         affiliation: String(meta.affiliation || ''),
         apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
         fundingInfo: String(meta.funding_info || ''),
@@ -146,6 +214,15 @@ export default function EditorManuscriptDetailPage() {
   const statusLower = status.toLowerCase()
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])
+  const canAssignReviewersStage = ['under_review', 'resubmitted'].includes(statusLower)
+  const canOpenDecisionWorkspaceStage = ['under_review', 'resubmitted', 'decision', 'decision_done'].includes(statusLower)
+  const showDirectStatusTransitions = !isPostAcceptance && !['published', 'rejected'].includes(statusLower)
+  const displayAuthors =
+    String(invoiceForm.authors || '').trim() ||
+    String(ms?.owner?.full_name || '').trim() ||
+    String(ms?.owner?.email || '').trim() ||
+    '—'
+  const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
 
   // --- File Processing ---
   const mapFile = (f: ManuscriptFile, type: FileItem['type']): FileItem => ({
@@ -226,7 +303,7 @@ export default function EditorManuscriptDetailPage() {
                         <div>
                             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Authors</div>
                             <div className="font-medium text-slate-900 text-sm">
-                                {invoiceForm.authors || 'Unknown Authors'}
+                                {displayAuthors}
                             </div>
                             <div className="text-xs text-slate-500 mt-1">{invoiceForm.affiliation || 'No affiliation'}</div>
                         </div>
@@ -320,6 +397,31 @@ export default function EditorManuscriptDetailPage() {
 
         {/* RIGHT COLUMN (4/12) */}
         <div className="lg:col-span-4 space-y-6">
+            <Card className="shadow-sm border-slate-200">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>Next Action</span>
+                      <Badge variant="secondary">{nextAction.phase}</Badge>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="text-sm font-semibold text-slate-900">{nextAction.title}</div>
+                    <div className="text-sm text-slate-600">{nextAction.description}</div>
+                    {nextAction.blockers.length > 0 && (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 space-y-1">
+                        <div className="text-xs font-semibold text-rose-700 flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Blocking Conditions
+                        </div>
+                        {nextAction.blockers.map((item) => (
+                          <div key={item} className="text-xs text-rose-700">
+                            - {item}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </CardContent>
+            </Card>
             
             {/* Action Panel / Workflow */}
             <Card className="border-t-4 border-t-purple-500 shadow-sm">
@@ -328,7 +430,7 @@ export default function EditorManuscriptDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {/* Reviewer Assignment */}
-                    {!isPostAcceptance && (
+                    {!isPostAcceptance && canAssignReviewersStage && (
                         <div className="pt-2 pb-4 border-b border-slate-100">
                             <div className="text-xs font-semibold text-slate-500 mb-2">ASSIGN REVIEWERS</div>
                             <ReviewerAssignmentSearch
@@ -338,8 +440,13 @@ export default function EditorManuscriptDetailPage() {
                             />
                         </div>
                     )}
+                    {!isPostAcceptance && !canAssignReviewersStage && (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                        当前阶段不开放审稿人分配。请先按流程推进到 `under_review / resubmitted`。
+                      </div>
+                    )}
 
-                    {!isPostAcceptance && (
+                    {!isPostAcceptance && canOpenDecisionWorkspaceStage && (
                       <Button
                         className="w-full justify-between"
                         variant="secondary"
@@ -351,6 +458,11 @@ export default function EditorManuscriptDetailPage() {
                         Open Decision Workspace
                         <ArrowRight className="h-4 w-4" />
                       </Button>
+                    )}
+                    {!isPostAcceptance && !canOpenDecisionWorkspaceStage && (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                        Decision Workspace 仅在 `under_review / resubmitted / decision / decision_done` 阶段开放。
+                      </div>
                     )}
 
                     {/* Status Transitions */}
@@ -377,7 +489,7 @@ export default function EditorManuscriptDetailPage() {
                                 onReload={load}
                             />
                         </div>
-                    ) : (
+                    ) : showDirectStatusTransitions ? (
                         <div className="space-y-2">
                              <div className="text-xs font-semibold text-slate-500 mb-2">CHANGE STATUS</div>
                              {nextStatuses.length === 0 ? (
@@ -391,8 +503,19 @@ export default function EditorManuscriptDetailPage() {
                                         disabled={transitioning === s}
                                         onClick={async () => {
                                             try {
+                                                const confirmText = `确认将状态修改为「${getStatusLabel(s)}」吗？`
+                                                if (!window.confirm(confirmText)) return
+                                                let comment: string | undefined
+                                                if (['minor_revision', 'major_revision', 'rejected', 'approved'].includes(s)) {
+                                                  const input = window.prompt(`请输入流转原因（${getStatusLabel(s)}）：`) ?? ''
+                                                  if (!input.trim()) {
+                                                    toast.error('该流转需要填写原因。')
+                                                    return
+                                                  }
+                                                  comment = input.trim()
+                                                }
                                                 setTransitioning(s)
-                                                const res = await EditorApi.patchManuscriptStatus(id, s)
+                                                const res = await EditorApi.patchManuscriptStatus(id, s, comment)
                                                 if (!res?.success) throw new Error(res?.detail || res?.message || 'Failed')
                                                 toast.success(`Moved to ${getStatusLabel(s)}`)
                                                 await load()
@@ -409,6 +532,10 @@ export default function EditorManuscriptDetailPage() {
                                 ))
                              )}
                         </div>
+                    ) : (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                        当前状态为流程终态，已关闭手动状态流转。
+                      </div>
                     )}
                 </CardContent>
             </Card>

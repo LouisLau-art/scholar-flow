@@ -3,8 +3,8 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Toast from '@/components/Toast'
-import { SiteFooter } from '@/components/portal/SiteFooter'
 import QueryProvider from '@/components/providers/QueryProvider'
+import { ConditionalSiteFooter } from '@/components/layout/ConditionalSiteFooter'
 
 import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'
 
@@ -83,7 +83,7 @@ export default function RootLayout({
             </EnvironmentProvider>
           </QueryProvider>
         </ErrorBoundary>
-        <SiteFooter />
+        <ConditionalSiteFooter />
         <Toast />
       </body>
     </html>

@@ -3,13 +3,23 @@ import { authService } from '@/services/auth'
 import { User } from '@/types/user'
 import { toast } from 'sonner'
 
+async function requestProfile(token: string): Promise<Response> {
+  return fetch('/api/v1/user/profile', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
 async function fetchProfile(): Promise<User | null> {
   const token = await authService.getAccessToken()
   if (!token) return null
 
-  const res = await fetch('/api/v1/user/profile', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  let res = await requestProfile(token)
+  if (res.status === 401) {
+    const refreshed = await authService.forceRefreshAccessToken()
+    if (refreshed) {
+      res = await requestProfile(refreshed)
+    }
+  }
 
   if (!res.ok) {
     if (res.status === 401) {
