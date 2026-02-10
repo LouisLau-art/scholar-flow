@@ -91,16 +91,23 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
     try {
       const res = await EditorApi.listInternalStaff('', { excludeCurrentUser: true })
       if (!res?.success) return
-      const rows = Array.isArray(res.data) ? res.data : []
-      setStaff(
-        rows.filter((row) => {
-          const rowId = String(row?.id || '').trim()
-          const rowEmail = String(row?.email || '').trim().toLowerCase()
-          if (activeUserId && rowId === activeUserId) return false
+      const rows: Array<Record<string, unknown>> = Array.isArray(res.data)
+        ? (res.data as Array<Record<string, unknown>>)
+        : []
+      const normalizedRows: StaffOption[] = rows
+        .map((row) => ({
+          id: String(row.id || '').trim(),
+          full_name: String(row.full_name || '').trim() || undefined,
+          email: String(row.email || '').trim() || undefined,
+        }))
+        .filter((row) => {
+          if (!row.id) return false
+          const rowEmail = String(row.email || '').toLowerCase()
+          if (activeUserId && row.id === activeUserId) return false
           if (activeUserEmail && rowEmail && rowEmail === activeUserEmail) return false
           return true
         })
-      )
+      setStaff(normalizedRows)
     } catch {
       // ignore and keep notebook usable without mention dropdown
     }
