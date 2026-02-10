@@ -201,6 +201,63 @@ def test_submit_technical_check_pass_to_academic():
     assert out["pre_check_status"] == PreCheckStatus.ACADEMIC.value
 
 
+def test_request_intake_revision_requires_comment():
+    svc = _new_service()
+    with pytest.raises(HTTPException) as ei:
+        svc.request_intake_revision(uuid4(), uuid4(), comment="   ")
+    assert ei.value.status_code == 422
+
+
+def test_request_intake_revision_success():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    current_user_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+        }
+    )
+
+    editorial_mock = Mock()
+    editorial_mock.update_status.return_value = {
+        "id": str(manuscript_id),
+        "status": ManuscriptStatus.MINOR_REVISION.value,
+    }
+    svc.editorial = editorial_mock
+
+    out = svc.request_intake_revision(
+        manuscript_id=manuscript_id,
+        current_user_id=current_user_id,
+        comment="请补充图表清晰度与伦理声明",
+    )
+    assert out["status"] == ManuscriptStatus.MINOR_REVISION.value
+    kwargs = editorial_mock.update_status.call_args.kwargs
+    assert kwargs["to_status"] == ManuscriptStatus.MINOR_REVISION.value
+    assert kwargs["payload"]["action"] == "precheck_intake_revision"
+
+
+def test_request_intake_revision_rejects_non_intake_stage():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    current_user_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+        }
+    )
+    with pytest.raises(HTTPException) as ei:
+        svc.request_intake_revision(
+            manuscript_id=manuscript_id,
+            current_user_id=current_user_id,
+            comment="请先补充稿件结构",
+        )
+    assert ei.value.status_code == 409
+
+
 def test_submit_academic_check_rejects_invalid_decision():
     svc = _new_service()
     with pytest.raises(HTTPException) as ei:

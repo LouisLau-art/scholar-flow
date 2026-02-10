@@ -61,6 +61,11 @@ export type AssignAEPayload = {
   idempotency_key?: string
 }
 
+export type SubmitIntakeRevisionPayload = {
+  comment: string
+  idempotency_key?: string
+}
+
 export type SubmitTechnicalCheckPayload = {
   decision: TechnicalDecision
   comment?: string
@@ -162,6 +167,15 @@ export const EditorApi = {
 
   async assignAE(manuscriptId: string, payload: AssignAEPayload) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/assign-ae`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  },
+
+  async submitIntakeRevision(manuscriptId: string, payload: SubmitIntakeRevisionPayload) {
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/intake-return`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

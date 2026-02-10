@@ -58,6 +58,14 @@ export const editorService = {
     return res
   },
 
+  submitIntakeRevision: async (manuscriptId: string, comment: string) => {
+    const res = await EditorApi.submitIntakeRevision(manuscriptId, { comment })
+    if (!res?.message) {
+      throw new Error(res?.detail || res?.message || 'Failed to submit intake revision')
+    }
+    return res
+  },
+
   getAEWorkspace: async (page = 1, pageSize = 20) => {
     const res = await EditorApi.getAEWorkspace(page, pageSize)
     if (!Array.isArray(res)) {

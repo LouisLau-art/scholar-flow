@@ -916,6 +916,56 @@ class EditorService:
         )
         return self._map_precheck_row(updated)
 
+    def request_intake_revision(
+        self,
+        manuscript_id: UUID,
+        current_user_id: UUID,
+        *,
+        comment: str,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        ME 入口技术审查：退回作者修改（非学术拒稿）。
+
+        中文注释:
+        - 仅允许在 pre_check/intake 阶段执行；
+        - 结果流转到 minor_revision，作者修回后再进入流程；
+        - 幂等处理：若已在 minor_revision，重复提交直接返回当前稿件。
+        """
+        manuscript_id_str = str(manuscript_id)
+        actor = str(current_user_id)
+        comment_clean = (comment or "").strip()
+        if not comment_clean:
+            raise HTTPException(status_code=422, detail="comment is required")
+
+        ms = self._get_manuscript(manuscript_id_str)
+        status = normalize_status(str(ms.get("status") or ""))
+        pre = self._normalize_precheck_status(ms.get("pre_check_status"))
+
+        if status == ManuscriptStatus.MINOR_REVISION.value:
+            return dict(ms)
+
+        if status != ManuscriptStatus.PRE_CHECK.value:
+            raise HTTPException(status_code=409, detail="Intake revision only allowed in pre_check")
+        if pre != PreCheckStatus.INTAKE.value:
+            raise HTTPException(status_code=409, detail=f"Intake revision only allowed in intake stage, current={pre}")
+
+        updated = self.editorial.update_status(
+            manuscript_id=manuscript_id_str,
+            to_status=ManuscriptStatus.MINOR_REVISION.value,
+            changed_by=actor,
+            comment=comment_clean,
+            allow_skip=False,
+            payload={
+                "action": "precheck_intake_revision",
+                "pre_check_from": PreCheckStatus.INTAKE.value,
+                "pre_check_to": None,
+                "decision": "revision",
+                "idempotency_key": idempotency_key,
+            },
+        )
+        return updated
+
     def get_ae_workspace(self, ae_id: UUID, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
         """
         AE Workspace: Status=PRE_CHECK, PreCheckStatus=TECHNICAL, assigned to ae_id

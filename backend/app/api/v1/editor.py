@@ -102,6 +102,11 @@ class AssignAERequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=64)
 
 
+class IntakeRevisionRequest(BaseModel):
+    comment: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str | None = Field(default=None, max_length=64)
+
+
 class TechnicalCheckRequest(BaseModel):
     decision: Literal["pass", "revision"]
     comment: str | None = Field(default=None, max_length=2000)
@@ -654,6 +659,32 @@ async def assign_ae(
         raise
     except Exception as e:
         print(f"[AssignAE] failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/manuscripts/{id}/intake-return")
+async def submit_intake_revision(
+    id: UUID,
+    request: IntakeRevisionRequest,
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    ME Intake technical screening:
+    return manuscript to author for revision with mandatory comment.
+    """
+    try:
+        updated = EditorService().request_intake_revision(
+            manuscript_id=id,
+            current_user_id=current_user["id"],
+            comment=request.comment,
+            idempotency_key=request.idempotency_key,
+        )
+        return {"message": "Intake revision submitted", "data": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[IntakeRevision] failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
