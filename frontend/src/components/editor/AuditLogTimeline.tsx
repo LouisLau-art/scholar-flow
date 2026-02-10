@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 import { Activity } from 'lucide-react'
+import type { InternalTask, InternalTaskActivity } from '@/types/internal-collaboration'
 
 interface AuditLog {
   id: string
@@ -54,7 +55,7 @@ interface InternalCommentItem {
   } | null
 }
 
-type TimelineCategory = 'all' | 'status' | 'author' | 'reviewer' | 'internal'
+type TimelineCategory = 'all' | 'status' | 'author' | 'reviewer' | 'internal' | 'task'
 
 interface TimelineEvent {
   id: string
@@ -90,8 +91,27 @@ function statusLabel(raw: unknown): string {
   return value.replace(/_/g, ' ')
 }
 
-function actorName(user?: { full_name?: string; email?: string } | null): string {
+function actorName(user?: { full_name?: string | null; email?: string | null } | null): string {
   return String(user?.full_name || user?.email || 'System').trim() || 'System'
+}
+
+function taskActionLabel(action: string): string {
+  const normalized = String(action || '').trim().toLowerCase()
+  if (normalized === 'task_created') return '内部任务创建'
+  if (normalized === 'status_changed') return '内部任务状态变更'
+  if (normalized === 'assignee_changed') return '内部任务指派变更'
+  if (normalized === 'due_at_changed') return '内部任务截止时间调整'
+  if (normalized === 'task_updated') return '内部任务更新'
+  return normalized || '内部任务事件'
+}
+
+function taskStatusLabel(value: unknown): string {
+  const status = String(value || '').trim().toLowerCase()
+  if (!status) return ''
+  if (status === 'todo') return 'To Do'
+  if (status === 'in_progress') return 'In Progress'
+  if (status === 'done') return 'Done'
+  return status
 }
 
 function isValidDate(value: unknown): value is string {
@@ -108,6 +128,10 @@ export function AuditLogTimeline({
 }: AuditLogTimelineProps) {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [comments, setComments] = useState<InternalCommentItem[]>([])
+  const [tasks, setTasks] = useState<InternalTask[]>([])
+  const [taskActivities, setTaskActivities] = useState<
+    Array<InternalTaskActivity & { task_title?: string | null }>
+  >([])
   const [category, setCategory] = useState<TimelineCategory>('all')
   const [loading, setLoading] = useState(true)
 
@@ -124,11 +148,43 @@ export function AuditLogTimeline({
     Promise.all([
       EditorApi.getAuditLogs(manuscriptId),
       EditorApi.getInternalComments(manuscriptId),
+      EditorApi.listInternalTasks(manuscriptId),
     ])
-      .then(([auditRes, commentRes]) => {
+      .then(async ([auditRes, commentRes, taskRes]) => {
         if (!mounted) return
         if (auditRes?.success) setLogs(Array.isArray(auditRes.data) ? auditRes.data : [])
         if (commentRes?.success) setComments(Array.isArray(commentRes.data) ? commentRes.data : [])
+
+        const taskRows: InternalTask[] = taskRes?.success && Array.isArray(taskRes.data) ? taskRes.data : []
+        setTasks(taskRows)
+
+        // 中文注释: 任务活动逐任务拉取，失败降级为仅显示任务基础事件，避免 timeline 整体不可用。
+        const activityResults = await Promise.allSettled(
+          taskRows.slice(0, 50).map(async (task) => {
+            const activityRes = await EditorApi.getInternalTaskActivity(manuscriptId, task.id)
+            const rows: InternalTaskActivity[] =
+              activityRes?.success && Array.isArray(activityRes.data) ? activityRes.data : []
+            return rows.map((item) => ({
+              ...item,
+              task_title: task.title || null,
+            }))
+          })
+        )
+        if (!mounted) return
+        const mergedActivities: Array<InternalTaskActivity & { task_title?: string | null }> = []
+        for (const result of activityResults) {
+          if (result.status === 'fulfilled') {
+            mergedActivities.push(...result.value)
+          }
+        }
+        setTaskActivities(mergedActivities)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setLogs([])
+        setComments([])
+        setTasks([])
+        setTaskActivities([])
       })
       .finally(() => {
         if (mounted) setLoading(false)
@@ -209,12 +265,48 @@ export function AuditLogTimeline({
       })
     }
 
+    for (const activity of taskActivities) {
+      if (!isValidDate(activity.created_at)) continue
+      const beforeStatus = taskStatusLabel(activity.before_payload?.status)
+      const afterStatus = taskStatusLabel(activity.after_payload?.status)
+      const statusMeta =
+        activity.action === 'status_changed' && (beforeStatus || afterStatus)
+          ? `${beforeStatus || '—'} -> ${afterStatus || '—'}`
+          : undefined
+      const taskTitle = normalizeText(activity.task_title || '')
+      merged.push({
+        id: `task-activity-${activity.id}`,
+        category: 'task',
+        createdAt: activity.created_at,
+        title: taskActionLabel(activity.action),
+        actor: actorName(activity.actor),
+        meta: statusMeta,
+        content: taskTitle ? `任务: ${taskTitle}` : undefined,
+      })
+    }
+
+    // 兜底：若某些任务没有 activity 记录，至少显示任务创建事件。
+    const activityTaskIds = new Set(taskActivities.map((item) => String(item.task_id || '')))
+    for (const task of tasks) {
+      if (!isValidDate(task.created_at)) continue
+      if (activityTaskIds.has(String(task.id || ''))) continue
+      merged.push({
+        id: `task-created-fallback-${task.id}`,
+        category: 'task',
+        createdAt: String(task.created_at),
+        title: '内部任务创建',
+        actor: actorName(task.creator || null),
+        meta: taskStatusLabel(task.status),
+        content: normalizeText(task.title),
+      })
+    }
+
     return merged.sort((a, b) => {
       const at = new Date(a.createdAt).getTime()
       const bt = new Date(b.createdAt).getTime()
       return bt - at
     })
-  }, [authorResponses, comments, logs, reviewerInvites])
+  }, [authorResponses, comments, logs, reviewerInvites, taskActivities, tasks])
 
   const filteredEvents = useMemo(() => {
     if (category === 'all') return events
@@ -228,6 +320,7 @@ export function AuditLogTimeline({
       author: events.filter((item) => item.category === 'author').length,
       reviewer: events.filter((item) => item.category === 'reviewer').length,
       internal: events.filter((item) => item.category === 'internal').length,
+      task: events.filter((item) => item.category === 'task').length,
     }
   }, [events])
 
@@ -235,6 +328,7 @@ export function AuditLogTimeline({
     if (eventCategory === 'status') return 'bg-blue-500'
     if (eventCategory === 'author') return 'bg-violet-500'
     if (eventCategory === 'reviewer') return 'bg-emerald-500'
+    if (eventCategory === 'task') return 'bg-cyan-500'
     return 'bg-amber-500'
   }
 
@@ -262,6 +356,9 @@ export function AuditLogTimeline({
           </Button>
           <Button size="sm" variant={category === 'internal' ? 'secondary' : 'outline'} onClick={() => setCategory('internal')}>
             Internal ({categoryCount.internal})
+          </Button>
+          <Button size="sm" variant={category === 'task' ? 'secondary' : 'outline'} onClick={() => setCategory('task')}>
+            Task ({categoryCount.task})
           </Button>
         </div>
 
