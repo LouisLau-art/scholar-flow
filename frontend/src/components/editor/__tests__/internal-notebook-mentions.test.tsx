@@ -54,14 +54,11 @@ describe('InternalNotebook mentions', () => {
       expect(EditorApi.listInternalStaff).toHaveBeenCalled()
     })
 
-    const mentionSelect = screen.getByLabelText('Mention teammates') as HTMLSelectElement
-    for (const option of Array.from(mentionSelect.options)) {
-      if (option.value === 'u1' || option.value === 'u2') option.selected = true
-    }
-    fireEvent.change(mentionSelect)
+    fireEvent.click(screen.getByLabelText('Mention Alice Editor'))
+    fireEvent.click(screen.getByLabelText('Mention Bob Editor'))
 
     fireEvent.change(screen.getByPlaceholderText('Type an internal note...'), { target: { value: 'Please help' } })
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByLabelText('Post internal note'))
 
     await waitFor(() => {
       expect(EditorApi.postInternalCommentWithMentions).toHaveBeenCalledWith('m1', {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { Loader2, MessageSquare, Send, UserRoundPlus } from 'lucide-react'
+import { Check, Loader2, MessageSquare, Search, Send, UserRoundPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
   const [submitting, setSubmitting] = useState(false)
   const [staff, setStaff] = useState<StaffOption[]>([])
   const [mentionUserIds, setMentionUserIds] = useState<string[]>([])
+  const [staffSearch, setStaffSearch] = useState('')
 
   const staffById = useMemo(() => {
     const map = new Map<string, StaffOption>()
@@ -51,6 +52,15 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
       }),
     [mentionUserIds, staffById]
   )
+  const filteredStaff = useMemo(() => {
+    const key = staffSearch.trim().toLowerCase()
+    if (!key) return staff
+    return staff.filter((member) => {
+      const name = String(member.full_name || '').toLowerCase()
+      const email = String(member.email || '').toLowerCase()
+      return name.includes(key) || email.includes(key)
+    })
+  }, [staff, staffSearch])
 
   async function loadComments() {
     try {
@@ -93,6 +103,10 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
       return 'Contains invalid mention targets.'
     }
     return null
+  }
+
+  function toggleMention(userId: string) {
+    setMentionUserIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
   }
 
   async function handlePost() {
@@ -192,24 +206,72 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
             <Label className="mb-1 inline-flex items-center gap-1 text-xs text-slate-600">
               <UserRoundPlus className="h-3.5 w-3.5" /> Mention teammates
             </Label>
-            <select
-              multiple
-              aria-label="Mention teammates"
-              value={mentionUserIds}
-              onChange={(e) => {
-                const next = Array.from(e.target.selectedOptions).map((option) => option.value)
-                setMentionUserIds(next)
-              }}
-              className="h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900"
-            >
-              {staff.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.full_name || member.email || member.id}
-                </option>
-              ))}
-            </select>
+            <div className="rounded-md border border-slate-200 bg-white p-2">
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                <Search className="h-3.5 w-3.5 text-slate-500" />
+                <Input
+                  aria-label="Search teammates"
+                  placeholder="Search by name or email..."
+                  value={staffSearch}
+                  onChange={(e) => setStaffSearch(e.target.value)}
+                  className="h-6 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
+                />
+              </div>
+
+              {mentionUserIds.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {mentionUserIds.map((uid) => {
+                    const member = staffById.get(uid)
+                    const text = member?.full_name || member?.email || uid
+                    return (
+                      <span
+                        key={`selected-${uid}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+                      >
+                        @{text}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${text}`}
+                          onClick={() => toggleMention(uid)}
+                          className="rounded-full p-0.5 text-blue-600 transition hover:bg-blue-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-[11px] text-slate-500">No teammates selected.</p>
+              )}
+
+              <div className="mt-2 max-h-28 overflow-y-auto rounded-md border border-slate-200">
+                {filteredStaff.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-slate-500">No teammates found.</div>
+                ) : (
+                  filteredStaff.map((member) => {
+                    const text = member.full_name || member.email || member.id
+                    const selected = mentionUserIds.includes(member.id)
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        aria-label={`Mention ${text}`}
+                        className={`flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                          selected ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                        onClick={() => toggleMention(member.id)}
+                      >
+                        <span className="truncate">{text}</span>
+                        {selected ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : null}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
             {selectedMentionLabels.length > 0 ? (
-              <p className="mt-1 text-[11px] text-slate-500">Selected: {selectedMentionLabels.join(', ')}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Selected {selectedMentionLabels.length} teammate(s).</p>
             ) : null}
           </div>
 
@@ -227,7 +289,7 @@ export function InternalNotebook({ manuscriptId, onCommentPosted }: InternalNote
               disabled={submitting}
               className="flex-1"
             />
-            <Button onClick={handlePost} disabled={submitting || !inputText.trim()} size="icon">
+            <Button aria-label="Post internal note" onClick={handlePost} disabled={submitting || !inputText.trim()} size="icon">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
