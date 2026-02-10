@@ -818,21 +818,125 @@ class EditorService:
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
 
-    def get_intake_queue(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+    def get_intake_queue(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        *,
+        q: str | None = None,
+        overdue_only: bool = False,
+    ) -> list[dict[str, Any]]:
         """
         ME Intake Queue: Status=PRE_CHECK, PreCheckStatus=INTAKE
         """
-        q = (
-            self.client.table("manuscripts")
-            .select("*")
-            .eq("status", ManuscriptStatus.PRE_CHECK.value)
-            .or_(f"pre_check_status.eq.{PreCheckStatus.INTAKE.value},pre_check_status.is.null")
-            .order("created_at", desc=True)
-            .range((page - 1) * page_size, page * page_size - 1)
-        )
-        resp = q.execute()
-        rows = getattr(resp, "data", None) or []
-        return self._enrich_precheck_rows(rows)
+        selects = [
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id",
+        ]
+        rows: list[dict[str, Any]] = []
+        last_error: Exception | None = None
+        for select_clause in selects:
+            try:
+                query = (
+                    self.client.table("manuscripts")
+                    .select(select_clause)
+                    .eq("status", ManuscriptStatus.PRE_CHECK.value)
+                    .or_(f"pre_check_status.eq.{PreCheckStatus.INTAKE.value},pre_check_status.is.null")
+                    .order("created_at", desc=True)
+                    .range((page - 1) * page_size, page * page_size - 1)
+                )
+                resp = query.execute()
+                rows = getattr(resp, "data", None) or []
+                break
+            except Exception as e:
+                last_error = e
+                lowered = str(e).lower()
+                if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
+                    continue
+                raise
+        if not rows and last_error:
+            # 若因 schema 漂移导致多次降级仍失败，则抛出原始异常便于定位。
+            # 这里仅在 rows 为空且确实经历过异常时触发。
+            lowered = str(last_error).lower()
+            if "schema cache" in lowered or "could not find" in lowered:
+                raise last_error
+
+        # Intake 列表不需要加载完整 pre-check 时间线，避免每次刷新多打一条审计日志聚合查询。
+        out = [self._map_precheck_row(r) for r in rows]
+
+        # 补齐 owner 展示字段（full_name/email），用于 Intake 决策信息补全。
+        owner_ids = sorted({str(r.get("owner_id") or "") for r in out if str(r.get("owner_id") or "")})
+        owner_map: dict[str, dict[str, Any]] = {}
+        if owner_ids:
+            try:
+                prof = (
+                    self.client.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", owner_ids)
+                    .execute()
+                )
+                for p in (getattr(prof, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        owner_map[pid] = p
+            except Exception as e:
+                print(f"[Intake] load owner profiles failed (ignored): {e}")
+
+        for row in out:
+            oid = str(row.get("owner_id") or "")
+            row["owner"] = (
+                {
+                    "id": oid,
+                    "full_name": (owner_map.get(oid) or {}).get("full_name"),
+                    "email": (owner_map.get(oid) or {}).get("email"),
+                }
+                if oid
+                else None
+            )
+            journal = row.get("journals")
+            if isinstance(journal, list):
+                row["journal"] = journal[0] if journal else None
+            elif isinstance(journal, dict):
+                row["journal"] = journal
+            else:
+                row["journal"] = None
+
+        now = datetime.now(timezone.utc)
+        for row in out:
+            created_raw = str(row.get("created_at") or "")
+            created_at: datetime | None = None
+            if created_raw:
+                try:
+                    created_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+                except Exception:
+                    created_at = None
+            if created_at is None:
+                row["intake_elapsed_hours"] = None
+                row["is_overdue"] = False
+                row["intake_priority"] = "normal"
+            else:
+                elapsed_hours = max(0, int((now - created_at).total_seconds() // 3600))
+                is_overdue = elapsed_hours >= 48
+                row["intake_elapsed_hours"] = elapsed_hours
+                row["is_overdue"] = is_overdue
+                row["intake_priority"] = "high" if is_overdue else "normal"
+
+        keyword = str(q or "").strip().lower()
+        if keyword:
+            out = [
+                row
+                for row in out
+                if keyword in str(row.get("title") or "").lower()
+                or keyword in str(row.get("id") or "").lower()
+                or keyword in str(((row.get("owner") or {}).get("full_name") or "")).lower()
+                or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
+            ]
+
+        if overdue_only:
+            out = [row for row in out if bool(row.get("is_overdue"))]
+
+        return out
 
     def assign_ae(
         self,

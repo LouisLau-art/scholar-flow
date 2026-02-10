@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Inbox, Loader2, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Inbox, Loader2, RotateCcw, Search } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import QueryProvider from '@/components/providers/QueryProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
@@ -17,6 +18,11 @@ interface Manuscript {
   title: string
   status?: string
   created_at?: string
+  owner?: { id: string; full_name?: string; email?: string } | null
+  journal?: { title?: string; slug?: string } | null
+  intake_priority?: 'high' | 'normal'
+  intake_elapsed_hours?: number | null
+  is_overdue?: boolean
   pre_check_status: string
 }
 
@@ -30,12 +36,25 @@ function formatDate(value?: string) {
 function renderIntakeStatus(status?: string) {
   const normalized = (status || '').toLowerCase()
   if (normalized === 'intake') {
-    return <Badge variant="secondary">intake</Badge>
+    return <Badge variant="secondary">入口审查</Badge>
   }
   if (!normalized) {
-    return <Badge variant="secondary">intake</Badge>
+    return <Badge variant="secondary">入口审查</Badge>
   }
   return <Badge variant="outline">{normalized}</Badge>
+}
+
+function renderPriority(row: Manuscript) {
+  if (row.intake_priority === 'high' || row.is_overdue) {
+    const hours = typeof row.intake_elapsed_hours === 'number' ? `（${row.intake_elapsed_hours}h）` : ''
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        高优先级{hours}
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">正常</Badge>
 }
 
 export default function MEIntakePage() {
@@ -43,28 +62,40 @@ export default function MEIntakePage() {
   const [loading, setLoading] = useState(true)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
+  const [queryInput, setQueryInput] = useState('')
+  const [query, setQuery] = useState('')
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [returnModalOpen, setReturnModalOpen] = useState(false)
   const [returning, setReturning] = useState(false)
   const [returnComment, setReturnComment] = useState('')
+  const [returnConfirmText, setReturnConfirmText] = useState('')
   const [returnError, setReturnError] = useState('')
   const [returnTarget, setReturnTarget] = useState<{ id: string; title: string } | null>(null)
+  const aePrefetchedRef = useRef(false)
 
-  const fetchQueue = async () => {
+  const fetchQueue = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await editorService.getIntakeQueue()
+      const data = await editorService.getIntakeQueue(1, 100, { q: query || undefined, overdueOnly })
       setManuscripts(data as unknown as Manuscript[])
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [query, overdueOnly])
 
   useEffect(() => {
-    fetchQueue()
-    // 中文注释：预取 AE 列表，避免首次点击 Assign AE 时才触发网络请求导致卡顿
-    void getAssistantEditors().catch(() => {})
+    void fetchQueue()
+  }, [fetchQueue])
+
+  useEffect(() => {
+    if (aePrefetchedRef.current) return
+    aePrefetchedRef.current = true
+    // 中文注释：将 AE 预取延后到首屏列表请求之后，避免首屏并发请求拖慢 Intake 列表出现速度。
+    setTimeout(() => {
+      void getAssistantEditors().catch(() => {})
+    }, 600)
   }, [])
 
   const openAssignModal = (id: string) => {
@@ -75,6 +106,7 @@ export default function MEIntakePage() {
   const openReturnModal = (target: { id: string; title: string }) => {
     setReturnTarget(target)
     setReturnComment('')
+    setReturnConfirmText('')
     setReturnError('')
     setReturnModalOpen(true)
   }
@@ -84,6 +116,7 @@ export default function MEIntakePage() {
     setReturnModalOpen(false)
     setReturnTarget(null)
     setReturnComment('')
+    setReturnConfirmText('')
     setReturnError('')
   }
 
@@ -92,6 +125,10 @@ export default function MEIntakePage() {
     const comment = returnComment.trim()
     if (!comment) {
       setReturnError('请填写退回原因，作者需要据此修订稿件。')
+      return
+    }
+    if (returnConfirmText.trim() !== '退回') {
+      setReturnError('请输入“退回”以确认该高风险操作。')
       return
     }
     setReturning(true)
@@ -105,6 +142,10 @@ export default function MEIntakePage() {
     } finally {
       setReturning(false)
     }
+  }
+
+  const applySearch = () => {
+    setQuery(queryInput.trim())
   }
 
   return (
@@ -129,24 +170,61 @@ export default function MEIntakePage() {
             </Link>
           </div>
 
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+              <div className="flex gap-2">
+                <Input
+                  value={queryInput}
+                  onChange={(e) => setQueryInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applySearch()
+                  }}
+                  placeholder="搜索标题 / UUID / 作者 / 期刊"
+                />
+                <Button variant="outline" onClick={applySearch} className="gap-1.5">
+                  <Search className="h-4 w-4" />
+                  搜索
+                </Button>
+              </div>
+              <Button variant={overdueOnly ? 'default' : 'outline'} onClick={() => setOverdueOnly((v) => !v)}>
+                {overdueOnly ? '仅看高优先级: 开' : '仅看高优先级: 关'}
+              </Button>
+              {(query || overdueOnly) && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setQueryInput('')
+                    setQuery('')
+                    setOverdueOnly(false)
+                  }}
+                >
+                  清空筛选
+                </Button>
+              )}
+            </div>
+          </div>
+
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="w-full table-fixed">
               <thead className="bg-slate-50/70">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
+                  <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Journal</th>
+                  <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Author</th>
                   <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</th>
+                  <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</th>
                   <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Stage</th>
-                  <th className="w-[360px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                  <th className="w-[300px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
                   </tr>
                 ) : manuscripts.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">No manuscripts in intake.</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">No manuscripts in intake.</td>
                   </tr>
                 ) : (
                   manuscripts.map((m) => (
@@ -161,12 +239,15 @@ export default function MEIntakePage() {
                         </Link>
                         <div className="mt-1 font-mono text-[11px] text-slate-500">{m.id}</div>
                       </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{m.owner?.full_name || m.owner?.email || '-'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{formatDate(m.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{renderPriority(m)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{renderIntakeStatus(m.pre_check_status)}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <Button size="sm" onClick={() => openAssignModal(m.id)}>
-                            Assign AE
+                            通过并分配 AE
                           </Button>
                           <Button size="sm" variant="destructive" onClick={() => openReturnModal({ id: m.id, title: m.title })}>
                             <RotateCcw className="h-4 w-4" />
@@ -216,6 +297,17 @@ export default function MEIntakePage() {
                     disabled={returning}
                   />
                   {returnError ? <div className="mt-2 text-xs text-red-600">{returnError}</div> : null}
+                </div>
+                <div>
+                  <div className="mb-2 text-sm font-medium text-slate-700">
+                    二次确认 <span className="text-red-600">*</span>
+                  </div>
+                  <Input
+                    value={returnConfirmText}
+                    onChange={(e) => setReturnConfirmText(e.target.value)}
+                    placeholder='请输入“退回”确认'
+                    disabled={returning}
+                  />
                 </div>
               </div>
 

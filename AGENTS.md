@@ -305,6 +305,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 
 ## 近期关键修复快照（2026-02-09）
 - **ME Intake 决策闭环（2026-02-10）**：`/editor/intake` 新增“查看稿件包”与“技术退回作者（必填理由）”动作；后端新增 `POST /api/v1/editor/manuscripts/{id}/intake-return`，退回流转到 `minor_revision` 并写审计 `action=precheck_intake_revision`。
+- **ME Intake 性能与可用性优化（2026-02-10）**：`GET /api/v1/editor/intake` 新增 `q` 与 `overdue_only` 过滤，服务层改为轻量查询（去除首屏时间线聚合），前端新增作者/期刊/优先级列、搜索与高优筛选，并将 AE 预取延后到首屏后以降低“刷新长时间转圈”问题。
 - **GAP-P2-01（DOI/Crossref 真对接）**：重构 `DOIService` 为真实落库链路（`doi_registrations` + `doi_tasks` + `doi_audit_log`），补齐注册/重试/任务列表 API 与 `POST /api/v1/internal/cron/doi-tasks` 队列消费入口；`register_doi` 现已执行 Crossref XML 生成、提交回执解析、状态更新与审计落库。
 - **GAP-P2-02（查重能力重启）**：新增 `PlagiarismService`，实现 `plagiarism_reports` 全生命周期落库（pending/running/completed/failed）、高相似度预警审计与内部通知；补齐 `/api/v1/plagiarism/status/{manuscript_id}` 状态查询、`/retry` 幂等重试、`/report/{id}/download` 下载链路，并在投稿上传流程中先初始化 pending 报告再异步执行 Worker。
 - **投稿上传卡住排障（Upload/AI Parse）**：修复作者端“Uploading and analyzing manuscript...”长时间转圈：前端增加双阶段超时（Storage 90s + Parse 25s）与直连 HF 优先策略；后端对大 PDF 自动跳过 layout 并为 metadata 提取加超时降级；同时补齐上传全链路 trace 日志，便于 HF 线上定位。

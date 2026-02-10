@@ -157,10 +157,12 @@ export const EditorApi = {
     return res.json()
   },
 
-  async getIntakeQueue(page = 1, pageSize = 20) {
+  async getIntakeQueue(page = 1, pageSize = 20, filters?: { q?: string; overdueOnly?: boolean }) {
     const params = new URLSearchParams()
     params.set('page', String(page))
     params.set('page_size', String(pageSize))
+    if (filters?.q) params.set('q', filters.q)
+    if (filters?.overdueOnly) params.set('overdue_only', 'true')
     const res = await authedFetch(`/api/v1/editor/intake?${params.toString()}`)
     return res.json()
   },

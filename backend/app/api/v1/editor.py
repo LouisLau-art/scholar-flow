@@ -621,6 +621,8 @@ async def export_finance_invoices_csv(
 async def get_intake_queue(
     page: int = 1,
     page_size: int = 20,
+    q: str | None = Query(None, max_length=100),
+    overdue_only: bool = Query(False),
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
@@ -628,7 +630,7 @@ async def get_intake_queue(
     Status: pre_check, Sub-status: intake
     """
     try:
-        return EditorService().get_intake_queue(page, page_size)
+        return EditorService().get_intake_queue(page, page_size, q=q, overdue_only=overdue_only)
     except HTTPException:
         raise
     except Exception as e:
