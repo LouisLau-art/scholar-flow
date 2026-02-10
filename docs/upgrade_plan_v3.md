@@ -2,8 +2,6 @@
 title: "ScholarFlow 期刊投稿与审稿系统升级方案（v3.0）"
 ---
 
-# ScholarFlow 期刊投稿与审稿系统升级方案（v3.0）
-
 **日期**: 2026-02-10  
 **依据**: `docs/original_version` + 当前 UAT 反馈  
 **重点修订**: 将前序流程统一为“ME 先技术审查，通过后再分配 AE”

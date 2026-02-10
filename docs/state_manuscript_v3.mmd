@@ -1,36 +1,28 @@
 stateDiagram-v2
-    [*] --> submitted: 作者投稿
+    [*] --> submitted
+    submitted --> me_precheck
+    me_precheck --> returned: 技术不通过
+    returned --> submitted: 重投
 
-    submitted --> me_precheck: 进入入口审查
-    me_precheck --> returned_to_author: 技术审查不通过
-    returned_to_author --> submitted: 作者修改后重投
-
-    me_precheck --> ae_assigned: 技术审查通过
-    ae_assigned --> academic_precheck: ME 分配 AE 后提交学术初审
-    academic_precheck --> rejected: 学术初审拒稿
-    academic_precheck --> under_review: 学术初审通过
-
-    under_review --> decision: 报告达标后 AE 汇总
+    me_precheck --> ae_assigned: 通过
+    ae_assigned --> under_review
+    under_review --> decision: 报告达标
 
     decision --> revision_minor: 小修
-    revision_minor --> resubmitted_minor: 作者修回
-    resubmitted_minor --> decision: AE 核查后再次决策
+    revision_minor --> resubmitted_minor
+    resubmitted_minor --> decision: AE核查后再决策
 
     decision --> revision_major: 大修
-    revision_major --> resubmitted_major: 作者修回
+    revision_major --> resubmitted_major
     resubmitted_major --> under_review: 必须二审
 
     decision --> approved: 接收
     decision --> rejected: 拒稿
 
-    approved --> proofing: 生产排版与校对
-    approved --> invoiced: 财务开票
+    approved --> proof_ready: 校对完成
+    approved --> paid: 财务确认
+    proof_ready --> published: 与 Paid 同时满足
+    paid --> published: 与 Proof 同时满足
 
-    proofing --> ready_for_publish: 校对完成
-    invoiced --> paid: 财务确认到账
-
-    ready_for_publish --> published: 与 Paid 同时满足门禁
-    paid --> published: 与 Ready 同时满足门禁
-
-    published --> [*]
     rejected --> [*]
+    published --> [*]

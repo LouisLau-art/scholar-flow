@@ -1,53 +1,33 @@
 flowchart TD
-    subgraph A["阶段A：投稿与 ME 技术审查"]
-        S0[作者提交稿件] --> S1{ME 技术审查}
-        S1 -- 不通过 --> S2[退回作者修改]
-        S2 --> S0
-        S1 -- 通过 --> S3[ME 分配助理编辑 AE]
-    end
+    A0([作者投稿]) --> A1{ME 技术审查}
+    A1 -- 不通过 --> A2[退回作者修改]
+    A2 --> A0
+    A1 -- 通过 --> A3[ME 分配 AE]
 
-    subgraph B["阶段B：AE 组织同行评审"]
-        S3 --> R1[AE 邀请审稿人]
-        R1 --> R2{审稿人是否接受}
-        R2 -- 拒绝或超时 --> R1
-        R2 -- 接受 --> R3[提交审稿报告]
-        R3 --> R4{报告数量达标}
-        R4 -- 否 --> R1
-        R4 -- 是 --> R5[AE 汇总意见]
-    end
+    A3 --> B1[AE 组织外审]
+    B1 --> B2{报告数量达标}
+    B2 -- 否 --> B1
+    B2 -- 是 --> C1[AE 汇总意见]
 
-    subgraph C["阶段C：EIC/编委学术决策"]
-        R5 --> D1{学术终审}
-        D1 -- 拒稿 --> D2[Rejected]
-        D1 -- 小修 --> D3[作者小修]
-        D3 --> D4[AE 核查修订]
-        D4 --> D1
-        D1 -- 大修 --> D5[作者大修]
-        D5 --> D6[AE 发起二审]
-        D6 --> R1
-        D1 -- 接收 --> D7[Approved]
-    end
+    C1 --> C2{EIC/编委终审}
+    C2 -- 拒稿 --> C3([Rejected])
+    C2 -- 小修 --> C4[作者小修]
+    C4 --> C5[AE 核查修订]
+    C5 --> C2
+    C2 -- 大修 --> C6[作者大修]
+    C6 --> C7[AE 发起二审]
+    C7 --> B1
+    C2 -- 接收 --> D0([Approved])
 
-    subgraph D["阶段D：出版与财务并行"]
-        D7 --> P0[并行启动]
+    D0 --> D1[Production 排版校对]
+    D0 --> D2[Finance 开票到账]
+    D1 --> D3{Proof Ready}
+    D2 --> D4{Paid}
+    D3 --> D5{发布门禁}
+    D4 --> D5
+    D5 --> D6([Published])
 
-        P0 --> P1[Production 排版与校对]
-        P0 --> P2[Finance 开票与到账]
-
-        P1 --> P3{作者校对完成}
-        P3 -- 否 --> P1
-        P3 -- 是 --> P4[Proof Ready]
-
-        P2 --> P5{账单已支付}
-        P5 -- 否 --> P2
-        P5 -- 是 --> P6[Paid]
-
-        P4 --> P7{发布门禁}
-        P6 --> P7
-        P7 --> P8[Published]
-    end
-
-    style S1 fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px
-    style D1 fill:#fce7f3,stroke:#be185d,stroke-width:2px
-    style P7 fill:#fef3c7,stroke:#b45309,stroke-width:2px
-    style P8 fill:#dcfce7,stroke:#15803d,stroke-width:2px
+    style A1 fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px
+    style C2 fill:#fce7f3,stroke:#be185d,stroke-width:2px
+    style D5 fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style D6 fill:#dcfce7,stroke:#15803d,stroke-width:2px
