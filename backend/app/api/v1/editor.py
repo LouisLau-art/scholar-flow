@@ -1080,6 +1080,7 @@ async def get_editor_manuscript_detail(
     ms["latest_author_response_letter"] = None
     ms["latest_author_response_submitted_at"] = None
     ms["latest_author_response_round"] = None
+    ms["author_response_history"] = []
     # 中文注释:
     # - 云端历史 schema 可能无 revisions.updated_at，仅有 created_at；
     # - 这里按“排序列 + select”双重降级，确保 response_letter 可回显。
@@ -1103,14 +1104,30 @@ async def get_editor_manuscript_detail(
                 response_letter = str(row.get("response_letter") or "").strip()
                 if not response_letter:
                     continue
-                ms["latest_author_response_letter"] = response_letter
-                ms["latest_author_response_submitted_at"] = (
+                submitted_at = (
                     row.get("submitted_at")
                     or row.get("updated_at")
                     or row.get("created_at")
                 )
-                ms["latest_author_response_round"] = row.get("round")
-                break
+                round_value = row.get("round")
+                try:
+                    round_value = int(round_value) if round_value is not None else None
+                except Exception:
+                    round_value = None
+
+                ms["author_response_history"].append(
+                    {
+                        "id": row.get("id"),
+                        "response_letter": response_letter,
+                        "submitted_at": submitted_at,
+                        "round": round_value,
+                    }
+                )
+
+                if ms["latest_author_response_letter"] is None:
+                    ms["latest_author_response_letter"] = response_letter
+                    ms["latest_author_response_submitted_at"] = submitted_at
+                    ms["latest_author_response_round"] = round_value
             break
         except Exception as e:
             lowered = str(e).lower()

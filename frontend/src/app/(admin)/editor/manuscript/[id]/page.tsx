@@ -72,9 +72,34 @@ type ManuscriptDetail = {
     is_overdue?: boolean
     nearest_due_at?: string | null
   } | null
+  author_response_history?: Array<{
+    id?: string | null
+    response_letter?: string | null
+    submitted_at?: string | null
+    round?: number | null
+  }> | null
   latest_author_response_letter?: string | null
   latest_author_response_submitted_at?: string | null
   latest_author_response_round?: number | null
+}
+
+type AuthorResponseHistoryItem = {
+  id: string
+  text: string
+  submittedAt: string | null
+  round: number | null
+}
+
+function normalizeResponseLetterText(raw: unknown): string {
+  const source = String(raw || '').trim()
+  if (!source) return ''
+  return source
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
 }
 
 function allowedNext(status: string): string[] {
@@ -279,17 +304,42 @@ export default function EditorManuscriptDetailPage() {
     String(ms?.owner?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
-  const latestAuthorResponseText = useMemo(() => {
-    const raw = String(ms?.latest_author_response_letter || '').trim()
-    if (!raw) return ''
-    return raw
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim()
-  }, [ms?.latest_author_response_letter])
+  const authorResponseHistory = useMemo<AuthorResponseHistoryItem[]>(() => {
+    const rawHistory = Array.isArray(ms?.author_response_history) ? ms.author_response_history : []
+    const normalized = rawHistory
+      .map((item, idx) => {
+        const text = normalizeResponseLetterText(item?.response_letter)
+        if (!text) return null
+        const rawRound = item?.round
+        const round = typeof rawRound === 'number' ? rawRound : rawRound != null ? Number(rawRound) : null
+        return {
+          id: String(item?.id || `response-${idx}`),
+          text,
+          submittedAt: item?.submitted_at || null,
+          round: Number.isFinite(round as number) ? (round as number) : null,
+        }
+      })
+      .filter((item): item is AuthorResponseHistoryItem => Boolean(item))
+
+    if (normalized.length > 0) return normalized
+
+    const fallbackText = normalizeResponseLetterText(ms?.latest_author_response_letter)
+    if (!fallbackText) return []
+    return [
+      {
+        id: 'latest-fallback',
+        text: fallbackText,
+        submittedAt: ms?.latest_author_response_submitted_at || null,
+        round: typeof ms?.latest_author_response_round === 'number' ? ms.latest_author_response_round : null,
+      },
+    ]
+  }, [
+    ms?.author_response_history,
+    ms?.latest_author_response_letter,
+    ms?.latest_author_response_submitted_at,
+    ms?.latest_author_response_round,
+  ])
+  const latestAuthorResponse = authorResponseHistory[0] || null
 
   // --- File Processing ---
   const mapFile = (f: ManuscriptFile, type: FileItem['type']): FileItem => ({
@@ -485,30 +535,33 @@ export default function EditorManuscriptDetailPage() {
                 onUploadReviewFile={load}
             />
 
-            {/* 3. Latest Author Response Letter */}
+            {/* 3. Author Resubmission History */}
             <Card className="shadow-sm">
               <CardHeader className="py-4 border-b bg-slate-50/30">
                 <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-700">
-                  Latest Author Response Letter
+                  Author Resubmission History
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5">
-                {latestAuthorResponseText ? (
+                {authorResponseHistory.length > 0 ? (
                   <div className="space-y-3">
-                    <div className="text-xs text-slate-500">
-                      {ms?.latest_author_response_submitted_at
-                        ? `Submitted at ${format(new Date(ms.latest_author_response_submitted_at), 'yyyy-MM-dd HH:mm')}`
-                        : 'Submitted time unavailable'}
-                      {typeof ms?.latest_author_response_round === 'number'
-                        ? ` · Round ${ms.latest_author_response_round}`
-                        : ''}
-                    </div>
-                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
-                      {latestAuthorResponseText}
-                    </div>
+                    {authorResponseHistory.map((item, idx) => (
+                      <div key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                          <div>
+                            {item.submittedAt
+                              ? `Submitted at ${format(new Date(item.submittedAt), 'yyyy-MM-dd HH:mm')}`
+                              : 'Submitted time unavailable'}
+                            {typeof item.round === 'number' ? ` · Round ${item.round}` : ''}
+                          </div>
+                          {idx === 0 ? <Badge variant="secondary">Latest</Badge> : null}
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-500">No author response letter submitted yet.</div>
+                  <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
                 )}
               </CardContent>
             </Card>
@@ -561,18 +614,18 @@ export default function EditorManuscriptDetailPage() {
                     <CardTitle className="text-base">Author Resubmission Comment</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {latestAuthorResponseText ? (
+                    {latestAuthorResponse ? (
                       <div className="space-y-2">
                         <div className="text-xs text-slate-500">
-                          {ms?.latest_author_response_submitted_at
-                            ? `Submitted at ${format(new Date(ms.latest_author_response_submitted_at), 'yyyy-MM-dd HH:mm')}`
+                          {latestAuthorResponse.submittedAt
+                            ? `Submitted at ${format(new Date(latestAuthorResponse.submittedAt), 'yyyy-MM-dd HH:mm')}`
                             : 'Submitted time unavailable'}
-                          {typeof ms?.latest_author_response_round === 'number'
-                            ? ` · Round ${ms.latest_author_response_round}`
+                          {typeof latestAuthorResponse.round === 'number'
+                            ? ` · Round ${latestAuthorResponse.round}`
                             : ''}
                         </div>
                         <div className="max-h-44 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
-                          {latestAuthorResponseText}
+                          {latestAuthorResponse.text}
                         </div>
                       </div>
                     ) : (
