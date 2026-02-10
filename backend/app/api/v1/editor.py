@@ -792,8 +792,13 @@ async def get_ae_workspace(
     _profile: dict = Depends(require_any_role(["assistant_editor", "admin"])),
 ):
     """
-    List manuscripts in Assistant Editor Workspace.
-    Status: pre_check, Sub-status: technical, Assigned to: Me
+    List manuscripts in Assistant Editor Workspace (owned by current AE).
+
+    Includes AE work-in-progress states:
+    - pre_check(technical)
+    - under_review
+    - major_revision / minor_revision / resubmitted
+    - decision
     """
     try:
         return EditorService().get_ae_workspace(current_user["id"], page, page_size)

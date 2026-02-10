@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ClipboardCheck } from 'lucide-react'
+import { format } from 'date-fns'
+
 import SiteHeader from '@/components/layout/SiteHeader'
 import QueryProvider from '@/components/providers/QueryProvider'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -17,8 +19,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { format } from 'date-fns'
+import { getStatusLabel } from '@/lib/statusStyles'
 
 interface Manuscript {
   id: string
@@ -26,9 +27,69 @@ interface Manuscript {
   title: string
   created_at?: string | null
   updated_at?: string | null
-  pre_check_status: string
+  pre_check_status?: string | null
+  workspace_bucket?: 'technical' | 'under_review' | 'revision_followup' | 'decision' | 'other'
   owner?: { id?: string; full_name?: string | null; email?: string | null } | null
   journal?: { title?: string | null; slug?: string | null } | null
+}
+
+type WorkspaceBucket = 'technical' | 'under_review' | 'revision_followup' | 'decision' | 'other'
+
+type SectionMeta = {
+  label: string
+  description: string
+}
+
+const SECTION_ORDER: WorkspaceBucket[] = ['technical', 'under_review', 'revision_followup', 'decision', 'other']
+
+const SECTION_META: Record<WorkspaceBucket, SectionMeta> = {
+  technical: {
+    label: '待发起外审',
+    description: 'ME 已分配给你的新稿件：完成技术闭环后进入外审。',
+  },
+  under_review: {
+    label: '外审进行中',
+    description: '正在邀审/催审/补邀的稿件。',
+  },
+  revision_followup: {
+    label: '修回待跟进',
+    description: '作者修回后等待 AE 判断是否二审或继续推进。',
+  },
+  decision: {
+    label: '待决策汇总',
+    description: '外审意见已齐，等待 AE 汇总提交学术决策。',
+  },
+  other: {
+    label: '其他在办稿件',
+    description: '仍归你分管但不在上述主流程节点的稿件。',
+  },
+}
+
+function toMillis(value?: string | null): number {
+  if (!value) return 0
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime()
+}
+
+function fmt(value?: string | null): string {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  return format(d, 'yyyy/MM/dd HH:mm')
+}
+
+function deriveBucket(m: Manuscript): WorkspaceBucket {
+  const explicit = m.workspace_bucket
+  if (explicit && SECTION_ORDER.includes(explicit)) return explicit
+
+  const status = String(m.status || '').toLowerCase()
+  const pre = String(m.pre_check_status || '').toLowerCase()
+
+  if (status === 'pre_check' && pre === 'technical') return 'technical'
+  if (status === 'under_review') return 'under_review'
+  if (status === 'resubmitted' || status === 'major_revision' || status === 'minor_revision') return 'revision_followup'
+  if (status === 'decision') return 'decision'
+  return 'other'
 }
 
 export default function AEWorkspacePage() {
@@ -37,7 +98,6 @@ export default function AEWorkspacePage() {
   const [submitting, setSubmitting] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
-  const [decision, setDecision] = useState<'pass' | 'revision'>('pass')
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
 
@@ -58,16 +118,14 @@ export default function AEWorkspacePage() {
   }, [fetchWorkspace])
 
   const resetDialog = useCallback(() => {
-    setDecision('pass')
     setComment('')
     setError('')
     setActiveMs(null)
     setDialogOpen(false)
   }, [])
 
-  const openDialog = useCallback((manuscript: Manuscript, presetDecision: 'pass' | 'revision') => {
+  const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     setActiveMs(manuscript)
-    setDecision(presetDecision)
     setComment('')
     setError('')
     setDialogOpen(true)
@@ -78,11 +136,7 @@ export default function AEWorkspacePage() {
     setError('')
     setSubmitting(true)
     try {
-      if (decision === 'revision' && !comment.trim()) {
-        setError('技术退回必须填写反馈意见。')
-        return
-      }
-      await editorService.submitTechnicalCheck(activeMs.id, { decision, comment: comment.trim() || undefined })
+      await editorService.submitTechnicalCheck(activeMs.id, { decision: 'pass', comment: comment.trim() || undefined })
       resetDialog()
       fetchWorkspace()
     } catch (e) {
@@ -90,26 +144,48 @@ export default function AEWorkspacePage() {
     } finally {
       setSubmitting(false)
     }
-  }, [activeMs?.id, comment, decision, fetchWorkspace, resetDialog])
+  }, [activeMs?.id, comment, fetchWorkspace, resetDialog])
 
-  const dialogDecisionLabel = useMemo(() => {
-    return decision === 'pass' ? '发起外审 (进入 under_review)' : '技术退回作者 (进入 minor_revision)'
-  }, [decision])
+  const groupedSections = useMemo(() => {
+    const sorted = [...manuscripts].sort((a, b) => {
+      const updatedDiff = toMillis(b.updated_at) - toMillis(a.updated_at)
+      if (updatedDiff !== 0) return updatedDiff
+      return toMillis(b.created_at) - toMillis(a.created_at)
+    })
+
+    const buckets: Record<WorkspaceBucket, Manuscript[]> = {
+      technical: [],
+      under_review: [],
+      revision_followup: [],
+      decision: [],
+      other: [],
+    }
+
+    for (const manuscript of sorted) {
+      buckets[deriveBucket(manuscript)].push(manuscript)
+    }
+
+    return SECTION_ORDER.map((key) => ({
+      key,
+      meta: SECTION_META[key],
+      items: buckets[key],
+    })).filter((section) => section.items.length > 0)
+  }, [manuscripts])
 
   return (
     <QueryProvider>
       <div className="min-h-screen bg-slate-50">
         <SiteHeader />
-        <main className="mx-auto w-[96vw] max-w-screen-2xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
+        <main className="mx-auto w-[96vw] max-w-screen-2xl space-y-6 px-4 py-10 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
                 <ClipboardCheck className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Assistant Editor Workspace</h1>
-                <p className="mt-1 text-slate-500 font-medium">
-                  这里处理 ME 已分配稿件的技术闭环：通过后进入外审，或退回作者补充。
+                <h1 className="text-3xl font-serif font-bold tracking-tight text-slate-900">Assistant Editor Workspace</h1>
+                <p className="mt-1 font-medium text-slate-500">
+                  展示你分管的在办稿件：技术发起外审、外审跟进、修回推进与决策汇总。
                 </p>
               </div>
             </div>
@@ -120,75 +196,89 @@ export default function AEWorkspacePage() {
             </Link>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <Table>
-              <TableHeader className="bg-slate-50/70">
-                <TableRow>
-                  <TableHead className="min-w-[420px]">Title</TableHead>
-                  <TableHead className="min-w-[180px]">Owner</TableHead>
-                  <TableHead className="min-w-[160px]">Journal</TableHead>
-                  <TableHead className="min-w-[180px]">Submitted</TableHead>
-                  <TableHead className="min-w-[120px]">Stage</TableHead>
-                  <TableHead className="min-w-[350px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : manuscripts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
-                      No manuscripts assigned.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  manuscripts.map((m) => (
-                    <TableRow key={m.id} className="hover:bg-slate-50/70">
-                      <TableCell>
-                        <Link
-                          href={`/editor/manuscript/${encodeURIComponent(m.id)}?from=workspace`}
-                          className="text-sm font-semibold text-slate-900 hover:text-primary hover:underline"
-                        >
-                          {m.title || 'Untitled Manuscript'}
-                        </Link>
-                        <div className="mt-1 text-xs font-mono text-slate-500">{m.id}</div>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-700">
-                        {m.owner?.full_name || m.owner?.email || '—'}
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-700">{m.journal?.title || '—'}</TableCell>
-                      <TableCell className="text-sm text-slate-700">
-                        {m.created_at ? format(new Date(m.created_at), 'yyyy/MM/dd HH:mm') : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{m.pre_check_status || 'technical'}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/editor/manuscript/${encodeURIComponent(m.id)}?from=workspace`}
-                            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-                          >
-                            查看稿件包
-                          </Link>
-                          <Button size="sm" onClick={() => openDialog(m, 'pass')}>
-                            发起外审
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => openDialog(m, 'revision')}>
-                            技术退回
-                          </Button>
-                        </div>
-                      </TableCell>
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">Loading...</div>
+          ) : groupedSections.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+              No manuscripts assigned.
+            </div>
+          ) : (
+            groupedSections.map((section) => (
+              <section key={section.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-base font-semibold text-slate-900">{section.meta.label}</h2>
+                    <Badge variant="secondary">{section.items.length}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{section.meta.description}</p>
+                </div>
+
+                <Table>
+                  <TableHeader className="bg-slate-50/40">
+                    <TableRow>
+                      <TableHead className="min-w-[420px]">Title</TableHead>
+                      <TableHead className="min-w-[160px]">Status</TableHead>
+                      <TableHead className="min-w-[170px]">Updated</TableHead>
+                      <TableHead className="min-w-[180px]">Owner</TableHead>
+                      <TableHead className="min-w-[160px]">Journal</TableHead>
+                      <TableHead className="min-w-[260px]">Actions</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {section.items.map((m) => {
+                      const detailHref = `/editor/manuscript/${encodeURIComponent(m.id)}?from=workspace`
+                      const bucket = deriveBucket(m)
+
+                      return (
+                        <TableRow key={m.id} className="hover:bg-slate-50/70">
+                          <TableCell>
+                            <Link href={detailHref} className="text-sm font-semibold text-slate-900 hover:text-primary hover:underline">
+                              {m.title || 'Untitled Manuscript'}
+                            </Link>
+                            <div className="mt-1 text-xs font-mono text-slate-500">{m.id}</div>
+                          </TableCell>
+
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline">{getStatusLabel(m.status || 'unknown')}</Badge>
+                              {m.pre_check_status ? <Badge variant="secondary">{m.pre_check_status}</Badge> : null}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="text-sm text-slate-700">{fmt(m.updated_at || m.created_at)}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{m.owner?.full_name || m.owner?.email || '—'}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{m.journal?.title || '—'}</TableCell>
+
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {bucket === 'technical' ? (
+                                <Button size="sm" onClick={() => openSubmitCheckDialog(m)}>
+                                  Submit Check
+                                </Button>
+                              ) : null}
+
+                              <Link
+                                href={detailHref}
+                                className={cn(buttonVariants({ variant: bucket === 'technical' ? 'outline' : 'secondary', size: 'sm' }))}
+                              >
+                                {bucket === 'under_review'
+                                  ? 'Manage Reviewers'
+                                  : bucket === 'revision_followup'
+                                    ? 'Review Revision'
+                                    : bucket === 'decision'
+                                      ? 'Prepare Decision'
+                                      : 'Open Details'}
+                              </Link>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </section>
+            ))
+          )}
         </main>
 
         <Dialog
@@ -200,44 +290,21 @@ export default function AEWorkspacePage() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>提交技术审查结果</DialogTitle>
+              <DialogTitle>Submit Technical Check</DialogTitle>
               <DialogDescription>
-                当前稿件：{activeMs?.title || '—'}。AE 在此阶段只做技术闭环，结果会进入外审或退回作者。
+                稿件：{activeMs?.title || '—'}。确认后将进入 <code>under_review</code> 供 AE 继续组织外审。
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3">
               <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Decision</div>
-                <Select value={decision} onValueChange={(value) => setDecision(value as 'pass' | 'revision')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pass">发起外审 (under_review)</SelectItem>
-                    <SelectItem value="revision">技术退回作者 (minor_revision)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Comment {decision === 'revision' ? '(required)' : '(optional)'}
-                </div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Comment (optional)</div>
                 <Textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder={
-                    decision === 'revision'
-                      ? '请写明作者需要补充/修正的技术项（必填）'
-                      : '可选：补充技术审查备注'
-                  }
+                  placeholder="可选：补充给后续外审流程的技术备注"
                   className="min-h-[110px]"
                 />
-              </div>
-
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                目标流转：<span className="font-semibold text-slate-800">{dialogDecisionLabel}</span>
               </div>
 
               {error ? <div className="text-xs text-rose-600">{error}</div> : null}

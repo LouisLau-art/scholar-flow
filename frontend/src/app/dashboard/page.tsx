@@ -360,10 +360,10 @@ function DashboardPageContent() {
             <TabsContent value="assistant_editor">
               <RoleWorkspacePanel
                 title="Assistant Editor Workspace"
-                description="Execute technical checks and progress assigned manuscripts."
+                description="Track your assigned manuscripts across technical handoff, peer review, and revision follow-up."
                 actions={[
-                  { label: 'AE Workspace', href: '/editor/workspace', helper: 'Complete technical pre-check decisions.' },
-                  { label: 'Manuscripts Process', href: '/editor/process', helper: 'Inspect current manuscript stage and owners.' },
+                  { label: 'AE Workspace', href: '/editor/workspace', helper: 'Focus on your in-flight manuscripts with status-based actions.' },
+                  { label: 'Manuscripts Process', href: '/editor/process', helper: 'Inspect lifecycle updates (sorted by most recently updated).' },
                   { label: 'Editor Dashboard', href: '/dashboard?tab=editor', helper: 'Open legacy editorial console when needed.' },
                 ]}
               />

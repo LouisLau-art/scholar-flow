@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.core.journal_scope import filter_rows_by_journal_scope
+from app.core.role_matrix import normalize_roles
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
 from app.services.editorial_service import EditorialService
@@ -150,6 +151,7 @@ class EditorService:
         q = (
             self.client.table("manuscripts")
             .select(select_clause)
+            .order("updated_at", desc=True)
             .order("created_at", desc=True)
         )
         return apply_process_filters(q, filters)
@@ -802,6 +804,16 @@ class EditorService:
         if filters.overdue_only:
             rows = [row for row in rows if bool(row.get("is_overdue"))]
 
+        # AE 视角默认仅看“分配给我”的稿件；ME/EIC/Admin 保持全局 Process 视图。
+        if viewer_user_id and viewer_roles is not None:
+            normalized_viewer_roles = normalize_roles(viewer_roles)
+            is_admin_viewer = "admin" in normalized_viewer_roles
+            has_global_process_scope = bool({"managing_editor", "editor_in_chief"} & normalized_viewer_roles)
+            if "assistant_editor" in normalized_viewer_roles and not is_admin_viewer and not has_global_process_scope:
+                rows = [
+                    row for row in rows if str(row.get("assistant_editor_id") or "") == str(viewer_user_id)
+                ]
+
         # GAP-P1-05: 同角色跨期刊默认隔离（admin bypass）。
         # 中文注释:
         # - 仅在调用方传入 viewer 上下文时启用作用域裁剪；
@@ -1070,10 +1082,38 @@ class EditorService:
         )
         return updated
 
+    def _derive_ae_workspace_bucket(self, *, status: str | None, pre_check_status: str | None) -> str:
+        if status == ManuscriptStatus.PRE_CHECK.value and pre_check_status == PreCheckStatus.TECHNICAL.value:
+            return "technical"
+        if status == ManuscriptStatus.UNDER_REVIEW.value:
+            return "under_review"
+        if status in {
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.MAJOR_REVISION.value,
+        }:
+            return "revision_followup"
+        if status == ManuscriptStatus.DECISION.value:
+            return "decision"
+        return "other"
+
     def get_ae_workspace(self, ae_id: UUID, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
         """
-        AE Workspace: Status=PRE_CHECK, PreCheckStatus=TECHNICAL, assigned to ae_id
+        AE Workspace：返回 AE 在办稿件全集（仅本人分管）。
+
+        设计约束：
+        - pre_check 仅展示 technical 子阶段（由 ME 分配后待发起外审）；
+        - under_review / major_revision / minor_revision / resubmitted / decision 也纳入 AE 待办；
+        - 默认按 updated_at 倒序，确保最近更新稿件置顶。
         """
+        status_scope = [
+            ManuscriptStatus.PRE_CHECK.value,
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.MAJOR_REVISION.value,
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.DECISION.value,
+        ]
         selects = [
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id,journals(title,slug)",
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id",
@@ -1088,9 +1128,9 @@ class EditorService:
                 q = (
                     self.client.table("manuscripts")
                     .select(select_clause)
-                    .eq("status", ManuscriptStatus.PRE_CHECK.value)
-                    .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+                    .in_("status", status_scope)
                     .eq("assistant_editor_id", str(ae_id))
+                    .order("updated_at", desc=True)
                     .order("created_at", desc=True)
                     .range((page - 1) * page_size, page * page_size - 1)
                 )
@@ -1108,7 +1148,21 @@ class EditorService:
             if "schema cache" in lowered or "could not find" in lowered:
                 raise last_error
 
-        out = self._enrich_precheck_rows(rows)
+        raw_enriched = self._enrich_precheck_rows(rows)
+        out: list[dict[str, Any]] = []
+        for row in raw_enriched:
+            normalized_status = normalize_status(str(row.get("status") or ""))
+            normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))
+            if (
+                normalized_status == ManuscriptStatus.PRE_CHECK.value
+                and normalized_precheck != PreCheckStatus.TECHNICAL.value
+            ):
+                continue
+            row["workspace_bucket"] = self._derive_ae_workspace_bucket(
+                status=normalized_status,
+                pre_check_status=normalized_precheck,
+            )
+            out.append(row)
 
         owner_ids = sorted({str(r.get("owner_id") or "") for r in out if str(r.get("owner_id") or "")})
         owner_map: dict[str, dict[str, Any]] = {}
@@ -1164,7 +1218,6 @@ class EditorService:
         """
         manuscript_id_str = str(manuscript_id)
         ae_id_str = str(ae_id)
-        now = self._now()
         normalized_decision = str(decision or "").strip().lower()
         if normalized_decision not in {"pass", "revision"}:
             raise HTTPException(status_code=422, detail="decision must be pass or revision")
