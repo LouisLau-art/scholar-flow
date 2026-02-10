@@ -781,7 +781,7 @@ export default function EditorManuscriptDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Audit Log Timeline */}
+            {/* Pre-check queue snapshot */}
             <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Pre-check Role Queue</CardTitle>
@@ -824,63 +824,18 @@ export default function EditorManuscriptDetailPage() {
                     </span>
                   </div>
                 </div>
-                {(ms.precheck_timeline || []).length > 0 ? (
-                  <div className="mt-4 border-t pt-3 space-y-2">
-                    {(ms.precheck_timeline || []).map((event) => (
-                      <div key={event.id} className="rounded-md border border-slate-200 p-2 text-xs text-slate-600">
-                        <div className="font-medium text-slate-800">
-                          {event.payload?.action || 'precheck_event'}
-                          {event.payload?.decision ? ` (${event.payload.decision})` : ''}
-                        </div>
-                        <div>{event.created_at ? format(new Date(event.created_at), 'yyyy-MM-dd HH:mm') : '—'}</div>
-                        {event.comment ? <div className="mt-1">{event.comment}</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 text-xs text-slate-400 italic">No pre-check timeline events.</div>
-                )}
+                <div className="mt-3 text-xs text-slate-500">
+                  Detailed role actions are merged into the Activity Timeline below.
+                </div>
               </CardContent>
             </Card>
 
-            {/* Audit Log Timeline */}
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-lg">Reviewer Invite Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {(ms.reviewer_invites || []).length === 0 ? (
-                  <div className="text-sm text-slate-400 italic">No reviewer invitations yet.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {(ms.reviewer_invites || []).map((item) => (
-                      <div key={item.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium text-slate-800 truncate">
-                            {item.reviewer_name || item.reviewer_email || item.id}
-                          </div>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase text-slate-700">
-                            {item.status}
-                          </span>
-                        </div>
-                        <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-500">
-                          <div>Invited: {item.invited_at ? format(new Date(item.invited_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          <div>Opened: {item.opened_at ? format(new Date(item.opened_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          <div>Accepted: {item.accepted_at ? format(new Date(item.accepted_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          <div>Declined: {item.declined_at ? format(new Date(item.declined_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          <div>Submitted: {item.submitted_at ? format(new Date(item.submitted_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          <div>Due: {item.due_at ? format(new Date(item.due_at), 'yyyy-MM-dd HH:mm') : '-'}</div>
-                          {item.decline_reason ? <div>Decline reason: {item.decline_reason}</div> : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Audit Log Timeline */}
-            <AuditLogTimeline manuscriptId={id} />
+            {/* Unified Activity Timeline */}
+            <AuditLogTimeline
+              manuscriptId={id}
+              authorResponses={authorResponseHistory}
+              reviewerInvites={ms.reviewer_invites || []}
+            />
 
         </div>
       </main>
