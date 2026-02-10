@@ -714,6 +714,7 @@ async def submit_intake_revision(
     request: IntakeRevisionRequest,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     ME Intake technical screening:
@@ -726,6 +727,55 @@ async def submit_intake_revision(
             comment=request.comment,
             idempotency_key=request.idempotency_key,
         )
+
+        # 中文注释:
+        # ME 技术退回属于作者必须感知的关键事件，需同时写站内通知 + 邮件（邮件失败不阻断主流程）。
+        try:
+            author_id = str(updated.get("author_id") or "").strip()
+            manuscript_title = str(updated.get("title") or "Manuscript").strip() or "Manuscript"
+            comment_clean = str(request.comment or "").strip()
+            if author_id:
+                NotificationService().create_notification(
+                    user_id=author_id,
+                    manuscript_id=str(id),
+                    action_url=f"/submit-revision/{id}",
+                    type="decision",
+                    title="Technical Revision Requested",
+                    content=f"Managing Editor requested technical revision for '{manuscript_title}'. Feedback: {comment_clean}",
+                )
+
+                if background_tasks:
+                    try:
+                        prof = (
+                            supabase_admin.table("user_profiles")
+                            .select("email, full_name")
+                            .eq("id", author_id)
+                            .single()
+                            .execute()
+                        )
+                        pdata = getattr(prof, "data", None) or {}
+                        author_email = pdata.get("email")
+                        recipient_name = pdata.get("full_name") or "Author"
+                        if author_email:
+                            from app.core.mail import email_service
+
+                            background_tasks.add_task(
+                                email_service.send_email_background,
+                                to_email=author_email,
+                                subject="Technical Revision Requested",
+                                template_name="status_update.html",
+                                context={
+                                    "recipient_name": recipient_name,
+                                    "manuscript_title": manuscript_title,
+                                    "decision_label": "Technical Revision Requested",
+                                    "comment": comment_clean or "Please check the portal for details.",
+                                },
+                            )
+                    except Exception as e:
+                        print(f"[Email] Failed to send intake-revision email: {e}")
+        except Exception as e:
+            print(f"[Notifications] Failed to send intake-revision notification: {e}")
+
         return {"message": "Intake revision submitted", "data": updated}
     except HTTPException:
         raise

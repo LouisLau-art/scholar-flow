@@ -56,13 +56,23 @@ export default function SubmitRevisionPage() {
            headers: { Authorization: `Bearer ${token}` }
         })
         const verData = await verRes.json()
+        let pendingRevision: any = null
         if (verData.success) {
            // Find pending revision
            const revisions = verData.data.revisions || []
-           const pending = revisions.find((r: any) => r.status === 'pending')
-           if (pending) {
-             setRevisionRequest(pending)
+           pendingRevision = revisions.find((r: any) => r.status === 'pending')
+           if (pendingRevision) {
+             setRevisionRequest(pendingRevision)
            }
+        }
+        if (!pendingRevision && ms?.author_latest_feedback_comment) {
+          // 中文注释:
+          // 兼容 ME/AE 预审退回（未创建 revisions 记录），作者仍应看到可执行的反馈意见。
+          setRevisionRequest({
+            decision_type: 'technical',
+            editor_comment: ms.author_latest_feedback_comment,
+            created_at: ms.author_latest_feedback_at || null,
+          })
         }
         
       } catch (error) {

@@ -231,8 +231,7 @@ export default function MEIntakePage() {
                     <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                       <td className="px-4 py-3 text-sm text-slate-900">
                         <Link
-                          href={`/editor/manuscript/${m.id}`}
-                          target="_blank"
+                          href={`/editor/manuscript/${m.id}?from=intake`}
                           className="line-clamp-2 font-medium text-slate-900 hover:text-primary hover:underline"
                         >
                           {m.title}

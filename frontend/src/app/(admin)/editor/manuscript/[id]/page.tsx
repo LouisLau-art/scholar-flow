@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
@@ -155,7 +155,17 @@ function getNextActionCard(
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const id = String((params as any).id || '')
+  const from = String(searchParams?.get('from') || '').trim().toLowerCase()
+  const fallbackPath =
+    from === 'intake'
+      ? '/editor/intake'
+      : from === 'workspace'
+      ? '/editor/workspace'
+      : from === 'academic'
+      ? '/editor/academic'
+      : '/editor/process'
 
   const [loading, setLoading] = useState(true)
   const [ms, setMs] = useState<ManuscriptDetail | null>(null)
@@ -290,8 +300,8 @@ export default function EditorManuscriptDetailPage() {
       router.back()
       return
     }
-    router.push('/editor/process')
-  }, [router])
+    router.push(fallbackPath)
+  }, [router, fallbackPath])
 
 
   if (loading) {
@@ -316,8 +326,8 @@ export default function EditorManuscriptDetailPage() {
               <ArrowLeft className="h-4 w-4" />
               返回上一页
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => router.push('/editor/process')}>
-              回到 Process 列表
+            <Button variant="secondary" size="sm" onClick={() => router.push(fallbackPath)}>
+              回到列表
             </Button>
           </div>
         </div>
@@ -348,8 +358,8 @@ export default function EditorManuscriptDetailPage() {
               <ArrowLeft className="h-4 w-4" />
               返回上一页
             </Button>
-            <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => router.push('/editor/process')}>
-              回到 Process 列表
+            <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => router.push(fallbackPath)}>
+              回到列表
             </Button>
           </div>
           <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">

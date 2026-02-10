@@ -39,11 +39,24 @@ import asyncio
 import tempfile
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 router = APIRouter(tags=["Manuscripts"])
 
 _PUBLISHED_AT_SUPPORTED: bool | None = None
+_PRIVATE_PROGRESS_ORDER: list[str] = [
+    "submitted",
+    "pre_check",
+    "under_review",
+    "revision_requested",
+    "resubmitted",
+    "decision",
+    "approved",
+    "layout",
+    "english_editing",
+    "proofreading",
+    "published",
+]
 
 def _is_truthy_env(name: str, default: str = "0") -> bool:
     v = (os.environ.get(name, default) or "").strip().lower()
@@ -121,6 +134,22 @@ def _parse_iso_datetime(raw_value: str | None) -> datetime | None:
         return datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except Exception:
         return None
+
+
+def _normalize_private_progress_status(raw_status: Any) -> str:
+    status = str(raw_status or "").strip().lower()
+    if status in {"minor_revision", "major_revision", "revision_required", "revision_requested", "returned_for_revision", "return_for_revision"}:
+        return "revision_requested"
+    if status == "decision_done":
+        return "decision"
+    return status
+
+
+def _order_private_progress_statuses(statuses: set[str]) -> list[str]:
+    ordered: list[str] = [step for step in _PRIVATE_PROGRESS_ORDER if step in statuses]
+    extras = sorted(status for status in statuses if status and status not in _PRIVATE_PROGRESS_ORDER)
+    ordered.extend(extras)
+    return ordered
 
 
 def _resolve_public_author_names(article: dict) -> list[str]:
@@ -1281,8 +1310,85 @@ async def get_manuscript_detail(
 
     if not allowed:
         raise HTTPException(status_code=403, detail="Forbidden")
+    manuscript_id_str = str(manuscript_id)
+    visited_statuses: set[str] = {"submitted"}
+    current_status = _normalize_private_progress_status(ms.get("status"))
+    if current_status:
+        visited_statuses.add(current_status)
 
-    return {"success": True, "data": ms}
+    latest_feedback_comment: str | None = None
+    latest_feedback_at: str | None = None
+    latest_feedback_source: str | None = None
+
+    # 中文注释:
+    # 1) 优先读取 revisions.editor_comment（正式修回请求）；
+    # 2) 若无，则回退到状态流转日志中的退回 comment（覆盖 ME/AE 预审退回）。
+    try:
+        revision_resp = (
+            supabase_admin.table("revisions")
+            .select("editor_comment,created_at,updated_at")
+            .eq("manuscript_id", manuscript_id_str)
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        revision_rows = getattr(revision_resp, "data", None) or []
+        for row in revision_rows:
+            comment = str(row.get("editor_comment") or "").strip()
+            if not comment:
+                continue
+            latest_feedback_comment = comment
+            latest_feedback_at = str(row.get("created_at") or row.get("updated_at") or "")
+            latest_feedback_source = "revision_request"
+            break
+    except Exception as e:
+        print(f"[ById] revisions feedback fallback failed (ignored): {e}")
+
+    try:
+        logs_resp = (
+            supabase_admin.table("status_transition_logs")
+            .select("from_status,to_status,comment,created_at,payload")
+            .eq("manuscript_id", manuscript_id_str)
+            .order("created_at", desc=True)
+            .limit(120)
+            .execute()
+        )
+        log_rows = getattr(logs_resp, "data", None) or []
+        for row in log_rows:
+            from_status = _normalize_private_progress_status(row.get("from_status"))
+            to_status = _normalize_private_progress_status(row.get("to_status"))
+            if from_status:
+                visited_statuses.add(from_status)
+            if to_status:
+                visited_statuses.add(to_status)
+
+            if latest_feedback_comment:
+                continue
+
+            comment = str(row.get("comment") or "").strip()
+            if not comment:
+                continue
+            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            action = str(payload.get("action") or "").strip().lower()
+            # 中文注释: 仅把“作者可见的退修原因”暴露给作者视图，不混入内部协作备注。
+            is_revision_feedback = (
+                to_status == "revision_requested"
+                or action in {"precheck_intake_revision", "precheck_technical_revision"}
+            )
+            if is_revision_feedback:
+                latest_feedback_comment = comment
+                latest_feedback_at = str(row.get("created_at") or "")
+                latest_feedback_source = "status_transition"
+    except Exception as e:
+        if not _is_missing_table_error(str(e), "status_transition_logs"):
+            print(f"[ById] transition logs fallback failed (ignored): {e}")
+
+    enriched = dict(ms)
+    enriched["workflow_visited_statuses"] = _order_private_progress_statuses(visited_statuses)
+    enriched["author_latest_feedback_comment"] = latest_feedback_comment
+    enriched["author_latest_feedback_at"] = latest_feedback_at
+    enriched["author_latest_feedback_source"] = latest_feedback_source
+    return {"success": True, "data": enriched}
 
 
 @router.get("/manuscripts/published/latest")

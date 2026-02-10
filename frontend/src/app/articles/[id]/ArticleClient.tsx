@@ -320,9 +320,17 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
   const isAuthor = currentUserId === article.author_id
   const canViewHistory = isAuthor || canPublish || roles?.includes('reviewer')
   const normalizedStatus = normalizeWorkflowStatus(article?.status)
-  const currentStepIndex = PRIVATE_PROGRESS_STEPS.findIndex((step) => step.key === normalizedStatus)
+  const visitedStatusSet = new Set<string>(
+    (Array.isArray(article?.workflow_visited_statuses) ? article.workflow_visited_statuses : []).map((status: unknown) =>
+      normalizeWorkflowStatus(status)
+    )
+  )
+  visitedStatusSet.add('submitted')
+  if (normalizedStatus) visitedStatusSet.add(normalizedStatus)
   const isRejected = normalizedStatus === 'rejected'
   const latestActivity = formatDateTime(article?.updated_at || article?.created_at)
+  const latestFeedbackComment = String(article?.author_latest_feedback_comment || '').trim()
+  const latestFeedbackAt = formatDateTime(article?.author_latest_feedback_at)
 
   if (!isPublished) {
     if (!isAuthor) {
@@ -363,12 +371,20 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
               </div>
             </div>
 
+            {normalizedStatus === 'revision_requested' && latestFeedbackComment ? (
+              <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Editorial Feedback</div>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900">{latestFeedbackComment}</p>
+                {latestFeedbackAt !== 'N/A' ? <p className="mt-2 text-xs text-amber-700">Updated at: {latestFeedbackAt}</p> : null}
+              </div>
+            ) : null}
+
             <div className="mt-8">
               <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Workflow Progress</h2>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {PRIVATE_PROGRESS_STEPS.map((step, index) => {
-                  const done = !isRejected && currentStepIndex >= 0 && index < currentStepIndex
-                  const active = !isRejected && index === currentStepIndex
+                {PRIVATE_PROGRESS_STEPS.map((step) => {
+                  const active = !isRejected && step.key === normalizedStatus
+                  const done = !isRejected && !active && visitedStatusSet.has(step.key)
                   return (
                     <div
                       key={step.key}
