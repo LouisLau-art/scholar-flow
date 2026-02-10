@@ -1025,6 +1025,11 @@ async def submit_revision(
     )
     if not pending:
         raise HTTPException(status_code=400, detail="No pending revision request found")
+    precheck_resubmit_stage: str | None = None
+    if isinstance(pending, dict):
+        derived_stage = str(pending.get("__derived_precheck_stage") or "").strip().lower()
+        if derived_stage in {"intake", "technical"}:
+            precheck_resubmit_stage = derived_stage
 
     # 3. 获取下一版本号用于文件名
     next_version = (manuscript.get("version", 1)) + 1
@@ -1088,6 +1093,7 @@ async def submit_revision(
         author_id=str(current_user["id"]),
         new_file_path=file_path,
         response_letter=response_letter,
+        precheck_resubmit_stage=precheck_resubmit_stage,
     )
 
     if not result["success"]:
@@ -1112,7 +1118,7 @@ async def submit_revision(
             content=f"Your revision for '{manuscript.get('title')}' has been submitted.",
         )
 
-        # 通知 Editor（MVP：只通知稿件归属人/编辑，避免给所有 editor 群发且减少云端 mock 用户导致的 409）
+        # 通知 Editor（MVP：只通知稿件归属人/编辑/当前预审责任人，避免给所有 editor 群发）
         recipients: set[str] = set()
         owner_id = manuscript.get("owner_id") or manuscript.get("kpi_owner_id")
         editor_id = manuscript.get("editor_id")
@@ -1120,15 +1126,60 @@ async def submit_revision(
             recipients.add(str(owner_id))
         if editor_id:
             recipients.add(str(editor_id))
+
+        result_data = (result or {}).get("data") or {}
+        updated_status = str(result_data.get("manuscript_status") or "").strip().lower()
+        updated_pre_stage = str(result_data.get("pre_check_status") or "").strip().lower()
+
+        # 中文注释:
+        # - 技术退回后的作者修回会回到 pre_check 队列；
+        # - technical 阶段应通知已分配 AE；intake 阶段优先通知 ME(owner/editor)，
+        #   若 owner/editor 缺失则回退到最近一次 precheck 退回动作的 changed_by。
+        if updated_status == "pre_check":
+            if updated_pre_stage == "technical":
+                ae_id = str(manuscript.get("assistant_editor_id") or "").strip()
+                if ae_id:
+                    recipients.add(ae_id)
+            elif updated_pre_stage == "intake" and not recipients:
+                try:
+                    logs_resp = (
+                        supabase_admin.table("status_transition_logs")
+                        .select("changed_by,payload,to_status,created_at")
+                        .eq("manuscript_id", str(manuscript_id))
+                        .order("created_at", desc=True)
+                        .limit(20)
+                        .execute()
+                    )
+                    logs = getattr(logs_resp, "data", None) or []
+                    for row in logs:
+                        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+                        action = str(payload.get("action") or "").strip().lower()
+                        changed_by = str(row.get("changed_by") or "").strip()
+                        if action in {"precheck_intake_revision", "precheck_technical_revision"} and changed_by:
+                            recipients.add(changed_by)
+                            break
+                except Exception as e:
+                    print(f"[Notifications] load precheck fallback recipient failed (ignored): {e}")
+
         recipients.discard(str(current_user["id"]))
+
+        inbox_title = "Revision Received"
+        inbox_content = f"A revision for '{manuscript.get('title')}' has been submitted."
+        if updated_status == "pre_check":
+            if updated_pre_stage == "intake":
+                inbox_title = "Revision Returned to Intake"
+                inbox_content = f"Author resubmitted '{manuscript.get('title')}'. Please review it in Intake Queue."
+            elif updated_pre_stage == "technical":
+                inbox_title = "Revision Returned to Technical Check"
+                inbox_content = f"Author resubmitted '{manuscript.get('title')}'. Please continue technical check."
 
         for uid in sorted(recipients):
             notification_service.create_notification(
                 user_id=uid,
                 manuscript_id=str(manuscript_id),
                 type="system",
-                title="Revision Received",
-                content=f"A revision for '{manuscript.get('title')}' has been submitted.",
+                title=inbox_title,
+                content=inbox_content,
             )
 
     except Exception as e:

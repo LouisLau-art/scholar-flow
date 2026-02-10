@@ -143,6 +143,7 @@ class RevisionService:
 
         current_status_raw = str(ms.get("status") or "").strip().lower()
         current_status = normalize_status(current_status_raw) or current_status_raw
+        precheck_stage = str(ms.get("pre_check_status") or "").strip().lower()
         if current_status not in {
             ManuscriptStatus.MAJOR_REVISION.value,
             ManuscriptStatus.MINOR_REVISION.value,
@@ -175,7 +176,17 @@ class RevisionService:
             # 幂等容错：并发下可能已被其他请求创建，继续回读即可
             print(f"[RevisionService] ensure pending revision insert failed (ignored): {e}")
 
-        return self.get_pending_revision(manuscript_id)
+        pending = self.get_pending_revision(manuscript_id)
+        if (
+            pending
+            and current_status == ManuscriptStatus.MINOR_REVISION.value
+            and precheck_stage in {"intake", "technical"}
+        ):
+            # 中文注释:
+            # - 仅对“本次自动补齐”返回一次性来源信息，供当前提交请求判定回流队列；
+            # - 不写入数据库字段，避免引入迁移依赖。
+            pending["__derived_precheck_stage"] = precheck_stage
+        return pending
 
     def get_next_round_number(self, manuscript_id: str) -> int:
         """
@@ -337,6 +348,7 @@ class RevisionService:
         response_letter: str,
         new_title: Optional[str] = None,
         new_abstract: Optional[str] = None,
+        precheck_resubmit_stage: Optional[Literal["intake", "technical"]] = None,
     ) -> dict:
         """
         Author 提交修订稿 (User Story 2)
@@ -413,12 +425,24 @@ class RevisionService:
             return {"success": False, "error": f"Failed to update revision: {e}"}
 
         # 8. 更新稿件
+        is_precheck_revision_flow = (
+            current_status == ManuscriptStatus.MINOR_REVISION.value
+            and (precheck_resubmit_stage in {"intake", "technical"})
+        )
         manuscript_update: dict = {
             "status": "resubmitted",
             "version": new_version,
             "file_path": new_file_path,
             "updated_at": now,
         }
+        if is_precheck_revision_flow:
+            # 中文注释:
+            # - ME/AE 技术退回后的作者修回应回到预审队列继续处理，而不是进入外审修回分支(resubmitted)。
+            manuscript_update["status"] = ManuscriptStatus.PRE_CHECK.value
+            manuscript_update["pre_check_status"] = precheck_resubmit_stage
+            if precheck_resubmit_stage == "intake":
+                # Intake 由 ME 重新看稿，清理 AE 绑定，避免误入 Technical 队列。
+                manuscript_update["assistant_editor_id"] = None
         if new_title:
             manuscript_update["title"] = new_title
         if new_abstract:
@@ -521,6 +545,7 @@ class RevisionService:
                 "new_version": new_version_record,
                 "revision_id": pending_revision["id"],
                 "manuscript_status": manuscript_update.get("status") or "resubmitted",
+                "pre_check_status": manuscript_update.get("pre_check_status"),
             },
         }
 
