@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, GraduationCap } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
+import QueryProvider from '@/components/providers/QueryProvider'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
@@ -41,9 +42,10 @@ export default function EICAcademicQueuePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <SiteHeader />
-      <main className="mx-auto w-[96vw] max-w-screen-2xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
+    <QueryProvider>
+      <div className="min-h-screen bg-slate-50">
+        <SiteHeader />
+        <main className="mx-auto w-[96vw] max-w-screen-2xl px-4 py-10 sm:px-6 lg:px-8 space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
@@ -107,7 +109,8 @@ export default function EICAcademicQueuePage() {
             onSuccess={fetchQueue}
           />
         )}
-      </main>
-    </div>
+        </main>
+      </div>
+    </QueryProvider>
   )
 }
