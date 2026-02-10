@@ -85,6 +85,98 @@ class RevisionService:
             print(f"[RevisionService] get_pending_revision error: {e}")
             return None
 
+    def _latest_revision_feedback_comment(self, manuscript_id: str) -> str | None:
+        """
+        从状态流转日志中提取最近一次“退修”反馈。
+
+        中文注释:
+        - 兼容 ME/AE 预审退回场景：这类场景可能先有状态流转日志，再由作者进入修回页面；
+        - 若未落 `revisions.pending`，可用该评论补一条 pending 记录，避免作者端报错。
+        """
+        try:
+            resp = (
+                self.read_client.table("status_transition_logs")
+                .select("to_status,comment,payload,created_at")
+                .eq("manuscript_id", manuscript_id)
+                .order("created_at", desc=True)
+                .limit(30)
+                .execute()
+            )
+            rows = self._extract_data(resp) or []
+        except Exception as e:
+            print(f"[RevisionService] load transition logs failed: {e}")
+            return None
+
+        for row in rows:
+            comment = str(row.get("comment") or "").strip()
+            if not comment:
+                continue
+            to_status_raw = str(row.get("to_status") or "").strip().lower()
+            to_status = normalize_status(to_status_raw) or to_status_raw
+            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            action = str(payload.get("action") or "").strip().lower()
+            if to_status in {
+                ManuscriptStatus.MAJOR_REVISION.value,
+                ManuscriptStatus.MINOR_REVISION.value,
+            } or ("revision" in action):
+                return comment
+        return None
+
+    def ensure_pending_revision_for_submit(
+        self, manuscript_id: str, manuscript: dict | None = None
+    ) -> Optional[dict]:
+        """
+        确保作者修回前存在 pending revision 记录（幂等）。
+
+        中文注释:
+        - 正常链路（Editor 发起修回）本来就有 pending 记录；
+        - ME Intake 技术退回等兼容链路可能只有状态流转，没有 pending；
+        - 这里做一次“补齐”，保证作者提交修回不会卡在 `No pending revision`.
+        """
+        existing = self.get_pending_revision(manuscript_id)
+        if existing:
+            return existing
+
+        ms = manuscript or self.get_manuscript(manuscript_id)
+        if not ms:
+            return None
+
+        current_status_raw = str(ms.get("status") or "").strip().lower()
+        current_status = normalize_status(current_status_raw) or current_status_raw
+        if current_status not in {
+            ManuscriptStatus.MAJOR_REVISION.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            "revision_requested",
+        }:
+            return None
+
+        decision_type = (
+            "major"
+            if current_status == ManuscriptStatus.MAJOR_REVISION.value
+            else "minor"
+        )
+        comment = self._latest_revision_feedback_comment(manuscript_id) or (
+            "Please revise the manuscript and resubmit."
+        )
+        now = datetime.now(timezone.utc).isoformat()
+
+        try:
+            self.client.table("revisions").insert(
+                {
+                    "manuscript_id": manuscript_id,
+                    "round_number": self.get_next_round_number(manuscript_id),
+                    "decision_type": decision_type,
+                    "editor_comment": comment,
+                    "status": "pending",
+                    "created_at": now,
+                }
+            ).execute()
+        except Exception as e:
+            # 幂等容错：并发下可能已被其他请求创建，继续回读即可
+            print(f"[RevisionService] ensure pending revision insert failed (ignored): {e}")
+
+        return self.get_pending_revision(manuscript_id)
+
     def get_next_round_number(self, manuscript_id: str) -> int:
         """
         获取下一个修订轮次编号

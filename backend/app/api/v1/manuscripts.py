@@ -1018,35 +1018,67 @@ async def submit_revision(
             status_code=403, detail="Only the author can submit revisions"
         )
 
-    # 2. 获取下一版本号用于文件名
+    # 2. 兼容链路补齐 pending revision：
+    #    ME/AE 技术退回场景可能只有状态流转日志、没有 revisions.pending 记录。
+    pending = service.ensure_pending_revision_for_submit(
+        str(manuscript_id), manuscript=manuscript
+    )
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending revision request found")
+
+    # 3. 获取下一版本号用于文件名
     next_version = (manuscript.get("version", 1)) + 1
 
-    # 3. 生成存储路径 (使用 Service 逻辑)
+    # 4. 生成存储路径 (使用 Service 逻辑)
     file_path = service.generate_versioned_file_path(
         str(manuscript_id), file.filename, next_version
     )
 
-    # 4. 上传文件到 Supabase Storage
+    # 5. 上传文件到 Supabase Storage
     # 注意：这里我们模拟上传，实际上应该使用 supabase storage client
     # 但由于之前的 upload_manuscript 似乎只解析没存 Storage?
     # 不，create_manuscript 接收 file_path。
     # 我们需要在 upload 阶段就上传，或者在这里上传。
     # 这里的 file 是 UploadFile，我们需要读取并上传。
 
+    uploaded_path: str | None = None
     try:
         file_content = await file.read()
+        if not file_content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
         # 使用 service_role client 上传以确保权限
-        supabase_admin.storage.from_("manuscripts").upload(
-            file_path, file_content, {"content-type": "application/pdf"}
-        )
-        # supabase-py upload 返回结果可能包含 path/Key
+        try:
+            supabase_admin.storage.from_("manuscripts").upload(
+                file_path, file_content, {"content-type": "application/pdf"}
+            )
+            uploaded_path = file_path
+        except Exception as upload_error:
+            # 中文注释:
+            # - 失败重试时若上一轮已上传同名对象，会返回 duplicate；
+            # - 不覆盖旧对象，改为附加随机后缀重新上传一次。
+            upload_error_text = str(upload_error).lower()
+            is_duplicate = (
+                "duplicate" in upload_error_text
+                or "already exists" in upload_error_text
+                or "409" in upload_error_text
+            )
+            if not is_duplicate:
+                raise
+            base_path, ext = os.path.splitext(file_path)
+            retry_path = f"{base_path}_{uuid4().hex[:8]}{ext}"
+            supabase_admin.storage.from_("manuscripts").upload(
+                retry_path, file_content, {"content-type": "application/pdf"}
+            )
+            file_path = retry_path
+            uploaded_path = retry_path
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"File upload failed: {e}")
-        # 如果是 duplicate，尝试覆盖或者报错? gate 2 says never overwrite.
-        # generate_versioned_file_path ensures uniqueness ideally.
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
-    # 5. 调用 Service 提交
+    # 6. 调用 Service 提交
     # 解析新文件的元数据（可选，如 title/abstract 变更）
     # 暂时复用旧的 title/abstract，除非我们想再次调用 AI 解析
     # 为了简化 MVP，假设作者只上传文件，不修改元数据，或者前端传递
@@ -1059,6 +1091,12 @@ async def submit_revision(
     )
 
     if not result["success"]:
+        # 中文注释: 业务提交失败时清理刚上传的对象，避免后续重试再次碰到 duplicate。
+        if uploaded_path:
+            try:
+                supabase_admin.storage.from_("manuscripts").remove([uploaded_path])
+            except Exception as cleanup_error:
+                print(f"[RevisionSubmit] cleanup failed (ignored): {cleanup_error}")
         raise HTTPException(status_code=400, detail=result["error"])
 
     # === 通知中心 (T024) ===
