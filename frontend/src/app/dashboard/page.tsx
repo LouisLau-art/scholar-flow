@@ -29,6 +29,17 @@ const DASHBOARD_TABS: DashboardTab[] = [
   'admin',
 ]
 
+const KNOWN_ROLE_TOKENS = [
+  'admin',
+  'author',
+  'reviewer',
+  'managing_editor',
+  'assistant_editor',
+  'editor_in_chief',
+  // 兼容历史遗留
+  'editor',
+] as const
+
 function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardTab {
   const order: DashboardTab[] = [
     'author',
@@ -47,6 +58,24 @@ function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardT
 function parseDashboardTab(raw: string | null): DashboardTab | null {
   if (!raw) return null
   return DASHBOARD_TABS.includes(raw as DashboardTab) ? (raw as DashboardTab) : null
+}
+
+function normalizeRoleTokens(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  const out = new Set<string>()
+  for (const raw of input) {
+    const text = String(raw || '').trim().toLowerCase()
+    if (!text) continue
+    // 标准分隔场景: "author,reviewer" / "author reviewer"
+    for (const part of text.split(/[,\s|;/]+/).filter(Boolean)) {
+      out.add(part)
+    }
+    // 异常拼接场景: "editorassistant_editor"
+    for (const token of KNOWN_ROLE_TOKENS) {
+      if (text.includes(token)) out.add(token)
+    }
+  }
+  return Array.from(out)
 }
 
 function RoleWorkspacePanel({
@@ -151,7 +180,8 @@ function DashboardPageContent() {
     { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-slate-600' },
   ]
 
-  const roleSet = new Set((roles || []).map((r) => String(r).toLowerCase()))
+  const normalizedRoles = useMemo(() => normalizeRoleTokens(roles || []), [roles])
+  const roleSet = new Set(normalizedRoles)
   // 中文注释：兼容历史遗留 editor（legacy）角色，避免清理角色后出现“Dashboard 空白无入口”。
   const isLegacyEditor = roleSet.has('editor')
   const canSeeAdmin = roleSet.has('admin')
@@ -178,7 +208,8 @@ function DashboardPageContent() {
       canSeeAdmin,
     ]
   )
-  const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
+  const roleLabel = rolesLoading ? 'loading…' : (normalizedRoles.length > 0 ? normalizedRoles.join(', ') : 'none')
+  const hasAnyTab = Object.values(allowedTabs).some(Boolean)
 
   // 支持 /dashboard?tab=reviewer 之类的深链
   useEffect(() => {
@@ -252,6 +283,14 @@ function DashboardPageContent() {
               </TabsList>
             )}
           </div>
+
+          {!rolesLoading && !hasAnyTab && (
+            <TabsContent value={activeTab} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+                当前账号未分配可访问的 Dashboard 角色，请联系管理员在 User Management 中补齐角色。
+              </div>
+            </TabsContent>
+          )}
 
           {canSeeAuthor && (
             <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">

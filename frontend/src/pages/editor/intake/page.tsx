@@ -205,7 +205,8 @@ export default function MEIntakePage() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full table-fixed">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1200px] w-full table-auto">
               <thead className="bg-slate-50/70">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
@@ -258,7 +259,8 @@ export default function MEIntakePage() {
                   ))
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
 
           {selectedManuscriptId && (
