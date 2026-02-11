@@ -229,6 +229,10 @@ export default function ReviewerAssignModal({
     if (!allowRoles.length) return false
     return myRoles.some((role) => allowRoles.includes(role))
   }, [myRoles, policyMeta.override_roles])
+  const canAddReviewerToLibrary = useMemo(
+    () => myRoles.includes('admin') || myRoles.includes('managing_editor'),
+    [myRoles]
+  )
 
   const policyByReviewerId = useMemo(() => {
     const index: Record<string, InvitePolicy> = {}
@@ -638,13 +642,15 @@ export default function ReviewerAssignModal({
                   data-testid="reviewer-search"
                 />
               </div>
-              <button
-                onClick={() => setIsAddDialogOpen(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add to Library
-              </button>
+              {canAddReviewerToLibrary ? (
+                <button
+                  onClick={() => setIsAddDialogOpen(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add to Library
+                </button>
+              ) : null}
             </div>
 
             <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">

@@ -21,6 +21,9 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "process:view",
         "precheck:technical_check",
         "manuscript:view_detail",
+        "review:assign",
+        "review:view_assignments",
+        "review:unassign",
     },
     "managing_editor": {
         "process:view",
@@ -28,6 +31,9 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "manuscript:bind_owner",
         "invoice:update_info",
         "decision:record_first",
+        "review:assign",
+        "review:view_assignments",
+        "review:unassign",
     },
     "editor_in_chief": {
         "process:view",

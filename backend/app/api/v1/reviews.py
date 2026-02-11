@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, Up
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
+from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import normalize_roles
 from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
@@ -164,6 +166,44 @@ def _parse_roles(profile: dict | None) -> list[str]:
     return [str(r).strip().lower() for r in raw if str(r).strip()]
 
 
+def _ensure_review_management_access(
+    *,
+    manuscript: dict[str, Any],
+    user_id: str,
+    roles: set[str],
+) -> None:
+    """
+    审稿人管理权限校验（assign/unassign/list）。
+
+    规则：
+    - admin: 全局允许
+    - managing_editor: 受 journal scope 约束
+    - assistant_editor: 仅可操作 assistant_editor_id == 自己 的稿件
+    """
+    if "admin" in roles:
+        return
+
+    manuscript_id = str(manuscript.get("id") or "").strip()
+    if not manuscript_id:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    if "managing_editor" in roles:
+        ensure_manuscript_scope_access(
+            manuscript_id=manuscript_id,
+            user_id=str(user_id),
+            roles=roles,
+        )
+        return
+
+    if "assistant_editor" in roles:
+        assigned_ae = str(manuscript.get("assistant_editor_id") or "").strip()
+        if assigned_ae != str(user_id).strip():
+            raise HTTPException(status_code=403, detail="Forbidden: manuscript not assigned to current assistant editor")
+        return
+
+    raise HTTPException(status_code=403, detail="Insufficient role")
+
+
 @router.get("/reviewer/assignments/{assignment_id}/workspace")
 async def get_reviewer_workspace_data(
     assignment_id: UUID,
@@ -301,7 +341,7 @@ async def submit_reviewer_workspace_review(
 async def assign_reviewer(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
     reviewer_id: UUID = Body(..., embed=True),
     override_cooldown: bool = Body(False, embed=True),
@@ -314,7 +354,7 @@ async def assign_reviewer(
     1. 校验逻辑: 确保 reviewer_id 不是稿件的作者 (通过 manuscripts 表查询)。
     2. 插入 review_assignments 表。
     """
-    requester_roles = set(_parse_roles(profile))
+    requester_roles = set(normalize_roles(_parse_roles(profile)))
     policy_service = ReviewPolicyService()
     reviewer_id_str = str(reviewer_id)
     manuscript_id_str = str(manuscript_id)
@@ -322,7 +362,7 @@ async def assign_reviewer(
     # 读取稿件基础信息（含 journal_id 供冷却期策略判断）
     ms_res = (
         supabase.table("manuscripts")
-        .select("id, author_id, title, version, status, owner_id, file_path, journal_id")
+        .select("id, author_id, title, version, status, owner_id, file_path, journal_id, assistant_editor_id")
         .eq("id", manuscript_id_str)
         .single()
         .execute()
@@ -330,6 +370,11 @@ async def assign_reviewer(
     manuscript = ms_res.data or {}
     if not manuscript:
         raise HTTPException(status_code=404, detail="Manuscript not found")
+    _ensure_review_management_access(
+        manuscript=manuscript,
+        user_id=str(current_user.get("id") or ""),
+        roles=requester_roles,
+    )
 
     if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
         raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
@@ -849,7 +894,7 @@ async def submit_review_via_magic_link(
 async def unassign_reviewer(
     assignment_id: UUID,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
 ):
     """
     撤销审稿指派
@@ -869,6 +914,19 @@ async def unassign_reviewer(
         manuscript_id = assign_res.data["manuscript_id"]
         reviewer_id = assign_res.data["reviewer_id"]
         round_number = assign_res.data.get("round_number")
+        manuscript_res = (
+            supabase_admin.table("manuscripts")
+            .select("id,journal_id,assistant_editor_id")
+            .eq("id", str(manuscript_id))
+            .single()
+            .execute()
+        )
+        manuscript = getattr(manuscript_res, "data", None) or {}
+        _ensure_review_management_access(
+            manuscript=manuscript,
+            user_id=str(current_user.get("id") or ""),
+            roles=set(normalize_roles(_parse_roles(profile))),
+        )
 
         # 2. 删除指派
         # 中文注释: 同一 reviewer 可能被重复指派（历史数据/并发），这里按 reviewer+round 做幂等清理。
@@ -918,12 +976,28 @@ async def get_manuscript_assignments(
     manuscript_id: UUID,
     round_number: int | None = None,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
 ):
     """
     获取某篇稿件的审稿指派列表
     """
     try:
+        manuscript_res = (
+            supabase_admin.table("manuscripts")
+            .select("id,journal_id,assistant_editor_id")
+            .eq("id", str(manuscript_id))
+            .single()
+            .execute()
+        )
+        manuscript = getattr(manuscript_res, "data", None) or {}
+        if not manuscript:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        _ensure_review_management_access(
+            manuscript=manuscript,
+            user_id=str(current_user.get("id") or ""),
+            roles=set(normalize_roles(_parse_roles(profile))),
+        )
+
         res = (
             # 使用 service_role 读取，避免 RLS/权限导致编辑端看不到已指派数据
             supabase_admin.table("review_assignments")

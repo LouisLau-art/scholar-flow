@@ -578,7 +578,7 @@ export default function EditorManuscriptDetailPage() {
                             <ReviewerAssignmentSearch
                               manuscriptId={id}
                               onChanged={refreshDetail}
-                              disabled={!capability.canRecordFirstDecision}
+                              disabled={!capability.canManageReviewers}
                             />
                         </div>
                     )}

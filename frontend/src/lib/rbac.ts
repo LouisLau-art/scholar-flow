@@ -4,6 +4,7 @@ export type EditorCapability = {
   canViewProcess: boolean
   canViewDetail: boolean
   canBindOwner: boolean
+  canManageReviewers: boolean
   canUpdateInvoiceInfo: boolean
   canConfirmInvoicePaid: boolean
   canRecordFirstDecision: boolean
@@ -21,6 +22,7 @@ export function deriveEditorCapability(context?: EditorRbacContext | null): Edit
     canViewProcess: hasAny(actions, ['process:view']),
     canViewDetail: hasAny(actions, ['manuscript:view_detail']),
     canBindOwner: hasAny(actions, ['manuscript:bind_owner']),
+    canManageReviewers: hasAny(actions, ['review:assign', 'review:view_assignments', 'review:unassign']),
     canUpdateInvoiceInfo: hasAny(actions, ['invoice:update_info', 'invoice:override_apc']),
     canConfirmInvoicePaid: hasAny(actions, ['invoice:override_apc']),
     canRecordFirstDecision: hasAny(actions, ['decision:record_first']),

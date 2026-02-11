@@ -1643,7 +1643,7 @@ async def search_reviewer_library(
     query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
     limit: int = Query(50, ge=1, le=200),
     manuscript_id: str | None = Query(None, description="可选：基于稿件上下文返回邀请策略命中信息"),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
 ):
     """
     User Story 2:
@@ -1652,10 +1652,14 @@ async def search_reviewer_library(
     try:
         rows = ReviewerService().search(query=query, limit=limit)
         meta: dict[str, Any] = {}
+        normalized_roles = set(normalize_roles(profile.get("roles") or []))
+        if "assistant_editor" in normalized_roles and "managing_editor" not in normalized_roles and not manuscript_id:
+            raise HTTPException(status_code=422, detail="manuscript_id is required for assistant editor reviewer search")
+
         if manuscript_id:
             ms_resp = (
                 supabase_admin.table("manuscripts")
-                .select("id,author_id,journal_id,status")
+                .select("id,author_id,journal_id,status,assistant_editor_id")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
@@ -1663,6 +1667,15 @@ async def search_reviewer_library(
             manuscript = getattr(ms_resp, "data", None) or {}
             if not manuscript:
                 raise HTTPException(status_code=404, detail="Manuscript not found")
+
+            if "admin" not in normalized_roles:
+                # 纯 AE 仅允许访问自己分管稿件的候选池（ME/Admin 保持现有可见范围）。
+                if "assistant_editor" in normalized_roles and "managing_editor" not in normalized_roles:
+                    assigned_ae = str(manuscript.get("assistant_editor_id") or "").strip()
+                    if assigned_ae != str(profile.get("id") or "").strip():
+                        raise HTTPException(status_code=403, detail="Forbidden: manuscript not assigned to current assistant editor")
+                elif "managing_editor" not in normalized_roles:
+                    raise HTTPException(status_code=403, detail="Insufficient role")
 
             policy_service = ReviewPolicyService()
             reviewer_ids = [str(r.get("id") or "").strip() for r in rows if str(r.get("id") or "").strip()]
