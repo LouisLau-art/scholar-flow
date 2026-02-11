@@ -1323,6 +1323,31 @@ async def patch_manuscript_status(
             detail="Publishing requires gates. Use /api/v1/editor/manuscripts/{id}/production/advance or /api/v1/editor/publish.",
         )
 
+    # 中文注释：
+    # - ME 在详情页可手动把 pre_check 推进到 under_review；
+    # - 但未分配 AE 会导致稿件离开 Intake 后无人跟进，属于危险流转。
+    # - 这里做服务端硬门禁，避免任何前端入口绕过检查。
+    target_status = (to_status or "").strip().lower()
+    if target_status == "under_review":
+        try:
+            ms_resp = (
+                supabase_admin.table("manuscripts")
+                .select("id,status,assistant_editor_id")
+                .eq("id", id)
+                .single()
+                .execute()
+            )
+            ms_row = getattr(ms_resp, "data", None) or {}
+        except Exception:
+            ms_row = {}
+        source_status = normalize_status(str(ms_row.get("status") or ""))
+        assigned_ae = str(ms_row.get("assistant_editor_id") or "").strip()
+        if source_status == ManuscriptStatus.PRE_CHECK.value and not assigned_ae:
+            raise HTTPException(
+                status_code=409,
+                detail="Assistant Editor must be assigned before moving to under_review.",
+            )
+
     updated = EditorialService().update_status(
         manuscript_id=id,
         to_status=to_status,

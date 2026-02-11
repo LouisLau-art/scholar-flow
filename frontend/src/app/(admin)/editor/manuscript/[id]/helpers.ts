@@ -14,7 +14,7 @@ export type ManuscriptDetail = {
   final_pdf_path?: string | null
   author?: { full_name?: string | null; email?: string | null; affiliation?: string | null } | null
   owner?: { full_name?: string | null; email?: string | null } | null
-  editor?: { full_name?: string | null; email?: string | null } | null
+  editor?: { id?: string | null; full_name?: string | null; email?: string | null } | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
   invoice?: { status?: string | null; amount?: number | string | null } | null
   signed_files?: any

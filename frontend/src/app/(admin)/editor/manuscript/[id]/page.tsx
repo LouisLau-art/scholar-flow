@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -28,6 +29,7 @@ import {
   getNextActionCard,
   type ManuscriptDetail,
 } from './helpers'
+import { getAssistantEditors, peekAssistantEditorsCache, type AssistantEditorOption } from '@/services/assistantEditorsCache'
 
 const InternalNotebook = dynamic(
   () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
@@ -78,7 +80,17 @@ export default function EditorManuscriptDetailPage() {
     fundingInfo: '',
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
+  const [aeOptions, setAeOptions] = useState<AssistantEditorOption[]>([])
+  const [loadingAeOptions, setLoadingAeOptions] = useState(false)
+  const [selectedAeId, setSelectedAeId] = useState('')
+  const [assigningAe, setAssigningAe] = useState(false)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
+  const normalizedRoles = useMemo(() => rbacContext?.normalized_roles || [], [rbacContext])
+  const canAssignAE = useMemo(
+    () => normalizedRoles.includes('managing_editor') || normalizedRoles.includes('admin'),
+    [normalizedRoles]
+  )
+  const currentAeId = String(ms?.editor?.id || '')
   const requiresTransitionReason = useMemo(() => {
     const target = String(pendingTransition || '').toLowerCase()
     return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
@@ -157,6 +169,36 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [])
 
+  useEffect(() => {
+    setSelectedAeId(currentAeId)
+  }, [currentAeId])
+
+  useEffect(() => {
+    if (!canAssignAE) return
+    let alive = true
+    const cached = peekAssistantEditorsCache()
+    if (cached?.length) {
+      setAeOptions(cached)
+    }
+    async function loadAes() {
+      try {
+        if (!cached?.length) setLoadingAeOptions(true)
+        const rows = await getAssistantEditors()
+        if (!alive) return
+        setAeOptions(rows)
+      } catch (e) {
+        if (!alive) return
+        toast.error(e instanceof Error ? e.message : 'Failed to load assistant editors')
+      } finally {
+        if (alive) setLoadingAeOptions(false)
+      }
+    }
+    loadAes()
+    return () => {
+      alive = false
+    }
+  }, [canAssignAE])
+
   // --- Derived State ---
   const status = String(ms?.status || '')
   const statusLower = status.toLowerCase()
@@ -201,11 +243,42 @@ export default function EditorManuscriptDetailPage() {
     [statusLower]
   )
 
-  const openTransitionDialog = useCallback((nextStatus: string) => {
-    setPendingTransition(nextStatus)
-    setTransitionReason('')
-    setTransitionDialogOpen(true)
-  }, [])
+  const assignAeFromDetail = useCallback(async () => {
+    const targetAeId = String(selectedAeId || '').trim()
+    if (!targetAeId) {
+      toast.error('Please select an Assistant Editor first.')
+      return
+    }
+    if (targetAeId === currentAeId) {
+      toast.message('Assistant Editor is already assigned.')
+      return
+    }
+    try {
+      setAssigningAe(true)
+      const res = await EditorApi.assignAE(id, { ae_id: targetAeId })
+      if (res?.detail) throw new Error(String(res.detail))
+      toast.success('Assistant Editor assigned')
+      await refreshDetail()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to assign assistant editor')
+    } finally {
+      setAssigningAe(false)
+    }
+  }, [currentAeId, id, refreshDetail, selectedAeId])
+
+  const openTransitionDialog = useCallback(
+    (nextStatus: string) => {
+      const target = String(nextStatus || '').toLowerCase().trim()
+      if (statusLower === 'pre_check' && target === 'under_review' && !currentAeId) {
+        toast.error('Please assign an Assistant Editor before moving to Under Review.')
+        return
+      }
+      setPendingTransition(nextStatus)
+      setTransitionReason('')
+      setTransitionDialogOpen(true)
+    },
+    [currentAeId, statusLower]
+  )
 
   const submitStatusTransition = useCallback(async () => {
     const target = String(pendingTransition || '').toLowerCase().trim()
@@ -344,18 +417,56 @@ export default function EditorManuscriptDetailPage() {
                         {/* AE Info */}
                         <div>
                             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Assistant Editor</div>
-                            <div className="flex items-center gap-2 h-9">
-                                {ms.editor ? (
-                                    <>
-                                        <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
-                                            {(ms.editor.full_name || ms.editor.email || 'E').substring(0, 1).toUpperCase()}
-                                        </div>
-                                        <span className="text-sm font-medium truncate">{ms.editor.full_name || ms.editor.email}</span>
-                                    </>
-                                ) : (
-                                    <span className="text-sm text-slate-400 italic">Unassigned</span>
-                                )}
-                            </div>
+                            {canAssignAE ? (
+                              <div className="space-y-2">
+                                <Select
+                                  value={selectedAeId || undefined}
+                                  onValueChange={(value) => setSelectedAeId(value)}
+                                  disabled={loadingAeOptions || assigningAe}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={loadingAeOptions ? 'Loading assistant editors…' : 'Select Assistant Editor'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {aeOptions.map((ae) => (
+                                      <SelectItem key={ae.id} value={ae.id}>
+                                        {ae.full_name || ae.email || ae.id}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={assignAeFromDetail}
+                                    disabled={assigningAe || !selectedAeId || selectedAeId === currentAeId}
+                                  >
+                                    {assigningAe ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                                    {currentAeId ? 'Update AE' : 'Assign AE'}
+                                  </Button>
+                                  {currentAeId ? (
+                                    <span className="text-xs text-slate-500">Current: {ms.editor?.full_name || ms.editor?.email || currentAeId}</span>
+                                  ) : (
+                                    <span className="text-xs text-amber-600">Unassigned</span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 h-9">
+                                  {ms.editor ? (
+                                      <>
+                                          <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
+                                              {(ms.editor.full_name || ms.editor.email || 'E').substring(0, 1).toUpperCase()}
+                                          </div>
+                                          <span className="text-sm font-medium truncate">{ms.editor.full_name || ms.editor.email}</span>
+                                      </>
+                                  ) : (
+                                      <span className="text-sm text-slate-400 italic">Unassigned</span>
+                                  )}
+                              </div>
+                            )}
                         </div>
 
                         {/* Finance Status */}
@@ -575,18 +686,22 @@ export default function EditorManuscriptDetailPage() {
                              {nextStatuses.length === 0 ? (
                                 <div className="text-sm text-slate-400 italic">No next status available.</div>
                              ) : (
-                                nextStatuses.map((s) => (
+                                nextStatuses.map((s) => {
+                                  const next = String(s || '').toLowerCase().trim()
+                                  const requireAeFirst = statusLower === 'pre_check' && next === 'under_review' && !currentAeId
+                                  return (
                                     <Button
                                         key={s}
                                         className="w-full justify-between"
                                         variant="outline"
-                                        disabled={transitioning === s}
+                                        disabled={transitioning === s || requireAeFirst}
                                         onClick={() => openTransitionDialog(s)}
                                     >
-                                        <span>{getTransitionActionLabel(s)}</span>
+                                        <span>{requireAeFirst ? 'Move to Under Review (Assign AE first)' : getTransitionActionLabel(s)}</span>
                                         {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4 opacity-50" />}
                                     </Button>
-                                ))
+                                  )
+                                })
                              )}
                         </div>
                     ) : (
