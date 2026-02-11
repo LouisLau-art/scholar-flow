@@ -87,10 +87,13 @@ export default function EditorManuscriptDetailPage() {
   const applyDetail = useCallback((detail: ManuscriptDetail) => {
     setMs(detail)
     const meta = (detail?.invoice_metadata as any) || {}
-    const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
+    const authorNameFallback = String(
+      detail?.author?.full_name || detail?.author?.email || detail?.owner?.full_name || detail?.owner?.email || ''
+    ).trim()
+    const authorAffiliationFallback = String(detail?.author?.affiliation || '').trim()
     setInvoiceForm({
-      authors: String(meta.authors || ownerFallback || ''),
-      affiliation: String(meta.affiliation || ''),
+      authors: String(meta.authors || authorNameFallback || ''),
+      affiliation: String(meta.affiliation || authorAffiliationFallback || ''),
       apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
       fundingInfo: String(meta.funding_info || ''),
     })
@@ -164,6 +167,8 @@ export default function EditorManuscriptDetailPage() {
   const showDirectStatusTransitions = !isPostAcceptance && !['published', 'rejected'].includes(statusLower)
   const displayAuthors =
     String(invoiceForm.authors || '').trim() ||
+    String(ms?.author?.full_name || '').trim() ||
+    String(ms?.author?.email || '').trim() ||
     String(ms?.owner?.full_name || '').trim() ||
     String(ms?.owner?.email || '').trim() ||
     '—'

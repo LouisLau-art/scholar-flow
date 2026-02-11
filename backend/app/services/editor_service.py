@@ -890,9 +890,9 @@ class EditorService:
         ME Intake Queue: Status=PRE_CHECK, PreCheckStatus=INTAKE
         """
         selects = [
-            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id,journals(title,slug)",
-            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id",
-            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id",
         ]
         rows: list[dict[str, Any]] = []
         last_error: Exception | None = None
@@ -926,33 +926,51 @@ class EditorService:
         # Intake 列表不需要加载完整 pre-check 时间线，避免每次刷新多打一条审计日志聚合查询。
         out = [self._map_precheck_row(r) for r in rows]
 
-        # 补齐 owner 展示字段（full_name/email），用于 Intake 决策信息补全。
-        owner_ids = sorted({str(r.get("owner_id") or "") for r in out if str(r.get("owner_id") or "")})
-        owner_map: dict[str, dict[str, Any]] = {}
-        if owner_ids:
+        # 补齐 owner/author 展示字段（full_name/email/affiliation），用于 Intake 决策信息补全。
+        profile_ids = sorted(
+            {
+                str(pid)
+                for row in out
+                for pid in (row.get("owner_id"), row.get("author_id"))
+                if str(pid or "").strip()
+            }
+        )
+        profile_map: dict[str, dict[str, Any]] = {}
+        if profile_ids:
             try:
                 prof = (
                     self.client.table("user_profiles")
-                    .select("id,full_name,email")
-                    .in_("id", owner_ids)
+                    .select("id,full_name,email,affiliation")
+                    .in_("id", profile_ids)
                     .execute()
                 )
                 for p in (getattr(prof, "data", None) or []):
                     pid = str(p.get("id") or "")
                     if pid:
-                        owner_map[pid] = p
+                        profile_map[pid] = p
             except Exception as e:
-                print(f"[Intake] load owner profiles failed (ignored): {e}")
+                print(f"[Intake] load owner/author profiles failed (ignored): {e}")
 
         for row in out:
             oid = str(row.get("owner_id") or "")
+            aid = str(row.get("author_id") or "")
             row["owner"] = (
                 {
                     "id": oid,
-                    "full_name": (owner_map.get(oid) or {}).get("full_name"),
-                    "email": (owner_map.get(oid) or {}).get("email"),
+                    "full_name": (profile_map.get(oid) or {}).get("full_name"),
+                    "email": (profile_map.get(oid) or {}).get("email"),
                 }
                 if oid
+                else None
+            )
+            row["author"] = (
+                {
+                    "id": aid,
+                    "full_name": (profile_map.get(aid) or {}).get("full_name"),
+                    "email": (profile_map.get(aid) or {}).get("email"),
+                    "affiliation": (profile_map.get(aid) or {}).get("affiliation"),
+                }
+                if aid
                 else None
             )
             journal = row.get("journals")
@@ -991,6 +1009,7 @@ class EditorService:
                 if keyword in str(row.get("title") or "").lower()
                 or keyword in str(row.get("id") or "").lower()
                 or keyword in str(((row.get("owner") or {}).get("full_name") or "")).lower()
+                or keyword in str(((row.get("author") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
             ]
 

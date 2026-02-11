@@ -988,6 +988,8 @@ async def get_editor_manuscript_detail(
 
     # 合并构建 profile id，减少 user_profiles 的重复查询。
     profile_ids: set[str] = set()
+    if ms.get("author_id"):
+        profile_ids.add(str(ms["author_id"]))
     if ms.get("owner_id"):
         profile_ids.add(str(ms["owner_id"]))
     if ms.get("editor_id"):
@@ -1009,7 +1011,7 @@ async def get_editor_manuscript_detail(
         try:
             p = (
                 supabase_admin.table("user_profiles")
-                .select("id,email,full_name,roles")
+                .select("id,email,full_name,roles,affiliation")
                 .in_("id", sorted(profile_ids))
                 .execute()
             )
@@ -1021,8 +1023,19 @@ async def get_editor_manuscript_detail(
             print(f"[Profiles] load failed (ignored): {e}")
     _mark("profiles", t0)
 
+    aid = str(ms.get("author_id") or "")
     oid = str(ms.get("owner_id") or "")
     eid = str(ms.get("editor_id") or "")
+    ms["author"] = (
+        {
+            "id": aid,
+            "full_name": (profiles_map.get(aid) or {}).get("full_name"),
+            "email": (profiles_map.get(aid) or {}).get("email"),
+            "affiliation": (profiles_map.get(aid) or {}).get("affiliation"),
+        }
+        if aid
+        else None
+    )
     ms["owner"] = (
         {"id": oid, "full_name": (profiles_map.get(oid) or {}).get("full_name"), "email": (profiles_map.get(oid) or {}).get("email")}
         if oid
@@ -1033,6 +1046,16 @@ async def get_editor_manuscript_detail(
         if eid
         else None
     )
+
+    # 作者元信息兜底：若 invoice_metadata 未填写，详情页仍可回显作者姓名与机构。
+    meta = ms.get("invoice_metadata")
+    if not isinstance(meta, dict):
+        meta = {}
+        ms["invoice_metadata"] = meta
+    if not str(meta.get("authors") or "").strip():
+        meta["authors"] = str((ms.get("author") or {}).get("full_name") or "").strip() or None
+    if not str(meta.get("affiliation") or "").strip():
+        meta["affiliation"] = str((ms.get("author") or {}).get("affiliation") or "").strip() or None
 
     # 文件签名（原稿 PDF + 审稿附件）
     file_path = str(ms.get("file_path") or "").strip()

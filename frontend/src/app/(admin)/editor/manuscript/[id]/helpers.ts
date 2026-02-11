@@ -12,6 +12,7 @@ export type ManuscriptDetail = {
   created_at?: string | null
   updated_at?: string | null
   final_pdf_path?: string | null
+  author?: { full_name?: string | null; email?: string | null; affiliation?: string | null } | null
   owner?: { full_name?: string | null; email?: string | null } | null
   editor?: { full_name?: string | null; email?: string | null } | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null

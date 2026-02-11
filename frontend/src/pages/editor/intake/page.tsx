@@ -18,6 +18,7 @@ interface Manuscript {
   title: string
   status?: string
   created_at?: string
+  author?: { id: string; full_name?: string; email?: string; affiliation?: string } | null
   owner?: { id: string; full_name?: string; email?: string } | null
   journal?: { title?: string; slug?: string } | null
   intake_priority?: 'high' | 'normal'
@@ -240,7 +241,9 @@ export default function MEIntakePage() {
                         <div className="mt-1 font-mono text-[11px] text-slate-500">{m.id}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{m.owner?.full_name || m.owner?.email || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {m.author?.full_name || m.author?.email || m.owner?.full_name || m.owner?.email || '-'}
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{formatDate(m.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{renderPriority(m)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{renderIntakeStatus(m.pre_check_status)}</td>
