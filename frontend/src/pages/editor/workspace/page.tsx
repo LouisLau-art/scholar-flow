@@ -30,24 +30,28 @@ interface Manuscript {
   created_at?: string | null
   updated_at?: string | null
   pre_check_status?: string | null
-  workspace_bucket?: 'technical' | 'under_review' | 'revision_followup' | 'decision' | 'other'
+  workspace_bucket?: 'technical' | 'academic_pending' | 'under_review' | 'revision_followup' | 'decision' | 'other'
   owner?: { id?: string; full_name?: string | null; email?: string | null } | null
   journal?: { title?: string | null; slug?: string | null } | null
 }
 
-type WorkspaceBucket = 'technical' | 'under_review' | 'revision_followup' | 'decision' | 'other'
+type WorkspaceBucket = 'technical' | 'academic_pending' | 'under_review' | 'revision_followup' | 'decision' | 'other'
 
 type SectionMeta = {
   label: string
   description: string
 }
 
-const SECTION_ORDER: WorkspaceBucket[] = ['technical', 'under_review', 'revision_followup', 'decision', 'other']
+const SECTION_ORDER: WorkspaceBucket[] = ['technical', 'academic_pending', 'under_review', 'revision_followup', 'decision', 'other']
 
 const SECTION_META: Record<WorkspaceBucket, SectionMeta> = {
   technical: {
     label: '待发起外审',
     description: 'ME 已分配给你的新稿件：完成技术闭环后进入外审。',
+  },
+  academic_pending: {
+    label: 'Academic 预审中',
+    description: '你已送 EIC 预审，等待 Academic 处理结果。',
   },
   under_review: {
     label: '外审进行中',
@@ -88,6 +92,7 @@ function deriveBucket(m: Manuscript): WorkspaceBucket {
   const pre = String(m.pre_check_status || '').toLowerCase()
 
   if (status === 'pre_check' && pre === 'technical') return 'technical'
+  if (status === 'pre_check' && pre === 'academic') return 'academic_pending'
   if (status === 'under_review') return 'under_review'
   if (status === 'resubmitted' || status === 'major_revision' || status === 'minor_revision') return 'revision_followup'
   if (status === 'decision') return 'decision'
@@ -167,6 +172,7 @@ export default function AEWorkspacePage() {
 
     const buckets: Record<WorkspaceBucket, Manuscript[]> = {
       technical: [],
+      academic_pending: [],
       under_review: [],
       revision_followup: [],
       decision: [],
@@ -275,7 +281,9 @@ export default function AEWorkspacePage() {
                               >
                                 {bucket === 'under_review'
                                   ? 'Manage Reviewers'
-                                  : bucket === 'revision_followup'
+                                  : bucket === 'academic_pending'
+                                    ? 'Track Academic Status'
+                                    : bucket === 'revision_followup'
                                     ? 'Review Revision'
                                     : bucket === 'decision'
                                       ? 'Prepare Decision'

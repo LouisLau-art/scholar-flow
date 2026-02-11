@@ -1140,6 +1140,8 @@ class EditorService:
     def _derive_ae_workspace_bucket(self, *, status: str | None, pre_check_status: str | None) -> str:
         if status == ManuscriptStatus.PRE_CHECK.value and pre_check_status == PreCheckStatus.TECHNICAL.value:
             return "technical"
+        if status == ManuscriptStatus.PRE_CHECK.value and pre_check_status == PreCheckStatus.ACADEMIC.value:
+            return "academic_pending"
         if status == ManuscriptStatus.UNDER_REVIEW.value:
             return "under_review"
         if status in {
@@ -1208,10 +1210,10 @@ class EditorService:
         for row in raw_enriched:
             normalized_status = normalize_status(str(row.get("status") or ""))
             normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))
-            if (
-                normalized_status == ManuscriptStatus.PRE_CHECK.value
-                and normalized_precheck != PreCheckStatus.TECHNICAL.value
-            ):
+            if normalized_status == ManuscriptStatus.PRE_CHECK.value and normalized_precheck not in {
+                PreCheckStatus.TECHNICAL.value,
+                PreCheckStatus.ACADEMIC.value,
+            }:
                 continue
             row["workspace_bucket"] = self._derive_ae_workspace_bucket(
                 status=normalized_status,
@@ -1392,21 +1394,46 @@ class EditorService:
         )
         return updated
 
-    def get_academic_queue(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+    def get_academic_queue(
+        self,
+        *,
+        viewer_user_id: UUID | str,
+        viewer_roles: Iterable[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[dict[str, Any]]:
         """
         EIC Academic Queue: Status=PRE_CHECK, PreCheckStatus=ACADEMIC
         """
+        normalized_roles = set(normalize_roles(viewer_roles))
         q = (
             self.client.table("manuscripts")
             .select("*")
             .eq("status", ManuscriptStatus.PRE_CHECK.value)
             .eq("pre_check_status", PreCheckStatus.ACADEMIC.value)
+            .order("updated_at", desc=True)
             .order("created_at", desc=True)
             .range((page - 1) * page_size, page * page_size - 1)
         )
         resp = q.execute()
         rows = getattr(resp, "data", None) or []
-        return self._enrich_precheck_rows(rows)
+        out = self._enrich_precheck_rows(rows)
+
+        if "admin" not in normalized_roles:
+            scoped_journal_ids = get_user_scope_journal_ids(
+                user_id=str(viewer_user_id),
+                roles=normalized_roles,
+            )
+            if scoped_journal_ids:
+                out = [
+                    row
+                    for row in out
+                    if str(row.get("journal_id") or "").strip() in scoped_journal_ids
+                ]
+            elif is_scope_enforcement_enabled():
+                return []
+
+        return out
 
     def submit_academic_check(
         self,

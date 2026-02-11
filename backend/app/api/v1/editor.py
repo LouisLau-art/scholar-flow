@@ -666,14 +666,20 @@ async def submit_technical_check(
 async def get_academic_queue(
     page: int = 1,
     page_size: int = 20,
-    _profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
 ):
     """
     List manuscripts in Academic Check Queue (EIC).
     Status: pre_check, Sub-status: academic
     """
     try:
-        return EditorService().get_academic_queue(page, page_size)
+        return EditorService().get_academic_queue(
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
+            page=page,
+            page_size=page_size,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -686,12 +692,17 @@ async def submit_academic_check(
     id: UUID,
     request: AcademicCheckRequest,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
 ):
     """
     Submit academic check. Routes to Review or Decision Phase.
     """
     try:
+        ensure_manuscript_scope_access(
+            manuscript_id=str(id),
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+        )
         updated = EditorService().submit_academic_check(
             id,
             request.decision,

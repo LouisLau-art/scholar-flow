@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, GraduationCap } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
@@ -6,35 +6,61 @@ import QueryProvider from '@/components/providers/QueryProvider'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
+import { EditorApi } from '@/services/editorApi'
 import { AcademicCheckModal } from '@/components/AcademicCheckModal'
+import { buildProcessScopeEmptyHint } from '@/lib/rbac'
+import type { EditorRbacContext } from '@/types/rbac'
 
 interface Manuscript {
   id: string
   title: string
   pre_check_status: string
+  journal?: { title?: string | null } | null
+  updated_at?: string | null
 }
 
 export default function EICAcademicQueuePage() {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
 
-  const fetchQueue = async () => {
+  const scopeHint = useMemo(() => buildProcessScopeEmptyHint(rbacContext), [rbacContext])
+
+  const fetchQueue = useCallback(async () => {
     setLoading(true)
+    setError('')
     try {
       const data = await editorService.getAcademicQueue()
       setManuscripts(data as unknown as Manuscript[])
     } catch (err) {
       console.error(err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch academic queue')
+      setManuscripts([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  const fetchRbacContext = useCallback(async () => {
+    try {
+      const res = await EditorApi.getRbacContext()
+      if (res?.success && res?.data) {
+        setRbacContext(res.data)
+        return
+      }
+      setRbacContext(null)
+    } catch {
+      setRbacContext(null)
+    }
+  }, [])
 
   useEffect(() => {
     fetchQueue()
-  }, [])
+    fetchRbacContext()
+  }, [fetchQueue, fetchRbacContext])
 
   const openDecisionModal = (id: string) => {
     setSelectedManuscriptId(id)
@@ -64,28 +90,40 @@ export default function EICAcademicQueuePage() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {scopeHint ? (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">{scopeHint}</div>
+          ) : null}
+          {error ? (
+            <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error}</div>
+          ) : null}
           <table className="w-full table-fixed">
             <thead className="bg-slate-50/70">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
+                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Journal</th>
                 <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</th>
                 <th className="w-32 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
                 </tr>
               ) : manuscripts.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-sm text-slate-500">No manuscripts awaiting academic check.</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                    {scopeHint ? 'No manuscript in your assigned journal scope.' : 'No manuscripts awaiting academic check.'}
+                  </td>
                 </tr>
               ) : (
                 manuscripts.map((m) => (
                   <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                     <td className="px-4 py-3 text-sm text-slate-900">{m.title}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{m.pre_check_status}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openDecisionModal(m.id)}
