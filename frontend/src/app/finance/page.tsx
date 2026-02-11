@@ -7,6 +7,7 @@ import { ArrowLeft, DollarSign, Download, RefreshCw } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
@@ -221,17 +222,17 @@ export default function FinanceDashboard() {
             <CardTitle className="text-slate-900">Invoices</CardTitle>
             <CardDescription>Filter by status and export the current reconciliation snapshot.</CardDescription>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <select
-                aria-label="Finance status filter"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as FinanceStatusFilter)}
-                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm"
-              >
-                <option value="all">All</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="paid">Paid</option>
-                <option value="waived">Waived</option>
-              </select>
+              <Select value={status} onValueChange={(value) => setStatus(value as FinanceStatusFilter)}>
+                <SelectTrigger aria-label="Finance status filter" className="h-9 w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="waived">Waived</SelectItem>
+                </SelectContent>
+              </Select>
               <input
                 aria-label="Finance search input"
                 placeholder="Search invoice number or manuscript title"

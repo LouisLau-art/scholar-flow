@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { UserRole } from '@/types/user';
 import { Loader2, AlertTriangle, Mail } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface CreateUserDialogProps {
   isOpen: boolean;
@@ -93,15 +94,16 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Role <span className="text-destructive">*</span></label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-md border border-input bg-background py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="editor">Editor</option>
-              <option value="reviewer">Reviewer</option>
-              <option value="admin">Admin</option>
-            </select>
+            <Select value={role} onValueChange={(value) => setRole(value as UserRole)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="editor">Editor</SelectItem>
+                <SelectItem value="reviewer">Reviewer</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {error && (

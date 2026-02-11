@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Save, Send, WandSparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { assembleLetter } from '@/lib/decision-utils'
 import type { DecisionAttachment, DecisionDraft, DecisionReport, FinalDecision } from '@/types/decision'
 
@@ -203,17 +204,21 @@ export function DecisionEditor({
       <div className="mt-4 space-y-4">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Decision</label>
-          <select
+          <Select
             value={decision}
-            onChange={(event) => setDecision(event.target.value as FinalDecision)}
+            onValueChange={(value) => setDecision(value as FinalDecision)}
             disabled={isReadOnly || isSavingDraft || isSubmittingFinal}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
-            <option value="accept">Accept</option>
-            <option value="minor_revision">Minor Revision</option>
-            <option value="major_revision">Major Revision</option>
-            <option value="reject">Reject</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="accept">Accept</SelectItem>
+              <SelectItem value="minor_revision">Minor Revision</SelectItem>
+              <SelectItem value="major_revision">Major Revision</SelectItem>
+              <SelectItem value="reject">Reject</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>

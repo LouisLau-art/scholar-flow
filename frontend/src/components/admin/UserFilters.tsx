@@ -1,6 +1,7 @@
 'use client'
 
 import { Search } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface UserFiltersProps {
   search: string;
@@ -26,17 +27,18 @@ export function UserFilters({ search, role, onSearchChange, onRoleChange }: User
       </div>
       
       <div className="w-full sm:w-auto">
-        <select
-          value={role}
-          onChange={(e) => onRoleChange(e.target.value)}
-          className="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-        >
-          <option value="">All Roles</option>
-          <option value="author">Author</option>
-          <option value="reviewer">Reviewer</option>
-          <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
-        </select>
+        <Select value={role || '__all'} onValueChange={(value) => onRoleChange(value === '__all' ? '' : value)}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="All Roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">All Roles</SelectItem>
+            <SelectItem value="author">Author</SelectItem>
+            <SelectItem value="reviewer">Reviewer</SelectItem>
+            <SelectItem value="editor">Editor</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

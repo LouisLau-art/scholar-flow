@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { FileUpload } from '@/components/FileUpload'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 function ReviewForm({
   assignmentId,
@@ -73,18 +74,18 @@ function ReviewForm({
           <label htmlFor="review_score" className="block text-sm font-semibold text-slate-900">
             Score (1-5)
           </label>
-          <select
-            id="review_score"
-            value={String(score)}
-            onChange={(e) => setScore(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="5">5 - Excellent</option>
-            <option value="4">4 - Good</option>
-            <option value="3">3 - Average</option>
-            <option value="2">2 - Poor</option>
-            <option value="1">1 - Terrible</option>
-          </select>
+          <Select value={String(score)} onValueChange={(value) => setScore(Number(value))}>
+            <SelectTrigger id="review_score" className="mt-1 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5 - Excellent</SelectItem>
+              <SelectItem value="4">4 - Good</SelectItem>
+              <SelectItem value="3">3 - Average</SelectItem>
+              <SelectItem value="2">2 - Poor</SelectItem>
+              <SelectItem value="1">1 - Terrible</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>

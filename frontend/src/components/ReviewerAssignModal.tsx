@@ -8,6 +8,7 @@ import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type InvitePolicyHit = {
   code: 'cooldown' | 'conflict' | 'overdue_risk' | string
@@ -515,20 +516,23 @@ export default function ReviewerAssignModal({
                   onChange={(e) => setOwnerSearch(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
-                <select
-                  value={ownerId}
-                  onChange={(e) => handleOwnerChange(e.target.value)}
+                <Select
+                  value={ownerId || '__unassigned'}
+                  onValueChange={(value) => handleOwnerChange(value === '__unassigned' ? '' : value)}
                   disabled={savingOwner || loadingOwner}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:bg-slate-50"
-                  data-testid="owner-select"
                 >
-                  <option value="">Unassigned</option>
-                  {filteredInternalStaff.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {(u.full_name || u.email || u.id) as string}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full" data-testid="owner-select">
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unassigned">Unassigned</SelectItem>
+                    {filteredInternalStaff.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {(u.full_name || u.email || u.id) as string}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="mt-2 text-xs text-slate-600">

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const DECLINE_REASONS = [
   { value: 'out_of_scope', label: 'Out of scope' },
@@ -49,18 +51,18 @@ export function DeclineForm({ assignmentId, onDeclined }: DeclineFormProps) {
       <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="decline_reason">
         Reason
       </label>
-      <select
-        id="decline_reason"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      >
-        {DECLINE_REASONS.map((item) => (
-          <option key={item.value} value={item.value}>
-            {item.label}
-          </option>
-        ))}
-      </select>
+      <Select value={reason} onValueChange={setReason}>
+        <SelectTrigger id="decline_reason" className="mt-1 w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {DECLINE_REASONS.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <label className="mt-3 block text-sm font-medium text-slate-700" htmlFor="decline_note">
         Note (optional)
       </label>
@@ -72,15 +74,15 @@ export function DeclineForm({ assignmentId, onDeclined }: DeclineFormProps) {
         className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
       {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-      <button
+      <Button
         type="button"
         disabled={submitting}
         onClick={() => void handleDecline()}
-        className="mt-4 w-full rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-60"
+        variant="outline"
+        className="mt-4 w-full border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
       >
         {submitting ? 'Declining...' : 'Decline Invitation'}
-      </button>
+      </Button>
     </div>
   )
 }
-

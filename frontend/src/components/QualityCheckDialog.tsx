@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Check, X, AlertCircle } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface QCProps {
   manuscriptId: string
@@ -54,15 +55,16 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
           {/* KPI 归属人选择 */}
           <div>
             <label className="block text-sm font-semibold text-slate-900">KPI Owner</label>
-            <select 
-              value={kpiOwner}
-              onChange={(e) => setKpiOwner(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select an editor...</option>
-              <option value="louis">Louis Lau</option>
-              <option value="admin">System Admin</option>
-            </select>
+            <Select value={kpiOwner || '__empty'} onValueChange={(value) => setKpiOwner(value === '__empty' ? '' : value)}>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue placeholder="Select an editor..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__empty">Select an editor...</SelectItem>
+                <SelectItem value="louis">Louis Lau</SelectItem>
+                <SelectItem value="admin">System Admin</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

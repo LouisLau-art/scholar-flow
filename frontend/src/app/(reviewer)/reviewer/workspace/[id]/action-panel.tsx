@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { Loader2, Send } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ReviewSubmission, WorkspaceData } from '@/types/review'
 
 interface ActionPanelProps {
@@ -33,6 +34,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
   })
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors, isDirty, isSubmitting },
@@ -93,17 +95,24 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
           <label className="text-sm font-semibold text-slate-900" htmlFor="recommendation">
             Recommendation
           </label>
-          <select
-            id="recommendation"
-            disabled={isReadOnly}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-            {...register('recommendation', { required: true })}
-          >
-            <option value="accept">Accept</option>
-            <option value="minor_revision">Minor Revision</option>
-            <option value="major_revision">Major Revision</option>
-            <option value="reject">Reject</option>
-          </select>
+          <Controller
+            control={control}
+            name="recommendation"
+            rules={{ required: true }}
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange} disabled={isReadOnly}>
+                <SelectTrigger id="recommendation" className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="accept">Accept</SelectItem>
+                  <SelectItem value="minor_revision">Minor Revision</SelectItem>
+                  <SelectItem value="major_revision">Major Revision</SelectItem>
+                  <SelectItem value="reject">Reject</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
 
         <div>

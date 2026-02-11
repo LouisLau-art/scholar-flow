@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { editorService } from '../services/editorService';
 import { getAssistantEditors, peekAssistantEditorsCache, type AssistantEditorOption } from '@/services/assistantEditorsCache';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AssignAEModalProps {
   isOpen: boolean;
@@ -80,19 +81,23 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
         
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Select AE</label>
-          <select 
-            className="w-full border rounded p-2"
-            value={selectedAE}
-            onChange={(e) => setSelectedAE(e.target.value)}
+          <Select
+            value={selectedAE || '__empty'}
+            onValueChange={(value) => setSelectedAE(value === '__empty' ? '' : value)}
             disabled={isSubmitting}
           >
-            <option value="">
-              {isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'}
-            </option>
-            {aes.map(ae => (
-              <option key={ae.id} value={ae.id}>{ae.full_name || ae.email || ae.id}</option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder={isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__empty">{isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'}</SelectItem>
+              {aes.map(ae => (
+                <SelectItem key={ae.id} value={ae.id}>
+                  {ae.full_name || ae.email || ae.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {isLoadingAEs ? <div className="mt-2 text-xs text-gray-500">Loading assistant editors...</div> : null}
           {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
         </div>

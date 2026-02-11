@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { getCmsMenu, updateCmsMenu, type CmsMenuItemInput, type CmsPage } from '@/services/cms'
 
@@ -113,40 +114,46 @@ export default function CmsMenuPanel({ pages }: Props) {
 
                 <div className="md:col-span-3">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Type</label>
-                  <select
+                  <Select
                     value={item.type}
-                    onChange={(e) => {
-                      const type = e.target.value as MenuItemState['type']
+                    onValueChange={(value) => {
+                      const type = value as MenuItemState['type']
                       setItems(items.map((x, i) => (i === idx ? { label: x.label, type } : x)))
                     }}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                   >
-                    <option value="page">Internal Page</option>
-                    <option value="url">External URL</option>
-                  </select>
+                    <SelectTrigger className="mt-1 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="page">Internal Page</SelectItem>
+                      <SelectItem value="url">External URL</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="md:col-span-5">
                   {item.type === 'page' ? (
                     <>
                       <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Page</label>
-                      <select
-                        value={item.pageSlug || ''}
-                        onChange={(e) => {
-                          const pageSlug = e.target.value
+                      <Select
+                        value={item.pageSlug || '__empty'}
+                        onValueChange={(value) => {
+                          const pageSlug = value === '__empty' ? '' : value
                           setItems(items.map((x, i) => (i === idx ? { ...x, pageSlug } : x)))
                         }}
-                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono"
                       >
-                        <option value="" disabled>
-                          Select…
-                        </option>
-                        {pageSlugs.map((slug) => (
-                          <option key={slug} value={slug}>
-                            {slug}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="mt-1 w-full font-mono">
+                          <SelectValue placeholder="Select…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__empty">Select…</SelectItem>
+                          {pageSlugs.map((slug) => (
+                            <SelectItem key={slug} value={slug}>
+                              {slug}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <div className="mt-1 text-xs font-mono text-slate-500">
                         URL: {item.pageSlug ? `/journal/${item.pageSlug}` : '—'}
                       </div>
@@ -231,4 +238,3 @@ export default function CmsMenuPanel({ pages }: Props) {
     </div>
   )
 }
-
