@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard, Shield } from 'lucide-react'
 import Link from 'next/link'
@@ -31,6 +31,22 @@ const DASHBOARD_TABS: DashboardTab[] = [
   'editor_in_chief',
   'admin',
 ]
+
+function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardTab {
+  const order: DashboardTab[] = [
+    'author',
+    'reviewer',
+    'managing_editor',
+    'assistant_editor',
+    'editor_in_chief',
+    'editor',
+    'admin',
+  ]
+  for (const tab of order) {
+    if (allowed[tab]) return tab
+  }
+  return 'author'
+}
 
 function parseDashboardTab(raw: string | null): DashboardTab | null {
   if (!raw) return null
@@ -141,12 +157,34 @@ function DashboardPageContent() {
 
   const roleSet = new Set((roles || []).map((r) => String(r).toLowerCase()))
   const canSeeAdmin = roleSet.has('admin')
+  const canSeeAuthor = canSeeAdmin || roleSet.has('author')
   const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
-  // 中文注释: legacy editor 继续保留，兼容历史 URL /dashboard?tab=editor
-  const canSeeEditor = canSeeAdmin || roleSet.has('editor')
-  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor') || roleSet.has('editor')
+  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
   const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
+  // Legacy editor 仅做路由兼容；当用户已有新角色时不再展示该 tab。
+  const hasModernEditorialRole = canSeeManagingEditor || canSeeAssistantEditor || canSeeEditorInChief
+  const canSeeEditor = roleSet.has('editor') && !hasModernEditorialRole
+  const allowedTabs: Record<DashboardTab, boolean> = useMemo(
+    () => ({
+      author: canSeeAuthor,
+      reviewer: canSeeReviewer,
+      editor: canSeeEditor,
+      managing_editor: canSeeManagingEditor,
+      assistant_editor: canSeeAssistantEditor,
+      editor_in_chief: canSeeEditorInChief,
+      admin: canSeeAdmin,
+    }),
+    [
+      canSeeAuthor,
+      canSeeReviewer,
+      canSeeEditor,
+      canSeeManagingEditor,
+      canSeeAssistantEditor,
+      canSeeEditorInChief,
+      canSeeAdmin,
+    ]
+  )
   const roleLabel = rolesLoading ? 'loading…' : (roles && roles.length > 0 ? roles.join(', ') : 'author')
 
   // 支持 /dashboard?tab=reviewer 之类的深链
@@ -157,24 +195,16 @@ function DashboardPageContent() {
     }
   }, [tabParam])
 
-  // 若 URL 指向无权限 tab，则回退到 author
+  // 若 URL 指向无权限 tab，则回退到“当前角色可访问的首个 tab”
   useEffect(() => {
     if (rolesLoading) return
-    if (activeTab === 'admin' && !canSeeAdmin) setActiveTab('author')
-    if (activeTab === 'editor' && !canSeeEditor) setActiveTab('author')
-    if (activeTab === 'reviewer' && !canSeeReviewer) setActiveTab('author')
-    if (activeTab === 'managing_editor' && !canSeeManagingEditor) setActiveTab('author')
-    if (activeTab === 'assistant_editor' && !canSeeAssistantEditor) setActiveTab('author')
-    if (activeTab === 'editor_in_chief' && !canSeeEditorInChief) setActiveTab('author')
+    if (!allowedTabs[activeTab]) {
+      setActiveTab(pickFirstAllowedTab(allowedTabs))
+    }
   }, [
     rolesLoading,
     activeTab,
-    canSeeAdmin,
-    canSeeEditor,
-    canSeeReviewer,
-    canSeeManagingEditor,
-    canSeeAssistantEditor,
-    canSeeEditorInChief,
+    allowedTabs,
   ])
 
   return (
@@ -196,9 +226,11 @@ function DashboardPageContent() {
               </div>
             ) : (
               <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-1 h-auto">
-                <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                  <LayoutDashboard className="h-4 w-4" /> Author
-                </TabsTrigger>
+                {canSeeAuthor && (
+                  <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <LayoutDashboard className="h-4 w-4" /> Author
+                  </TabsTrigger>
+                )}
                 {canSeeReviewer && (
                   <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                     <Users className="h-4 w-4" /> Reviewer
@@ -219,11 +251,6 @@ function DashboardPageContent() {
                     <Shield className="h-4 w-4" /> Editor-in-Chief
                   </TabsTrigger>
                 )}
-                {canSeeEditor && (
-                  <TabsTrigger value="editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                    <Shield className="h-4 w-4" /> Editor (Legacy)
-                  </TabsTrigger>
-                )}
                 {canSeeAdmin && (
                   <TabsTrigger value="admin" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                     <Shield className="h-4 w-4" /> Admin
@@ -233,107 +260,109 @@ function DashboardPageContent() {
             )}
           </div>
 
-          <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {isLoading ? (
-              <div className="flex justify-center py-20"><Loader2 className="h-12 w-12 animate-spin text-blue-600" /></div>
-            ) : (
-              <div className="space-y-12">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {statCards.map((card) => (
-                    <div key={card.label} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{card.label}</p>
-                        <p className="text-3xl font-mono font-bold text-slate-900">{card.value || 0}</p>
+          {canSeeAuthor && (
+            <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {isLoading ? (
+                <div className="flex justify-center py-20"><Loader2 className="h-12 w-12 animate-spin text-blue-600" /></div>
+              ) : (
+                <div className="space-y-12">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {statCards.map((card) => (
+                      <div key={card.label} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{card.label}</p>
+                          <p className="text-3xl font-mono font-bold text-slate-900">{card.value || 0}</p>
+                        </div>
+                        <card.icon className={`h-10 w-10 ${card.color} opacity-20`} />
                       </div>
-                      <card.icon className={`h-10 w-10 ${card.color} opacity-20`} />
-                    </div>
-                  ))}
-                </div>
-
-                <section>
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-slate-900">My Submissions</h2>
-                    <Link href="/submit" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
-                      <Plus className="h-4 w-4" /> New Submission
-                    </Link>
+                    ))}
                   </div>
-                  <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                    {submissions.length === 0 ? (
-                      <div className="p-8 text-slate-500 text-sm">No submissions yet.</div>
-                    ) : (
-                      <div className="divide-y divide-slate-100">
-                        {submissions.map((item) => (
-                          <div key={item.id} className="p-6 flex items-center justify-between hover:bg-slate-50 group transition-all">
-                            <div className="flex items-center gap-4">
-                              <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
-                              <div>
-                                <p className="font-bold text-slate-900">{item.title}</p>
-                                <p className="text-sm text-slate-500 font-medium">
-                                  Status: {item.status || 'pre_check'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
-                                </p>
+
+                  <section>
+                    <div className="flex justify-between items-center mb-6">
+                      <h2 className="text-xl font-bold text-slate-900">My Submissions</h2>
+                      <Link href="/submit" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
+                        <Plus className="h-4 w-4" /> New Submission
+                      </Link>
+                    </div>
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                      {submissions.length === 0 ? (
+                        <div className="p-8 text-slate-500 text-sm">No submissions yet.</div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {submissions.map((item) => (
+                            <div key={item.id} className="p-6 flex items-center justify-between hover:bg-slate-50 group transition-all">
+                              <div className="flex items-center gap-4">
+                                <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
+                                <div>
+                                  <p className="font-bold text-slate-900">{item.title}</p>
+                                  <p className="text-sm text-slate-500 font-medium">
+                                    Status: {item.status || 'pre_check'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {['major_revision', 'minor_revision', 'revision_requested'].includes(item.status) && (
+                                  <Link
+                                    href={`/submit-revision/${item.id}`}
+                                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                                  >
+                                    Submit Revision
+                                  </Link>
+                                )}
+                                {item.status === 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={async (e) => {
+                                      e.preventDefault()
+                                      const toastId = toast.loading('Generating invoice…')
+                                      try {
+                                        const token = await authService.getAccessToken()
+                                        if (!token) {
+                                          toast.error('Please sign in again.', { id: toastId })
+                                          return
+                                        }
+                                        const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(item.id)}/invoice`, {
+                                          headers: { Authorization: `Bearer ${token}` },
+                                        })
+                                        if (!res.ok) {
+                                          let msg = ''
+                                          try {
+                                            const j = await res.json()
+                                            msg = (j?.detail || j?.message || '').toString()
+                                          } catch {
+                                            msg = await res.text().catch(() => '')
+                                          }
+                                          toast.error(msg || 'Invoice not available.', { id: toastId })
+                                          return
+                                        }
+                                        const blob = await res.blob()
+                                        const url = window.URL.createObjectURL(blob)
+                                        window.open(url, '_blank')
+                                        toast.success('Invoice ready.', { id: toastId })
+                                      } catch (err) {
+                                        toast.error('Failed to download invoice.', { id: toastId })
+                                      }
+                                    }}
+                                  >
+                                    Download Invoice
+                                  </Button>
+                                )}
+                                <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                                  <ArrowRight className="h-5 w-5" />
+                                </Link>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              {['major_revision', 'minor_revision', 'revision_requested'].includes(item.status) && (
-                                <Link
-                                  href={`/submit-revision/${item.id}`}
-                                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                                >
-                                  Submit Revision
-                                </Link>
-                              )}
-                              {item.status === 'approved' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={async (e) => {
-                                    e.preventDefault()
-                                    const toastId = toast.loading('Generating invoice…')
-                                    try {
-                                      const token = await authService.getAccessToken()
-                                      if (!token) {
-                                        toast.error('Please sign in again.', { id: toastId })
-                                        return
-                                      }
-                                      const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(item.id)}/invoice`, {
-                                        headers: { Authorization: `Bearer ${token}` },
-                                      })
-                                      if (!res.ok) {
-                                        let msg = ''
-                                        try {
-                                          const j = await res.json()
-                                          msg = (j?.detail || j?.message || '').toString()
-                                        } catch {
-                                          msg = await res.text().catch(() => '')
-                                        }
-                                        toast.error(msg || 'Invoice not available.', { id: toastId })
-                                        return
-                                      }
-                                      const blob = await res.blob()
-                                      const url = window.URL.createObjectURL(blob)
-                                      window.open(url, '_blank')
-                                      toast.success('Invoice ready.', { id: toastId })
-                                    } catch (err) {
-                                      toast.error('Failed to download invoice.', { id: toastId })
-                                    }
-                                  }}
-                                >
-                                  Download Invoice
-                                </Button>
-                              )}
-                              <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
-                                <ArrowRight className="h-5 w-5" />
-                              </Link>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
-            )}
-          </TabsContent>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           {canSeeReviewer && (
             <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -364,7 +393,6 @@ function DashboardPageContent() {
                 actions={[
                   { label: 'AE Workspace', href: '/editor/workspace', helper: 'Focus on your in-flight manuscripts with status-based actions.' },
                   { label: 'Manuscripts Process', href: '/editor/process', helper: 'Inspect lifecycle updates (sorted by most recently updated).' },
-                  { label: 'Editor Dashboard', href: '/dashboard?tab=editor', helper: 'Open legacy editorial console when needed.' },
                 ]}
               />
             </TabsContent>
