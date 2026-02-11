@@ -24,6 +24,7 @@ export type ManuscriptDetail = {
   role_queue?: {
     current_role?: string | null
     current_assignee?: { id: string; full_name?: string | null; email?: string | null } | null
+    current_assignee_label?: string | null
     assigned_at?: string | null
     technical_completed_at?: string | null
     academic_completed_at?: string | null

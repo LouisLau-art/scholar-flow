@@ -1610,6 +1610,7 @@ class EditorService:
             changed_by=actor,
             comment=(comment or "").strip() or None,
             allow_skip=False,
+            extra_updates={"pre_check_status": None},
             payload={
                 "action": payload_action,
                 "pre_check_from": PreCheckStatus.ACADEMIC.value,

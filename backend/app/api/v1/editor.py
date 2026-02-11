@@ -935,12 +935,21 @@ async def get_editor_manuscript_detail(
         "academic": "editor_in_chief",
     }
     pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
-    current_role = role_map.get(pre_stage, "managing_editor")
+    current_status = normalize_status(str(ms.get("status") or "")) or str(ms.get("status") or "").strip().lower()
+    in_precheck = current_status == ManuscriptStatus.PRE_CHECK.value
+    current_role = role_map.get(pre_stage, "managing_editor") if in_precheck else "completed"
     current_assignee = None
-    if pre_stage == "technical" and ms.get("assistant_editor_id"):
+    current_assignee_label = None
+    if in_precheck and pre_stage == "technical" and ms.get("assistant_editor_id"):
         aid = str(ms.get("assistant_editor_id"))
         aprof = profiles_map.get(aid) or {}
         current_assignee = {"id": aid, "full_name": aprof.get("full_name"), "email": aprof.get("email")}
+    elif in_precheck and pre_stage == "academic":
+        current_assignee_label = "Journal EIC Queue"
+    elif in_precheck and pre_stage == "intake":
+        current_assignee_label = "Managing Editor Queue"
+    elif not in_precheck:
+        current_assignee_label = "Pre-check completed"
 
     ms["precheck_timeline"] = []
     assigned_at = None
@@ -962,6 +971,7 @@ async def get_editor_manuscript_detail(
     ms["role_queue"] = {
         "current_role": current_role,
         "current_assignee": current_assignee,
+        "current_assignee_label": current_assignee_label,
         "assigned_at": assigned_at,
         "technical_completed_at": technical_completed_at,
         "academic_completed_at": academic_completed_at,

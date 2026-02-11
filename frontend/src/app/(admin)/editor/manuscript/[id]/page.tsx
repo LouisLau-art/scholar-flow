@@ -215,6 +215,7 @@ export default function EditorManuscriptDetailPage() {
   // --- Derived State ---
   const status = String(ms?.status || '')
   const statusLower = status.toLowerCase()
+  const isPrecheckActive = statusLower === 'pre_check'
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])
   const canAssignReviewersStage = ['under_review', 'resubmitted'].includes(statusLower)
@@ -230,6 +231,12 @@ export default function EditorManuscriptDetailPage() {
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
   const authorResponseHistory = useMemo(() => buildAuthorResponseHistory(ms), [ms])
   const latestAuthorResponse = authorResponseHistory[0] || null
+  const roleQueueAssigneeText =
+    ms?.role_queue?.current_assignee?.full_name ||
+    ms?.role_queue?.current_assignee?.email ||
+    ms?.role_queue?.current_assignee?.id ||
+    ms?.role_queue?.current_assignee_label ||
+    '—'
 
   // --- File Processing ---
   const fileHubProps = useMemo(() => buildFileHubProps(ms?.files), [ms?.files])
@@ -806,46 +813,71 @@ export default function EditorManuscriptDetailPage() {
                 <CardTitle className="text-lg">Pre-check Role Queue</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="font-medium text-slate-700">Current Role:</span>{' '}
-                    <span className="text-slate-900">{(ms.role_queue?.current_role || '—').replaceAll('_', ' ')}</span>
+                {isPrecheckActive ? (
+                  <>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium text-slate-700">Current Role:</span>{' '}
+                        <span className="text-slate-900">{(ms.role_queue?.current_role || '—').replaceAll('_', ' ')}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Current Assignee:</span>{' '}
+                        <span className="text-slate-900">{roleQueueAssigneeText}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Assigned At:</span>{' '}
+                        <span className="text-slate-900">
+                          {ms.role_queue?.assigned_at ? format(new Date(ms.role_queue.assigned_at), 'yyyy-MM-dd HH:mm') : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Technical Completed:</span>{' '}
+                        <span className="text-slate-900">
+                          {ms.role_queue?.technical_completed_at
+                            ? format(new Date(ms.role_queue.technical_completed_at), 'yyyy-MM-dd HH:mm')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-700">Academic Completed:</span>{' '}
+                        <span className="text-slate-900">
+                          {ms.role_queue?.academic_completed_at
+                            ? format(new Date(ms.role_queue.academic_completed_at), 'yyyy-MM-dd HH:mm')
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                      Detailed role actions are merged into the Activity Timeline below.
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2 text-sm">
+                    <div className="font-medium text-slate-900">Pre-check completed</div>
+                    <div className="text-slate-700">
+                      Last assignee: <span className="font-medium text-slate-900">{roleQueueAssigneeText}</span>
+                    </div>
+                    <div className="text-slate-700">
+                      Technical completed:{' '}
+                      <span className="font-medium text-slate-900">
+                        {ms.role_queue?.technical_completed_at
+                          ? format(new Date(ms.role_queue.technical_completed_at), 'yyyy-MM-dd HH:mm')
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="text-slate-700">
+                      Academic completed:{' '}
+                      <span className="font-medium text-slate-900">
+                        {ms.role_queue?.academic_completed_at
+                          ? format(new Date(ms.role_queue.academic_completed_at), 'yyyy-MM-dd HH:mm')
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="pt-1 text-xs text-slate-500">
+                      Current manuscript status is <span className="font-medium">{statusLower || '—'}</span>. Full pre-check actions are in Activity Timeline.
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-medium text-slate-700">Current Assignee:</span>{' '}
-                    <span className="text-slate-900">
-                      {ms.role_queue?.current_assignee?.full_name ||
-                        ms.role_queue?.current_assignee?.email ||
-                        ms.role_queue?.current_assignee?.id ||
-                        '—'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">Assigned At:</span>{' '}
-                    <span className="text-slate-900">
-                      {ms.role_queue?.assigned_at ? format(new Date(ms.role_queue.assigned_at), 'yyyy-MM-dd HH:mm') : '—'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">Technical Completed:</span>{' '}
-                    <span className="text-slate-900">
-                      {ms.role_queue?.technical_completed_at
-                        ? format(new Date(ms.role_queue.technical_completed_at), 'yyyy-MM-dd HH:mm')
-                        : '—'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">Academic Completed:</span>{' '}
-                    <span className="text-slate-900">
-                      {ms.role_queue?.academic_completed_at
-                        ? format(new Date(ms.role_queue.academic_completed_at), 'yyyy-MM-dd HH:mm')
-                        : '—'}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-slate-500">
-                  Detailed role actions are merged into the Activity Timeline below.
-                </div>
+                )}
               </CardContent>
             </Card>
 

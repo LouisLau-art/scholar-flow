@@ -159,6 +159,20 @@ class EditorialService:
 
         now = self._now()
         update_payload: dict[str, Any] = {"status": to_norm, "updated_at": now}
+        # 中文注释:
+        # - pre_check 的子阶段仅在预审链路中有效；
+        # - 当稿件离开 pre_check 且不是“技术退回/学术退回”类修回阶段时，清空 pre_check_status，
+        #   避免详情页 Role Queue 误显示为 technical/academic。
+        if (
+            from_norm == ManuscriptStatus.PRE_CHECK.value
+            and to_norm
+            not in {
+                ManuscriptStatus.PRE_CHECK.value,
+                ManuscriptStatus.MINOR_REVISION.value,
+                ManuscriptStatus.MAJOR_REVISION.value,
+            }
+        ):
+            update_payload["pre_check_status"] = None
         if extra_updates:
             update_payload.update(extra_updates)
         try:
