@@ -15,6 +15,7 @@ def get_full_mock(data_to_return):
     mock.select.return_value = mock
     mock.order.return_value = mock
     mock.eq.return_value = mock
+    mock.limit.return_value = mock
     mock.or_.return_value = mock
     mock.single.return_value = mock
     mock.insert.return_value = mock
@@ -168,6 +169,71 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
         insert_payload = mock.insert.call_args[0][0]
         assert insert_payload["author_id"] == token_user_id
         assert insert_payload["author_id"] != provided_author_id
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_with_journal_binding(client: AsyncClient):
+    """验证创建稿件时可绑定 journal_id"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    journal_id = str(uuid.uuid4())
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Journal Bound Manuscript",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "author_id": token_user_id,
+        "journal_id": journal_id,
+        "status": "pre_check",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00"
+    }
+    mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": journal_id, "is_active": True}])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Journal Bound Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "author_id": token_user_id,
+                "journal_id": journal_id,
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 200
+    insert_payload = mock.insert.call_args[0][0]
+    assert insert_payload["journal_id"] == journal_id
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_rejects_invalid_journal_id(client: AsyncClient):
+    """验证 journal_id 不存在时返回 422"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    mock = get_full_mock([])
+    admin_mock = get_full_mock([])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Invalid Journal Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "author_id": token_user_id,
+                "journal_id": str(uuid.uuid4()),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
+    assert "journal_id" in str(response.json().get("detail", "")).lower()
 
 
 @pytest.mark.asyncio

@@ -1866,13 +1866,28 @@ async def list_journals(
     Feature 028: ProcessFilterBar 数据源（期刊下拉框）。
     """
     try:
-        resp = (
-            supabase_admin.table("journals")
-            .select("id,title,slug")
-            .order("title", desc=False)
-            .execute()
-        )
-        return {"success": True, "data": getattr(resp, "data", None) or []}
+        try:
+            resp = (
+                supabase_admin.table("journals")
+                .select("id,title,slug,is_active")
+                .eq("is_active", True)
+                .order("title", desc=False)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            lowered = str(e).lower()
+            if "is_active" in lowered and "does not exist" in lowered:
+                fallback = (
+                    supabase_admin.table("journals")
+                    .select("id,title,slug")
+                    .order("title", desc=False)
+                    .execute()
+                )
+                rows = getattr(fallback, "data", None) or []
+            else:
+                raise
+        return {"success": True, "data": rows}
     except Exception as e:
         print(f"[Journals] list failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to load journals")

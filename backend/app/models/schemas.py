@@ -16,6 +16,7 @@ class ManuscriptBase(BaseModel):
     cover_letter_content_type: Optional[str] = Field(None, max_length=255, description="Cover Letter MIME 类型")
     dataset_url: Optional[str] = Field(None, max_length=1000, description="外部数据集链接")
     source_code_url: Optional[str] = Field(None, max_length=1000, description="代码仓库链接")
+    journal_id: Optional[UUID] = Field(None, description="绑定的期刊 ID")
 
     @field_validator("title")
     @classmethod

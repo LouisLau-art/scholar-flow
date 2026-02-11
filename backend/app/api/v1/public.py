@@ -1,8 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.lib.api_client import supabase_admin
 
 router = APIRouter(prefix="/public", tags=["Public Resources"])
+
+
+def _is_missing_column_error(error_text: str, column_name: str) -> bool:
+    lowered = str(error_text or "").lower()
+    col = str(column_name or "").strip().lower()
+    if not col:
+        return False
+    return col in lowered and "does not exist" in lowered
 
 
 # 中文注释:
@@ -190,6 +198,38 @@ async def get_all_topics():
         "success": True,
         "data": collections,
     }
+
+
+@router.get("/journals")
+async def get_public_journals():
+    """
+    投稿/公开页使用的期刊列表（默认仅返回启用状态）。
+    """
+    try:
+        try:
+            resp = (
+                supabase_admin.table("journals")
+                .select("id,title,slug,description,issn,impact_factor,cover_url,is_active")
+                .eq("is_active", True)
+                .order("title", desc=False)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_missing_column_error(str(e), "is_active"):
+                fallback = (
+                    supabase_admin.table("journals")
+                    .select("id,title,slug,description,issn,impact_factor,cover_url")
+                    .order("title", desc=False)
+                    .execute()
+                )
+                rows = getattr(fallback, "data", None) or []
+            else:
+                raise
+        return {"success": True, "data": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load journals: {e}")
+
 
 @router.get("/announcements")
 async def get_announcements():

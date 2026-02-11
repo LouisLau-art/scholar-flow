@@ -95,6 +95,60 @@ def _is_postgrest_single_no_rows_error(error_text: str) -> bool:
     # PostgREST: `.single()` 在 0 行时会报 406，并带 PGRST116（Cannot coerce ... 0 rows）
     return "pgrst116" in lowered or "cannot coerce the result to a single json object" in lowered or "0 rows" in lowered
 
+
+def _is_missing_specific_column_error(error_text: str, column_name: str) -> bool:
+    lowered = str(error_text or "").lower()
+    col = str(column_name or "").strip().lower()
+    if not col:
+        return False
+    return col in lowered and "does not exist" in lowered
+
+
+def _validate_submission_journal_id(journal_id: UUID | None) -> str | None:
+    """
+    校验投稿绑定的 journal_id 是否可用（存在且未停用）。
+
+    中文注释:
+    - 仅当作者提交了 journal_id 才触发校验，保持历史客户端兼容。
+    - 若云端尚未迁移 journals.is_active，则退化为“只校验存在性”。
+    """
+    if journal_id is None:
+        return None
+
+    target_id = str(journal_id)
+    try:
+        resp = (
+            supabase_admin.table("journals")
+            .select("id,is_active")
+            .eq("id", target_id)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=422, detail="Invalid journal_id")
+        row = rows[0] or {}
+        if row.get("is_active") is False:
+            raise HTTPException(status_code=422, detail="Selected journal is inactive")
+        return target_id
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_missing_specific_column_error(str(e), "is_active"):
+            fallback = (
+                supabase_admin.table("journals")
+                .select("id")
+                .eq("id", target_id)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(fallback, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=422, detail="Invalid journal_id")
+            return target_id
+        raise HTTPException(status_code=500, detail="Failed to validate journal")
+
+
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
     """
     生成 manuscripts bucket 的 signed URL（优先使用 service_role）。
@@ -1811,6 +1865,7 @@ async def create_manuscript(
         cover_letter_path = str(manuscript.cover_letter_path or "").strip()
         cover_letter_filename = str(manuscript.cover_letter_filename or "").strip() or None
         cover_letter_content_type = str(manuscript.cover_letter_content_type or "").strip() or None
+        validated_journal_id = _validate_submission_journal_id(manuscript.journal_id)
 
         if cover_letter_path:
             # 中文注释: 防止恶意构造 path 绑定他人文件或目录穿越路径
@@ -1834,6 +1889,7 @@ async def create_manuscript(
             "file_path": manuscript.file_path,
             "dataset_url": manuscript.dataset_url,
             "source_code_url": manuscript.source_code_url,
+            "journal_id": validated_journal_id,
             "author_id": current_user_id,  # 使用真实的用户 ID
             "status": "pre_check",
             "owner_id": None,

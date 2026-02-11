@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation'
 import { authService } from '@/services/auth'
 import { supabase } from '@/lib/supabase'
 import LoginPrompt from '@/components/LoginPrompt'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { Journal } from '@/types/journal'
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
 const COVER_LETTER_UPLOAD_TIMEOUT_MS = 60_000
@@ -68,7 +70,17 @@ export default function SubmissionForm() {
   const [isUploadingCoverLetter, setIsUploadingCoverLetter] = useState(false)
   const [coverLetterUploadError, setCoverLetterUploadError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
-  const [touched, setTouched] = useState({ title: false, abstract: false, datasetUrl: false, sourceCodeUrl: false })
+  const [journals, setJournals] = useState<Journal[]>([])
+  const [isLoadingJournals, setIsLoadingJournals] = useState(false)
+  const [journalLoadError, setJournalLoadError] = useState<string | null>(null)
+  const [journalId, setJournalId] = useState('')
+  const [touched, setTouched] = useState({
+    title: false,
+    abstract: false,
+    datasetUrl: false,
+    sourceCodeUrl: false,
+    journal: false,
+  })
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [datasetUrl, setDatasetUrl] = useState('')
@@ -79,12 +91,15 @@ export default function SubmissionForm() {
   const datasetValue = datasetUrl.trim()
   const sourceCodeValue = sourceCodeUrl.trim()
   const isHttpUrl = (value: string) => value.startsWith('http://') || value.startsWith('https://')
+  const journalRequired = journals.length > 0
+  const journalValid = !journalRequired || journalId.trim().length > 0
   const datasetUrlValid = datasetValue === '' || isHttpUrl(datasetValue)
   const sourceCodeUrlValid = sourceCodeValue === '' || isHttpUrl(sourceCodeValue)
   const showTitleError = touched.title && !titleValid
   const showAbstractError = touched.abstract && !abstractValid
   const showDatasetError = touched.datasetUrl && !datasetUrlValid
   const showSourceCodeError = touched.sourceCodeUrl && !sourceCodeUrlValid
+  const showJournalError = touched.journal && !journalValid
 
   // 检查用户登录状态
   useEffect(() => {
@@ -105,6 +120,43 @@ export default function SubmissionForm() {
     })
 
     return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadJournals = async () => {
+      setIsLoadingJournals(true)
+      setJournalLoadError(null)
+      try {
+        const response = await fetch('/api/v1/public/journals', { cache: 'no-store' })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.detail || payload?.message || 'Failed to load journals')
+        }
+        const rows = Array.isArray(payload.data) ? payload.data : []
+        if (!cancelled) {
+          setJournals(rows)
+          if (rows.length === 1) {
+            setJournalId(String(rows[0]?.id || ''))
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load journals'
+          setJournalLoadError(message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingJournals(false)
+        }
+      }
+    }
+
+    loadJournals()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -359,6 +411,18 @@ export default function SubmissionForm() {
       toast.error('Source code URL must start with http:// or https://.')
       return
     }
+    if (isLoadingJournals) {
+      toast.error('Journal list is still loading. Please wait a moment.')
+      return
+    }
+    if (!journalValid) {
+      toast.error('Please select a target journal before finalizing submission.')
+      return
+    }
+    if (journals.length === 0) {
+      toast.error('No active journals available. Please contact admin.')
+      return
+    }
 
     // 检查用户是否登录
     if (!user) {
@@ -392,7 +456,8 @@ export default function SubmissionForm() {
           cover_letter_filename: coverLetterFile?.name || null,
           cover_letter_content_type: coverLetterFile?.type || null,
           dataset_url: datasetValue || null,
-          source_code_url: sourceCodeValue || null
+          source_code_url: sourceCodeValue || null,
+          journal_id: journalId || null,
         }),
       })
       const result = await response.json()
@@ -472,6 +537,56 @@ export default function SubmissionForm() {
 
       {/* 元数据展示/编辑区域 */}
       <div className="grid grid-cols-1 gap-6">
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-900">Target Journal</label>
+          <Select
+            value={journalId}
+            onValueChange={(value) => {
+              setJournalId(value)
+              if (!touched.journal) setTouched((prev) => ({ ...prev, journal: true }))
+            }}
+            disabled={isLoadingJournals || journals.length === 0}
+          >
+            <SelectTrigger
+              className="w-full border-slate-300 text-slate-900"
+              data-testid="submission-journal-select"
+              onBlur={() => setTouched((prev) => ({ ...prev, journal: true }))}
+            >
+              <SelectValue
+                placeholder={
+                  isLoadingJournals
+                    ? 'Loading journals...'
+                    : journals.length === 0
+                      ? 'No active journal available'
+                      : 'Select a journal'
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {journals.map((journal) => (
+                <SelectItem key={journal.id} value={journal.id}>
+                  {journal.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {showJournalError && (
+            <p className="mt-2 text-xs text-red-600" data-testid="submission-journal-error">
+              Please select a target journal.
+            </p>
+          )}
+          {journalLoadError && (
+            <p className="mt-2 text-xs text-amber-700">
+              Journal list load failed: {journalLoadError}
+            </p>
+          )}
+          {!isLoadingJournals && journals.length === 0 && !journalLoadError && (
+            <p className="mt-2 text-xs text-amber-700">
+              No active journal found. Please ask admin to configure journals first.
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="block text-sm font-semibold text-slate-900 mb-2">Manuscript Title</label>
           <input
@@ -575,8 +690,10 @@ export default function SubmissionForm() {
             !fileValid ||
             !titleValid ||
             !abstractValid ||
+            !journalValid ||
             !datasetUrlValid ||
             !sourceCodeUrlValid ||
+            isLoadingJournals ||
             isUploading ||
             isUploadingCoverLetter ||
             isSubmitting ||
@@ -587,9 +704,9 @@ export default function SubmissionForm() {
         >
           {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
         </button>
-        {user && (!fileValid || !titleValid || !abstractValid || !datasetUrlValid || !sourceCodeUrlValid) && (
+        {user && (!fileValid || !titleValid || !abstractValid || !journalValid || !datasetUrlValid || !sourceCodeUrlValid) && (
           <p className="text-xs text-slate-500 text-center" data-testid="submission-validation-hint">
-            Upload a PDF, add a title (≥5 chars) and an abstract (≥30 chars). Optional URLs must start with http(s).
+            Upload a PDF, choose a journal, add a title (at least 5 chars) and abstract (at least 30 chars). Optional URLs must start with http(s).
           </p>
         )}
         {user && (
