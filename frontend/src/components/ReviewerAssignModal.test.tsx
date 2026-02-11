@@ -13,7 +13,7 @@ vi.mock('@/services/auth', () => ({
 describe('ReviewerAssignModal AI Recommendations', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn((url: any) => {
-      if (String(url).includes('/api/v1/manuscripts/articles/')) {
+      if (String(url).includes('/api/v1/editor/manuscripts/')) {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -202,7 +202,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
 
   it('submits cooldown override reason when selected reviewer requires override', async () => {
     globalThis.fetch = vi.fn((url: any) => {
-      if (String(url).includes('/api/v1/manuscripts/articles/')) {
+      if (String(url).includes('/api/v1/editor/manuscripts/')) {
         return Promise.resolve({
           ok: true,
           json: () =>
