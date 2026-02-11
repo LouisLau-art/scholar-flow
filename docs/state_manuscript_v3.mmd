@@ -22,18 +22,23 @@ stateDiagram-v2
 
     me_precheck --> ae_assigned: 通过
     ae_assigned --> under_review
-    under_review --> decision: 报告达标
+    under_review --> decision: 报告达标（可选 First Decision）
+    under_review --> revision_minor: 可直接送小修（跳过 First）
+    under_review --> revision_major: 可直接送大修（跳过 First）
 
     decision --> revision_minor: 小修
     revision_minor --> resubmitted_minor
-    resubmitted_minor --> decision: AE核查后再决策
+    resubmitted_minor --> decision_done: Final Decision 入口
 
     decision --> revision_major: 大修
     revision_major --> resubmitted_major
     resubmitted_major --> under_review: 必须二审
+    resubmitted_major --> decision_done: 二审已齐可入 Final
 
-    decision --> approved: 接收
-    decision --> rejected: 拒稿
+    decision_done --> approved: Final 接收
+    decision_done --> rejected: Final 拒稿
+    decision_done --> revision_minor: Final 小修
+    decision_done --> revision_major: Final 大修
 
     approved --> proof_ready: 校对完成
     approved --> paid: 财务确认

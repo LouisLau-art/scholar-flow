@@ -1,6 +1,6 @@
 export type PrecheckStage = 'intake' | 'technical' | 'academic'
 export type PrecheckRole = 'managing_editor' | 'assistant_editor' | 'editor_in_chief'
-export type TechnicalDecision = 'pass' | 'revision'
+export type TechnicalDecision = 'pass' | 'academic' | 'revision'
 export type AcademicDecision = 'review' | 'decision_phase'
 
 export type UserSummary = {

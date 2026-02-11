@@ -14,6 +14,7 @@ def _cleanup(db, manuscript_id: str) -> None:
         ("notifications", "manuscript_id"),
         ("status_transition_logs", "manuscript_id"),
         ("decision_letters", "manuscript_id"),
+        ("revisions", "manuscript_id"),
         ("review_reports", "manuscript_id"),
         ("manuscripts", "id"),
     ):
@@ -28,6 +29,7 @@ def _require_decision_schema(db) -> None:
         ("decision_letters", "id,manuscript_id,editor_id,content,decision,status,attachment_paths,updated_at"),
         ("manuscripts", "id,status,version"),
         ("review_reports", "id,manuscript_id,status"),
+        ("revisions", "id,manuscript_id,status,submitted_at"),
     ]
     for table, cols in checks:
         try:
@@ -54,11 +56,22 @@ async def test_submit_final_accept_persists_decision_letter_and_updates_status(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="decision",
+        status="resubmitted",
         title="Decision Accept Manuscript",
         version=2,
         file_path=f"manuscripts/{manuscript_id}/v2.pdf",
     )
+    supabase_admin_client.table("revisions").insert(
+        {
+            "manuscript_id": manuscript_id,
+            "round_number": 1,
+            "decision_type": "major",
+            "editor_comment": "Please revise and resubmit.",
+            "status": "submitted",
+            "response_letter": "Author addressed all comments.",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ).execute()
     supabase_admin_client.table("review_reports").insert(
         {
             "manuscript_id": manuscript_id,
@@ -159,7 +172,7 @@ async def test_reject_blocked_outside_decision_stage(
             },
         )
         assert res.status_code == 422, res.text
-        assert "decision/decision_done" in (res.text.lower())
+        assert "after author resubmission" in (res.text.lower())
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
 

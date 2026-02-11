@@ -8,6 +8,7 @@ import QueryProvider from '@/components/providers/QueryProvider'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
 import { getStatusLabel } from '@/lib/statusStyles'
+import type { TechnicalDecision } from '@/types/precheck'
 
 interface Manuscript {
   id: string
@@ -98,6 +100,7 @@ export default function AEWorkspacePage() {
   const [submitting, setSubmitting] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
+  const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
 
@@ -118,6 +121,7 @@ export default function AEWorkspacePage() {
   }, [fetchWorkspace])
 
   const resetDialog = useCallback(() => {
+    setTechnicalDecision('pass')
     setComment('')
     setError('')
     setActiveMs(null)
@@ -125,6 +129,7 @@ export default function AEWorkspacePage() {
   }, [])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
+    setTechnicalDecision('pass')
     setActiveMs(manuscript)
     setComment('')
     setError('')
@@ -134,9 +139,16 @@ export default function AEWorkspacePage() {
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
     setError('')
+    if (technicalDecision === 'revision' && !comment.trim()) {
+      setError('技术退回必须填写说明，方便作者修回。')
+      return
+    }
     setSubmitting(true)
     try {
-      await editorService.submitTechnicalCheck(activeMs.id, { decision: 'pass', comment: comment.trim() || undefined })
+      await editorService.submitTechnicalCheck(activeMs.id, {
+        decision: technicalDecision,
+        comment: comment.trim() || undefined,
+      })
       resetDialog()
       fetchWorkspace()
     } catch (e) {
@@ -144,7 +156,7 @@ export default function AEWorkspacePage() {
     } finally {
       setSubmitting(false)
     }
-  }, [activeMs?.id, comment, fetchWorkspace, resetDialog])
+  }, [activeMs?.id, comment, fetchWorkspace, resetDialog, technicalDecision])
 
   const groupedSections = useMemo(() => {
     const sorted = [...manuscripts].sort((a, b) => {
@@ -292,17 +304,36 @@ export default function AEWorkspacePage() {
             <DialogHeader>
               <DialogTitle>Submit Technical Check</DialogTitle>
               <DialogDescription>
-                稿件：{activeMs?.title || '—'}。确认后将进入 <code>under_review</code> 供 AE 继续组织外审。
+                稿件：{activeMs?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3">
               <div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Next Step</div>
+                <Select value={technicalDecision} onValueChange={(v) => setTechnicalDecision(v as TechnicalDecision)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择技术检查后的流转" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pass">发起外审（进入 under_review）</SelectItem>
+                    <SelectItem value="academic">送 Academic 预审（可选）</SelectItem>
+                    <SelectItem value="revision">技术退回作者（需填写说明）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Comment (optional)</div>
                 <Textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="可选：补充给后续外审流程的技术备注"
+                  placeholder={
+                    technicalDecision === 'revision'
+                      ? '必填：明确指出作者需要修复的问题（格式、伦理、缺件等）'
+                      : technicalDecision === 'academic'
+                        ? '可选：补充给 Academic 预审的背景说明'
+                        : '可选：补充给后续外审流程的技术备注'
+                  }
                   className="min-h-[110px]"
                 />
               </div>

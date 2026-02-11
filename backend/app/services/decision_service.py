@@ -420,45 +420,7 @@ class DecisionService:
         audit_payload["after"] = {"status": target_status}
 
         if decision == "reject":
-            if norm not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Reject is only allowed in decision/decision_done stage",
-                )
-            if norm == ManuscriptStatus.DECISION.value:
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION_DONE.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-            updated = self.editorial.update_status(
-                manuscript_id=manuscript_id,
-                to_status=ManuscriptStatus.REJECTED.value,
-                changed_by=changed_by,
-                comment=comment,
-                allow_skip=False,
-                payload=audit_payload,
-            )
-            return str(updated.get("status") or ManuscriptStatus.REJECTED.value)
-
-        if decision == "accept":
-            if norm == ManuscriptStatus.DECISION.value:
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION_DONE.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-            elif norm in {
-                ManuscriptStatus.UNDER_REVIEW.value,
-                ManuscriptStatus.RESUBMITTED.value,
-                ManuscriptStatus.MAJOR_REVISION.value,
-                ManuscriptStatus.MINOR_REVISION.value,
-                ManuscriptStatus.PRE_CHECK.value,
-            }:
+            if norm == ManuscriptStatus.RESUBMITTED.value:
                 self.editorial.update_status(
                     manuscript_id=manuscript_id,
                     to_status=ManuscriptStatus.DECISION.value,
@@ -472,6 +434,58 @@ class DecisionService:
                     changed_by=changed_by,
                     comment="decision workspace auto step",
                     allow_skip=False,
+                )
+            elif norm == ManuscriptStatus.DECISION.value:
+                self.editorial.update_status(
+                    manuscript_id=manuscript_id,
+                    to_status=ManuscriptStatus.DECISION_DONE.value,
+                    changed_by=changed_by,
+                    comment="decision workspace auto step",
+                    allow_skip=False,
+                )
+            elif norm != ManuscriptStatus.DECISION_DONE.value:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Final reject only allowed in resubmitted/decision/decision_done stage",
+                )
+            updated = self.editorial.update_status(
+                manuscript_id=manuscript_id,
+                to_status=ManuscriptStatus.REJECTED.value,
+                changed_by=changed_by,
+                comment=comment,
+                allow_skip=False,
+                payload=audit_payload,
+            )
+            return str(updated.get("status") or ManuscriptStatus.REJECTED.value)
+
+        if decision == "accept":
+            if norm == ManuscriptStatus.RESUBMITTED.value:
+                self.editorial.update_status(
+                    manuscript_id=manuscript_id,
+                    to_status=ManuscriptStatus.DECISION.value,
+                    changed_by=changed_by,
+                    comment="decision workspace auto step",
+                    allow_skip=False,
+                )
+                self.editorial.update_status(
+                    manuscript_id=manuscript_id,
+                    to_status=ManuscriptStatus.DECISION_DONE.value,
+                    changed_by=changed_by,
+                    comment="decision workspace auto step",
+                    allow_skip=False,
+                )
+            elif norm == ManuscriptStatus.DECISION.value:
+                self.editorial.update_status(
+                    manuscript_id=manuscript_id,
+                    to_status=ManuscriptStatus.DECISION_DONE.value,
+                    changed_by=changed_by,
+                    comment="decision workspace auto step",
+                    allow_skip=False,
+                )
+            elif norm != ManuscriptStatus.DECISION_DONE.value:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Final accept only allowed in resubmitted/decision/decision_done stage",
                 )
             updated = self.editorial.update_status(
                 manuscript_id=manuscript_id,
@@ -648,6 +662,44 @@ class DecisionService:
         )
 
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
+        if request.is_final:
+            if current_status not in {
+                ManuscriptStatus.RESUBMITTED.value,
+                ManuscriptStatus.DECISION.value,
+                ManuscriptStatus.DECISION_DONE.value,
+            }:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Final decision is only allowed after author resubmission "
+                        "(status must be resubmitted/decision/decision_done)"
+                    ),
+                )
+            try:
+                rev = (
+                    self.client.table("revisions")
+                    .select("id,status,submitted_at")
+                    .eq("manuscript_id", manuscript_id)
+                    .order("submitted_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                rev_rows = getattr(rev, "data", None) or []
+                latest = rev_rows[0] if rev_rows else None
+                has_submitted_revision = bool(
+                    latest
+                    and (
+                        str(latest.get("status") or "").strip().lower() == "submitted"
+                        or bool(latest.get("submitted_at"))
+                    )
+                )
+            except Exception:
+                has_submitted_revision = False
+            if not has_submitted_revision:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Final decision requires at least one submitted author revision",
+                )
         new_status = current_status
 
         if request.is_final:

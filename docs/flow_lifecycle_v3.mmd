@@ -1,33 +1,44 @@
 flowchart TD
     A0([作者投稿]) --> A1{ME 技术审查}
-    A1 -- 不通过 --> A2[退回作者修改]
+    A1 -- 不通过 --> A2[技术退回作者]
     A2 --> A0
     A1 -- 通过 --> A3[ME 分配 AE]
 
-    A3 --> B1[AE 组织外审]
-    B1 --> B2{报告数量达标}
-    B2 -- 否 --> B1
-    B2 -- 是 --> C1[AE 汇总意见]
+    A3 --> B0{AE 执行入口}
+    B0 -- 直接发起外审 --> B1[外审进行中]
+    B0 -- 送 Academic Pre-check 可选 --> B2[Academic Queue]
+    B2 --> B1
 
-    C1 --> C2{EIC/编委终审}
-    C2 -- 拒稿 --> C3([Rejected])
-    C2 -- 小修 --> C4[作者小修]
-    C4 --> C5[AE 核查修订]
-    C5 --> C2
-    C2 -- 大修 --> C6[作者大修]
-    C6 --> C7[AE 发起二审]
-    C7 --> B1
-    C2 -- 接收 --> D0([Approved])
+    B1 --> C1{报告数量达标}
+    C1 -- 否 --> B1
+    C1 -- 是 --> C2{First Decision 可选}
+    C2 -- 跳过 --> D1[直接给出修回建议]
+    C2 -- 启用 --> D2[提交 First Decision 建议]
+    D2 --> D1
 
-    D0 --> D1[Production 排版校对]
-    D0 --> D2[Finance 开票到账]
-    D1 --> D3{Proof Ready}
-    D2 --> D4{Paid}
-    D3 --> D5{发布门禁}
-    D4 --> D5
-    D5 --> D6([Published])
+    D1 --> E1{修回类型}
+    E1 -- 小修 --> F1[作者小修提交]
+    E1 -- 大修 --> F2[作者大修提交]
+    F1 --> G1[AE 核查修回]
+    G1 --> H1[进入 Final Decision]
+    F2 --> G2[AE 发起二审]
+    G2 --> B1
+
+    H1 --> H2{Final Decision 必须}
+    H2 -- 接收 --> I0([Approved])
+    H2 -- 拒稿 --> I1([Rejected])
+    H2 -- 继续修回 --> D1
+
+    I0 --> J1[Production 排版校对]
+    I0 --> J2[Finance 开票到账]
+    J1 --> J3{Proof Ready}
+    J2 --> J4{Paid}
+    J3 --> J5{发布门禁}
+    J4 --> J5
+    J5 --> J6([Published])
 
     style A1 fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px
-    style C2 fill:#fce7f3,stroke:#be185d,stroke-width:2px
-    style D5 fill:#fef3c7,stroke:#b45309,stroke-width:2px
-    style D6 fill:#dcfce7,stroke:#15803d,stroke-width:2px
+    style C2 fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style H2 fill:#fce7f3,stroke:#be185d,stroke-width:2px
+    style J5 fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style J6 fill:#dcfce7,stroke:#15803d,stroke-width:2px

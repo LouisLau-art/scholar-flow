@@ -64,7 +64,7 @@ img {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 240mm;
+  max-height: 220mm;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
@@ -109,7 +109,6 @@ hr {
 @media print {
   h2,
   h3,
-  figure,
   table {
     page-break-inside: avoid;
     break-inside: avoid;

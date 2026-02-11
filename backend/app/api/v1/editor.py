@@ -108,7 +108,7 @@ class IntakeRevisionRequest(BaseModel):
 
 
 class TechnicalCheckRequest(BaseModel):
-    decision: Literal["pass", "revision"]
+    decision: Literal["pass", "revision", "academic"]
     comment: str | None = Field(default=None, max_length=2000)
     idempotency_key: str | None = Field(default=None, max_length=64)
 
@@ -825,7 +825,10 @@ async def submit_technical_check(
     _profile: dict = Depends(require_any_role(["assistant_editor", "admin"])),
 ):
     """
-    Submit technical check. Moves manuscript to Academic Check (EIC).
+    Submit technical check.
+    - pass: 直接进入 under_review（跳过 Academic Pre-check）
+    - academic: 进入 Academic Queue（可选）
+    - revision: 技术退回作者
     """
     try:
         updated = EditorService().submit_technical_check(

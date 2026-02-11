@@ -278,6 +278,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **GAP-P2-01（DOI/Crossref 真对接）迁移与配置**：云端需执行 `supabase/migrations/20260210193000_doi_registration_manuscript_fk.sql`（修复 `doi_registrations.article_id` 到 `manuscripts` 的兼容约束 + 任务索引）；后端需配置 `CROSSREF_DEPOSITOR_EMAIL` / `CROSSREF_DEPOSITOR_PASSWORD` / `CROSSREF_DOI_PREFIX` / `CROSSREF_API_URL`，并通过 `POST /api/v1/internal/cron/doi-tasks`（`ADMIN_API_KEY`）消费队列。
 - **GAP-P2-02（查重能力重启）开关约定**：默认仍可保持关闭（`PLAGIARISM_CHECK_ENABLED=0`）；启用时支持 `PLAGIARISM_SIMILARITY_THRESHOLD`、`PLAGIARISM_POLL_MAX_ATTEMPTS`、`PLAGIARISM_POLL_INTERVAL_SEC`、`PLAGIARISM_SUBMIT_DELAY_SEC` 调优。状态查询/重试/下载统一走 `/api/v1/plagiarism/status/{manuscript_id}`、`/api/v1/plagiarism/retry`、`/api/v1/plagiarism/report/{report_id}/download`。
 - **Journal Management（2026-02-11）迁移与投稿绑定**：云端需执行 `supabase/migrations/20260210200000_add_journal_management_fields.sql`（`journals.is_active/updated_at` + trigger/index）；后台新增 `GET/POST/PUT/DELETE /api/v1/admin/journals` 与页面 `/admin/journals`；投稿页通过 `GET /api/v1/public/journals` 加载期刊并在 `POST /api/v1/manuscripts` 提交 `journal_id`（后端校验期刊存在且可用）。
+- **决策口径对齐（2026-02-11）**：`AE Technical Check` 支持 `pass | academic | revision`（`academic` 为可选送审）；`First Decision` 仅记录草稿审计不触发状态流转；`Final Decision` 强制要求作者至少一次修回提交（仅允许在 `resubmitted/decision/decision_done` 执行），否则返回 422。
 - **Workflow 审核约束（2026-02-06）**：拒稿只能在 `decision/decision_done` 阶段执行；`pre_check`、`under_review`、`resubmitted` 禁止直接流转到 `rejected`。外审中发现问题需先进入 `decision` 再做拒稿。Quick Pre-check 仅允许 `approve` / `revision`。
 - **云端迁移同步（Supabase CLI）**：在 repo root 执行 `supabase projects list`（确认已 linked）→ `supabase db push --dry-run` → `supabase db push`（按提示输入 `y`）。若 CLI 不可用/失败，则到 Supabase Dashboard 的 SQL Editor 依次执行 `supabase/migrations/*.sql`（至少包含 `20260201000000/00001/00002/00003`）并可执行 `select pg_notify('pgrst', 'reload schema');` 刷新 schema cache。
 - **Feature 030（Reviewer Library）迁移**：云端需执行 `supabase/migrations/20260204210000_reviewer_library_active_and_search.sql`（新增 `is_reviewer_active`、`reviewer_search_text` + `pg_trgm` GIN 索引），否则 `/api/v1/editor/reviewer-library` 会报列不存在。
@@ -305,6 +306,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **鲁总三段决策口径落地（2026-02-11）**：后端 `submit_technical_check` 新增 `academic` 分支（AE 可选送 EIC Academic Queue），`submit_decision` 收紧为“Final 仅允许修回后执行”；前端 `/editor/workspace` 技术检查弹窗升级为三选一（发起外审/送 Academic/技术退回），并同步更新 `docs/upgrade_plan_v3.md + flow_lifecycle_v3.mmd + state_manuscript_v3.mmd` 与新版 PDF。
 - **ME Intake 决策闭环（2026-02-10）**：`/editor/intake` 新增“查看稿件包”与“技术退回作者（必填理由）”动作；后端新增 `POST /api/v1/editor/manuscripts/{id}/intake-return`，退回流转到 `minor_revision` 并写审计 `action=precheck_intake_revision`。
 - **ME Intake 性能与可用性优化（2026-02-10）**：`GET /api/v1/editor/intake` 新增 `q` 与 `overdue_only` 过滤，服务层改为轻量查询（去除首屏时间线聚合），前端新增作者/期刊/优先级列、搜索与高优筛选，并将 AE 预取延后到首屏后以降低“刷新长时间转圈”问题。
 - **Editor 详情页决策聚焦优化（2026-02-10）**：`/editor/manuscript/[id]` 新增 `Next Action` 决策条（阶段+阻塞条件）、按状态收紧 Reviewer/Decision/状态流转入口、以及高风险流转的二次确认+理由；作者展示改为 `invoice_metadata.authors -> owner.full_name/email` 回填，避免出现 `Unknown Authors`。

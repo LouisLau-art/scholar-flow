@@ -1268,14 +1268,15 @@ class EditorService:
     ) -> dict[str, Any]:
         """
         AE technical check:
-        - pass -> under_review
+        - pass -> under_review（跳过 academic pre-check）
+        - academic -> pre_check/academic（送 EIC 预审，可选）
         - revision -> minor_revision
         """
         manuscript_id_str = str(manuscript_id)
         ae_id_str = str(ae_id)
         normalized_decision = str(decision or "").strip().lower()
-        if normalized_decision not in {"pass", "revision"}:
-            raise HTTPException(status_code=422, detail="decision must be pass or revision")
+        if normalized_decision not in {"pass", "revision", "academic"}:
+            raise HTTPException(status_code=422, detail="decision must be pass, academic or revision")
         comment_clean = (comment or "").strip() or None
         if normalized_decision == "revision" and not comment_clean:
             raise HTTPException(status_code=422, detail="comment is required for revision")
@@ -1290,6 +1291,12 @@ class EditorService:
                 return dict(ms)
             if normalized_decision == "pass" and status == ManuscriptStatus.UNDER_REVIEW.value:
                 return dict(ms)
+            if (
+                normalized_decision == "academic"
+                and status == ManuscriptStatus.PRE_CHECK.value
+                and pre == PreCheckStatus.ACADEMIC.value
+            ):
+                return dict(ms)
             raise HTTPException(status_code=409, detail="Technical check conflict: manuscript state changed")
 
         if pre != PreCheckStatus.TECHNICAL.value:
@@ -1297,6 +1304,55 @@ class EditorService:
 
         if owner_ae != ae_id_str:
             raise HTTPException(status_code=403, detail="Only assigned assistant editor can submit technical check")
+
+        if normalized_decision == "academic":
+            now = self._now()
+            data = {
+                "pre_check_status": PreCheckStatus.ACADEMIC.value,
+                "updated_at": now,
+            }
+            q = (
+                self.client.table("manuscripts")
+                .update(data)
+                .eq("id", manuscript_id_str)
+                .eq("status", ManuscriptStatus.PRE_CHECK.value)
+                .eq("pre_check_status", PreCheckStatus.TECHNICAL.value)
+                .eq("assistant_editor_id", ae_id_str)
+            )
+            resp = q.execute()
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                latest = self._get_manuscript(manuscript_id_str)
+                latest_status = normalize_status(str(latest.get("status") or ""))
+                latest_pre = self._normalize_precheck_status(latest.get("pre_check_status"))
+                latest_ae = str(latest.get("assistant_editor_id") or "")
+                if (
+                    latest_status == ManuscriptStatus.PRE_CHECK.value
+                    and latest_pre == PreCheckStatus.ACADEMIC.value
+                    and latest_ae == ae_id_str
+                ):
+                    return self._map_precheck_row(latest)
+                raise HTTPException(status_code=409, detail="Technical check conflict: manuscript state changed")
+
+            updated = rows[0]
+            self._safe_insert_transition_log(
+                manuscript_id=manuscript_id_str,
+                from_status=ManuscriptStatus.PRE_CHECK.value,
+                to_status=ManuscriptStatus.PRE_CHECK.value,
+                changed_by=ae_id_str,
+                comment=comment_clean or "technical check sent to academic queue",
+                payload={
+                    "action": "precheck_technical_to_academic",
+                    "pre_check_from": PreCheckStatus.TECHNICAL.value,
+                    "pre_check_to": PreCheckStatus.ACADEMIC.value,
+                    "assistant_editor_before": owner_ae or None,
+                    "assistant_editor_after": owner_ae or None,
+                    "decision": "academic",
+                    "idempotency_key": idempotency_key,
+                },
+                created_at=now,
+            )
+            return self._map_precheck_row(updated)
 
         if normalized_decision == "pass":
             updated = self.editorial.update_status(
