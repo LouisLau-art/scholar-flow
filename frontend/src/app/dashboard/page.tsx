@@ -152,10 +152,12 @@ function DashboardPageContent() {
   ]
 
   const roleSet = new Set((roles || []).map((r) => String(r).toLowerCase()))
+  // 中文注释：兼容历史遗留 editor（legacy）角色，避免清理角色后出现“Dashboard 空白无入口”。
+  const isLegacyEditor = roleSet.has('editor')
   const canSeeAdmin = roleSet.has('admin')
   const canSeeAuthor = canSeeAdmin || roleSet.has('author')
   const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
-  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
+  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor') || isLegacyEditor
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
   const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
   const allowedTabs: Record<DashboardTab, boolean> = useMemo(

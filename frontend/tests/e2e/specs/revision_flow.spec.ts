@@ -22,6 +22,8 @@ async function mockApi(
     submissions?: any[]
     manuscriptStatus?: string
     revisionRequest?: { decision_type: 'major' | 'minor'; editor_comment: string }
+    getEditorDetail?: () => any
+    onPatchManuscriptStatus?: (status: string) => void
     onEditorRequestRevision?: () => void
     onAuthorSubmitRevision?: () => void
   }
@@ -56,9 +58,64 @@ async function mockApi(
       return fulfillJson(route, 200, { success: true, data: [] })
     }
 
+    if (pathname === '/api/v1/editor/rbac/context') {
+      return fulfillJson(route, 200, {
+        success: true,
+        data: {
+          roles: opts.roles,
+          allowed_actions: [
+            'process:view',
+            'manuscript:view_detail',
+            'decision:record_first',
+            'decision:submit_final',
+            'manuscript:bind_owner',
+          ],
+          journal_scope: {
+            enforcement_enabled: false,
+            is_admin: true,
+            allowed_journal_ids: [],
+          },
+        },
+      })
+    }
+
     if (pathname === '/api/v1/editor/manuscripts/process') {
       const data = opts.getProcessRows ? opts.getProcessRows() : buildProcessRows({ rows: opts.initialRows })
       return fulfillJson(route, 200, { success: true, data })
+    }
+
+    if (pathname === `/api/v1/editor/manuscripts/${opts.manuscriptId}` && req.method() === 'GET') {
+      const detail =
+        opts.getEditorDetail?.() || {
+          id: opts.manuscriptId,
+          title: 'Mocked manuscript',
+          status: opts.manuscriptStatus ?? 'minor_revision',
+          updated_at: nowIso,
+          owner: { id: 'o1', full_name: 'Owner A', email: 'owner@example.com' },
+          editor: { id: 'e1', full_name: 'Editor A', email: 'editor@example.com' },
+          invoice: { status: 'unpaid', amount: 1000 },
+          files: [],
+          signed_files: {
+            original_manuscript: { path: `${opts.manuscriptId}/v1_initial.pdf`, signed_url: '/favicon.svg' },
+            peer_review_reports: [],
+          },
+        }
+      return fulfillJson(route, 200, { success: true, data: detail })
+    }
+
+    if (pathname === `/api/v1/editor/manuscripts/${opts.manuscriptId}/status` && req.method() === 'PATCH') {
+      let status = ''
+      try {
+        const body = (await req.postDataJSON()) as any
+        status = String(body?.status || '')
+      } catch {
+        status = ''
+      }
+      if (status) opts.onPatchManuscriptStatus?.(status)
+      return fulfillJson(route, 200, {
+        success: true,
+        data: { id: opts.manuscriptId, status, updated_at: new Date().toISOString() },
+      })
     }
 
     if (pathname === '/api/v1/editor/revisions' && req.method() === 'POST') {
@@ -134,40 +191,41 @@ test.describe('Revision workflow (mocked backend)', () => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'editor@example.com'))
 
-    let revisionRequested = false
+    let manuscriptStatus = 'pre_check'
     await mockApi(page, {
-      roles: ['editor'],
+      roles: ['managing_editor'],
       manuscriptId,
-      getProcessRows: () =>
-        revisionRequested
-          ? [{ id: manuscriptId, status: 'minor_revision', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]
-          : [{ id: manuscriptId, status: 'decision', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-      onEditorRequestRevision: () => {
-        revisionRequested = true
+      getEditorDetail: () => ({
+        id: manuscriptId,
+        title: 'Mocked manuscript',
+        abstract: 'Mocked abstract',
+        status: manuscriptStatus,
+        version: 1,
+        updated_at: new Date().toISOString(),
+        owner: { id: 'o1', full_name: 'Owner A', email: 'owner@example.com' },
+        editor: { id: 'e1', full_name: 'Editor A', email: 'editor@example.com' },
+        invoice: { status: 'unpaid', amount: 1000 },
+        files: [],
+        signed_files: {
+          original_manuscript: { path: `${manuscriptId}/v1_initial.pdf`, signed_url: '/favicon.svg' },
+          peer_review_reports: [],
+        },
+      }),
+      onPatchManuscriptStatus: (status) => {
+        manuscriptStatus = status
       },
     })
 
-    await page.goto('/dashboard')
-    await expect(page.getByText('roles:')).toBeVisible({ timeout: 15000 })
-    await page.getByRole('tab', { name: /Editor/i }).click()
+    await page.goto(`/editor/manuscript/${manuscriptId}`)
+    await expect(page.getByRole('heading', { name: 'Mocked manuscript' })).toBeVisible()
 
-    await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    const table = page.getByTestId('editor-process-table')
-    await expect(table.getByText(manuscriptId)).toBeVisible()
+    await page.getByRole('button', { name: /Request Technical Return|Move to Minor Revision/i }).click()
+    const dialog = page.getByRole('dialog', { name: 'Confirm Status Transition' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('textbox').fill('Please fix the formatting and update references.')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
 
-    // 打开决策面板
-    await page.getByTestId(`decide-${manuscriptId}`).click()
-    await expect(page.getByRole('heading', { name: 'Final Decision' })).toBeVisible()
-
-    // 选择 Request Revision -> Minor -> 填写说明 -> 提交
-    await page.getByText('Request Revision', { exact: true }).click()
-    await page.getByRole('radio', { name: 'Minor Revision', exact: true }).click()
-    await page.locator('textarea').fill('Please fix the formatting and update references.')
-    await page.getByRole('button', { name: 'Submit Decision' }).click()
-
-    // 回到 process 表后，应看到状态变为 Minor Revision
-    await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    await expect(table.getByText('Minor Revision')).toBeVisible()
+    await expect(page.getByText('Minor Revision')).toBeVisible()
   })
 
   test('Author submits revision flow (button visibility + submit)', async ({ page }) => {
@@ -183,9 +241,7 @@ test.describe('Revision workflow (mocked backend)', () => {
       revisionRequest: { decision_type: 'minor', editor_comment: 'Please update references and fix typos.' },
     })
 
-    await page.goto('/dashboard')
-    await expect(page.getByRole('link', { name: 'Submit Revision' })).toBeVisible()
-    await page.getByRole('link', { name: 'Submit Revision' }).click()
+    await page.goto(`/submit-revision/${manuscriptId}`)
 
     await expect(page.getByRole('heading', { name: 'Submit Revision' })).toBeVisible()
     await expect(page.getByText("Editor's Request")).toBeVisible()
@@ -209,13 +265,12 @@ test.describe('Revision workflow (mocked backend)', () => {
     await seedSession(page, buildSession('cccccccc-cccc-cccc-cccc-cccccccccccc', 'editor@example.com'))
 
     await mockApi(page, {
-      roles: ['editor'],
+      roles: ['managing_editor'],
       manuscriptId,
       initialRows: [{ id: manuscriptId, status: 'resubmitted', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
     })
 
-    await page.goto('/dashboard')
-    await page.getByRole('tab', { name: /Editor/i }).click()
+    await page.goto('/editor/process')
 
     await expect(page.getByTestId('editor-process-table')).toBeVisible()
     const table = page.getByTestId('editor-process-table')

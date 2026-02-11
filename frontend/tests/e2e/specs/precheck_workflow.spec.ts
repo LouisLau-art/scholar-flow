@@ -90,14 +90,24 @@ test.describe('Pre-check workflow (mocked)', () => {
             },
           })
         }
-        stage = 'academic'
+        if (body?.decision === 'academic') {
+          stage = 'academic'
+          return fulfillJson(route, 200, {
+            message: 'Technical check submitted',
+            data: {
+              id: manuscriptId,
+              status: 'pre_check',
+              pre_check_status: 'academic',
+              assistant_editor_id: aeId,
+            },
+          })
+        }
+        stage = 'done'
         return fulfillJson(route, 200, {
           message: 'Technical check submitted',
           data: {
             id: manuscriptId,
-            status: 'pre_check',
-            pre_check_status: 'academic',
-            assistant_editor_id: aeId,
+            status: 'under_review',
           },
         })
       }
@@ -134,18 +144,21 @@ test.describe('Pre-check workflow (mocked)', () => {
     // 1) ME Intake -> assign AE
     await page.goto('/editor/intake')
     await expect(page.getByRole('heading', { name: 'Managing Editor Intake Queue' })).toBeVisible()
-    await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
-    await page.getByRole('button', { name: 'Assign AE' }).click()
+    await expect(page.getByRole('button', { name: '通过并分配 AE' })).toBeVisible()
+    await page.getByRole('button', { name: '通过并分配 AE' }).click()
     await expect(page.getByRole('heading', { name: 'Assign Assistant Editor' })).toBeVisible()
-    await page.locator('select').selectOption(aeId)
+    await page.getByRole('combobox').first().click()
+    await page.getByRole('option', { name: 'Alice Editor' }).click()
     await page.getByRole('button', { name: 'Assign', exact: true }).click()
 
-    // 2) AE Workspace -> submit pass
+    // 2) AE Workspace -> submit academic (optional pre-check path)
     await page.goto('/editor/workspace')
     await expect(page.getByRole('heading', { name: 'Assistant Editor Workspace' })).toBeVisible()
     await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
     await page.getByRole('button', { name: 'Submit Check' }).click()
-    await page.getByRole('button', { name: 'Confirm' }).click()
+    await page.getByRole('dialog').getByRole('combobox').click()
+    await page.getByRole('option', { name: '送 Academic 预审（可选）' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click()
 
     // 3) EIC Academic -> send to review
     await page.goto('/editor/academic')
