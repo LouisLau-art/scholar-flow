@@ -54,6 +54,10 @@ interface ReviewerAssignModalProps {
   onClose: () => void
   onAssign: (reviewerIds: string[], options?: AssignOptions) => Promise<boolean> | boolean | void // 统一为多选；返回 false 表示不要自动关闭
   manuscriptId: string
+  currentOwnerId?: string
+  currentOwnerLabel?: string
+  canBindOwner?: boolean
+  viewerRoles?: string[]
 }
 
 export default function ReviewerAssignModal({

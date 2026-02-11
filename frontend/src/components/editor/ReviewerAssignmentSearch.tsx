@@ -6,7 +6,15 @@ import { Button } from '@/components/ui/button'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import { authService } from '@/services/auth'
 
-export function ReviewerAssignmentSearch(props: { manuscriptId: string; onChanged?: () => void; disabled?: boolean }) {
+export function ReviewerAssignmentSearch(props: {
+  manuscriptId: string
+  onChanged?: () => void
+  disabled?: boolean
+  currentOwnerId?: string
+  currentOwnerLabel?: string
+  canBindOwner?: boolean
+  viewerRoles?: string[]
+}) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -72,6 +80,10 @@ export function ReviewerAssignmentSearch(props: { manuscriptId: string; onChange
           onClose={() => setOpen(false)}
           onAssign={handleAssign}
           manuscriptId={props.manuscriptId}
+          currentOwnerId={props.currentOwnerId}
+          currentOwnerLabel={props.currentOwnerLabel}
+          canBindOwner={props.canBindOwner}
+          viewerRoles={props.viewerRoles}
         />
       )}
     </>

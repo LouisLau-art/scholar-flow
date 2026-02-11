@@ -23,6 +23,7 @@ from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
 from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
 from app.services.reviewer_service import ReviewerService, ReviewPolicyService
+from app.services.matchmaking_service import MatchmakingService
 from app.services.editor_service import EditorService, ProcessListFilters, FinanceListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
@@ -1621,6 +1622,7 @@ async def list_assistant_editors(
 async def add_reviewer_to_library(
     payload: ReviewerCreate,
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     User Story 1:
@@ -1630,6 +1632,17 @@ async def add_reviewer_to_library(
     """
     try:
         data = ReviewerService().add_to_library(payload)
+        # 中文注释:
+        # - Reviewer Library 新增/激活后，异步触发 embedding 索引，降低 AI 推荐数据不足概率。
+        # - 索引失败不阻断主流程（fail-open）。
+        try:
+            reviewer_id = str(data.get("id") or "").strip()
+            roles = [str(r).strip().lower() for r in (data.get("roles") or [])]
+            is_active = bool(data.get("is_reviewer_active", True))
+            if reviewer_id and "reviewer" in roles and is_active and background_tasks is not None:
+                background_tasks.add_task(MatchmakingService().index_reviewer, reviewer_id)
+        except Exception as e:
+            print(f"[ReviewerLibrary] enqueue index failed (ignored): {e}")
         return {"success": True, "data": data}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -1727,6 +1740,7 @@ async def update_reviewer_library_item(
     id: str,
     payload: ReviewerUpdate,
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     User Story 3:
@@ -1734,6 +1748,16 @@ async def update_reviewer_library_item(
     """
     try:
         data = ReviewerService().update_reviewer(UUID(id), payload)
+        # 中文注释:
+        # - reviewer 元数据更新（尤其 research_interests）后，异步重建 embedding。
+        try:
+            reviewer_id = str(data.get("id") or id).strip()
+            roles = [str(r).strip().lower() for r in (data.get("roles") or [])]
+            is_active = bool(data.get("is_reviewer_active", True))
+            if reviewer_id and "reviewer" in roles and is_active and background_tasks is not None:
+                background_tasks.add_task(MatchmakingService().index_reviewer, reviewer_id)
+        except Exception as e:
+            print(f"[ReviewerLibrary] enqueue reindex failed (ignored): {e}")
         return {"success": True, "data": data}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
