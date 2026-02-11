@@ -25,6 +25,10 @@ interface Manuscript {
   intake_elapsed_hours?: number | null
   is_overdue?: boolean
   pre_check_status: string
+  intake_actionable?: boolean
+  waiting_resubmit?: boolean
+  waiting_resubmit_at?: string | null
+  waiting_resubmit_reason?: string | null
 }
 
 function formatDate(value?: string) {
@@ -39,6 +43,13 @@ function renderIntakeStatus(status?: string) {
   if (normalized === 'intake') {
     return <Badge variant="secondary">入口审查</Badge>
   }
+  if (normalized === 'awaiting_resubmit') {
+    return (
+      <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+        等待作者修回
+      </Badge>
+    )
+  }
   if (!normalized) {
     return <Badge variant="secondary">入口审查</Badge>
   }
@@ -46,6 +57,13 @@ function renderIntakeStatus(status?: string) {
 }
 
 function renderPriority(row: Manuscript) {
+  if (row.waiting_resubmit) {
+    return (
+      <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+        等待作者
+      </Badge>
+    )
+  }
   if (row.intake_priority === 'high' || row.is_overdue) {
     const hours = typeof row.intake_elapsed_hours === 'number' ? `（${row.intake_elapsed_hours}h）` : ''
     return (
@@ -161,7 +179,9 @@ export default function MEIntakePage() {
               </div>
               <div>
                 <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Managing Editor Intake Queue</h1>
-                <p className="mt-1 text-slate-500 font-medium">ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。</p>
+                <p className="mt-1 text-slate-500 font-medium">
+                  ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿会以灰态保留，直至作者修回。
+                </p>
               </div>
             </div>
 
@@ -230,11 +250,22 @@ export default function MEIntakePage() {
                   </tr>
                 ) : (
                   manuscripts.map((m) => (
-                    <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                    <tr
+                      key={m.id}
+                      className={cn(
+                        'border-t border-slate-100',
+                        m.waiting_resubmit ? 'bg-slate-50/70 text-slate-500' : 'hover:bg-slate-50/60'
+                      )}
+                    >
                       <td className="px-4 py-3 text-sm text-slate-900">
                         <Link
                           href={`/editor/manuscript/${m.id}?from=intake`}
-                          className="line-clamp-2 font-medium text-slate-900 hover:text-primary hover:underline"
+                          className={cn(
+                            'line-clamp-2 font-medium',
+                            m.waiting_resubmit
+                              ? 'text-slate-500 hover:text-slate-700'
+                              : 'text-slate-900 hover:text-primary hover:underline'
+                          )}
                         >
                           {m.title}
                         </Link>
@@ -248,15 +279,28 @@ export default function MEIntakePage() {
                       <td className="px-4 py-3 text-sm text-slate-600">{renderPriority(m)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{renderIntakeStatus(m.pre_check_status)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button size="sm" onClick={() => openAssignModal(m.id)}>
-                            通过并分配 AE
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => openReturnModal({ id: m.id, title: m.title })}>
-                            <RotateCcw className="h-4 w-4" />
-                            技术退回
-                          </Button>
-                        </div>
+                        {m.intake_actionable === false || m.waiting_resubmit ? (
+                          <div className="space-y-1">
+                            <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+                              等待作者修回（不可操作）
+                            </Badge>
+                            {m.waiting_resubmit_reason ? (
+                              <div className="max-w-[280px] truncate text-xs text-slate-500" title={m.waiting_resubmit_reason}>
+                                退回原因：{m.waiting_resubmit_reason}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" onClick={() => openAssignModal(m.id)}>
+                              通过并分配 AE
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => openReturnModal({ id: m.id, title: m.title })}>
+                              <RotateCcw className="h-4 w-4" />
+                              技术退回
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))

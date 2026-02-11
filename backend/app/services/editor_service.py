@@ -387,6 +387,48 @@ class EditorService:
             out["current_assignee"] = None
         return out
 
+    def _load_latest_precheck_intake_revision_logs(
+        self,
+        manuscript_ids: list[str],
+    ) -> dict[str, dict[str, str]]:
+        """
+        读取“ME 技术退回”最近一条日志（用于 Intake 队列灰态占位展示）。
+
+        中文注释:
+        - 仅识别 payload.action == precheck_intake_revision；
+        - 返回每篇稿件最近一条（created_at desc）；
+        - 若审计表缺失/未迁移，降级为空，不影响主流程。
+        """
+        if not manuscript_ids:
+            return {}
+
+        try:
+            resp = (
+                self.client.table("status_transition_logs")
+                .select("manuscript_id,created_at,comment,payload")
+                .in_("manuscript_id", manuscript_ids)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception:
+            return {}
+
+        out: dict[str, dict[str, str]] = {}
+        for row in rows:
+            mid = str(row.get("manuscript_id") or "").strip()
+            if not mid or mid in out:
+                continue
+            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            action = str(payload.get("action") or "").strip()
+            if action != "precheck_intake_revision":
+                continue
+            out[mid] = {
+                "created_at": str(row.get("created_at") or "").strip(),
+                "comment": str(row.get("comment") or "").strip(),
+            }
+        return out
+
     def _load_precheck_timeline_index(self, manuscript_ids: list[str]) -> dict[str, dict[str, str]]:
         """
         从审计日志汇总 assigned_at / technical_completed_at / academic_completed_at。
@@ -887,15 +929,19 @@ class EditorService:
         viewer_roles: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """
-        ME Intake Queue: Status=PRE_CHECK, PreCheckStatus=INTAKE
+        ME Intake Queue:
+        - Active: status=pre_check & pre_check_status=intake
+        - Passive placeholder: status=minor_revision 且来源于 precheck_intake_revision（等待作者 resubmit）
         """
         selects = [
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id,journals(title,slug)",
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id",
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id",
         ]
-        rows: list[dict[str, Any]] = []
-        last_error: Exception | None = None
+        fetch_end = max(page * page_size - 1, page_size - 1)
+
+        active_rows: list[dict[str, Any]] = []
+        active_last_error: Exception | None = None
         for select_clause in selects:
             try:
                 query = (
@@ -905,26 +951,82 @@ class EditorService:
                     .or_(f"pre_check_status.eq.{PreCheckStatus.INTAKE.value},pre_check_status.is.null")
                     .order("updated_at", desc=True)
                     .order("created_at", desc=True)
-                    .range((page - 1) * page_size, page * page_size - 1)
+                    .range(0, fetch_end)
                 )
                 resp = query.execute()
-                rows = getattr(resp, "data", None) or []
+                active_rows = getattr(resp, "data", None) or []
                 break
             except Exception as e:
-                last_error = e
+                active_last_error = e
                 lowered = str(e).lower()
                 if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
                     continue
                 raise
-        if not rows and last_error:
+        if not active_rows and active_last_error:
             # 若因 schema 漂移导致多次降级仍失败，则抛出原始异常便于定位。
             # 这里仅在 rows 为空且确实经历过异常时触发。
-            lowered = str(last_error).lower()
+            lowered = str(active_last_error).lower()
             if "schema cache" in lowered or "could not find" in lowered:
-                raise last_error
+                raise active_last_error
+
+        waiting_rows_candidates: list[dict[str, Any]] = []
+        waiting_last_error: Exception | None = None
+        for select_clause in selects:
+            try:
+                query = (
+                    self.client.table("manuscripts")
+                    .select(select_clause)
+                    .eq("status", ManuscriptStatus.MINOR_REVISION.value)
+                    .order("updated_at", desc=True)
+                    .order("created_at", desc=True)
+                    .range(0, fetch_end)
+                )
+                resp = query.execute()
+                waiting_rows_candidates = getattr(resp, "data", None) or []
+                break
+            except Exception as e:
+                waiting_last_error = e
+                lowered = str(e).lower()
+                if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
+                    continue
+                raise
+        if not waiting_rows_candidates and waiting_last_error:
+            lowered = str(waiting_last_error).lower()
+            if "schema cache" in lowered or "could not find" in lowered:
+                # 中文注释: “灰态占位”不可用时降级为仅返回 active intake，不阻断主流程。
+                waiting_rows_candidates = []
 
         # Intake 列表不需要加载完整 pre-check 时间线，避免每次刷新多打一条审计日志聚合查询。
-        out = [self._map_precheck_row(r) for r in rows]
+        active_out = [self._map_precheck_row(r) for r in active_rows]
+        for row in active_out:
+            row["intake_actionable"] = True
+            row["waiting_resubmit"] = False
+            row["waiting_resubmit_at"] = None
+            row["waiting_resubmit_reason"] = None
+
+        waiting_ids = [
+            str(row.get("id") or "").strip()
+            for row in waiting_rows_candidates
+            if str(row.get("id") or "").strip()
+        ]
+        waiting_reason_map = self._load_latest_precheck_intake_revision_logs(waiting_ids)
+        waiting_out: list[dict[str, Any]] = []
+        for row in waiting_rows_candidates:
+            mid = str(row.get("id") or "").strip()
+            reason_meta = waiting_reason_map.get(mid)
+            if not mid or not reason_meta:
+                continue
+            out_row = dict(row)
+            out_row["pre_check_status"] = "awaiting_resubmit"
+            out_row["current_role"] = "author"
+            out_row["current_assignee"] = None
+            out_row["intake_actionable"] = False
+            out_row["waiting_resubmit"] = True
+            out_row["waiting_resubmit_at"] = reason_meta.get("created_at")
+            out_row["waiting_resubmit_reason"] = reason_meta.get("comment")
+            waiting_out.append(out_row)
+
+        out = [*active_out, *waiting_out]
 
         # 补齐 owner/author 展示字段（full_name/email/affiliation），用于 Intake 决策信息补全。
         profile_ids = sorted(
@@ -983,6 +1085,11 @@ class EditorService:
 
         now = datetime.now(timezone.utc)
         for row in out:
+            if bool(row.get("waiting_resubmit")):
+                row["intake_elapsed_hours"] = None
+                row["is_overdue"] = False
+                row["intake_priority"] = "normal"
+                continue
             created_raw = str(row.get("created_at") or "")
             created_at: datetime | None = None
             if created_raw:
@@ -1011,6 +1118,7 @@ class EditorService:
                 or keyword in str(((row.get("owner") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("author") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
+                or keyword in str(row.get("waiting_resubmit_reason") or "").lower()
             ]
 
         if overdue_only:
@@ -1022,7 +1130,16 @@ class EditorService:
             viewer_roles=viewer_roles,
         )
 
-        return out
+        # 按 updated_at/created_at 全局排序后再分页，避免 active/passive 合并后顺序错乱。
+        def _sort_key(item: dict[str, Any]) -> tuple[str, str]:
+            updated = str(item.get("updated_at") or "")
+            created = str(item.get("created_at") or "")
+            return (updated, created)
+
+        out.sort(key=_sort_key, reverse=True)
+        start = max((page - 1) * page_size, 0)
+        end = start + page_size
+        return out[start:end]
 
     def assign_ae(
         self,
