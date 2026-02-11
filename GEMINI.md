@@ -292,6 +292,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 灰度开关**：`JOURNAL_SCOPE_ENFORCEMENT` 默认 `0`（关闭强制 scope 拦截，保持兼容）；设为 `1` 后，对非 `admin` 启用 `journal_role_scopes` 严格隔离（process 裁剪 + 稿件级写操作 403）。
+- **Legacy editor 角色清洗（2026-02-11）**：云端需执行 `supabase/migrations/20260211160000_cleanup_legacy_editor_role.sql`，将 `user_profiles.roles` 与 `journal_role_scopes.role` 中历史 `editor` 幂等迁移为 `managing_editor`，并收紧 `journal_role_scopes_role_check` 约束，避免后续新写入继续落 legacy 角色。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
 - **分支发布约束（强制）**：GitHub 远端只保留 `main` 作为长期分支；功能开发可在本地短分支进行，但完成后必须合入 `main` 并删除本地/远端功能分支，禁止在 GitHub 长期保留 `0xx-*` 分支。
@@ -306,6 +307,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **Legacy editor 清理（Phase-1，2026-02-11）**：新增 `supabase/migrations/20260211160000_cleanup_legacy_editor_role.sql`，完成历史 `editor -> managing_editor` 的数据清洗（`user_profiles.roles` + `journal_role_scopes.role`）与约束收敛；为后续彻底移除后端兼容 alias 做前置准备。
 - **鲁总三段决策口径落地（2026-02-11）**：后端 `submit_technical_check` 新增 `academic` 分支（AE 可选送 EIC Academic Queue），`submit_decision` 收紧为“Final 仅允许修回后执行”；前端 `/editor/workspace` 技术检查弹窗升级为三选一（发起外审/送 Academic/技术退回），并同步更新 `docs/upgrade_plan_v3.md + flow_lifecycle_v3.mmd + state_manuscript_v3.mmd` 与新版 PDF。
 - **ME Intake 决策闭环（2026-02-10）**：`/editor/intake` 新增“查看稿件包”与“技术退回作者（必填理由）”动作；后端新增 `POST /api/v1/editor/manuscripts/{id}/intake-return`，退回流转到 `minor_revision` 并写审计 `action=precheck_intake_revision`。
 - **ME Intake 性能与可用性优化（2026-02-10）**：`GET /api/v1/editor/intake` 新增 `q` 与 `overdue_only` 过滤，服务层改为轻量查询（去除首屏时间线聚合），前端新增作者/期刊/优先级列、搜索与高优筛选，并将 AE 预取延后到首屏后以降低“刷新长时间转圈”问题。
