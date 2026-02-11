@@ -6,11 +6,13 @@ import {
   UpdateRoleRequest, 
   InviteReviewerRequest,
   RoleChangeLog,
+  JournalScopeItem,
   ResetPasswordRequest,
   ResetPasswordResponse,
 } from '@/types/user';
 
 const API_BASE = '/api/v1/admin/users';
+const JOURNAL_SCOPE_API = '/api/v1/admin/journal-scopes';
 
 async function getAuthHeader() {
   const token = await authService.getAccessToken();
@@ -65,6 +67,21 @@ export const adminUserService = {
     if (!res.ok) {
       const error = await res.json();
       throw new Error(error.detail || 'Failed to update role');
+    }
+    return res.json();
+  },
+
+  async listJournalScopes(params?: { userId?: string; journalId?: string; isActive?: boolean }): Promise<JournalScopeItem[]> {
+    const headers = await getAuthHeader();
+    const query = new URLSearchParams();
+    if (params?.userId) query.set('user_id', params.userId);
+    if (params?.journalId) query.set('journal_id', params.journalId);
+    if (typeof params?.isActive === 'boolean') query.set('is_active', String(params.isActive));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${JOURNAL_SCOPE_API}${suffix}`, { headers });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Failed to fetch journal scopes');
     }
     return res.json();
   },

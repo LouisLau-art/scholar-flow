@@ -52,7 +52,19 @@ export interface CreateUserRequest {
 export interface UpdateRoleRequest {
   new_role?: UserRole;
   new_roles?: UserRole[];
+  scope_journal_ids?: string[];
   reason: string;
+}
+
+export interface JournalScopeItem {
+  id: string;
+  user_id: string;
+  journal_id: string;
+  role: 'managing_editor' | 'editor_in_chief';
+  is_active: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ResetPasswordRequest {

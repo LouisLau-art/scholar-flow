@@ -34,7 +34,7 @@ def get_user_management_service():
 class JournalScopeUpsertRequest(BaseModel):
     user_id: UUID
     journal_id: UUID
-    role: Literal["managing_editor", "assistant_editor", "editor_in_chief", "admin"]
+    role: Literal["managing_editor", "editor_in_chief"]
     is_active: bool = True
 
 
@@ -115,6 +115,8 @@ class JournalResponse(BaseModel):
 
 
 _JOURNAL_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_SCOPE_REQUIRED_ROLES = {"managing_editor", "editor_in_chief"}
+_SCOPE_TABLE = "journal_role_scopes"
 
 
 def _normalize_journal_slug(raw_slug: str) -> str:
@@ -137,6 +139,146 @@ def _is_missing_column_error(error_text: str, column_name: str) -> bool:
 def _is_duplicate_error(error_text: str) -> bool:
     lowered = str(error_text or "").lower()
     return "duplicate" in lowered or "unique constraint" in lowered
+
+
+def _is_missing_table_error(error_text: str, table_name: str) -> bool:
+    lowered = str(error_text or "").lower()
+    needle = str(table_name or "").strip().lower()
+    if not needle:
+        return False
+    return needle in lowered and ("does not exist" in lowered or "schema cache" in lowered)
+
+
+def _normalize_uuid_strings(raw_values: Optional[List[UUID]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in raw_values or []:
+        value = str(raw).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _list_active_user_scopes_by_roles(*, user_id: str, roles: list[str]) -> list[dict[str, Any]]:
+    if not roles:
+        return []
+    try:
+        resp = (
+            supabase_admin.table(_SCOPE_TABLE)
+            .select("id,user_id,journal_id,role,is_active")
+            .eq("user_id", str(user_id))
+            .eq("is_active", True)
+            .in_("role", roles)
+            .execute()
+        )
+    except Exception as e:
+        if _is_missing_table_error(str(e), _SCOPE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_SCOPE_TABLE} table missing") from e
+        raise
+    return getattr(resp, "data", None) or []
+
+
+def _ensure_journals_exist(*, journal_ids: list[str]) -> None:
+    if not journal_ids:
+        return
+    try:
+        resp = supabase_admin.table("journals").select("id").in_("id", journal_ids).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate journals: {e}") from e
+    rows = getattr(resp, "data", None) or []
+    existing = {str(row.get("id") or "").strip() for row in rows if str(row.get("id") or "").strip()}
+    missing = [jid for jid in journal_ids if jid not in existing]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid journal ids: {', '.join(missing)}",
+        )
+
+
+def _sync_required_role_scopes(
+    *,
+    user_id: str,
+    role: str,
+    journal_ids: list[str],
+    actor_id: str,
+) -> None:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = [
+        {
+            "user_id": str(user_id),
+            "journal_id": journal_id,
+            "role": role,
+            "is_active": True,
+            "created_by": actor_id,
+            "updated_at": now_iso,
+        }
+        for journal_id in journal_ids
+    ]
+
+    if payload:
+        try:
+            (
+                supabase_admin.table(_SCOPE_TABLE)
+                .upsert(payload, on_conflict="user_id,journal_id,role")
+                .execute()
+            )
+        except Exception as e:
+            if _is_missing_table_error(str(e), _SCOPE_TABLE):
+                raise HTTPException(status_code=500, detail=f"DB not migrated: {_SCOPE_TABLE} table missing") from e
+            raise HTTPException(status_code=500, detail=f"Failed to upsert journal scopes: {e}") from e
+
+    try:
+        existing = (
+            supabase_admin.table(_SCOPE_TABLE)
+            .select("id,journal_id")
+            .eq("user_id", str(user_id))
+            .eq("role", role)
+            .eq("is_active", True)
+            .execute()
+        )
+    except Exception as e:
+        if _is_missing_table_error(str(e), _SCOPE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_SCOPE_TABLE} table missing") from e
+        raise HTTPException(status_code=500, detail=f"Failed to list journal scopes: {e}") from e
+
+    target = set(journal_ids)
+    existing_rows = getattr(existing, "data", None) or []
+    for row in existing_rows:
+        row_id = str(row.get("id") or "").strip()
+        row_journal_id = str(row.get("journal_id") or "").strip()
+        if not row_id or not row_journal_id or row_journal_id in target:
+            continue
+        try:
+            (
+                supabase_admin.table(_SCOPE_TABLE)
+                .update({"is_active": False, "updated_at": now_iso})
+                .eq("id", row_id)
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to deactivate journal scope: {e}") from e
+
+
+def _deactivate_required_role_scopes(*, user_id: str, roles: list[str]) -> None:
+    if not roles:
+        return
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for role in roles:
+        try:
+            (
+                supabase_admin.table(_SCOPE_TABLE)
+                .update({"is_active": False, "updated_at": now_iso})
+                .eq("user_id", str(user_id))
+                .eq("role", role)
+                .eq("is_active", True)
+                .execute()
+            )
+        except Exception as e:
+            if _is_missing_table_error(str(e), _SCOPE_TABLE):
+                raise HTTPException(status_code=500, detail=f"DB not migrated: {_SCOPE_TABLE} table missing") from e
+            raise HTTPException(status_code=500, detail=f"Failed to deactivate journal scopes: {e}") from e
 
 
 def _fallback_journal_rows(rows: list[dict[str, Any]], *, include_inactive: bool) -> list[dict[str, Any]]:
@@ -311,14 +453,57 @@ async def update_user_role(
     T056: Update user role.
     """
     try:
+        requested_roles = set(request.resolved_roles())
+        required_scope_roles = sorted(requested_roles.intersection(_SCOPE_REQUIRED_ROLES))
+        requested_journal_ids = _normalize_uuid_strings(request.scope_journal_ids)
+
+        if required_scope_roles:
+            if requested_journal_ids:
+                _ensure_journals_exist(journal_ids=requested_journal_ids)
+            else:
+                existing_scopes = _list_active_user_scopes_by_roles(
+                    user_id=str(user_id),
+                    roles=required_scope_roles,
+                )
+                scoped_roles = {
+                    str(row.get("role") or "").strip()
+                    for row in existing_scopes
+                    if str(row.get("journal_id") or "").strip()
+                }
+                missing_roles = [role for role in required_scope_roles if role not in scoped_roles]
+                if missing_roles:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "managing_editor/editor_in_chief requires journal binding. "
+                            "Provide scope_journal_ids or pre-bind scopes via /api/v1/admin/journal-scopes."
+                        ),
+                    )
+
         # T059: We pass current_user['id'] as changed_by
-        return service.update_user_role(
+        result = service.update_user_role(
             target_user_id=user_id,
             new_role=request.new_role,
             new_roles=request.resolved_roles(),
             reason=request.reason,
             changed_by=UUID(current_user["id"])
         )
+
+        if required_scope_roles:
+            if requested_journal_ids:
+                for role in required_scope_roles:
+                    _sync_required_role_scopes(
+                        user_id=str(user_id),
+                        role=role,
+                        journal_ids=requested_journal_ids,
+                        actor_id=str(current_user.get("id") or ""),
+                    )
+        else:
+            _deactivate_required_role_scopes(user_id=str(user_id), roles=sorted(_SCOPE_REQUIRED_ROLES))
+
+        return result
+    except HTTPException:
+        raise
     except ValueError as e:
         # Handle known business logic errors
         msg = str(e)

@@ -292,6 +292,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 Scope 执行口径（2026-02-11 更新）**：`managing_editor` / `editor_in_chief` 始终按 `journal_role_scopes` 强制隔离（即使 `JOURNAL_SCOPE_ENFORCEMENT=0`；scope 为空时列表返回空、稿件级写操作返回 403）。`JOURNAL_SCOPE_ENFORCEMENT` 仅继续控制 assistant_editor 等非管理角色的灰度拦截。
+- **Admin 角色编辑与 Scope 绑定（2026-02-11 更新）**：`PUT /api/v1/admin/users/{id}/role` 当目标角色包含 `managing_editor/editor_in_chief` 时，必须具备至少一个期刊绑定（可通过 `scope_journal_ids` 同步提交）；移除这两类角色会自动停用其对应 `journal_role_scopes`。`assistant_editor` 保持轻量策略：不强制绑定期刊，仅按分配稿件可见。
 - **Legacy editor 角色清洗（2026-02-11）**：云端需执行 `supabase/migrations/20260211160000_cleanup_legacy_editor_role.sql`，将 `user_profiles.roles` 与 `journal_role_scopes.role` 中历史 `editor` 幂等迁移为 `managing_editor`，并收紧 `journal_role_scopes_role_check` 约束，避免后续新写入继续落 legacy 角色。
 - **Feature 024 迁移（可选）**：若要启用 Production Gate（强制 `final_pdf_path`），云端 `public.manuscripts` 需包含 `final_pdf_path`（建议执行 `supabase/migrations/20260203143000_post_acceptance_pipeline.sql`）；若不启用 Production Gate，可先不做该迁移，发布会自动降级为仅 Payment Gate。
 - **单人开发提速（默认不走 PR）**：当前为“单人 + 单机 + 单目录”开发，默认不使用 PR / review / auto-merge。工作方式：**直接在 `main` 小步 `git commit` → `git push`**（把 GitHub 当作备份与回滚点）；仅在重大高风险改动或多人协作时才开短期 feature 分支并合回 `main`。
@@ -309,6 +310,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 ## 近期关键修复快照（2026-02-09）
 - **Legacy editor 清理（Phase-1，2026-02-11）**：新增 `supabase/migrations/20260211160000_cleanup_legacy_editor_role.sql`，完成历史 `editor -> managing_editor` 的数据清洗（`user_profiles.roles` + `journal_role_scopes.role`）与约束收敛；为后续彻底移除后端兼容 alias 做前置准备。
 - **鲁总三段决策口径落地（2026-02-11）**：后端 `submit_technical_check` 新增 `academic` 分支（AE 可选送 EIC Academic Queue），`submit_decision` 收紧为“Final 仅允许修回后执行”；前端 `/editor/workspace` 技术检查弹窗升级为三选一（发起外审/送 Academic/技术退回），并同步更新 `docs/upgrade_plan_v3.md + flow_lifecycle_v3.mmd + state_manuscript_v3.mmd` 与新版 PDF。
+- **Admin 用户管理（2026-02-11）**：角色编辑弹窗支持“角色 + 期刊范围”一次提交；后端新增 ME/EIC 角色与期刊绑定强校验（无 scope 拒绝变更），并在移除管理角色时自动清理对应 scope，避免跨刊越权残留。
 - **ME Intake 决策闭环（2026-02-10）**：`/editor/intake` 新增“查看稿件包”与“技术退回作者（必填理由）”动作；后端新增 `POST /api/v1/editor/manuscripts/{id}/intake-return`，退回流转到 `minor_revision` 并写审计 `action=precheck_intake_revision`。
 - **ME Intake 性能与可用性优化（2026-02-10）**：`GET /api/v1/editor/intake` 新增 `q` 与 `overdue_only` 过滤，服务层改为轻量查询（去除首屏时间线聚合），前端新增作者/期刊/优先级列、搜索与高优筛选，并将 AE 预取延后到首屏后以降低“刷新长时间转圈”问题。
 - **Editor 详情页决策聚焦优化（2026-02-10）**：`/editor/manuscript/[id]` 新增 `Next Action` 决策条（阶段+阻塞条件）、按状态收紧 Reviewer/Decision/状态流转入口、以及高风险流转的二次确认+理由；作者展示改为 `invoice_metadata.authors -> owner.full_name/email` 回填，避免出现 `Unknown Authors`。

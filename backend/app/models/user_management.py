@@ -108,6 +108,10 @@ class UpdateRoleRequest(BaseModel):
     """
     new_role: Optional[str] = Field(default=None)
     new_roles: Optional[List[str]] = Field(default=None)
+    scope_journal_ids: Optional[List[UUID]] = Field(
+        default=None,
+        description="当角色包含 managing_editor/editor_in_chief 时可一次性提交绑定期刊列表",
+    )
     reason: str = Field(..., min_length=10, description="Reason for role change is mandatory for audit trail")
 
     @model_validator(mode="after")

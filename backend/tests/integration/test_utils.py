@@ -59,6 +59,7 @@ def insert_manuscript(
     status: str = "decision",
     version: int = 1,
     file_path: str = "",
+    journal_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     插入一条 manuscripts 记录（用于修订循环的前置状态）
@@ -74,6 +75,8 @@ def insert_manuscript(
     }
     if file_path:
         payload["file_path"] = file_path
+    if journal_id:
+        payload["journal_id"] = journal_id
 
     resp = db.table("manuscripts").insert(payload).execute()
     data = getattr(resp, "data", None) or []

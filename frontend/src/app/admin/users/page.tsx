@@ -117,9 +117,18 @@ export default function UserManagementPage() {
     setIsResetDialogOpen(true);
   };
 
-  const handleRoleUpdate = async (userId: string, newRoles: UserRole[], reason: string) => {
+  const handleRoleUpdate = async (
+    userId: string,
+    newRoles: UserRole[],
+    reason: string,
+    scopeJournalIds?: string[]
+  ) => {
     try {
-      await adminUserService.updateUserRole(userId, { new_roles: newRoles, reason });
+      await adminUserService.updateUserRole(userId, {
+        new_roles: newRoles,
+        reason,
+        scope_journal_ids: scopeJournalIds,
+      });
       toast.success('User roles updated successfully');
       fetchUsers(); 
     } catch (error) {

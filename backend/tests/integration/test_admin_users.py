@@ -161,7 +161,11 @@ async def test_update_role_validation(client: AsyncClient, auth_token, mock_admi
 async def test_update_role_success(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
     """T052: HTTP method test: Test PUT /api/v1/admin/users/{id}/role"""
     user_id = str(uuid4())
-    payload = {"new_role": "managing_editor", "reason": "Valid reason for promotion"}
+    payload = {
+        "new_role": "managing_editor",
+        "scope_journal_ids": [str(uuid4())],
+        "reason": "Valid reason for promotion",
+    }
     
     mock_admin_service.update_user_role.return_value = {
         "id": user_id,
@@ -170,16 +174,21 @@ async def test_update_role_success(client: AsyncClient, auth_token, mock_admin_r
         "created_at": "2026-01-01T00:00:00Z"
     }
     
-    response = await client.put(
-        f"/api/v1/admin/users/{user_id}/role",
-        headers={"Authorization": f"Bearer {auth_token}"},
-        json=payload
-    )
-    
+    with patch("app.api.v1.admin.users._ensure_journals_exist") as ensure_journals, patch(
+        "app.api.v1.admin.users._sync_required_role_scopes"
+    ) as sync_scope:
+        response = await client.put(
+            f"/api/v1/admin/users/{user_id}/role",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json=payload
+        )
+
     assert response.status_code == 200
     data = response.json()
     assert "managing_editor" in data["roles"]
     mock_admin_service.update_user_role.assert_called_once()
+    ensure_journals.assert_called_once()
+    sync_scope.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token, mock_admin_service):
@@ -189,7 +198,11 @@ async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token
         "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
     }
 
-    payload = {"new_roles": ["admin", "managing_editor"], "reason": "Add editor role to self"}
+    payload = {
+        "new_roles": ["admin", "managing_editor"],
+        "scope_journal_ids": [str(uuid4())],
+        "reason": "Add editor role to self",
+    }
     mock_admin_service.update_user_role.return_value = {
         "id": admin_id,
         "email": "admin@example.com",
@@ -197,13 +210,18 @@ async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token
         "created_at": "2026-01-01T00:00:00Z",
     }
 
-    response = await client.put(
-        f"/api/v1/admin/users/{admin_id}/role",
-        headers={"Authorization": f"Bearer {auth_token}"},
-        json=payload,
-    )
+    with patch("app.api.v1.admin.users._ensure_journals_exist") as ensure_journals, patch(
+        "app.api.v1.admin.users._sync_required_role_scopes"
+    ) as sync_scope:
+        response = await client.put(
+            f"/api/v1/admin/users/{admin_id}/role",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json=payload,
+        )
     assert response.status_code == 200
     assert set(response.json().get("roles", [])) == {"admin", "managing_editor"}
+    ensure_journals.assert_called_once()
+    sync_scope.assert_called_once()
 
     app.dependency_overrides.pop(get_current_profile, None)
 
@@ -216,17 +234,46 @@ async def test_update_role_self_remove_admin_forbidden(client: AsyncClient, auth
         "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
     }
 
-    payload = {"new_roles": ["managing_editor"], "reason": "Remove admin from self"}
+    payload = {
+        "new_roles": ["managing_editor"],
+        "scope_journal_ids": [str(uuid4())],
+        "reason": "Remove admin from self",
+    }
     mock_admin_service.update_user_role.side_effect = ValueError("Cannot remove your own admin role")
 
-    response = await client.put(
-        f"/api/v1/admin/users/{admin_id}/role",
-        headers={"Authorization": f"Bearer {auth_token}"},
-        json=payload,
-    )
+    with patch("app.api.v1.admin.users._ensure_journals_exist"):
+        response = await client.put(
+            f"/api/v1/admin/users/{admin_id}/role",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json=payload,
+        )
     assert response.status_code == 403
 
     app.dependency_overrides.pop(get_current_profile, None)
+
+
+@pytest.mark.asyncio
+async def test_update_role_requires_scope_for_managing_roles(
+    client: AsyncClient, auth_token, mock_admin_role, mock_admin_service
+):
+    user_id = str(uuid4())
+    payload = {"new_role": "managing_editor", "reason": "Promote to ME without scope"}
+
+    mock_admin_service.update_user_role.return_value = {
+        "id": user_id,
+        "email": "target@example.com",
+        "roles": ["managing_editor"],
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+
+    with patch("app.api.v1.admin.users._list_active_user_scopes_by_roles", return_value=[]):
+        response = await client.put(
+            f"/api/v1/admin/users/{user_id}/role",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json=payload,
+        )
+    assert response.status_code == 422
+    assert "requires journal binding" in str(response.json().get("detail", "")).lower()
 
 # === Password Reset ===
 
@@ -454,7 +501,7 @@ async def test_upsert_journal_scope_success(client: AsyncClient, auth_token, moc
     payload = {
         "user_id": str(uuid4()),
         "journal_id": str(uuid4()),
-        "role": "assistant_editor",
+        "role": "managing_editor",
         "is_active": True,
     }
     row = {

@@ -156,6 +156,43 @@ def _cleanup_decision_records(db, manuscript_id: str, user_ids: list[str]) -> No
             pass
 
 
+def _ensure_role_scope_binding(
+    db,
+    *,
+    user_id: str,
+    role: str,
+    journal_id: str,
+) -> None:
+    try:
+        db.table("journals").upsert(
+            {
+                "id": journal_id,
+                "title": f"RBAC Journal {journal_id[:6]}",
+                "slug": f"rbac-{journal_id[:8]}",
+                "is_active": True,
+            }
+        ).execute()
+    except Exception:
+        db.table("journals").upsert(
+            {
+                "id": journal_id,
+                "title": f"RBAC Journal {journal_id[:6]}",
+                "slug": f"rbac-{journal_id[:8]}",
+            }
+        ).execute()
+
+    db.table("journal_role_scopes").upsert(
+        {
+            "user_id": user_id,
+            "journal_id": journal_id,
+            "role": role,
+            "is_active": True,
+            "created_by": user_id,
+        },
+        on_conflict="user_id,journal_id,role",
+    ).execute()
+
+
 @pytest.mark.asyncio
 async def test_process_role_matrix_allows_assistant_editor(
     client: AsyncClient,
@@ -516,6 +553,7 @@ async def test_first_decision_semantics_keeps_status_and_writes_audit_event(
     author = make_user(email="rbac_first_decision_author@example.com")
     reviewer = make_user(email="rbac_first_decision_reviewer@example.com")
     manuscript_id = str(uuid4())
+    journal_id = str(uuid4())
 
     try:
         supabase_admin_client.table("user_profiles").upsert(
@@ -525,6 +563,12 @@ async def test_first_decision_semantics_keeps_status_and_writes_audit_event(
                 "roles": ["managing_editor"],
             }
         ).execute()
+        _ensure_role_scope_binding(
+            supabase_admin_client,
+            user_id=managing_editor.id,
+            role="managing_editor",
+            journal_id=journal_id,
+        )
         insert_manuscript(
             supabase_admin_client,
             manuscript_id=manuscript_id,
@@ -532,6 +576,7 @@ async def test_first_decision_semantics_keeps_status_and_writes_audit_event(
             status="decision",
             title="RBAC First Decision Manuscript",
             file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+            journal_id=journal_id,
         )
         supabase_admin_client.table("manuscripts").update({"editor_id": managing_editor.id}).eq(
             "id", manuscript_id
@@ -589,6 +634,14 @@ async def test_first_decision_semantics_keeps_status_and_writes_audit_event(
             for r in rows
         )
     finally:
+        try:
+            supabase_admin_client.table("journal_role_scopes").delete().eq("journal_id", journal_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase_admin_client.table("journals").delete().eq("id", journal_id).execute()
+        except Exception:
+            pass
         _cleanup_decision_records(
             supabase_admin_client,
             manuscript_id,
@@ -611,6 +664,7 @@ async def test_final_decision_requires_eic_or_admin(
     author = make_user(email="rbac_final_author@example.com")
     reviewer = make_user(email="rbac_final_reviewer@example.com")
     manuscript_id = str(uuid4())
+    journal_id = str(uuid4())
 
     try:
         supabase_admin_client.table("user_profiles").upsert(
@@ -619,6 +673,18 @@ async def test_final_decision_requires_eic_or_admin(
         supabase_admin_client.table("user_profiles").upsert(
             {"id": eic.id, "email": eic.email, "roles": ["editor_in_chief"]}
         ).execute()
+        _ensure_role_scope_binding(
+            supabase_admin_client,
+            user_id=managing_editor.id,
+            role="managing_editor",
+            journal_id=journal_id,
+        )
+        _ensure_role_scope_binding(
+            supabase_admin_client,
+            user_id=eic.id,
+            role="editor_in_chief",
+            journal_id=journal_id,
+        )
         insert_manuscript(
             supabase_admin_client,
             manuscript_id=manuscript_id,
@@ -626,6 +692,7 @@ async def test_final_decision_requires_eic_or_admin(
             status="decision",
             title="RBAC Final Decision Manuscript",
             file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+            journal_id=journal_id,
         )
         supabase_admin_client.table("manuscripts").update({"editor_id": managing_editor.id}).eq(
             "id", manuscript_id
@@ -637,6 +704,17 @@ async def test_final_decision_requires_eic_or_admin(
                 "status": "completed",
                 "content": "Accept recommended.",
                 "score": 5,
+            }
+        ).execute()
+        supabase_admin_client.table("revisions").insert(
+            {
+                "manuscript_id": manuscript_id,
+                "round_number": 1,
+                "decision_type": "major",
+                "editor_comment": "Please revise and resubmit.",
+                "status": "submitted",
+                "response_letter": "Author addressed all comments.",
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
             }
         ).execute()
 
@@ -679,6 +757,14 @@ async def test_final_decision_requires_eic_or_admin(
         )
         assert str(ms.get("status") or "") == "approved"
     finally:
+        try:
+            supabase_admin_client.table("journal_role_scopes").delete().eq("journal_id", journal_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase_admin_client.table("journals").delete().eq("id", journal_id).execute()
+        except Exception:
+            pass
         _cleanup_decision_records(
             supabase_admin_client,
             manuscript_id,
@@ -699,11 +785,18 @@ async def test_apc_override_audit_payload_contains_before_after_reason_source(
     eic = make_user(email="rbac_apc_eic@example.com")
     author = make_user(email="rbac_apc_author@example.com")
     manuscript_id = str(uuid4())
+    journal_id = str(uuid4())
 
     try:
         supabase_admin_client.table("user_profiles").upsert(
             {"id": eic.id, "email": eic.email, "roles": ["editor_in_chief"]}
         ).execute()
+        _ensure_role_scope_binding(
+            supabase_admin_client,
+            user_id=eic.id,
+            role="editor_in_chief",
+            journal_id=journal_id,
+        )
         insert_manuscript(
             supabase_admin_client,
             manuscript_id=manuscript_id,
@@ -711,6 +804,7 @@ async def test_apc_override_audit_payload_contains_before_after_reason_source(
             status="decision",
             title="RBAC APC Audit Manuscript",
             file_path=f"manuscripts/{manuscript_id}/v1.pdf",
+            journal_id=journal_id,
         )
         supabase_admin_client.table("manuscripts").update(
             {
@@ -757,6 +851,14 @@ async def test_apc_override_audit_payload_contains_before_after_reason_source(
         assert int(float((payload.get("before") or {}).get("apc_amount") or 0)) == 1200
         assert int(float((payload.get("after") or {}).get("apc_amount") or 0)) == 1800
     finally:
+        try:
+            supabase_admin_client.table("journal_role_scopes").delete().eq("journal_id", journal_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase_admin_client.table("journals").delete().eq("id", journal_id).execute()
+        except Exception:
+            pass
         _cleanup_decision_records(
             supabase_admin_client,
             manuscript_id,
