@@ -31,6 +31,7 @@ from app.services.production_workspace_service import ProductionWorkspaceService
 from typing import Any, Literal
 from io import BytesIO
 from uuid import uuid4
+from time import perf_counter
 from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
 from app.api.v1.editor_common import (
     AcademicCheckRequest,
@@ -774,8 +775,15 @@ async def get_editor_manuscript_detail(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
+    t_total_start = perf_counter()
+    timings: dict[str, float] = {}
+
+    def _mark(name: str, t_start: float) -> None:
+        timings[name] = round((perf_counter() - t_start) * 1000, 1)
+
     # 票据/支付状态（容错：没有 invoice 也不应 500）
     invoice = None
+    t0 = perf_counter()
     try:
         inv_resp = (
             supabase_admin.table("invoices")
@@ -787,33 +795,12 @@ async def get_editor_manuscript_detail(
         invoice = getattr(inv_resp, "data", None) or None
     except Exception:
         invoice = None
+    _mark("invoice", t0)
     ms["invoice"] = invoice
 
-    # 文件签名（原稿 PDF + 审稿附件）
-    file_path = str(ms.get("file_path") or "").strip()
-    ms["files"] = []
-    ms["signed_files"] = {
-        "original_manuscript": {
-            "bucket": "manuscripts",
-            "path": file_path or None,
-            "signed_url": _get_signed_url("manuscripts", file_path) if file_path else None,
-        },
-        "peer_review_reports": [],
-    }
-    if file_path:
-        ms["files"].append(
-            {
-                "id": "original_manuscript",
-                "file_type": "manuscript",
-                "bucket": "manuscripts",
-                "path": file_path,
-                "label": "Current Manuscript PDF",
-                "signed_url": _get_signed_url("manuscripts", file_path),
-                "created_at": ms.get("updated_at") or ms.get("created_at"),
-            }
-        )
-
     # Feature 033: 内部文件（cover letter / editor peer review attachments）
+    mf_rows: list[dict[str, Any]] = []
+    t0 = perf_counter()
     try:
         mf = (
             supabase_admin.table("manuscript_files")
@@ -823,30 +810,15 @@ async def get_editor_manuscript_detail(
             .execute()
         )
         mf_rows = getattr(mf, "data", None) or []
-        for r in mf_rows:
-            bucket = str(r.get("bucket") or "").strip()
-            path = str(r.get("path") or "").strip()
-            if not bucket or not path:
-                continue
-            ms["files"].append(
-                {
-                    "id": r.get("id"),
-                    "file_type": r.get("file_type"),
-                    "bucket": bucket,
-                    "path": path,
-                    "label": r.get("original_filename") or path,
-                    "signed_url": _get_signed_url(bucket, path),
-                    "created_at": r.get("created_at"),
-                    "uploaded_by": r.get("uploaded_by"),
-                }
-            )
     except Exception as e:
         # 中文注释: 云端未应用 migration 时不应导致详情页 500
-        if _is_missing_table_error(str(e)):
-            pass
-        else:
+        if not _is_missing_table_error(str(e)):
             print(f"[ManuscriptFiles] load manuscript_files failed (ignored): {e}")
+    _mark("manuscript_files", t0)
 
+    # 审稿报告（用于附件 + submitted_at 聚合），尽量复用同一查询结果，避免重复打 DB。
+    rr_rows: list[dict[str, Any]] = []
+    t0 = perf_counter()
     try:
         rr = (
             supabase_admin.table("review_reports")
@@ -855,57 +827,10 @@ async def get_editor_manuscript_detail(
             .order("created_at", desc=True)
             .execute()
         )
-        rows = getattr(rr, "data", None) or []
-        reviewer_ids = sorted({str(r.get("reviewer_id")) for r in rows if r.get("reviewer_id")})
-        reviewer_map: dict[str, dict] = {}
-        if reviewer_ids:
-            try:
-                pr = (
-                    supabase_admin.table("user_profiles")
-                    .select("id,full_name,email")
-                    .in_("id", reviewer_ids)
-                    .execute()
-                )
-                for p in (getattr(pr, "data", None) or []):
-                    pid = str(p.get("id") or "")
-                    if pid:
-                        reviewer_map[pid] = p
-            except Exception:
-                reviewer_map = {}
-        for r in rows:
-            path = str(r.get("attachment_path") or "").strip()
-            if not path:
-                continue
-            rid = str(r.get("reviewer_id") or "")
-            prof = reviewer_map.get(rid) or {}
-            signed_url = _get_signed_url("review-attachments", path)
-            ms["signed_files"]["peer_review_reports"].append(
-                {
-                    "review_report_id": r.get("id"),
-                    "reviewer_id": r.get("reviewer_id"),
-                    "reviewer_name": prof.get("full_name"),
-                    "reviewer_email": prof.get("email"),
-                    "status": r.get("status"),
-                    "created_at": r.get("created_at"),
-                    "bucket": "review-attachments",
-                    "path": path,
-                    "signed_url": signed_url,
-                }
-            )
-            ms["files"].append(
-                {
-                    "id": r.get("id"),
-                    "file_type": "review_attachment",
-                    "bucket": "review-attachments",
-                    "path": path,
-                    "label": f"{prof.get('full_name') or prof.get('email') or rid or 'Reviewer'} — Annotated PDF",
-                    "signed_url": signed_url,
-                    "created_at": r.get("created_at"),
-                    "uploaded_by": r.get("reviewer_id"),
-                }
-            )
+        rr_rows = getattr(rr, "data", None) or []
     except Exception as e:
-        print(f"[SignedFiles] load review attachments failed (ignored): {e}")
+        print(f"[ReviewReports] load failed (ignored): {e}")
+    _mark("review_reports", t0)
 
     # 作者最近一次修回说明（Response Letter），用于 editor 详情页快速查看。
     ms["latest_author_response_letter"] = None
@@ -915,6 +840,7 @@ async def get_editor_manuscript_detail(
     # 中文注释:
     # - 云端历史 schema 可能无 revisions.updated_at，仅有 created_at；
     # - 这里按“排序列 + select”双重降级，确保 response_letter 可回显。
+    t0 = perf_counter()
     revision_query_variants = [
         ("updated_at", "id,response_letter,submitted_at,updated_at,round"),
         ("created_at", "id,response_letter,submitted_at,created_at,round"),
@@ -935,11 +861,7 @@ async def get_editor_manuscript_detail(
                 response_letter = str(row.get("response_letter") or "").strip()
                 if not response_letter:
                     continue
-                submitted_at = (
-                    row.get("submitted_at")
-                    or row.get("updated_at")
-                    or row.get("created_at")
-                )
+                submitted_at = row.get("submitted_at") or row.get("updated_at") or row.get("created_at")
                 round_value = row.get("round")
                 try:
                     round_value = int(round_value) if round_value is not None else None
@@ -966,60 +888,11 @@ async def get_editor_manuscript_detail(
                 continue
             print(f"[Revisions] load latest response letter failed (ignored): {e}")
             break
+    _mark("revisions", t0)
 
-    profile_ids: list[str] = []
-    if ms.get("owner_id"):
-        profile_ids.append(str(ms["owner_id"]))
-    if ms.get("editor_id"):
-        profile_ids.append(str(ms["editor_id"]))
-
-    profiles_map: dict[str, dict] = {}
-    if profile_ids:
-        try:
-            p = (
-                supabase_admin.table("user_profiles")
-                .select("id,email,full_name,roles")
-                .in_("id", sorted(set(profile_ids)))
-                .execute()
-            )
-            for row in (getattr(p, "data", None) or []):
-                rid = str(row.get("id") or "")
-                if rid:
-                    profiles_map[rid] = row
-        except Exception:
-            pass
-
-    oid = str(ms.get("owner_id") or "")
-    eid = str(ms.get("editor_id") or "")
-    ms["owner"] = (
-        {"id": oid, "full_name": (profiles_map.get(oid) or {}).get("full_name"), "email": (profiles_map.get(oid) or {}).get("email")}
-        if oid
-        else None
-    )
-    ms["editor"] = (
-        {"id": eid, "full_name": (profiles_map.get(eid) or {}).get("full_name"), "email": (profiles_map.get(eid) or {}).get("email")}
-        if eid
-        else None
-    )
-
-    # 044: 预审队列可视化（详情页）
-    role_map = {
-        "intake": "managing_editor",
-        "technical": "assistant_editor",
-        "academic": "editor_in_chief",
-    }
-    pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
-    current_role = role_map.get(pre_stage, "managing_editor")
-    current_assignee = None
-    if pre_stage == "technical" and ms.get("assistant_editor_id"):
-        aid = str(ms.get("assistant_editor_id"))
-        aprof = profiles_map.get(aid) or {}
-        current_assignee = {"id": aid, "full_name": aprof.get("full_name"), "email": aprof.get("email")}
-
-    ms["precheck_timeline"] = []
-    assigned_at = None
-    technical_completed_at = None
-    academic_completed_at = None
+    # 预审时间线
+    tl_rows: list[dict[str, Any]] = []
+    t0 = perf_counter()
     try:
         tl_resp = (
             supabase_admin.table("status_transition_logs")
@@ -1029,31 +902,13 @@ async def get_editor_manuscript_detail(
             .execute()
         )
         tl_rows = getattr(tl_resp, "data", None) or []
-        for row in tl_rows:
-            payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
-            action = str(payload.get("action") or "")
-            if action.startswith("precheck_"):
-                ms["precheck_timeline"].append(row)
-                created_at = str(row.get("created_at") or "")
-                if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
-                    assigned_at = created_at or assigned_at
-                if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
-                    technical_completed_at = created_at or technical_completed_at
-                if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
-                    academic_completed_at = created_at or academic_completed_at
     except Exception as e:
         print(f"[PrecheckTimeline] load failed (ignored): {e}")
+    _mark("status_logs", t0)
 
-    ms["role_queue"] = {
-        "current_role": current_role,
-        "current_assignee": current_assignee,
-        "assigned_at": assigned_at,
-        "technical_completed_at": technical_completed_at,
-        "academic_completed_at": academic_completed_at,
-    }
-
-    # Feature 037: Reviewer invite timeline（Editor 可见）
-    ms["reviewer_invites"] = []
+    # Reviewer 邀请时间线
+    ra_rows: list[dict[str, Any]] = []
+    t0 = perf_counter()
     try:
         ra_resp = (
             supabase_admin.table("review_assignments")
@@ -1065,72 +920,9 @@ async def get_editor_manuscript_detail(
             .execute()
         )
         ra_rows = getattr(ra_resp, "data", None) or []
-        reviewer_ids = sorted({str(r.get("reviewer_id") or "") for r in ra_rows if r.get("reviewer_id")})
-        reviewer_map: dict[str, dict] = {}
-        if reviewer_ids:
-            try:
-                rp = (
-                    supabase_admin.table("user_profiles")
-                    .select("id,full_name,email")
-                    .in_("id", reviewer_ids)
-                    .execute()
-                )
-                for p in (getattr(rp, "data", None) or []):
-                    pid = str(p.get("id") or "")
-                    if pid:
-                        reviewer_map[pid] = p
-            except Exception:
-                reviewer_map = {}
-
-        submitted_map: dict[str, str] = {}
-        try:
-            rr = (
-                supabase_admin.table("review_reports")
-                .select("reviewer_id,created_at,status")
-                .eq("manuscript_id", id)
-                .eq("status", "completed")
-                .order("created_at", desc=True)
-                .execute()
-            )
-            for row in (getattr(rr, "data", None) or []):
-                rid = str(row.get("reviewer_id") or "")
-                if rid and rid not in submitted_map:
-                    submitted_map[rid] = str(row.get("created_at") or "")
-        except Exception:
-            submitted_map = {}
-
-        for row in ra_rows:
-            rid = str(row.get("reviewer_id") or "")
-            prof = reviewer_map.get(rid) or {}
-            status_raw = str(row.get("status") or "").lower()
-            if status_raw == "completed":
-                invite_state = "submitted"
-            elif status_raw == "declined" or row.get("declined_at"):
-                invite_state = "declined"
-            elif row.get("accepted_at"):
-                invite_state = "accepted"
-            else:
-                invite_state = "invited"
-
-            ms["reviewer_invites"].append(
-                {
-                    "id": row.get("id"),
-                    "reviewer_id": row.get("reviewer_id"),
-                    "reviewer_name": prof.get("full_name"),
-                    "reviewer_email": prof.get("email"),
-                    "status": invite_state,
-                    "due_at": row.get("due_at"),
-                    "invited_at": row.get("invited_at") or row.get("created_at"),
-                    "opened_at": row.get("opened_at"),
-                    "accepted_at": row.get("accepted_at"),
-                    "declined_at": row.get("declined_at"),
-                    "submitted_at": submitted_map.get(rid),
-                    "decline_reason": row.get("decline_reason"),
-                    "decline_note": row.get("decline_note"),
-                }
-            )
     except Exception as e:
         print(f"[ReviewerInvites] load failed (ignored): {e}")
+    _mark("review_assignments", t0)
 
     # Feature 045: 稿件级任务逾期摘要（详情页右侧摘要使用）
     ms["task_summary"] = {
@@ -1139,6 +931,7 @@ async def get_editor_manuscript_detail(
         "is_overdue": False,
         "nearest_due_at": None,
     }
+    t0 = perf_counter()
     try:
         t_resp = (
             supabase_admin.table("internal_tasks")
@@ -1178,10 +971,221 @@ async def get_editor_manuscript_detail(
             "nearest_due_at": nearest_due,
         }
     except Exception as e:
-        if _is_missing_table_error(str(e)):
-            pass
-        else:
+        if not _is_missing_table_error(str(e)):
             print(f"[InternalTasks] task summary failed (ignored): {e}")
+    _mark("task_summary", t0)
+
+    # 合并构建 profile id，减少 user_profiles 的重复查询。
+    profile_ids: set[str] = set()
+    if ms.get("owner_id"):
+        profile_ids.add(str(ms["owner_id"]))
+    if ms.get("editor_id"):
+        profile_ids.add(str(ms["editor_id"]))
+    if ms.get("assistant_editor_id"):
+        profile_ids.add(str(ms["assistant_editor_id"]))
+    for row in rr_rows:
+        rid = str(row.get("reviewer_id") or "").strip()
+        if rid:
+            profile_ids.add(rid)
+    for row in ra_rows:
+        rid = str(row.get("reviewer_id") or "").strip()
+        if rid:
+            profile_ids.add(rid)
+
+    profiles_map: dict[str, dict] = {}
+    t0 = perf_counter()
+    if profile_ids:
+        try:
+            p = (
+                supabase_admin.table("user_profiles")
+                .select("id,email,full_name,roles")
+                .in_("id", sorted(profile_ids))
+                .execute()
+            )
+            for row in (getattr(p, "data", None) or []):
+                pid = str(row.get("id") or "")
+                if pid:
+                    profiles_map[pid] = row
+        except Exception as e:
+            print(f"[Profiles] load failed (ignored): {e}")
+    _mark("profiles", t0)
+
+    oid = str(ms.get("owner_id") or "")
+    eid = str(ms.get("editor_id") or "")
+    ms["owner"] = (
+        {"id": oid, "full_name": (profiles_map.get(oid) or {}).get("full_name"), "email": (profiles_map.get(oid) or {}).get("email")}
+        if oid
+        else None
+    )
+    ms["editor"] = (
+        {"id": eid, "full_name": (profiles_map.get(eid) or {}).get("full_name"), "email": (profiles_map.get(eid) or {}).get("email")}
+        if eid
+        else None
+    )
+
+    # 文件签名（原稿 PDF + 审稿附件）
+    file_path = str(ms.get("file_path") or "").strip()
+    original_signed_url = _get_signed_url("manuscripts", file_path) if file_path else None
+    ms["files"] = []
+    ms["signed_files"] = {
+        "original_manuscript": {
+            "bucket": "manuscripts",
+            "path": file_path or None,
+            "signed_url": original_signed_url,
+        },
+        "peer_review_reports": [],
+    }
+    if file_path:
+        ms["files"].append(
+            {
+                "id": "original_manuscript",
+                "file_type": "manuscript",
+                "bucket": "manuscripts",
+                "path": file_path,
+                "label": "Current Manuscript PDF",
+                "signed_url": original_signed_url,
+                "created_at": ms.get("updated_at") or ms.get("created_at"),
+            }
+        )
+
+    # 内部文件（cover letter / editor peer review attachments）
+    for row in mf_rows:
+        bucket = str(row.get("bucket") or "").strip()
+        path = str(row.get("path") or "").strip()
+        if not bucket or not path:
+            continue
+        ms["files"].append(
+            {
+                "id": row.get("id"),
+                "file_type": row.get("file_type"),
+                "bucket": bucket,
+                "path": path,
+                "label": row.get("original_filename") or path,
+                "signed_url": _get_signed_url(bucket, path),
+                "created_at": row.get("created_at"),
+                "uploaded_by": row.get("uploaded_by"),
+            }
+        )
+
+    # 从同一份 review_reports 行中同时构建:
+    # - reviewer report 附件列表
+    # - reviewer 提交时间 submitted_map（用于 Reviewer Invite Timeline）
+    submitted_map: dict[str, str] = {}
+    for row in rr_rows:
+        rid = str(row.get("reviewer_id") or "").strip()
+        status_raw = str(row.get("status") or "").lower()
+        created_at = str(row.get("created_at") or "")
+        if rid and status_raw == "completed" and rid not in submitted_map and created_at:
+            submitted_map[rid] = created_at
+
+    for row in rr_rows:
+        path = str(row.get("attachment_path") or "").strip()
+        if not path:
+            continue
+        rid = str(row.get("reviewer_id") or "").strip()
+        prof = profiles_map.get(rid) or {}
+        signed_url = _get_signed_url("review-attachments", path)
+        ms["signed_files"]["peer_review_reports"].append(
+            {
+                "review_report_id": row.get("id"),
+                "reviewer_id": row.get("reviewer_id"),
+                "reviewer_name": prof.get("full_name"),
+                "reviewer_email": prof.get("email"),
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "bucket": "review-attachments",
+                "path": path,
+                "signed_url": signed_url,
+            }
+        )
+        ms["files"].append(
+            {
+                "id": row.get("id"),
+                "file_type": "review_attachment",
+                "bucket": "review-attachments",
+                "path": path,
+                "label": f"{prof.get('full_name') or prof.get('email') or rid or 'Reviewer'} — Annotated PDF",
+                "signed_url": signed_url,
+                "created_at": row.get("created_at"),
+                "uploaded_by": row.get("reviewer_id"),
+            }
+        )
+
+    # 044: 预审队列可视化（详情页）
+    role_map = {
+        "intake": "managing_editor",
+        "technical": "assistant_editor",
+        "academic": "editor_in_chief",
+    }
+    pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
+    current_role = role_map.get(pre_stage, "managing_editor")
+    current_assignee = None
+    if pre_stage == "technical" and ms.get("assistant_editor_id"):
+        aid = str(ms.get("assistant_editor_id"))
+        aprof = profiles_map.get(aid) or {}
+        current_assignee = {"id": aid, "full_name": aprof.get("full_name"), "email": aprof.get("email")}
+
+    ms["precheck_timeline"] = []
+    assigned_at = None
+    technical_completed_at = None
+    academic_completed_at = None
+    for row in tl_rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        action = str(payload.get("action") or "")
+        if action.startswith("precheck_"):
+            ms["precheck_timeline"].append(row)
+            created_at = str(row.get("created_at") or "")
+            if action in {"precheck_assign_ae", "precheck_reassign_ae"}:
+                assigned_at = created_at or assigned_at
+            if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
+                technical_completed_at = created_at or technical_completed_at
+            if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
+                academic_completed_at = created_at or academic_completed_at
+
+    ms["role_queue"] = {
+        "current_role": current_role,
+        "current_assignee": current_assignee,
+        "assigned_at": assigned_at,
+        "technical_completed_at": technical_completed_at,
+        "academic_completed_at": academic_completed_at,
+    }
+
+    # Feature 037: Reviewer invite timeline（Editor 可见）
+    ms["reviewer_invites"] = []
+    for row in ra_rows:
+        rid = str(row.get("reviewer_id") or "").strip()
+        prof = profiles_map.get(rid) or {}
+        status_raw = str(row.get("status") or "").lower()
+        if status_raw == "completed":
+            invite_state = "submitted"
+        elif status_raw == "declined" or row.get("declined_at"):
+            invite_state = "declined"
+        elif row.get("accepted_at"):
+            invite_state = "accepted"
+        else:
+            invite_state = "invited"
+
+        ms["reviewer_invites"].append(
+            {
+                "id": row.get("id"),
+                "reviewer_id": row.get("reviewer_id"),
+                "reviewer_name": prof.get("full_name"),
+                "reviewer_email": prof.get("email"),
+                "status": invite_state,
+                "due_at": row.get("due_at"),
+                "invited_at": row.get("invited_at") or row.get("created_at"),
+                "opened_at": row.get("opened_at"),
+                "accepted_at": row.get("accepted_at"),
+                "declined_at": row.get("declined_at"),
+                "submitted_at": submitted_map.get(rid),
+                "decline_reason": row.get("decline_reason"),
+                "decline_note": row.get("decline_note"),
+            }
+        )
+
+    total_ms = round((perf_counter() - t_total_start) * 1000, 1)
+    timing_text = " ".join([f"{k}={v}ms" for k, v in timings.items()])
+    print(f"[EditorDetail:{id}] total={total_ms}ms {timing_text}")
 
     return {"success": True, "data": ms}
 
