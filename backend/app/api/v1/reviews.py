@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Response
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -733,6 +733,73 @@ async def get_review_assignment_via_magic_link(
             "manuscript": ms,
             "review_report": review_report,
             "latest_revision": latest_revision,
+        },
+    }
+
+
+@router.post("/reviewer/assignments/{assignment_id}/session")
+async def establish_reviewer_workspace_session(
+    assignment_id: UUID,
+    response: Response,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    登录态 Reviewer 会话桥接（Dashboard -> Reviewer Workspace v2）。
+
+    中文注释:
+    - 内部登录 reviewer 不走邮件链接时，也需要一个 assignment-scoped 的 `sf_review_magic` cookie。
+    - 这里严格校验 assignment 属于当前用户后，签发同 scope JWT 并写入 httpOnly cookie。
+    """
+    reviewer_id = str(current_user.get("id") or "").strip()
+    if not reviewer_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        a = (
+            supabase_admin.table("review_assignments")
+            .select("id, reviewer_id, manuscript_id, status")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+        assignment = getattr(a, "data", None) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load assignment: {e}")
+
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if str(assignment.get("reviewer_id") or "") != reviewer_id:
+        raise HTTPException(status_code=403, detail="Not allowed to access this assignment")
+    if str(assignment.get("status") or "").lower() == "cancelled":
+        raise HTTPException(status_code=403, detail="Invitation revoked")
+
+    try:
+        token = create_magic_link_jwt(
+            reviewer_id=UUID(str(assignment.get("reviewer_id"))),
+            manuscript_id=UUID(str(assignment.get("manuscript_id"))),
+            assignment_id=UUID(str(assignment.get("id"))),
+            expires_in_days=14,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create reviewer session: {e}")
+
+    secure_cookie = (os.environ.get("GO_ENV") or "").strip().lower() in {"prod", "production"}
+    response.set_cookie(
+        key="sf_review_magic",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=secure_cookie,
+        path="/",
+        max_age=60 * 60 * 24 * 14,
+    )
+    return {
+        "success": True,
+        "data": {
+            "assignment_id": str(assignment_id),
+            "redirect_url": f"/reviewer/workspace/{assignment_id}",
         },
     }
 

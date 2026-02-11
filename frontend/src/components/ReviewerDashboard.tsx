@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import { authService } from "@/services/auth"
@@ -276,6 +277,7 @@ function ReviewModal({
 }
 
 export default function ReviewerDashboard() {
+  const router = useRouter()
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -284,6 +286,7 @@ export default function ReviewerDashboard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewTitle, setPreviewTitle] = useState("")
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [openingAssignmentId, setOpeningAssignmentId] = useState<string | null>(null)
 
   const fetchTasks = async () => {
     try {
@@ -348,6 +351,33 @@ export default function ReviewerDashboard() {
     setPreviewTitle("")
   }
 
+  const handleOpenReviewerWorkspace = async (task: ReviewTask) => {
+    const toastId = toast.loading("Opening reviewer workspace...")
+    setOpeningAssignmentId(task.id)
+    try {
+      const token = await authService.getAccessToken()
+      if (!token) {
+        toast.error("Please sign in again.", { id: toastId })
+        return
+      }
+      const res = await fetch(`/api/v1/reviewer/assignments/${encodeURIComponent(task.id)}/session`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        toast.error(json?.detail || json?.message || "Failed to open reviewer workspace.", { id: toastId })
+        return
+      }
+      toast.success("Workspace ready.", { id: toastId })
+      router.push(`/reviewer/workspace/${encodeURIComponent(task.id)}`)
+    } catch {
+      toast.error("Failed to open reviewer workspace.", { id: toastId })
+    } finally {
+      setOpeningAssignmentId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* ... 之前的 Header 代码 ... */}
@@ -379,14 +409,12 @@ export default function ReviewerDashboard() {
               </Button>
               
               <Button
-                onClick={() => {
-                  setSelectedTask(task)
-                  setIsModalOpen(true)
-                }}
+                onClick={() => handleOpenReviewerWorkspace(task)}
                 size="sm"
                 className="gap-2"
+                disabled={openingAssignmentId === task.id}
               >
-                <Star className="h-4 w-4" /> Start Review
+                <Star className="h-4 w-4" /> {openingAssignmentId === task.id ? "Opening..." : "Start Review"}
               </Button>
             </div>
             </div>
