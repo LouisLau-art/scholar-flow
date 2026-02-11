@@ -36,8 +36,6 @@ const KNOWN_ROLE_TOKENS = [
   'managing_editor',
   'assistant_editor',
   'editor_in_chief',
-  // 兼容历史遗留
-  'editor',
 ] as const
 
 function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardTab {
@@ -63,16 +61,23 @@ function parseDashboardTab(raw: string | null): DashboardTab | null {
 function normalizeRoleTokens(input: unknown): string[] {
   if (!Array.isArray(input)) return []
   const out = new Set<string>()
+  const known = new Set<string>(KNOWN_ROLE_TOKENS)
+  const sortedTokens = [...KNOWN_ROLE_TOKENS].sort((a, b) => b.length - a.length)
   for (const raw of input) {
     const text = String(raw || '').trim().toLowerCase()
     if (!text) continue
     // 标准分隔场景: "author,reviewer" / "author reviewer"
     for (const part of text.split(/[,\s|;/]+/).filter(Boolean)) {
-      out.add(part)
+      if (known.has(part)) out.add(part)
     }
-    // 异常拼接场景: "editorassistant_editor"
-    for (const token of KNOWN_ROLE_TOKENS) {
-      if (text.includes(token)) out.add(token)
+
+    // 异常拼接场景: "managing_editorassistant_editor"
+    // 采用“最长 token 优先剥离”，避免 assistant_editor 被误判为 legacy editor。
+    let rest = text
+    for (const token of sortedTokens) {
+      if (!rest.includes(token)) continue
+      out.add(token)
+      rest = rest.split(token).join(' ')
     }
   }
   return Array.from(out)
@@ -182,12 +187,10 @@ function DashboardPageContent() {
 
   const normalizedRoles = useMemo(() => normalizeRoleTokens(roles || []), [roles])
   const roleSet = new Set(normalizedRoles)
-  // 中文注释：兼容历史遗留 editor（legacy）角色，避免清理角色后出现“Dashboard 空白无入口”。
-  const isLegacyEditor = roleSet.has('editor')
   const canSeeAdmin = roleSet.has('admin')
   const canSeeAuthor = canSeeAdmin || roleSet.has('author')
   const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
-  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor') || isLegacyEditor
+  const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
   const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
   const allowedTabs: Record<DashboardTab, boolean> = useMemo(

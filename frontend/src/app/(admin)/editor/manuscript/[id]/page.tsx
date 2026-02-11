@@ -81,6 +81,10 @@ export default function EditorManuscriptDetailPage() {
   const [invoiceSaving, setInvoiceSaving] = useState(false)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
   const normalizedRoles = useMemo(() => rbacContext?.normalized_roles || [], [rbacContext])
+  const canManualStatusTransition = useMemo(
+    () => normalizedRoles.includes('admin') || normalizedRoles.includes('managing_editor'),
+    [normalizedRoles]
+  )
   const canAssignAE = useMemo(
     () => normalizedRoles.includes('managing_editor') || normalizedRoles.includes('admin'),
     [normalizedRoles]
@@ -217,6 +221,10 @@ export default function EditorManuscriptDetailPage() {
 
   const openTransitionDialog = useCallback(
     (nextStatus: string) => {
+      if (!canManualStatusTransition) {
+        toast.error('Only Managing Editor/Admin can change status directly.')
+        return
+      }
       const target = String(nextStatus || '').toLowerCase().trim()
       if (statusLower === 'pre_check' && target === 'under_review' && !currentAeId) {
         toast.error('Please assign an Assistant Editor before moving to Under Review.')
@@ -226,7 +234,7 @@ export default function EditorManuscriptDetailPage() {
       setTransitionReason('')
       setTransitionDialogOpen(true)
     },
-    [currentAeId, statusLower]
+    [canManualStatusTransition, currentAeId, statusLower]
   )
 
   const submitStatusTransition = useCallback(async () => {
@@ -626,7 +634,11 @@ export default function EditorManuscriptDetailPage() {
                     ) : showDirectStatusTransitions ? (
                         <div className="space-y-2">
                              <div className="text-xs font-semibold text-slate-500 mb-2">CHANGE STATUS</div>
-                             {nextStatuses.length === 0 ? (
+                             {!canManualStatusTransition ? (
+                                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                                  当前账号无手动状态流转权限（仅 Managing Editor/Admin 可用）。
+                                </div>
+                             ) : nextStatuses.length === 0 ? (
                                 <div className="text-sm text-slate-400 italic">No next status available.</div>
                              ) : (
                                 nextStatuses.map((s) => {
