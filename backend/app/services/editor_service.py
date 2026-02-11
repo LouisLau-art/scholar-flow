@@ -165,8 +165,8 @@ class EditorService:
         - admin：不裁剪；
         - assistant_editor（且不具备 ME/EIC 全局角色）：仅看 `assistant_editor_id == 自己`；
         - managing_editor / editor_in_chief：
-          若已配置 journal scopes，则默认按 scope 裁剪；
-          若 scope 为空且 `JOURNAL_SCOPE_ENFORCEMENT=1`，返回空列表；
+          若已配置 journal scopes，则按 scope 裁剪；
+          若 scope 为空，返回空列表（fail-closed）；
         - 其余角色沿用现有灰度开关逻辑（filter_rows_by_journal_scope）。
         """
         if not viewer_user_id or viewer_roles is None:
@@ -197,7 +197,7 @@ class EditorService:
                 out = [
                     row for row in out if str(row.get("journal_id") or "").strip() in scoped_journal_ids
                 ]
-            elif is_scope_enforcement_enabled():
+            else:
                 out = []
 
         # 其余角色继续走现有灰度策略，兼容旧环境。
@@ -1443,13 +1443,14 @@ class EditorService:
                 user_id=str(viewer_user_id),
                 roles=normalized_roles,
             )
+            has_global_scope_role = bool({"managing_editor", "editor_in_chief"} & normalized_roles)
             if scoped_journal_ids:
                 out = [
                     row
                     for row in out
                     if str(row.get("journal_id") or "").strip() in scoped_journal_ids
                 ]
-            elif is_scope_enforcement_enabled():
+            elif has_global_scope_role or is_scope_enforcement_enabled():
                 return []
 
         return out

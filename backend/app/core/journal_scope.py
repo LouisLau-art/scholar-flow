@@ -15,6 +15,11 @@ _ALLOWED_SCOPE_ROLES = {
     "editor_in_chief",
 }
 
+_STRICT_SCOPE_ALWAYS_ROLES = {
+    "managing_editor",
+    "editor_in_chief",
+}
+
 
 def is_scope_enforcement_enabled() -> bool:
     """
@@ -109,12 +114,15 @@ def ensure_manuscript_scope_access(
     """
     role_set = normalize_roles(roles)
 
-    if not is_scope_enforcement_enabled():
+    if allow_admin_bypass and ADMIN_ROLE in role_set:
+        if is_scope_enforcement_enabled():
+            journal_id = get_manuscript_journal_id(manuscript_id)
+            return str(journal_id or "")
         return ""
 
-    if allow_admin_bypass and ADMIN_ROLE in role_set:
-        journal_id = get_manuscript_journal_id(manuscript_id)
-        return str(journal_id or "")
+    should_enforce = bool(role_set.intersection(_STRICT_SCOPE_ALWAYS_ROLES)) or is_scope_enforcement_enabled()
+    if not should_enforce:
+        return ""
 
     journal_id = get_manuscript_journal_id(manuscript_id)
     if not journal_id:
@@ -142,7 +150,8 @@ def filter_rows_by_journal_scope(
     if allow_admin_bypass and ADMIN_ROLE in role_set:
         return rows
 
-    if not is_scope_enforcement_enabled():
+    should_enforce = bool(role_set.intersection(_STRICT_SCOPE_ALWAYS_ROLES)) or is_scope_enforcement_enabled()
+    if not should_enforce:
         return rows
 
     allowed_journal_ids = get_user_scope_journal_ids(user_id=str(user_id), roles=role_set)

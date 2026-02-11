@@ -331,7 +331,8 @@ async def get_editor_rbac_context(
     normalized_roles = sorted(normalize_roles(raw_roles))
     actions = sorted(list_allowed_actions(raw_roles))
     is_admin = "admin" in normalized_roles
-    enforcement_enabled = bool(is_scope_enforcement_enabled())
+    has_strict_scope_role = bool({"managing_editor", "editor_in_chief"} & set(normalized_roles))
+    enforcement_enabled = bool(is_scope_enforcement_enabled() or has_strict_scope_role)
 
     allowed_journal_ids: list[str] = []
     if enforcement_enabled and not is_admin:

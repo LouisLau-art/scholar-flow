@@ -286,6 +286,54 @@ async def test_process_list_trimmed_by_journal_scope(
 
 
 @pytest.mark.asyncio
+async def test_process_list_me_without_scope_hidden_when_enforcement_off(
+    client: AsyncClient,
+    auth_token: str,
+    override_profile_role,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    override_profile_role(["managing_editor"], user_id=user_id)
+    monkeypatch.setenv("JOURNAL_SCOPE_ENFORCEMENT", "0")
+
+    fake = _FakeSupabase(
+        {
+            "manuscripts": [
+                {
+                    "id": "m-any",
+                    "title": "Any Manuscript",
+                    "status": "under_review",
+                    "created_at": "2026-02-10T00:00:00Z",
+                    "updated_at": "2026-02-10T00:00:00Z",
+                    "journal_id": "j-any",
+                    "owner_id": None,
+                    "editor_id": None,
+                    "pre_check_status": None,
+                    "assistant_editor_id": None,
+                    "journals": {"title": "Any Journal", "slug": "any"},
+                }
+            ],
+            "journal_role_scopes": [],
+            "user_profiles": [],
+            "status_transition_logs": [],
+            "internal_tasks": [],
+        }
+    )
+
+    monkeypatch.setattr("app.services.editor_service.supabase_admin", fake)
+    monkeypatch.setattr("app.core.journal_scope.supabase_admin", fake)
+
+    response = await client.get(
+        "/api/v1/editor/manuscripts/process",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload.get("success") is True
+    assert payload.get("data") == []
+
+
+@pytest.mark.asyncio
 async def test_detail_cross_journal_forbidden(
     client: AsyncClient,
     auth_token: str,
@@ -320,6 +368,78 @@ async def test_detail_cross_journal_forbidden(
     )
     assert response.status_code == 403
     assert "journal scope" in str(response.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_detail_me_without_scope_forbidden_when_enforcement_off(
+    client: AsyncClient,
+    auth_token: str,
+    override_profile_role,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    override_profile_role(["managing_editor"], user_id=user_id)
+    monkeypatch.setenv("JOURNAL_SCOPE_ENFORCEMENT", "0")
+
+    fake = _FakeSupabase(
+        {
+            "manuscripts": [
+                {"id": "m-403", "journal_id": "j-forbidden"},
+            ],
+            "journal_role_scopes": [],
+        }
+    )
+    monkeypatch.setattr("app.core.journal_scope.supabase_admin", fake)
+
+    response = await client.get(
+        "/api/v1/editor/manuscripts/m-403",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert response.status_code == 403
+    assert "journal scope" in str(response.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_academic_queue_eic_without_scope_hidden_when_enforcement_off(
+    client: AsyncClient,
+    auth_token: str,
+    override_profile_role,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    user_id = "11111111-1111-1111-1111-111111111111"
+    override_profile_role(["editor_in_chief"], user_id=user_id)
+    monkeypatch.setenv("JOURNAL_SCOPE_ENFORCEMENT", "0")
+
+    fake = _FakeSupabase(
+        {
+            "manuscripts": [
+                {
+                    "id": "m-academic",
+                    "title": "Academic Queue Manuscript",
+                    "status": "pre_check",
+                    "pre_check_status": "academic",
+                    "journal_id": "j-any",
+                    "owner_id": None,
+                    "editor_id": None,
+                    "assistant_editor_id": None,
+                    "created_at": "2026-02-10T00:00:00Z",
+                    "updated_at": "2026-02-10T00:00:00Z",
+                }
+            ],
+            "journal_role_scopes": [],
+            "user_profiles": [],
+        }
+    )
+
+    monkeypatch.setattr("app.services.editor_service.supabase_admin", fake)
+    monkeypatch.setattr("app.core.journal_scope.supabase_admin", fake)
+
+    response = await client.get(
+        "/api/v1/editor/academic",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == []
 
 
 @pytest.mark.asyncio
