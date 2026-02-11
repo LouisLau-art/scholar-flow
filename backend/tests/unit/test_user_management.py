@@ -710,7 +710,7 @@ class TestCreateInternalUser:
 
             # Verify console output
             captured = capsys.readouterr()
-            assert "INTERNAL USER CREATED" in captured.out
+            assert "internal user created" in captured.out.lower()
 
     def test_create_internal_user_already_exists(self, mock_env):
         """Test user creation when email already exists"""
@@ -816,7 +816,7 @@ class TestInviteReviewer:
             assert result["roles"] == ["reviewer"]
 
             captured = capsys.readouterr()
-            assert "REVIEWER INVITE GENERATED" in captured.out
+            assert "reviewer invite link generated" in captured.out.lower()
 
     def test_invite_reviewer_already_exists(self, mock_env):
         """Test invite when reviewer already exists"""
