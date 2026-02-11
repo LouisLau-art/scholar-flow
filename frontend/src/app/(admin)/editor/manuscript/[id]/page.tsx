@@ -8,6 +8,8 @@ import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
@@ -199,6 +201,9 @@ export default function EditorManuscriptDetailPage() {
   const [ms, setMs] = useState<ManuscriptDetail | null>(null)
   const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
   const [transitioning, setTransitioning] = useState<string | null>(null)
+  const [pendingTransition, setPendingTransition] = useState<string | null>(null)
+  const [transitionDialogOpen, setTransitionDialogOpen] = useState(false)
+  const [transitionReason, setTransitionReason] = useState('')
   const [viewerEmail, setViewerEmail] = useState<string>('')
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -210,6 +215,10 @@ export default function EditorManuscriptDetailPage() {
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
+  const requiresTransitionReason = useMemo(() => {
+    const target = String(pendingTransition || '').toLowerCase()
+    return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
+  }, [pendingTransition])
 
   const loadRbacContext = useCallback(async () => {
     const rbacRes = await EditorApi.getRbacContext()
@@ -251,7 +260,8 @@ export default function EditorManuscriptDetailPage() {
       if (!detailRes?.success) throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       const detail = detailRes.data
       setMs(detail)
-      await loadRbacContext()
+      // 不阻塞详情页首屏；RBAC 信息后台刷新。
+      void loadRbacContext().catch(() => setRbacContext(null))
 
       const meta = (detail?.invoice_metadata as any) || {}
       const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
@@ -366,6 +376,49 @@ export default function EditorManuscriptDetailPage() {
     }
     router.push(fallbackPath)
   }, [router, fallbackPath])
+
+  const getTransitionActionLabel = useCallback(
+    (nextStatus: string) => {
+      const next = String(nextStatus || '').toLowerCase()
+      if (statusLower === 'pre_check' && next === 'minor_revision') {
+        return 'Request Technical Return'
+      }
+      if (statusLower === 'pre_check' && next === 'under_review') {
+        return 'Move to Under Review'
+      }
+      return `Move to ${getStatusLabel(nextStatus)}`
+    },
+    [statusLower]
+  )
+
+  const openTransitionDialog = useCallback((nextStatus: string) => {
+    setPendingTransition(nextStatus)
+    setTransitionReason('')
+    setTransitionDialogOpen(true)
+  }, [])
+
+  const submitStatusTransition = useCallback(async () => {
+    const target = String(pendingTransition || '').toLowerCase().trim()
+    if (!target) return
+    try {
+      if (requiresTransitionReason && !transitionReason.trim()) {
+        toast.error('This transition requires a reason.')
+        return
+      }
+      setTransitioning(target)
+      const res = await EditorApi.patchManuscriptStatus(id, target, transitionReason.trim() || undefined)
+      if (!res?.success) throw new Error(res?.detail || res?.message || 'Failed')
+      toast.success(`Moved to ${getStatusLabel(target)}`)
+      setTransitionDialogOpen(false)
+      setPendingTransition(null)
+      setTransitionReason('')
+      await refreshDetail()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Transition failed')
+    } finally {
+      setTransitioning(null)
+    }
+  }, [id, pendingTransition, refreshDetail, requiresTransitionReason, transitionReason])
 
 
   if (loading) {
@@ -718,32 +771,9 @@ export default function EditorManuscriptDetailPage() {
                                         className="w-full justify-between"
                                         variant="outline"
                                         disabled={transitioning === s}
-                                        onClick={async () => {
-                                            try {
-                                                const confirmText = `确认将状态修改为「${getStatusLabel(s)}」吗？`
-                                                if (!window.confirm(confirmText)) return
-                                                let comment: string | undefined
-                                                if (['minor_revision', 'major_revision', 'rejected', 'approved'].includes(s)) {
-                                                  const input = window.prompt(`请输入流转原因（${getStatusLabel(s)}）：`) ?? ''
-                                                  if (!input.trim()) {
-                                                    toast.error('该流转需要填写原因。')
-                                                    return
-                                                  }
-                                                  comment = input.trim()
-                                                }
-                                                setTransitioning(s)
-                                                const res = await EditorApi.patchManuscriptStatus(id, s, comment)
-                                                if (!res?.success) throw new Error(res?.detail || res?.message || 'Failed')
-                                                toast.success(`Moved to ${getStatusLabel(s)}`)
-                                                await refreshDetail()
-                                            } catch (e) {
-                                                toast.error(e instanceof Error ? e.message : 'Transition failed')
-                                            } finally {
-                                                setTransitioning(null)
-                                            }
-                                        }}
+                                        onClick={() => openTransitionDialog(s)}
                                     >
-                                        <span>Move to {getStatusLabel(s)}</span>
+                                        <span>{getTransitionActionLabel(s)}</span>
                                         {transitioning === s ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4 opacity-50" />}
                                     </Button>
                                 ))
@@ -872,6 +902,50 @@ export default function EditorManuscriptDetailPage() {
           }
         }}
       />
+
+      <Dialog open={transitionDialogOpen} onOpenChange={setTransitionDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirm Status Transition</DialogTitle>
+            <DialogDescription>
+              {pendingTransition
+                ? `You are moving this manuscript from "${getStatusLabel(status)}" to "${getStatusLabel(pendingTransition)}".`
+                : 'Please confirm status transition.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {requiresTransitionReason ? (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-slate-700">Reason</div>
+              <Textarea
+                placeholder={`Enter reason for ${pendingTransition ? getStatusLabel(pendingTransition) : 'this transition'}...`}
+                value={transitionReason}
+                onChange={(event) => setTransitionReason(event.target.value)}
+                rows={4}
+              />
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (transitioning) return
+                setTransitionDialogOpen(false)
+                setPendingTransition(null)
+                setTransitionReason('')
+              }}
+              disabled={Boolean(transitioning)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitStatusTransition} disabled={Boolean(transitioning)}>
+              {transitioning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, RefreshCw, FileWarning } from 'lucide-react'
-import { ApiClient } from '@/lib/api-client'
+import { Download, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   manuscriptId: string
@@ -22,9 +23,9 @@ export default function PlagiarismActions({ manuscriptId, status }: Props) {
       // 调用 T016 后端重试接口
       console.log('Retrying plagiarism check for', manuscriptId)
       // await ApiClient.retryPlagiarism(manuscriptId)
-      alert('任务已重新加入队列')
+      toast.success('任务已重新加入队列')
     } catch (error) {
-      alert('重试请求失败')
+      toast.error('重试请求失败')
     } finally {
       setIsUploading(false)
     }
@@ -38,23 +39,28 @@ export default function PlagiarismActions({ manuscriptId, status }: Props) {
   return (
     <div className="flex gap-2">
       {status === 'completed' && (
-        <button 
+        <Button
+          type="button"
+          size="sm"
           onClick={handleDownload}
           className="flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
         >
           <Download className="h-3.5 w-3.5" /> Report
-        </button>
+        </Button>
       )}
 
       {status === 'failed' && (
-        <button 
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
           onClick={handleRetry}
           disabled={isRetrying}
           className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`} /> 
           Retry Check
-        </button>
+        </Button>
       )}
 
       {(status === 'pending' || status === 'running') && (
