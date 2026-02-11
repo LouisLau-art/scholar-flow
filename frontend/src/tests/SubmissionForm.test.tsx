@@ -55,16 +55,32 @@ vi.mock('next/link', () => ({
 }))
 
 // Mock lucide-react icons
-vi.mock('lucide-react', () => ({
-  Upload: () => <div data-testid="upload-icon">Upload</div>,
-  Loader2: () => <div data-testid="loader-icon">Loader</div>,
-  ArrowLeft: () => <div data-testid="arrow-icon">Arrow</div>
-}))
+vi.mock('lucide-react', async () => {
+  const actual = await vi.importActual<typeof import('lucide-react')>('lucide-react')
+  return {
+    ...actual,
+    Upload: () => <div data-testid="upload-icon">Upload</div>,
+    Loader2: () => <div data-testid="loader-icon">Loader</div>,
+    ArrowLeft: () => <div data-testid="arrow-icon">Arrow</div>,
+    ChevronDown: () => <div data-testid="chevron-down-icon">Chevron</div>,
+  }
+})
 
 // Import after mocking
 import SubmissionForm from '@/components/SubmissionForm'
 import { authService } from '@/services/auth'
 import { toast } from 'sonner'
+
+const JOURNAL_LIST_SUCCESS = {
+  success: true,
+  data: [
+    {
+      id: 'journal-1',
+      title: 'Journal One',
+      slug: 'journal-one',
+    },
+  ],
+}
 
 describe('SubmissionForm Component', () => {
   /**
@@ -78,6 +94,16 @@ describe('SubmissionForm Component', () => {
     vi.clearAllMocks()
     ;(authService.getSession as any).mockResolvedValue(null)
     storageUploadMock.mockResolvedValue({ error: null })
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+        text: async () => JSON.stringify({ success: true }),
+      } as any
+    }))
     vi.stubGlobal('crypto', {
       randomUUID: () => 'test-uuid',
     } as any)
@@ -134,15 +160,21 @@ describe('SubmissionForm Component', () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
     })
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            success: true,
-            data: { title: 'Parsed Title', abstract: 'Parsed Abstract', authors: [] },
-          })
-        ),
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: { title: 'Parsed Title', abstract: 'Parsed Abstract', authors: [] },
+            }),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -169,9 +201,17 @@ describe('SubmissionForm Component', () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
     })
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve(JSON.stringify({ success: false, message: 'bad' })),
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: false,
+          text: async () => JSON.stringify({ success: false, message: 'bad' }),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -201,6 +241,9 @@ describe('SubmissionForm Component', () => {
     })
     ;(authService.getAccessToken as any).mockResolvedValue('token')
     const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
       if (url === '/api/v1/manuscripts/upload') {
         return {
           ok: true,
@@ -266,6 +309,9 @@ describe('SubmissionForm Component', () => {
     })
     ;(authService.getAccessToken as any).mockResolvedValue('token')
     const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
       if (url === '/api/v1/manuscripts/upload') {
         return {
           ok: true,
@@ -334,6 +380,9 @@ describe('SubmissionForm Component', () => {
     })
     ;(authService.getAccessToken as any).mockResolvedValue('token')
     const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
       if (url === '/api/v1/manuscripts/upload') {
         return {
           ok: true,

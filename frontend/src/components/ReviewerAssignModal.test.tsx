@@ -117,9 +117,9 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       />
     )
 
-    const ownerSelect = (await screen.findByTestId('owner-select')) as HTMLSelectElement
+    await screen.findByTestId('owner-select')
     await waitFor(() => {
-      expect(ownerSelect.value).toBe('u-owner')
+      expect(screen.getByText(/Current:/)).toHaveTextContent('Owner User')
     })
 
     const analyzeBtn = await screen.findByTestId('ai-analyze')
@@ -152,9 +152,9 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       />
     )
 
-    const ownerSelect = (await screen.findByTestId('owner-select')) as HTMLSelectElement
+    await screen.findByTestId('owner-select')
     await waitFor(() => {
-      expect(ownerSelect.value).toBe('u-owner')
+      expect(screen.getByText(/Current:/)).toHaveTextContent('Owner User')
     })
 
     // Initial load fetches reviewers
