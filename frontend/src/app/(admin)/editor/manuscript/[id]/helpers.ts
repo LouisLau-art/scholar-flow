@@ -193,13 +193,68 @@ export function buildAuthorResponseHistory(manuscript: ManuscriptDetail | null):
 }
 
 function mapFile(f: ManuscriptFile, type: FileItem['type']): FileItem {
+  const visual = inferFileVisual(f, type)
   return {
     id: String(f.id),
-    label: f.label || 'Unknown File',
-    type,
+    label: f.label || f.original_filename || f.path || 'Unknown File',
+    type: visual.type,
+    badge: visual.badge,
     url: f.signed_url || undefined,
     date: f.created_at ? format(new Date(f.created_at), 'yyyy-MM-dd') : undefined,
   }
+}
+
+function getFileExtension(file: ManuscriptFile): string {
+  const candidates = [
+    String(file.original_filename || ''),
+    String(file.label || ''),
+    String(file.path || ''),
+    String(file.signed_url || ''),
+  ]
+  for (const candidate of candidates) {
+    const m = candidate.toLowerCase().match(/\.([a-z0-9]{1,8})(?:[?#].*)?$/)
+    if (m?.[1]) return m[1]
+  }
+  return ''
+}
+
+function inferFileVisual(
+  file: ManuscriptFile,
+  fallbackType: FileItem['type']
+): { type: FileItem['type']; badge: string } {
+  const ext = getFileExtension(file)
+  const contentType = String(file.content_type || '').toLowerCase()
+
+  if (ext === 'pdf' || contentType.includes('application/pdf')) {
+    return { type: 'pdf', badge: 'PDF' }
+  }
+  if (
+    ['doc', 'docx', 'rtf', 'odt'].includes(ext) ||
+    contentType.includes('msword') ||
+    contentType.includes('wordprocessingml')
+  ) {
+    return { type: 'doc', badge: ext ? ext.toUpperCase() : 'DOC' }
+  }
+  if (['txt', 'md'].includes(ext) || contentType.startsWith('text/')) {
+    return { type: 'doc', badge: ext ? ext.toUpperCase() : 'TXT' }
+  }
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) || contentType.startsWith('image/')) {
+    return { type: 'other', badge: 'IMG' }
+  }
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+    return { type: 'other', badge: 'ZIP' }
+  }
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return { type: 'other', badge: ext.toUpperCase() }
+  }
+  if (['ppt', 'pptx'].includes(ext)) {
+    return { type: 'other', badge: ext.toUpperCase() }
+  }
+
+  if (fallbackType === 'rpt') return { type: 'rpt', badge: 'RPT' }
+  if (fallbackType === 'pdf') return { type: 'pdf', badge: 'PDF' }
+  if (fallbackType === 'doc') return { type: 'doc', badge: 'DOC' }
+  return { type: 'other', badge: 'FILE' }
 }
 
 export function buildFileHubProps(files?: ManuscriptFile[] | null): {
@@ -211,6 +266,6 @@ export function buildFileHubProps(files?: ManuscriptFile[] | null): {
   return {
     manuscriptFiles: filterFilesByType(rawFiles, 'manuscript').map((f) => mapFile(f, 'pdf')),
     coverFiles: filterFilesByType(rawFiles, 'cover_letter').map((f) => mapFile(f, 'doc')),
-    reviewFiles: filterFilesByType(rawFiles, 'review_attachment').map((f) => mapFile(f, 'pdf')),
+    reviewFiles: filterFilesByType(rawFiles, 'review_attachment').map((f) => mapFile(f, 'rpt')),
   }
 }

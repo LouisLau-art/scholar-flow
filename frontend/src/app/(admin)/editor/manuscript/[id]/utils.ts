@@ -2,6 +2,8 @@ export type ManuscriptFile = {
   id: string
   file_type: 'cover_letter' | 'manuscript' | 'review_attachment' | string
   label?: string | null
+  original_filename?: string | null
+  content_type?: string | null
   bucket?: string | null
   path?: string | null
   signed_url?: string | null
@@ -13,4 +15,3 @@ export function filterFilesByType(files: ManuscriptFile[] | undefined | null, ty
   const t = String(type || '').toLowerCase()
   return list.filter((f) => String(f?.file_type || '').toLowerCase() === t)
 }
-

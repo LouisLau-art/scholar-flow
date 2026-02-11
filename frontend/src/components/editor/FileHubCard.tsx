@@ -9,6 +9,7 @@ export interface FileItem {
   id: string
   label: string
   type: 'pdf' | 'doc' | 'rpt' | 'other'
+  badge?: string
   url?: string
   date?: string
 }
@@ -34,7 +35,7 @@ function FileRow({ file }: { file: FileItem }) {
     <div className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded hover:bg-slate-100 transition-colors">
       <div className="flex items-center gap-3 overflow-hidden">
         <div className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${colorClass}`}>
-          {file.type.toUpperCase()}
+          {(file.badge || file.type.toUpperCase()).slice(0, 4)}
         </div>
         <div className="truncate">
           <div className="font-medium text-slate-700 truncate">{file.label}</div>
