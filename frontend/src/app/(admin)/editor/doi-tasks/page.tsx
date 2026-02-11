@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { doiApi, DOITask } from '@/lib/api/doi'
 import { DOITaskList } from '@/components/doi/DOITaskList'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ export default function DOITasksPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'failed'>('all')
 
-  async function loadTasks() {
+  const loadTasks = useCallback(async () => {
     setLoading(true)
     try {
       const res = filter === 'failed' 
@@ -24,11 +24,11 @@ export default function DOITasksPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
 
   useEffect(() => {
-    loadTasks()
-  }, [filter])
+    void loadTasks()
+  }, [loadTasks])
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

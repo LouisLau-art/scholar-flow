@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AcceptForm } from './accept-form'
@@ -63,7 +63,7 @@ function ReviewInvitePageInner() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<InviteData | null>(null)
 
-  const loadInvite = async () => {
+  const loadInvite = useCallback(async () => {
     if (!assignmentId) {
       setError('Missing assignment id in invite link.')
       setLoading(false)
@@ -84,11 +84,11 @@ function ReviewInvitePageInner() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [assignmentId])
 
   useEffect(() => {
     void loadInvite()
-  }, [assignmentId])
+  }, [loadInvite])
 
   const openWorkspace = () => {
     if (!assignmentId) return

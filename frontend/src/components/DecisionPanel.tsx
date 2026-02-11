@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import VersionHistory from '@/components/VersionHistory'
+import { getLatestRevisionDecisionType, getScoreNumber, isReviewCompleted } from '@/lib/decision/reviewUtils'
 
 interface ReviewFeedback {
   id: string
@@ -77,24 +78,6 @@ export default function DecisionPanel({
     } catch (e) {
       toast.error('生成下载链接失败', { id: toastId })
     }
-  }
-
-  const getScoreNumber = (value: unknown): number | null => {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null
-    if (typeof value === 'string') {
-      const n = Number(value)
-      return Number.isFinite(n) ? n : null
-    }
-    return null
-  }
-
-  const isReviewCompleted = (r: ReviewFeedback): boolean => {
-    const status = String(r.status || '').toLowerCase()
-    if (status === 'completed' || status === 'submitted' || status === 'done') return true
-    if (getScoreNumber(r.score) !== null) return true
-    if ((r.comments_for_author || '').trim()) return true
-    if ((r.confidential_comments_to_editor || '').trim()) return true
-    return false
   }
 
   useEffect(() => {
@@ -196,41 +179,41 @@ export default function DecisionPanel({
         const token = await authService.getAccessToken()
         if (!token) return
 
-        // 1) 当前用户角色（用于 UI 权限控制）
-        const pRes = await fetch('/api/v1/user/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const pRaw = await pRes.text().catch(() => '')
+        // 并行获取角色与版本，减少决策面板首屏等待。
+        const [pRes, hRes] = await Promise.all([
+          fetch('/api/v1/user/profile', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/versions`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ])
+
+        const [pRaw, hRaw] = await Promise.all([
+          pRes.text().catch(() => ''),
+          hRes.text().catch(() => ''),
+        ])
+
         let pJson: any = null
         try {
           pJson = pRaw ? JSON.parse(pRaw) : null
         } catch {
           pJson = null
         }
-        const nextRoles = (pJson?.data?.roles || pJson?.roles || []) as string[]
-        if (!cancelled) setRoles(Array.isArray(nextRoles) ? nextRoles : [])
-
-        // 2) 最新修订类型（用于“上轮小修后禁用大修”）
-        const hRes = await fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/versions`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const hRaw = await hRes.text().catch(() => '')
         let hJson: any = null
         try {
           hJson = hRaw ? JSON.parse(hRaw) : null
         } catch {
           hJson = null
         }
-        const revisions = (hJson?.data?.revisions || []) as any[]
-        const latest = Array.isArray(revisions)
-          ? revisions.reduce((acc: any, cur: any) => {
-              if (!acc) return cur
-              if ((cur?.round_number ?? 0) > (acc?.round_number ?? 0)) return cur
-              return acc
-            }, null as any)
-          : null
-        const t = String(latest?.decision_type || '').toLowerCase()
-        if (!cancelled) setLastRevisionType(t === 'minor' || t === 'major' ? (t as any) : null)
+
+        if (!cancelled) {
+          const nextRoles = (pJson?.data?.roles || pJson?.roles || []) as string[]
+          setRoles(Array.isArray(nextRoles) ? nextRoles : [])
+
+          const revisions = (hJson?.data?.revisions || []) as any[]
+          setLastRevisionType(Array.isArray(revisions) ? getLatestRevisionDecisionType(revisions) : null)
+        }
       } catch (e) {
         // 不阻塞主流程：失败就不做 UI 限制
         console.warn('[DecisionPanel] load meta failed (ignored):', e)

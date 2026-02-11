@@ -59,7 +59,7 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
     setEditTitle(selectedPage.title || '')
     setEditContent((selectedPage.content as string) || '')
     setEditPublished(Boolean(selectedPage.is_published))
-  }, [selectedPage?.slug])
+  }, [selectedPage])
 
   const handleCreate = async () => {
     const title = newTitle.trim()
@@ -235,4 +235,3 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
     </div>
   )
 }
-
