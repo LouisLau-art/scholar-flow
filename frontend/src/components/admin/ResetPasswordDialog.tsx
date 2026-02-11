@@ -20,8 +20,6 @@ interface ResetPasswordDialogProps {
   onConfirm: (userId: string) => Promise<void>
 }
 
-const DEFAULT_TEMP_PASSWORD = '12345678'
-
 export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetPasswordDialogProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +44,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
         <DialogHeader>
           <DialogTitle>Reset User Password</DialogTitle>
           <DialogDescription>
-            This will reset the user password to a temporary value.
+            This will reset the user password to a system-generated temporary value.
           </DialogDescription>
         </DialogHeader>
 
@@ -59,7 +57,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             Target user: <span className="font-semibold">{user?.full_name || user?.email || '-'}</span>
           </div>
           <div className="text-sm text-amber-900">
-            Temporary password: <span className="rounded bg-white px-2 py-1 font-mono">{DEFAULT_TEMP_PASSWORD}</span>
+            The system will generate a random temporary password for this reset.
           </div>
           <div className="text-xs text-amber-700">
             Ask the user to log in and immediately change their password in Settings.

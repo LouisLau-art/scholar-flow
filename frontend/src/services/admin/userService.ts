@@ -88,7 +88,7 @@ export const adminUserService = {
 
   async resetUserPassword(
     userId: string,
-    data: ResetPasswordRequest = { temporary_password: '12345678' }
+    data: ResetPasswordRequest = {}
   ): Promise<ResetPasswordResponse> {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/${userId}/reset-password`, {

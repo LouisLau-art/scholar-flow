@@ -150,8 +150,8 @@ export default function UserManagementPage() {
 
   const handleResetPassword = async (userId: string) => {
     try {
-      await adminUserService.resetUserPassword(userId, { temporary_password: '12345678' });
-      toast.success('Password reset to 12345678');
+      await adminUserService.resetUserPassword(userId);
+      toast.success('Password reset successfully');
     } catch (error) {
       console.error('Reset password failed:', error);
       throw error;

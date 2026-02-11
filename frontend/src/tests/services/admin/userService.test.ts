@@ -175,7 +175,7 @@ describe('adminUserService', () => {
         '/api/v1/admin/users/1/reset-password',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ temporary_password: '12345678' }),
+          body: JSON.stringify({}),
         })
       );
       expect(result.must_change_password).toBe(true);

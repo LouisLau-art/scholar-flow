@@ -1,4 +1,6 @@
 import os
+import secrets
+import string
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, Dict, Any, List
@@ -32,6 +34,14 @@ class UserManagementService:
             print("WARNING: SUPABASE_SERVICE_ROLE_KEY not set. Admin operations will fail.")
         
         self.admin_client: Client = create_client(url, service_key)
+
+    @staticmethod
+    def _generate_temporary_password(length: int = 16) -> str:
+        """
+        生成高熵临时密码（避免固定弱口令）。
+        """
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+        return "".join(secrets.choice(alphabet) for _ in range(length))
 
     # --- T015: Implement audit logging helper functions ---
 
@@ -276,10 +286,10 @@ class UserManagementService:
     ) -> Dict[str, Any]:
         """
         Admin 重置用户密码。
-        默认临时密码：12345678（可被请求参数覆盖）。
+        - 若未显式传入临时密码，则自动生成强随机密码。
         """
         target_id_str = str(target_user_id)
-        pwd = str(temporary_password or "12345678").strip()
+        pwd = str(temporary_password or self._generate_temporary_password()).strip()
         if len(pwd) < 8:
             raise ValueError("Temporary password must be at least 8 characters")
 
@@ -319,8 +329,8 @@ class UserManagementService:
             self.log_email_notification(
                 recipient_email=profile_email or f"user:{target_id_str}",
                 notification_type="admin_password_reset",
-                status="sent",
-                error_message=f"reset_by={changed_by}",
+                status="pending_retry",
+                error_message=f"Password reset by admin {changed_by}; delivery not implemented in this flow.",
             )
         except Exception:
             pass
@@ -365,10 +375,7 @@ class UserManagementService:
             # So we might want `create_user` with `email_confirm=True` and a generated password, 
             # then send our own email.
             
-            import secrets
-            import string
-            alphabet = string.ascii_letters + string.digits
-            temp_password = ''.join(secrets.choice(alphabet) for i in range(12))
+            temp_password = self._generate_temporary_password(16)
             
             # Note: auth.admin is accessed via self.admin_client.auth.admin
             user_response = self.admin_client.auth.admin.create_user({
@@ -408,17 +415,14 @@ class UserManagementService:
             )
             
             # 5. Send Notification (T086)
-            print("-" * 50)
-            print("🚀 [INTERNAL USER CREATED]")
-            print(f"📧 Email: {email}")
-            print(f"🔑 Temp Password: {temp_password}")
-            print(f"🎭 Role: {role}")
-            print("-" * 50)
+            print(f"[UserManagement] internal user created: email={email} role={role}")
 
             self.log_email_notification(
                 recipient_email=email,
                 notification_type="account_created",
-                status="sent" # Assuming sent
+                # 当前链路仅记录创建事件，未实际发送账号邮件，不应标记 sent。
+                status="pending_retry",
+                error_message="Account created; delivery not implemented in this flow.",
             )
             
             return {
@@ -466,10 +470,7 @@ class UserManagementService:
             # Step 2a: Create user (shadow account)
             user_id = None
             try:
-                import secrets
-                import string
-                alphabet = string.ascii_letters + string.digits
-                temp_password = ''.join(secrets.choice(alphabet) for i in range(12))
+                temp_password = self._generate_temporary_password(16)
                 
                 user_response = self.admin_client.auth.admin.create_user({
                     "email": email,
@@ -553,24 +554,15 @@ class UserManagementService:
                 )
             
             # 5. Send Notification (Email with Magic Link)
-            print("-" * 50)
-            print("🔗 [REVIEWER INVITE GENERATED]")
-            print(f"📧 Recipient: {email}")
-            # 中文注释:
-            # - 本地开发时 Magic Link 往往不稳定，会极大阻碍测试。
-            # - GO_ENV=dev 时，直接打印 dev-login 链接（点击即可登录），避免依赖邮件/回调。
-            if (os.environ.get("GO_ENV") or "").strip().lower() == "dev":
-                print(f"🌐 Dev Login: http://localhost:3000/api/v1/auth/dev-login?email={email}")
-            else:
-                print(f"🌐 Magic Link: {magic_link}")
-            print("-" * 50)
+            print(f"[UserManagement] reviewer invite link generated for {email}")
 
             try:
                 self.log_email_notification(
                     recipient_email=email,
                     notification_type="reviewer_invite",
-                    status="sent",
-                    error_message="Magic Link generated (logged to console)",
+                    # 当前链路仅生成链接且不写日志明文，不应标记 sent。
+                    status="pending_retry",
+                    error_message="Magic link generated; delivery not implemented in this flow.",
                 )
             except Exception as log_err:
                 print(f"WARNING: Failed to log email notification: {log_err}")

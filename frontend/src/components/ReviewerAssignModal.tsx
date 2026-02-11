@@ -195,10 +195,10 @@ export default function ReviewerAssignModal({
     }
   }
 
-  const fetchReviewers = useCallback(async () => {
+  const fetchReviewers = useCallback(async (query: string = '') => {
     setIsLoading(true)
     try {
-      const payload = await EditorApi.searchReviewerLibrary(searchTerm, 120, manuscriptId)
+      const payload = await EditorApi.searchReviewerLibrary(query, 120, manuscriptId)
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
       setReviewers((payload.data || []) as ReviewerWithPolicy[])
       setPolicyMeta(payload?.policy || {})
@@ -208,25 +208,31 @@ export default function ReviewerAssignModal({
     } finally {
       setIsLoading(false)
     }
-  }, [searchTerm, manuscriptId])
+  }, [manuscriptId])
 
   useEffect(() => {
-    if (isOpen) {
-      setSearchTerm('')
-      setSelectedReviewers([])
-      setOverrideReasons({})
-      setAiRecommendations([])
-      setAiMessage(null)
-      setPendingRemove(null)
-      setOwnerSearch('')
-      setPolicyMeta({})
-      fetchReviewers()
-      fetchExistingReviewers()
-      fetchOwner()
-      fetchInternalStaff()
-      fetchMyRoles()
-    }
-  }, [isOpen, fetchReviewers, fetchExistingReviewers, fetchOwner, fetchInternalStaff, fetchMyRoles])
+    if (!isOpen) return
+    setSearchTerm('')
+    setSelectedReviewers([])
+    setOverrideReasons({})
+    setAiRecommendations([])
+    setAiMessage(null)
+    setPendingRemove(null)
+    setOwnerSearch('')
+    setPolicyMeta({})
+    fetchExistingReviewers()
+    fetchOwner()
+    fetchInternalStaff()
+    fetchMyRoles()
+  }, [isOpen, manuscriptId, fetchExistingReviewers, fetchOwner, fetchInternalStaff, fetchMyRoles])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const timer = window.setTimeout(() => {
+      void fetchReviewers(searchTerm.trim())
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [isOpen, manuscriptId, searchTerm, fetchReviewers])
 
   const canCurrentUserOverrideCooldown = useMemo(() => {
     const allowRoles = (policyMeta.override_roles || ['admin', 'managing_editor']).map((r) => String(r).toLowerCase())
@@ -850,7 +856,7 @@ export default function ReviewerAssignModal({
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         mode="create"
-        onSaved={() => fetchReviewers()}
+        onSaved={() => fetchReviewers(searchTerm.trim())}
       />
     </>
   )

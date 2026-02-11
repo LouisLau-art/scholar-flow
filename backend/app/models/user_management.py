@@ -149,10 +149,11 @@ class InviteReviewerRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     """
     Admin 重置密码请求。
-    默认值遵循产品约定：12345678
+    - 不传则由后端生成强随机临时密码。
+    - 仅在极少数排障场景允许显式传入（仍需满足长度约束）。
     """
 
-    temporary_password: str = Field(default="12345678", min_length=8, max_length=128)
+    temporary_password: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
 
 class ResetPasswordResponse(BaseModel):

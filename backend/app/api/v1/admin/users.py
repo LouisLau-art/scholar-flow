@@ -575,7 +575,7 @@ async def reset_user_password(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Admin 将指定用户密码重置为临时密码（默认 12345678）。
+    Admin 将指定用户密码重置为临时密码（默认由后端生成强随机密码）。
     """
     try:
         return service.reset_user_password(
