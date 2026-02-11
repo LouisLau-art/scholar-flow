@@ -322,7 +322,13 @@ function DashboardPageContent() {
                         <div className="p-8 text-slate-500 text-sm">No submissions yet.</div>
                       ) : (
                         <div className="divide-y divide-slate-100">
-                          {submissions.map((item) => (
+                          {submissions.map((item) => {
+                            const itemStatus = String(item?.status || '').toLowerCase()
+                            const detailHref =
+                              itemStatus === 'published'
+                                ? `/articles/${item.id}`
+                                : `/dashboard/author/manuscripts/${item.id}`
+                            return (
                             <div key={item.id} className="p-6 flex items-center justify-between hover:bg-slate-50 group transition-all">
                               <div className="flex items-center gap-4">
                                 <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
@@ -381,12 +387,13 @@ function DashboardPageContent() {
                                     Download Invoice
                                   </Button>
                                 )}
-                                <Link href={`/articles/${item.id}`} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                                <Link href={detailHref} className="text-slate-300 group-hover:text-blue-600 transition-all">
                                   <ArrowRight className="h-5 w-5" />
                                 </Link>
                               </div>
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
                     </div>
