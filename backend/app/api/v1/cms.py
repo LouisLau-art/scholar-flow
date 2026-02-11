@@ -19,7 +19,7 @@ def _service() -> CMSService:
 @router.get("/pages")
 async def list_pages(
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     列出所有 CMS 页面（编辑/管理员）。
@@ -32,7 +32,7 @@ async def list_pages(
 async def create_page(
     payload: CMSPageCreate,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     创建 CMS 页面（编辑/管理员）。
@@ -54,7 +54,7 @@ async def update_page(
     slug: str,
     payload: CMSPageUpdate,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     更新 CMS 页面（编辑/管理员）。
@@ -87,7 +87,7 @@ async def get_public_page(slug: str):
 async def upload_image(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     CMS 图片上传（编辑/管理员）。
@@ -120,7 +120,7 @@ async def get_menu(location: str | None = None):
 async def update_menu(
     payload: CMSMenuUpdateRequest,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     更新菜单结构（编辑/管理员）。

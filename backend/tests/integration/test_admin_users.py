@@ -55,7 +55,7 @@ async def test_get_users_authorized_admin(client: AsyncClient, auth_token, mock_
     """T023: Authentication test: GET /api/v1/admin/users requires valid JWT and admin role"""
     mock_users_data = [
         {"id": str(uuid4()), "email": "user1@example.com", "full_name": "User One", "roles": ["author"], "created_at": "2026-01-01T00:00:00Z", "is_verified": True},
-        {"id": str(uuid4()), "email": "user2@example.com", "full_name": "User Two", "roles": ["editor"], "created_at": "2026-01-02T00:00:00Z", "is_verified": True},
+        {"id": str(uuid4()), "email": "user2@example.com", "full_name": "User Two", "roles": ["managing_editor"], "created_at": "2026-01-02T00:00:00Z", "is_verified": True},
     ]
     
     mock_admin_service.get_users.return_value = {
@@ -161,12 +161,12 @@ async def test_update_role_validation(client: AsyncClient, auth_token, mock_admi
 async def test_update_role_success(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
     """T052: HTTP method test: Test PUT /api/v1/admin/users/{id}/role"""
     user_id = str(uuid4())
-    payload = {"new_role": "editor", "reason": "Valid reason for promotion"}
+    payload = {"new_role": "managing_editor", "reason": "Valid reason for promotion"}
     
     mock_admin_service.update_user_role.return_value = {
         "id": user_id,
         "email": "target@example.com",
-        "roles": ["editor"],
+        "roles": ["managing_editor"],
         "created_at": "2026-01-01T00:00:00Z"
     }
     
@@ -178,7 +178,7 @@ async def test_update_role_success(client: AsyncClient, auth_token, mock_admin_r
     
     assert response.status_code == 200
     data = response.json()
-    assert "editor" in data["roles"]
+    assert "managing_editor" in data["roles"]
     mock_admin_service.update_user_role.assert_called_once()
 
 @pytest.mark.asyncio
@@ -189,11 +189,11 @@ async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token
         "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
     }
 
-    payload = {"new_roles": ["admin", "editor"], "reason": "Add editor role to self"}
+    payload = {"new_roles": ["admin", "managing_editor"], "reason": "Add editor role to self"}
     mock_admin_service.update_user_role.return_value = {
         "id": admin_id,
         "email": "admin@example.com",
-        "roles": ["admin", "editor"],
+        "roles": ["admin", "managing_editor"],
         "created_at": "2026-01-01T00:00:00Z",
     }
 
@@ -203,7 +203,7 @@ async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token
         json=payload,
     )
     assert response.status_code == 200
-    assert set(response.json().get("roles", [])) == {"admin", "editor"}
+    assert set(response.json().get("roles", [])) == {"admin", "managing_editor"}
 
     app.dependency_overrides.pop(get_current_profile, None)
 
@@ -216,7 +216,7 @@ async def test_update_role_self_remove_admin_forbidden(client: AsyncClient, auth
         "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
     }
 
-    payload = {"new_roles": ["editor"], "reason": "Remove admin from self"}
+    payload = {"new_roles": ["managing_editor"], "reason": "Remove admin from self"}
     mock_admin_service.update_user_role.side_effect = ValueError("Cannot remove your own admin role")
 
     response = await client.put(
@@ -270,7 +270,7 @@ async def test_reset_password_not_found(client: AsyncClient, auth_token, mock_ad
 @pytest.mark.asyncio
 async def test_create_user_unauthorized(client: AsyncClient, auth_token, mock_author_role):
     """T074: Authorization test: Non-admin users cannot create users"""
-    payload = {"email": "new@example.com", "full_name": "New Editor", "role": "editor"}
+    payload = {"email": "new@example.com", "full_name": "New Editor", "role": "managing_editor"}
     response = await client.post(
         "/api/v1/admin/users",
         headers={"Authorization": f"Bearer {auth_token}"},
@@ -285,7 +285,7 @@ async def test_create_user_validation(client: AsyncClient, auth_token, mock_admi
     response = await client.post(
         "/api/v1/admin/users",
         headers={"Authorization": f"Bearer {auth_token}"},
-        json={"email": "not-an-email", "full_name": "Name", "role": "editor"}
+        json={"email": "not-an-email", "full_name": "Name", "role": "managing_editor"}
     )
     assert response.status_code == 422
     
@@ -300,7 +300,7 @@ async def test_create_user_validation(client: AsyncClient, auth_token, mock_admi
 @pytest.mark.asyncio
 async def test_create_user_duplicate_email(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
     """T077: Error handling test: Email already exists"""
-    payload = {"email": "duplicate@example.com", "full_name": "Duplicate", "role": "editor"}
+    payload = {"email": "duplicate@example.com", "full_name": "Duplicate", "role": "managing_editor"}
     
     mock_admin_service.create_internal_user.side_effect = ValueError("User with this email already exists")
     
@@ -317,13 +317,13 @@ async def test_create_user_duplicate_email(client: AsyncClient, auth_token, mock
 @pytest.mark.asyncio
 async def test_create_user_success(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
     """T079: HTTP method test: Test POST /api/v1/admin/users"""
-    payload = {"email": "success@example.com", "full_name": "Success", "role": "editor"}
+    payload = {"email": "success@example.com", "full_name": "Success", "role": "managing_editor"}
     
     mock_admin_service.create_internal_user.return_value = {
         "id": str(uuid4()),
         "email": payload["email"],
         "full_name": payload["full_name"],
-        "roles": ["editor"],
+        "roles": ["managing_editor"],
         "created_at": "2026-01-01T00:00:00Z",
         "is_verified": True
     }

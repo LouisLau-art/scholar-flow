@@ -1,11 +1,10 @@
 from app.core.role_matrix import can_perform_action, list_allowed_actions, normalize_roles
 
 
-def test_normalize_roles_maps_legacy_editor_alias() -> None:
-    roles = normalize_roles(["editor", " Admin ", "", None])
+def test_normalize_roles_keeps_current_roles_only() -> None:
+    roles = normalize_roles(["managing_editor", " Admin ", "", None])
     assert "managing_editor" in roles
     assert "admin" in roles
-    assert "editor" not in roles
 
 
 def test_admin_has_global_action_access() -> None:

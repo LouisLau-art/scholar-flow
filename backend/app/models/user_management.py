@@ -4,11 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 
 # --- Enums & Shared Types ---
-# (User roles are typically strings in Supabase: "author", "editor", "reviewer", "admin")
+# (User roles are typically strings in Supabase: "author", "reviewer", "managing_editor", "admin")
 ALLOWED_USER_ROLES = {
     "author",
     "reviewer",
-    "editor",
     "managing_editor",
     "assistant_editor",
     "editor_in_chief",
@@ -101,7 +100,7 @@ class CreateUserRequest(BaseModel):
     """
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(..., pattern="^(editor|reviewer|managing_editor|assistant_editor|editor_in_chief|admin)$")
+    role: str = Field(..., pattern="^(reviewer|managing_editor|assistant_editor|editor_in_chief|admin)$")
 
 class UpdateRoleRequest(BaseModel):
     """

@@ -268,9 +268,9 @@ class TestRequireRoles:
     @pytest.mark.asyncio
     async def test_user_has_required_role(self):
         """Test access granted when user has required role"""
-        checker = require_roles(["editor", "admin"])
+        checker = require_roles(["managing_editor", "admin"])
 
-        mock_user = {"id": "user-1", "email": "test@example.com", "roles": ["editor"]}
+        mock_user = {"id": "user-1", "email": "test@example.com", "roles": ["managing_editor"]}
 
         with patch(
             "app.core.auth.get_current_user", new_callable=AsyncMock
@@ -315,7 +315,7 @@ class TestRequireRoles:
     @pytest.mark.asyncio
     async def test_user_with_no_roles(self):
         """Test user with empty roles list"""
-        checker = require_roles(["editor"])
+        checker = require_roles(["managing_editor"])
 
         mock_user = {"id": "user-1", "email": "test@example.com", "roles": []}
 
@@ -327,7 +327,7 @@ class TestRequireRoles:
     @pytest.mark.asyncio
     async def test_user_without_roles_key(self):
         """Test user dict without roles key"""
-        checker = require_roles(["editor"])
+        checker = require_roles(["managing_editor"])
 
         mock_user = {"id": "user-1", "email": "test@example.com"}  # No 'roles' key
 

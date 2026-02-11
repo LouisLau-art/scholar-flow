@@ -77,7 +77,7 @@ async def test_publish_blocks_when_invoice_unpaid(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await editor_api.publish_manuscript_dev(
             current_user={"id": "u-1"},
-            _profile={"roles": ["editor"]},
+            _profile={"roles": ["managing_editor"]},
             manuscript_id="m-1",
         )
 
@@ -96,7 +96,7 @@ async def test_publish_allows_when_invoice_paid(monkeypatch):
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
-        _profile={"roles": ["editor"]},
+        _profile={"roles": ["managing_editor"]},
         manuscript_id="m-1",
     )
 
@@ -116,7 +116,7 @@ async def test_publish_blocks_when_invoice_missing_for_approved(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await editor_api.publish_manuscript_dev(
             current_user={"id": "u-1"},
-            _profile={"roles": ["editor"]},
+            _profile={"roles": ["managing_editor"]},
             manuscript_id="m-1",
         )
 
@@ -161,7 +161,7 @@ async def test_publish_allows_when_invoice_missing_for_non_approved(monkeypatch)
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
-        _profile={"roles": ["editor"]},
+        _profile={"roles": ["managing_editor"]},
         manuscript_id="m-1",
     )
     assert result["success"] is True
@@ -180,7 +180,7 @@ async def test_publish_allows_when_invoice_amount_not_numeric(monkeypatch):
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "u-1"},
-        _profile={"roles": ["editor"]},
+        _profile={"roles": ["managing_editor"]},
         manuscript_id="m-1",
     )
     assert result["success"] is True
@@ -201,7 +201,7 @@ async def test_publish_blocks_when_final_pdf_missing(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await editor_api.publish_manuscript_dev(
             current_user={"id": "u-1"},
-            _profile={"roles": ["editor"]},
+            _profile={"roles": ["managing_editor"]},
             manuscript_id="m-1",
         )
     assert exc.value.status_code == 400

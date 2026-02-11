@@ -25,7 +25,7 @@ router = APIRouter(tags=["Admin User Management"])
 
 # T036: Implement admin role verification
 admin_only = require_any_role(["admin"])
-editor_or_admin = require_any_role(["admin", "editor"])
+editor_or_admin = require_any_role(["admin", "managing_editor"])
 
 def get_user_management_service():
     return UserManagementService()
@@ -34,7 +34,7 @@ def get_user_management_service():
 class JournalScopeUpsertRequest(BaseModel):
     user_id: UUID
     journal_id: UUID
-    role: Literal["editor", "managing_editor", "assistant_editor", "editor_in_chief", "admin"]
+    role: Literal["managing_editor", "assistant_editor", "editor_in_chief", "admin"]
     is_active: bool = True
 
 

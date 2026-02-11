@@ -115,7 +115,7 @@ class TestLogRoleChange:
                 user_id=UUID(int=1),
                 changed_by=UUID(int=2),
                 old_role="author",
-                new_role="editor",
+                new_role="managing_editor",
                 reason="promotion",
             )
             # Should not raise
@@ -132,7 +132,7 @@ class TestLogRoleChange:
                 user_id=UUID(int=1),
                 changed_by=UUID(int=2),
                 old_role="author",
-                new_role="editor",
+                new_role="managing_editor",
                 reason="promotion",
             )
 
@@ -260,7 +260,7 @@ class TestGetUsers:
                 "id": "1",
                 "email": "editor@test.com",
                 "name": "Editor",
-                "roles": ["editor"],
+                "roles": ["managing_editor"],
                 "created_at": "2024-01-01",
             }
         ]
@@ -273,7 +273,10 @@ class TestGetUsers:
 
             service = UserManagementService()
             result = service.get_users(
-                page=1, per_page=10, search="editor", role="editor"
+                page=1,
+                per_page=10,
+                search="editor",
+                role="managing_editor",
             )
 
             assert "data" in result
@@ -353,7 +356,7 @@ class TestUpdateUserRole:
             "id": "user-1",
             "email": "user@test.com",
             "name": "Test User",
-            "roles": ["editor"],
+            "roles": ["managing_editor"],
             "created_at": "2024-01-01",
         }
 
@@ -394,12 +397,12 @@ class TestUpdateUserRole:
             service = UserManagementService()
             result = service.update_user_role(
                 target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
-                new_role="editor",
+                new_role="managing_editor",
                 reason="Promotion",
                 changed_by=UUID("00000000-0000-0000-0000-000000000002"),
             )
 
-            assert result["roles"] == ["editor"]
+            assert result["roles"] == ["managing_editor"]
 
     def test_update_role_self_addition_allowed(self, mock_env):
         """Test self role update allows additive-only changes"""
@@ -414,7 +417,7 @@ class TestUpdateUserRole:
             "id": "user-1",
             "email": "user@test.com",
             "name": "Test User",
-            "roles": ["admin", "editor"],
+            "roles": ["admin", "managing_editor"],
             "created_at": "2024-01-01",
         }
 
@@ -450,12 +453,12 @@ class TestUpdateUserRole:
             result = service.update_user_role(
                 target_user_id=user_id,
                 new_role=None,
-                new_roles=["admin", "editor"],
+                new_roles=["admin", "managing_editor"],
                 reason="Self add editor role",
                 changed_by=user_id,  # Same user
             )
 
-            assert result["roles"] == ["admin", "editor"]
+            assert result["roles"] == ["admin", "managing_editor"]
 
     def test_update_role_self_remove_admin_forbidden(self, mock_env):
         """Test self role update cannot remove own admin role"""
@@ -463,7 +466,7 @@ class TestUpdateUserRole:
             "id": "user-1",
             "email": "user@test.com",
             "name": "Test User",
-            "roles": ["admin", "editor"],
+            "roles": ["admin", "managing_editor"],
             "created_at": "2024-01-01",
         }
 
@@ -484,7 +487,7 @@ class TestUpdateUserRole:
                 service.update_user_role(
                     target_user_id=user_id,
                     new_role=None,
-                    new_roles=["editor"],
+                    new_roles=["managing_editor"],
                     reason="Self remove admin role",
                     changed_by=user_id,  # Same user
                 )
@@ -542,7 +545,7 @@ class TestUpdateUserRole:
             with pytest.raises(ValueError) as exc_info:
                 service.update_user_role(
                     target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
-                    new_role="editor",
+                    new_role="managing_editor",
                     reason="Promotion",
                     changed_by=UUID("00000000-0000-0000-0000-000000000002"),
                 )
@@ -623,7 +626,7 @@ class TestGetRoleChanges:
             {
                 "user_id": "1",
                 "old_role": "author",
-                "new_role": "editor",
+                "new_role": "managing_editor",
                 "created_at": "2024-01-01",
             }
         ]
@@ -698,12 +701,12 @@ class TestCreateInternalUser:
             result = service.create_internal_user(
                 email="newuser@test.com",
                 full_name="New User",
-                role="editor",
+                role="managing_editor",
                 created_by=UUID("00000000-0000-0000-0000-000000000001"),
             )
 
             assert result["email"] == "newuser@test.com"
-            assert result["roles"] == ["editor"]
+            assert result["roles"] == ["managing_editor"]
 
             # Verify console output
             captured = capsys.readouterr()
@@ -729,7 +732,7 @@ class TestCreateInternalUser:
                 service.create_internal_user(
                     email="existing@test.com",
                     full_name="Existing User",
-                    role="editor",
+                    role="managing_editor",
                     created_by=UUID("00000000-0000-0000-0000-000000000001"),
                 )
 
@@ -759,7 +762,7 @@ class TestCreateInternalUser:
                 service.create_internal_user(
                     email="new@test.com",
                     full_name="New User",
-                    role="editor",
+                    role="managing_editor",
                     created_by=UUID("00000000-0000-0000-0000-000000000001"),
                 )
 

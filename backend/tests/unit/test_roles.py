@@ -57,14 +57,14 @@ async def test_get_current_profile_admin_email_elevates_and_merges(monkeypatch):
     select_resp = MagicMock()
     select_resp.data = [{"id": user_id, "email": "test@example.com", "roles": ["author"]}]
     update_resp = MagicMock()
-    update_resp.data = [{"id": user_id, "roles": ["admin", "editor", "reviewer", "author"]}]
+    update_resp.data = [{"id": user_id, "roles": ["admin", "managing_editor", "reviewer", "author"]}]
     mock.execute.side_effect = [select_resp, update_resp]
 
     monkeypatch.setattr(roles_mod, "supabase", mock)
 
     profile = await roles_mod.get_current_profile(user)
     assert "admin" in profile["roles"]
-    assert "editor" in profile["roles"]
+    assert "managing_editor" in profile["roles"]
     assert "reviewer" in profile["roles"]
 
 
@@ -88,7 +88,7 @@ async def test_get_current_profile_falls_back_on_error(monkeypatch):
 async def test_require_any_role_allows(monkeypatch):
     from app.core.roles import require_any_role
 
-    dep = require_any_role(["editor"])
-    profile = await dep(profile={"roles": ["editor"]})
-    assert profile["roles"] == ["editor"]
+    dep = require_any_role(["managing_editor"])
+    profile = await dep(profile={"roles": ["managing_editor"]})
+    assert profile["roles"] == ["managing_editor"]
 

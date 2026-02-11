@@ -25,14 +25,14 @@ async def get_current_profile(current_user: dict = Depends(get_current_user)) ->
     中文注释:
     1) 由于后端当前使用 Supabase anon key，因此这里做“应用层”角色管理。
     2) 首次访问时自动创建 user_profiles 记录，默认 roles=['author']。
-    3) 若 email 在 ADMIN_EMAILS 中，则自动补齐 admin/editor/reviewer 权限，便于本地/演示测试。
+    3) 若 email 在 ADMIN_EMAILS 中，则自动补齐 admin/managing_editor/reviewer 权限，便于本地/演示测试。
     """
     user_id = current_user["id"]
     email = current_user.get("email")
 
     roles = ["author"]
     if _is_admin_email(email):
-        roles = ["admin", "editor", "reviewer", "author"]
+        roles = ["admin", "managing_editor", "reviewer", "author"]
 
     try:
         resp = supabase.table("user_profiles").select("*").eq("id", user_id).execute()
@@ -69,4 +69,3 @@ def require_any_role(required: Iterable[str]) -> Callable[[dict], dict]:
         return profile
 
     return _dep
-

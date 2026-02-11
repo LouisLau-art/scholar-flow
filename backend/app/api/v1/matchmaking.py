@@ -30,13 +30,13 @@ class MatchmakingAnalyzeRequest(BaseModel):
 def analyze_matchmaking(
     req: MatchmakingAnalyzeRequest,
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     AI 分析：为稿件推荐审稿人
 
     中文注释:
-    - 权限：仅 editor/admin 可用（SEC-004）。
+    - 权限：仅 managing_editor/admin 可用（SEC-004）。
     - 输出：只返回 reviewer_id + 联系信息 + match_score，不暴露 embedding（SEC-005）。
     """
 

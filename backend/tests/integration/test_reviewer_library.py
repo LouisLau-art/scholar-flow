@@ -17,7 +17,7 @@ def override_profile():
 
 @pytest.mark.asyncio
 async def test_reviewer_library_add_and_search(client, override_profile, monkeypatch: pytest.MonkeyPatch):
-    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["editor"]})
+    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["managing_editor"]})
 
     reviewer_id = str(uuid4())
 
@@ -62,7 +62,7 @@ async def test_reviewer_library_requires_editor_or_admin(client, override_profil
 async def test_reviewer_library_returns_invite_policy_when_manuscript_context_provided(
     client, override_profile, monkeypatch: pytest.MonkeyPatch
 ):
-    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["editor"]})
+    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["managing_editor"]})
 
     class _StubSvc:
         def search(self, query: str = "", limit: int = 50):

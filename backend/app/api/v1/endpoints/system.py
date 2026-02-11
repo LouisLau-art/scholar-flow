@@ -7,7 +7,7 @@ from app.lib.api_client import supabase
 from app.schemas.feedback import FeedbackAck, FeedbackCreate
 
 router = APIRouter()
-editor_or_admin = require_any_role(["admin", "editor"])
+editor_or_admin = require_any_role(["admin", "managing_editor"])
 
 
 @router.post("/system/feedback", response_model=FeedbackAck, status_code=201)

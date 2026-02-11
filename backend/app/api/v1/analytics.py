@@ -44,7 +44,6 @@ def _require_analytics_access(current_user: dict) -> set[str]:
     """
     GAP-P1-03:
     - Analytics 仅对管理角色开放（ME/EIC/Admin）。
-    - legacy `editor` 会在 normalize_roles 中映射为 `managing_editor`。
     """
     roles = normalize_roles(current_user.get("roles") or [])
     if not roles.intersection(_ANALYTICS_ALLOWED_ROLES):

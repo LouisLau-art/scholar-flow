@@ -138,7 +138,7 @@ def require_roles(allowed_roles: list[str]):
 
     使用方式:
         @router.get("/endpoint")
-        async def endpoint(user = Depends(require_roles(["editor", "admin"]))):
+        async def endpoint(user = Depends(require_roles(["managing_editor", "admin"]))):
             ...
 
     中文注释:
@@ -167,6 +167,6 @@ def require_roles(allowed_roles: list[str]):
 
 # 便捷的角色检查依赖
 require_editor = require_roles(
-    ["editor", "managing_editor", "editor_in_chief", "admin"]
+    ["managing_editor", "editor_in_chief", "admin"]
 )
 require_admin = require_roles(["admin"])

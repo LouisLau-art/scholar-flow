@@ -14,7 +14,6 @@ from app.services.notification_service import NotificationService
 
 INTERNAL_COLLAB_ROLES = {
     "admin",
-    "editor",
     "assistant_editor",
     "managing_editor",
     "editor_in_chief",

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 async def mark_invoice_paid(
     invoice_id: UUID,
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 024: 标记账单已支付（Admin/Editor）
@@ -69,7 +69,7 @@ async def get_invoice_pdf_signed(
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
-    is_internal = bool(roles.intersection({"admin", "editor"}))
+    is_internal = bool(roles.intersection({"admin", "managing_editor"}))
 
     inv_resp = (
         supabase_admin.table("invoices")
@@ -97,7 +97,7 @@ async def get_invoice_pdf_signed(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
-    if not (roles.intersection({"admin", "editor"}) or str(ms.get("author_id") or "") == user_id):
+    if not (roles.intersection({"admin", "managing_editor"}) or str(ms.get("author_id") or "") == user_id):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     pdf_path = (inv.get("pdf_path") or "").strip()
@@ -134,7 +134,7 @@ async def get_invoice_pdf_signed(
 async def regenerate_invoice_pdf(
     invoice_id: UUID,
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 026: Regenerate invoice PDF（Editor/Admin）

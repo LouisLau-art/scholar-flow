@@ -4,13 +4,9 @@ from typing import Iterable
 
 # 中文注释：
 # - 这里集中定义“角色 -> 动作”权限矩阵，避免权限逻辑散落在各路由。
-# - legacy 兼容：历史 `editor` 角色统一映射为 `managing_editor`，避免一次性收敛导致流程中断。
+# - 2026-02-11 起移除 legacy `editor` 兼容；输入角色仅接受当前标准角色集合。
 
 ADMIN_ROLE = "admin"
-
-LEGACY_ROLE_ALIASES: dict[str, str] = {
-    "editor": "managing_editor",
-}
 
 ROLE_ACTIONS: dict[str, set[str]] = {
     "author": {
@@ -48,15 +44,14 @@ ROLE_ACTIONS: dict[str, set[str]] = {
 
 def normalize_roles(roles: Iterable[str] | None) -> set[str]:
     """
-    将输入角色归一化（小写、去空、alias 映射）。
+    将输入角色归一化（小写、去空）。
     """
     out: set[str] = set()
     for raw in roles or []:
         role = str(raw or "").strip().lower()
         if not role:
             continue
-        mapped = LEGACY_ROLE_ALIASES.get(role, role)
-        out.add(mapped)
+        out.add(role)
     return out
 
 

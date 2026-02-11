@@ -59,9 +59,9 @@ from app.services.internal_collaboration_service import (
 from app.services.internal_task_service import InternalTaskSchemaMissingError, InternalTaskService
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
-INTERNAL_COLLAB_ALLOWED_ROLES = ["editor", "admin", "managing_editor", "assistant_editor", "editor_in_chief"]
-EDITOR_SCOPE_COMPAT_ROLES = ["editor", "admin", "managing_editor", "assistant_editor", "editor_in_chief"]
-EDITOR_DECISION_ROLES = ["editor", "admin", "managing_editor", "editor_in_chief"]
+INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+EDITOR_DECISION_ROLES = ["admin", "managing_editor", "editor_in_chief"]
 
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
@@ -408,7 +408,7 @@ async def get_finance_invoices(
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Literal["updated_at", "amount", "status"] = Query("updated_at"),
     sort_order: Literal["asc", "desc"] = Query("desc"),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 046: Finance 页面真实账单列表（内部角色）。
@@ -438,7 +438,7 @@ async def export_finance_invoices_csv(
     q: str | None = Query(None, max_length=100, description="关键词（invoice number / manuscript title）"),
     sort_by: Literal["updated_at", "amount", "status"] = Query("updated_at"),
     sort_order: Literal["asc", "desc"] = Query("desc"),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 046: 导出 Finance 当前筛选结果（CSV）。
@@ -723,7 +723,7 @@ async def quick_precheck(
     id: str,
     payload: QuickPrecheckPayload,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     032 / US2: 高频“Pre-check”快操作（无需进入详情页）。
@@ -1206,7 +1206,7 @@ async def upload_editor_review_attachment(
     id: str,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 033: Editor/Admin 上传 Peer Review Files（仅内部可见）。
@@ -1282,7 +1282,7 @@ async def patch_manuscript_status(
     id: str,
     payload: dict = Body(...),
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 028 / US2: 更新稿件生命周期状态，并写入 transition log。
@@ -1313,7 +1313,7 @@ async def patch_manuscript_status(
 async def advance_production_stage(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 031: 录用后出版流水线 - 前进一个阶段（approved->layout->english_editing->proofreading->published）。
@@ -1338,7 +1338,7 @@ async def advance_production_stage(
 async def revert_production_stage(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 031: 录用后出版流水线 - 回退一个阶段（proofreading->english_editing->layout->approved）。
@@ -1404,9 +1404,9 @@ async def bind_internal_owner(
     profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
-    Feature 028 / US3: 绑定 Internal Owner（仅 editor/admin 可操作）。
+    Feature 028 / US3: 绑定 Internal Owner（仅 managing_editor/admin 可操作）。
 
-    显性逻辑：owner_id 必须属于内部员工（editor/admin）。
+    显性逻辑：owner_id 必须属于内部员工（managing_editor/admin）。
     """
     _require_action_or_403(action="manuscript:bind_owner", roles=profile.get("roles") or [])
     ensure_manuscript_scope_access(
@@ -1419,7 +1419,7 @@ async def bind_internal_owner(
     try:
         validate_internal_owner_id(UUID(owner_id))
     except Exception:
-        raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+        raise HTTPException(status_code=422, detail="owner_id must be managing_editor/admin")
 
     before_owner_id: str | None = None
     before_status: str | None = None
@@ -1488,14 +1488,14 @@ async def list_internal_staff(
     _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
-    Feature 023: 提供 Internal Owner 下拉框的数据源（仅 editor/admin）。
+    Feature 023: 提供 Internal Owner 下拉框的数据源（仅 managing_editor/admin）。
     """
     try:
         query = (
             supabase_admin.table("user_profiles")
             .select("id, email, full_name, roles")
             .or_(
-                "roles.cs.{editor},roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
+                "roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
             )
         )
         resp = query.execute()
@@ -1571,7 +1571,7 @@ async def list_assistant_editors(
 @router.post("/reviewer-library", status_code=201)
 async def add_reviewer_to_library(
     payload: ReviewerCreate,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     User Story 1:
@@ -1594,7 +1594,7 @@ async def search_reviewer_library(
     query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
     limit: int = Query(50, ge=1, le=200),
     manuscript_id: str | None = Query(None, description="可选：基于稿件上下文返回邀请策略命中信息"),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     User Story 2:
@@ -1644,7 +1644,7 @@ async def search_reviewer_library(
 @router.get("/reviewer-library/{id}")
 async def get_reviewer_library_item(
     id: str,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     User Story 3:
@@ -1664,7 +1664,7 @@ async def get_reviewer_library_item(
 async def update_reviewer_library_item(
     id: str,
     payload: ReviewerUpdate,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     User Story 3:
@@ -1683,7 +1683,7 @@ async def update_reviewer_library_item(
 @router.delete("/reviewer-library/{id}")
 async def deactivate_reviewer_library_item(
     id: str,
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     User Story 1:
@@ -1701,7 +1701,7 @@ async def deactivate_reviewer_library_item(
 
 @router.get("/journals")
 async def list_journals(
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 028: ProcessFilterBar 数据源（期刊下拉框）。
@@ -1737,7 +1737,7 @@ async def list_journals(
 @router.get("/pipeline")
 async def get_editor_pipeline(
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     获取全站稿件流转状态看板数据
@@ -1952,7 +1952,7 @@ async def get_editor_pipeline(
 async def request_revision(
     request: RevisionCreate,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
     background_tasks: BackgroundTasks = None,
 ):
     """
@@ -2049,7 +2049,7 @@ async def request_revision(
 @router.get("/available-reviewers")
 async def get_available_reviewers(
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     获取可用的审稿人专家池
@@ -2284,7 +2284,7 @@ async def get_decision_attachment_signed_url_editor(
 async def get_production_workspace_context(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 编辑端生产工作间上下文。
@@ -2302,7 +2302,7 @@ async def create_production_cycle(
     id: str,
     payload: CreateProductionCycleRequest,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 创建生产轮次。
@@ -2324,7 +2324,7 @@ async def upload_production_galley(
     version_note: str = Form(...),
     proof_due_at: str | None = Form(default=None),
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 上传生产轮次清样并进入 awaiting_author。
@@ -2356,7 +2356,7 @@ async def get_production_galley_signed_url_editor(
     id: str,
     cycle_id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 编辑端获取清样 signed URL。
@@ -2375,7 +2375,7 @@ async def approve_production_cycle(
     id: str,
     cycle_id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 编辑确认发布前核准（approved_for_publish）。
@@ -2688,7 +2688,7 @@ async def submit_final_decision(
 @router.post("/publish")
 async def publish_manuscript_dev(
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
     manuscript_id: str = Body(..., embed=True),
     background_tasks: BackgroundTasks = None,
 ):
@@ -2696,7 +2696,7 @@ async def publish_manuscript_dev(
     Feature 024: 发布（Post-Acceptance Pipeline）
 
     中文注释:
-    - 仍然需要 editor/admin 角色，避免普通作者误操作。
+    - 仍然需要 managing_editor/admin 角色，避免普通作者误操作。
     - 门禁显性化：Payment Gate + Production Gate（final_pdf_path）。
     """
     try:

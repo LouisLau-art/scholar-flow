@@ -76,7 +76,7 @@ async def test_decision_workspace_rbac_assigned_editor_and_admin_allowed(
     # 非 ADMIN_EMAILS 用户，需要显式 profile.roles 才能通过 require_any_role
     for user in (assigned_editor, outsider_editor):
         supabase_admin_client.table("user_profiles").upsert(
-            {"id": user.id, "email": user.email, "roles": ["editor"]}
+            {"id": user.id, "email": user.email, "roles": ["managing_editor"]}
         ).execute()
 
     set_admin_emails([admin_editor.email])

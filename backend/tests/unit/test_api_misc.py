@@ -442,7 +442,7 @@ async def test_editor_publish_fallback_on_missing_column(monkeypatch):
 
     result = await editor_api.publish_manuscript_dev(
         current_user={"id": "user"},
-        _profile={"roles": ["editor"]},
+        _profile={"roles": ["managing_editor"]},
         manuscript_id="1",
     )
 

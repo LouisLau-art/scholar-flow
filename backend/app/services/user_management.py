@@ -7,7 +7,6 @@ from supabase import create_client, Client
 ALLOWED_USER_ROLES = {
     "author",
     "reviewer",
-    "editor",
     "managing_editor",
     "assistant_editor",
     "editor_in_chief",

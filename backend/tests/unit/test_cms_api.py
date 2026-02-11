@@ -132,7 +132,7 @@ async def test_cms_list_pages_requires_editor_role(client, monkeypatch, auth_tok
 
 @pytest.mark.asyncio
 async def test_cms_create_page_reserved_slug_conflict(client, monkeypatch, auth_token):
-    _set_profile_roles(monkeypatch, ["editor"])
+    _set_profile_roles(monkeypatch, ["managing_editor"])
     monkeypatch.setattr(cms_api, "_service", lambda: _FakeCMSService())
 
     resp = await client.post(
@@ -145,7 +145,7 @@ async def test_cms_create_page_reserved_slug_conflict(client, monkeypatch, auth_
 
 @pytest.mark.asyncio
 async def test_cms_create_and_update_page_flow(client, monkeypatch, auth_token):
-    _set_profile_roles(monkeypatch, ["editor"])
+    _set_profile_roles(monkeypatch, ["managing_editor"])
     svc = _FakeCMSService()
     monkeypatch.setattr(cms_api, "_service", lambda: svc)
 
@@ -174,7 +174,7 @@ async def test_cms_upload_requires_auth(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cms_upload_success(client, monkeypatch, auth_token):
-    _set_profile_roles(monkeypatch, ["editor"])
+    _set_profile_roles(monkeypatch, ["managing_editor"])
     monkeypatch.setattr(cms_api, "_service", lambda: _FakeCMSService())
 
     resp = await client.post(
@@ -201,7 +201,7 @@ async def test_cms_menu_public_default_shape(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cms_menu_update_requires_editor(client, monkeypatch, auth_token):
-    _set_profile_roles(monkeypatch, ["editor"])
+    _set_profile_roles(monkeypatch, ["managing_editor"])
     svc = _FakeCMSService()
     monkeypatch.setattr(cms_api, "_service", lambda: svc)
 

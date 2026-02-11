@@ -103,7 +103,7 @@ class DecisionService:
     def _ensure_editor_access(
         self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]
     ) -> None:
-        # admin / editor_in_chief 可跨稿件访问；assigned editor 仅可访问自己稿件
+        # admin / editor_in_chief 可跨稿件访问；assigned managing_editor 仅可访问自己稿件
         if roles.intersection({"admin", "editor_in_chief"}):
             return
         assigned_editor_id = str(manuscript.get("editor_id") or "")
@@ -115,9 +115,9 @@ class DecisionService:
         self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]
     ) -> bool:
         """
-        返回值表示是否为内部角色（editor/admin/eic）。
+        返回值表示是否为内部角色（managing_editor/admin/eic）。
         """
-        if roles.intersection({"admin", "editor", "editor_in_chief"}):
+        if roles.intersection({"admin", "managing_editor", "editor_in_chief"}):
             return True
         if str(manuscript.get("author_id") or "") == str(user_id):
             return False

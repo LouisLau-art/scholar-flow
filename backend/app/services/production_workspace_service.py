@@ -134,7 +134,7 @@ class ProductionWorkspaceService:
     def _ensure_editor_access(self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]) -> None:
         if roles.intersection({"admin", "editor_in_chief"}):
             return
-        if "editor" not in roles:
+        if "managing_editor" not in roles:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         allowed = {
@@ -153,7 +153,7 @@ class ProductionWorkspaceService:
         user_id: str,
         roles: set[str],
     ) -> bool:
-        if roles.intersection({"admin", "editor", "editor_in_chief"}):
+        if roles.intersection({"admin", "managing_editor", "editor_in_chief"}):
             return True
 
         proofreader_id = str(cycle.get("proofreader_author_id") or "").strip()
@@ -559,7 +559,7 @@ class ProductionWorkspaceService:
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
         roles = self._roles(profile_roles)
 
-        is_internal = roles.intersection({"admin", "editor", "editor_in_chief"})
+        is_internal = roles.intersection({"admin", "managing_editor", "editor_in_chief"})
         if is_internal:
             self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
         else:

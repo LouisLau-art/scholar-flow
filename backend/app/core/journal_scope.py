@@ -13,7 +13,6 @@ _ALLOWED_SCOPE_ROLES = {
     "managing_editor",
     "assistant_editor",
     "editor_in_chief",
-    "editor",  # 兼容旧数据
 }
 
 

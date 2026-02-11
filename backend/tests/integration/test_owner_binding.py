@@ -63,7 +63,7 @@ async def test_update_manuscript_owner_requires_editor_or_admin(
 async def test_update_manuscript_owner_rejects_non_staff_owner(
     client: AsyncClient, auth_token: str, override_profile, monkeypatch: pytest.MonkeyPatch
 ):
-    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["editor"]})
+    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["managing_editor"]})
 
     def _bad(_owner_id):
         raise ValueError("owner_id must be editor/admin")
@@ -83,12 +83,12 @@ async def test_update_manuscript_owner_rejects_non_staff_owner(
 async def test_update_manuscript_owner_success(
     client: AsyncClient, auth_token: str, override_profile, monkeypatch: pytest.MonkeyPatch
 ):
-    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["editor"]})
+    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["managing_editor"]})
 
     owner_id = str(uuid4())
     manuscript_id = str(uuid4())
 
-    monkeypatch.setattr("app.api.v1.manuscripts.validate_internal_owner_id", lambda _id: {"id": owner_id, "roles": ["editor"]})
+    monkeypatch.setattr("app.api.v1.manuscripts.validate_internal_owner_id", lambda _id: {"id": owner_id, "roles": ["managing_editor"]})
     monkeypatch.setattr(
         "app.api.v1.manuscripts.supabase_admin",
         _DummySupabaseAdmin([{"id": manuscript_id, "owner_id": owner_id}]),

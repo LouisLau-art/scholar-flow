@@ -61,7 +61,7 @@ def test_create_cycle_rejects_active_cycle(monkeypatch: pytest.MonkeyPatch):
         svc.create_cycle(
             manuscript_id="ms-1",
             user_id="editor-1",
-            profile_roles=["editor"],
+            profile_roles=["managing_editor"],
             request=CreateProductionCycleRequest(
                 layout_editor_id="00000000-0000-0000-0000-000000000001",
                 proofreader_author_id="00000000-0000-0000-0000-000000000002",
@@ -92,7 +92,7 @@ def test_create_cycle_requires_mvp_author_binding(monkeypatch: pytest.MonkeyPatc
         svc.create_cycle(
             manuscript_id="ms-1",
             user_id="editor-1",
-            profile_roles=["editor"],
+            profile_roles=["managing_editor"],
             request=CreateProductionCycleRequest(
                 layout_editor_id="00000000-0000-0000-0000-000000000001",
                 proofreader_author_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -175,7 +175,7 @@ def test_approve_cycle_requires_author_confirmed(monkeypatch: pytest.MonkeyPatch
             manuscript_id="ms-1",
             cycle_id="cycle-1",
             user_id="editor-1",
-            profile_roles=["editor"],
+            profile_roles=["managing_editor"],
         )
     assert exc.value.status_code == 422
 

@@ -83,7 +83,7 @@ def test_status_transition_done_to_todo_is_rejected(monkeypatch: pytest.MonkeyPa
             manuscript_id=row["manuscript_id"],
             task_id=row["id"],
             actor_user_id=row["assignee_user_id"],
-            actor_roles=["editor"],
+            actor_roles=["managing_editor"],
             status=InternalTaskStatus.TODO,
         )
 
@@ -124,7 +124,7 @@ def test_privileged_user_can_mark_task_done_and_activity_is_written(monkeypatch:
         manuscript_id=row["manuscript_id"],
         task_id=row["id"],
         actor_user_id=str(uuid4()),
-        actor_roles=["editor"],
+        actor_roles=["managing_editor"],
         status=InternalTaskStatus.DONE,
     )
 

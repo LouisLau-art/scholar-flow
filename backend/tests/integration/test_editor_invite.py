@@ -82,7 +82,7 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
     supabase = _Client(
         {
             "user_profiles": [
-                [{"id": editor_id, "email": "test@example.com", "roles": ["editor"]}],
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
             ],
             "manuscripts": [
                 {
@@ -177,7 +177,7 @@ async def test_editor_assign_blocked_by_cooldown_without_override(
     supabase = _Client(
         {
             "user_profiles": [
-                [{"id": editor_id, "email": "test@example.com", "roles": ["editor"]}],
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
             ],
             "manuscripts": [
                 {
@@ -253,7 +253,7 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
     supabase = _Client(
         {
             "user_profiles": [
-                [{"id": editor_id, "email": "test@example.com", "roles": ["editor"]}],
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
             ],
             "manuscripts": [
                 {

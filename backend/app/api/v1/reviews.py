@@ -301,7 +301,7 @@ async def submit_reviewer_workspace_review(
 async def assign_reviewer(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
     reviewer_id: UUID = Body(..., embed=True),
     override_cooldown: bool = Body(False, embed=True),
@@ -849,7 +849,7 @@ async def submit_review_via_magic_link(
 async def unassign_reviewer(
     assignment_id: UUID,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     撤销审稿指派
@@ -918,7 +918,7 @@ async def get_manuscript_assignments(
     manuscript_id: UUID,
     round_number: int | None = None,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     获取某篇稿件的审稿指派列表
@@ -1647,7 +1647,7 @@ async def get_review_attachment_signed_by_token(token: str):
 async def get_review_attachment_signed(
     review_report_id: UUID,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["reviewer", "editor", "admin"])),
+    profile: dict = Depends(require_any_role(["reviewer", "managing_editor", "admin"])),
 ):
     """
     登录态：Reviewer/Editor/Admin 下载机密附件（Author 禁止）。
@@ -1665,7 +1665,7 @@ async def get_review_attachment_signed(
             raise HTTPException(status_code=404, detail="Review report not found")
 
         roles = set(profile.get("roles") or [])
-        is_editor = bool(roles.intersection({"editor", "admin"}))
+        is_editor = bool(roles.intersection({"managing_editor", "admin"}))
         if not is_editor and str(rr.get("reviewer_id") or "") != str(current_user.get("id") or ""):
             raise HTTPException(status_code=403, detail="Forbidden")
 

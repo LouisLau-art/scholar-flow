@@ -164,7 +164,7 @@ class EditorService:
         规则：
         - admin：不裁剪；
         - assistant_editor（且不具备 ME/EIC 全局角色）：仅看 `assistant_editor_id == 自己`；
-        - managing_editor / editor_in_chief（含 legacy editor 映射）：
+        - managing_editor / editor_in_chief：
           若已配置 journal scopes，则默认按 scope 裁剪；
           若 scope 为空且 `JOURNAL_SCOPE_ENFORCEMENT=1`，返回空列表；
         - 其余角色沿用现有灰度开关逻辑（filter_rows_by_journal_scope）。

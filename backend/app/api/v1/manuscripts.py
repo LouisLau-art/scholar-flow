@@ -381,7 +381,7 @@ async def get_manuscript_pdf_signed(
 
     中文注释:
     - 之所以不直接返回 file_path：Storage RLS/权限会导致前端预览空白或报错。
-    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / editor/admin 可取 signedUrl。
+    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / managing_editor/admin 可取 signedUrl。
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
@@ -401,12 +401,12 @@ async def get_manuscript_pdf_signed(
         raise HTTPException(status_code=404, detail="Manuscript PDF not found")
 
     allowed = False
-    if roles.intersection({"admin", "editor"}):
+    if roles.intersection({"admin", "managing_editor"}):
         allowed = True
     elif str(ms.get("author_id") or "") == user_id:
         allowed = True
     else:
-        # Reviewer: 允许已指派 reviewer 预览（避免 editor 通过 UI 分配后 reviewer 侧打不开 PDF）
+        # Reviewer: 允许已指派 reviewer 预览（避免 managing_editor 通过 UI 分配后 reviewer 侧打不开 PDF）
         try:
             ra = (
                 supabase_admin.table("review_assignments")
@@ -534,7 +534,7 @@ async def download_invoice_pdf(
     """
     user_id = str(current_user["id"])
     roles = set((profile or {}).get("roles") or [])
-    is_internal = bool(roles.intersection({"admin", "editor"}))
+    is_internal = bool(roles.intersection({"admin", "managing_editor"}))
 
     ms_resp = (
         supabase_admin.table("manuscripts")
@@ -547,7 +547,7 @@ async def download_invoice_pdf(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
-    if not (roles.intersection({"admin", "editor"}) or str(ms.get("author_id") or "") == user_id):
+    if not (roles.intersection({"admin", "managing_editor"}) or str(ms.get("author_id") or "") == user_id):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     inv_resp = (
@@ -616,7 +616,7 @@ async def upload_production_file(
     manuscript_id: UUID,
     file: UploadFile = File(...),
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 024: 上传最终排版 PDF（Production File）
@@ -685,7 +685,7 @@ async def upload_production_file(
 async def publish_manuscript_endpoint(
     manuscript_id: UUID,
     _current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 024: REST 形式发布端点（与 /api/v1/editor/publish 等价）
@@ -726,7 +726,7 @@ async def get_manuscript_version_pdf_signed(
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
     allowed = False
-    if roles.intersection({"admin", "editor"}):
+    if roles.intersection({"admin", "managing_editor"}):
         allowed = True
     elif str(ms.get("author_id") or "") == user_id:
         allowed = True
@@ -810,7 +810,7 @@ async def get_manuscript_reviews(
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
     is_author = str(ms.get("author_id") or "") == user_id
-    is_editor = bool(roles.intersection({"admin", "editor"}))
+    is_editor = bool(roles.intersection({"admin", "managing_editor"}))
     if not (is_author or is_editor):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -1298,7 +1298,7 @@ async def get_manuscript_versions(
         except Exception:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        if roles.intersection({"editor", "admin"}):
+        if roles.intersection({"managing_editor", "admin"}):
             pass
         elif "reviewer" in roles:
             try:
@@ -1339,11 +1339,11 @@ async def submit_quality_check(
     if not resolved_owner_id:
         raise HTTPException(status_code=422, detail="owner_id is required")
 
-    # 显性逻辑：owner_id 必须属于内部员工（editor/admin）
+    # 显性逻辑：owner_id 必须属于内部员工（managing_editor/admin）
     try:
         validate_internal_owner_id(resolved_owner_id)
     except ValueError:
-        raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+        raise HTTPException(status_code=422, detail="owner_id must be managing_editor/admin")
 
     result = await process_quality_check(manuscript_id, passed, resolved_owner_id)
     return {"success": True, "data": result}
@@ -1421,7 +1421,7 @@ async def get_manuscript_detail(
 
     中文注释:
     - Submit Revision / Reviewer Workspace / Editor 后台都需要读取“未发表稿件”的详情。
-    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / editor/admin 可读。
+    - 这里显式做访问控制：仅作者本人 / 被分配 reviewer / managing_editor/admin 可读。
     - 该路由必须放在 /manuscripts/search 之后，避免 path 参数吞掉静态路由。
     """
     user_id = str(current_user["id"])
@@ -1444,7 +1444,7 @@ async def get_manuscript_detail(
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
     allowed = False
-    if roles.intersection({"admin", "editor"}):
+    if roles.intersection({"admin", "managing_editor"}):
         allowed = True
     elif str(ms.get("author_id") or "") == user_id:
         allowed = True
@@ -1812,14 +1812,14 @@ async def get_published_article_pdf(id: UUID):
 async def update_manuscript(
     manuscript_id: UUID,
     owner_id: Optional[UUID] = Body(None, embed=True),
-    _profile: dict = Depends(require_any_role(["editor", "admin"])),
+    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 023: 允许 Editor/Admin 更新稿件 owner_id（KPI 归属人绑定）。
 
     中文注释:
     - owner_id 允许为空（自然投稿/未绑定）。
-    - 若传入非空 owner_id，必须校验其角色为 editor/admin（防止误绑定外部作者/审稿人）。
+    - 若传入非空 owner_id，必须校验其角色为 managing_editor/admin（防止误绑定外部作者/审稿人）。
     """
     try:
         update_data = {
@@ -1830,7 +1830,7 @@ async def update_manuscript(
             try:
                 validate_internal_owner_id(owner_id)
             except ValueError:
-                raise HTTPException(status_code=422, detail="owner_id must be editor/admin")
+                raise HTTPException(status_code=422, detail="owner_id must be managing_editor/admin")
             update_data["owner_id"] = str(owner_id)
 
         resp = (
@@ -1932,7 +1932,7 @@ async def create_manuscript(
             # === 通知中心 (Feature 011) ===
             # 中文注释:
             # 1) 投稿成功：作者收到站内信 + 邮件（异步）。
-            # 2) 新投稿提醒：所有 editor/admin 账号收到站内信（邮件可在后续扩展）。
+            # 2) 新投稿提醒：所有 managing_editor/admin 账号收到站内信（邮件可在后续扩展）。
             notification_service = NotificationService()
             notification_service.create_notification(
                 user_id=current_user["id"],

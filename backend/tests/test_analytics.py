@@ -291,7 +291,7 @@ class TestAnalyticsAPI:
             mock.return_value = {
                 "id": "test-user-id",
                 "email": "editor@test.com",
-                "roles": ["editor"],
+                "roles": ["managing_editor"],
             }
             yield mock
 
@@ -373,7 +373,7 @@ class TestAnalyticsAPI:
         app.dependency_overrides[get_current_user] = lambda: {
             "id": "u-me",
             "email": "me@example.com",
-            "roles": ["editor"],
+            "roles": ["managing_editor"],
         }
         app.dependency_overrides[get_analytics_service] = lambda: fake_service
 
