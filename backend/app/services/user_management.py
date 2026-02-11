@@ -154,15 +154,12 @@ class UserManagementService:
         """
         T057: Update user role in user_profiles.
         T058: Record audit log.
-        T059: Prevent self-modification.
-        T060: Prevent modifying other admins (unless super-super admin? For now, prevent modifying admin role).
+        T059: 自己修改自己的角色时，仅允许“追加角色”。
+        T060: 自己修改自己的角色时，禁止移除 admin。
         """
         target_id_str = str(target_user_id)
         changed_by_str = str(changed_by)
-
-        # T059: Self-modification check
-        if target_id_str == changed_by_str:
-            raise ValueError("Cannot modify your own role")
+        is_self_update = target_id_str == changed_by_str
 
         # Fetch current profile to check existence and old role
         try:
@@ -171,15 +168,17 @@ class UserManagementService:
                 raise ValueError("User not found")
             
             user_profile = resp.data
-            current_roles = user_profile.get("roles", [])
-            
-            # T060: Prevent modifying admins (Safety check)
-            # If the target is ALREADY an admin, we might want to restrict who can demote them.
-            # For simplicity in this feature: Admins cannot be demoted/modified by this standard endpoint.
-            # Or we allow it but log strictly.
-            # Let's check spec. Spec says "allow Admin to upgrade ordinary Author".
-            # It implies we can also change roles back.
-            # But let's assume we allow it for now, but logged.
+            # 统一角色格式：小写 + 去重 + 保序
+            current_roles_raw = user_profile.get("roles", []) or []
+            current_roles: List[str] = []
+            current_seen: set[str] = set()
+            for role in current_roles_raw:
+                normalized = str(role or "").strip().lower()
+                if not normalized or normalized in current_seen:
+                    continue
+                if normalized in ALLOWED_USER_ROLES:
+                    current_seen.add(normalized)
+                    current_roles.append(normalized)
             
             requested = new_roles or ([new_role] if new_role else [])
             updated_roles: List[str] = []
@@ -194,6 +193,20 @@ class UserManagementService:
                 updated_roles.append(normalized)
             if not updated_roles:
                 raise ValueError("At least one role is required")
+
+            # 方案2：
+            # - 允许管理员给自己“追加角色”
+            # - 禁止管理员给自己移除任何已有角色（尤其 admin）
+            if is_self_update:
+                current_role_set = set(current_roles)
+                updated_role_set = set(updated_roles)
+
+                if "admin" in current_role_set and "admin" not in updated_role_set:
+                    raise ValueError("Cannot remove your own admin role")
+
+                removed_roles = current_role_set - updated_role_set
+                if removed_roles:
+                    raise ValueError("You can only add roles to yourself")
             
             # Perform update
             update_resp = self.admin_client.table("user_profiles").update({
@@ -228,7 +241,12 @@ class UserManagementService:
 
         except Exception as e:
             print(f"Update role failed: {e}")
-            if "User not found" in str(e) or "Cannot modify" in str(e):
+            if (
+                "User not found" in str(e)
+                or "Cannot modify" in str(e)
+                or "Cannot remove your own admin role" in str(e)
+                or "You can only add roles to yourself" in str(e)
+            ):
                 raise e # Re-raise known errors
             raise Exception(f"Internal error updating role: {e}")
 

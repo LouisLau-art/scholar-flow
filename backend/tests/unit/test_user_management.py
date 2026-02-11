@@ -401,10 +401,80 @@ class TestUpdateUserRole:
 
             assert result["roles"] == ["editor"]
 
-    def test_update_role_self_modification(self, mock_env):
-        """Test that self-modification is prevented"""
+    def test_update_role_self_addition_allowed(self, mock_env):
+        """Test self role update allows additive-only changes"""
+        user_data = {
+            "id": "user-1",
+            "email": "user@test.com",
+            "name": "Test User",
+            "roles": ["admin"],
+            "created_at": "2024-01-01",
+        }
+        updated_data = {
+            "id": "user-1",
+            "email": "user@test.com",
+            "name": "Test User",
+            "roles": ["admin", "editor"],
+            "created_at": "2024-01-01",
+        }
+
         with patch("app.services.user_management.create_client") as mock_create:
-            mock_client = MockAdminClient()
+            mock_client = MagicMock()
+            select_response = MockSupabaseResponse(data=user_data)
+            update_response = MockSupabaseResponse(data=[updated_data])
+            log_response = MockSupabaseResponse(data=[{}])
+            call_count = [0]
+
+            def table_side_effect(name):
+                mock_table = MagicMock()
+                mock_table.select.return_value = mock_table
+                mock_table.update.return_value = mock_table
+                mock_table.insert.return_value = mock_table
+                mock_table.eq.return_value = mock_table
+                mock_table.single.return_value = mock_table
+                if name == "user_profiles":
+                    if call_count[0] == 0:
+                        mock_table.execute.return_value = select_response
+                    else:
+                        mock_table.execute.return_value = update_response
+                    call_count[0] += 1
+                else:
+                    mock_table.execute.return_value = log_response
+                return mock_table
+
+            mock_client.table.side_effect = table_side_effect
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            user_id = UUID("00000000-0000-0000-0000-000000000001")
+            result = service.update_user_role(
+                target_user_id=user_id,
+                new_role=None,
+                new_roles=["admin", "editor"],
+                reason="Self add editor role",
+                changed_by=user_id,  # Same user
+            )
+
+            assert result["roles"] == ["admin", "editor"]
+
+    def test_update_role_self_remove_admin_forbidden(self, mock_env):
+        """Test self role update cannot remove own admin role"""
+        user_data = {
+            "id": "user-1",
+            "email": "user@test.com",
+            "name": "Test User",
+            "roles": ["admin", "editor"],
+            "created_at": "2024-01-01",
+        }
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.single.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(data=user_data)
+            mock_client.table.return_value = mock_table
             mock_create.return_value = mock_client
 
             service = UserManagementService()
@@ -413,12 +483,47 @@ class TestUpdateUserRole:
             with pytest.raises(ValueError) as exc_info:
                 service.update_user_role(
                     target_user_id=user_id,
-                    new_role="admin",
-                    reason="Self-promotion",
+                    new_role=None,
+                    new_roles=["editor"],
+                    reason="Self remove admin role",
                     changed_by=user_id,  # Same user
                 )
 
-            assert "Cannot modify your own role" in str(exc_info.value)
+            assert "Cannot remove your own admin role" in str(exc_info.value)
+
+    def test_update_role_self_remove_non_admin_forbidden(self, mock_env):
+        """Test self role update cannot remove existing non-admin roles either"""
+        user_data = {
+            "id": "user-1",
+            "email": "user@test.com",
+            "name": "Test User",
+            "roles": ["author", "reviewer"],
+            "created_at": "2024-01-01",
+        }
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.single.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(data=user_data)
+            mock_client.table.return_value = mock_table
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            user_id = UUID("00000000-0000-0000-0000-000000000001")
+
+            with pytest.raises(ValueError) as exc_info:
+                service.update_user_role(
+                    target_user_id=user_id,
+                    new_role=None,
+                    new_roles=["author"],
+                    reason="Self remove reviewer role",
+                    changed_by=user_id,  # Same user
+                )
+
+            assert "You can only add roles to yourself" in str(exc_info.value)
 
     def test_update_role_user_not_found(self, mock_env):
         """Test role update for non-existent user"""

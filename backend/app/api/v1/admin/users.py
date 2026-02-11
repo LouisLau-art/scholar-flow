@@ -320,7 +320,11 @@ async def update_user_role(
     except ValueError as e:
         # Handle known business logic errors
         msg = str(e)
-        if "Cannot modify" in msg:
+        if (
+            "Cannot modify" in msg
+            or "Cannot remove your own admin role" in msg
+            or "You can only add roles to yourself" in msg
+        ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
         if "User not found" in msg:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)

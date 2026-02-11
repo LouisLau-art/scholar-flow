@@ -182,26 +182,50 @@ async def test_update_role_success(client: AsyncClient, auth_token, mock_admin_r
     mock_admin_service.update_user_role.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_update_role_self_prevention(client: AsyncClient, auth_token, mock_admin_service):
-    """T048: Security test: User cannot modify their own role"""
+async def test_update_role_self_addition_allowed(client: AsyncClient, auth_token, mock_admin_service):
+    """Self role update is allowed when additive-only"""
     admin_id = str(uuid4())
-    # Mock profile to match target user_id
     app.dependency_overrides[get_current_profile] = lambda: {
         "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
     }
-    
-    payload = {"new_role": "author", "reason": "Demoting myself"}
-    
-    # Simulate service raising ValueError (which API maps to 403)
-    mock_admin_service.update_user_role.side_effect = ValueError("Cannot modify your own role")
-    
+
+    payload = {"new_roles": ["admin", "editor"], "reason": "Add editor role to self"}
+    mock_admin_service.update_user_role.return_value = {
+        "id": admin_id,
+        "email": "admin@example.com",
+        "roles": ["admin", "editor"],
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+
     response = await client.put(
         f"/api/v1/admin/users/{admin_id}/role",
         headers={"Authorization": f"Bearer {auth_token}"},
-        json=payload
+        json=payload,
+    )
+    assert response.status_code == 200
+    assert set(response.json().get("roles", [])) == {"admin", "editor"}
+
+    app.dependency_overrides.pop(get_current_profile, None)
+
+
+@pytest.mark.asyncio
+async def test_update_role_self_remove_admin_forbidden(client: AsyncClient, auth_token, mock_admin_service):
+    """Self role update cannot remove own admin role"""
+    admin_id = str(uuid4())
+    app.dependency_overrides[get_current_profile] = lambda: {
+        "id": admin_id, "email": "admin@example.com", "roles": ["admin"]
+    }
+
+    payload = {"new_roles": ["editor"], "reason": "Remove admin from self"}
+    mock_admin_service.update_user_role.side_effect = ValueError("Cannot remove your own admin role")
+
+    response = await client.put(
+        f"/api/v1/admin/users/{admin_id}/role",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json=payload,
     )
     assert response.status_code == 403
-    
+
     app.dependency_overrides.pop(get_current_profile, None)
 
 # === T073-T081: User Story 3 (Direct Member Invitation) ===
