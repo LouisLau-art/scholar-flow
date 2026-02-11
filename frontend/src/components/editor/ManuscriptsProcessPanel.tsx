@@ -20,10 +20,12 @@ export function ManuscriptsProcessPanel({
   onAssign,
   onDecide,
   refreshKey,
+  viewMode = 'actionable',
 }: {
-  onAssign: (row: ProcessRow) => void
-  onDecide: (row: ProcessRow) => void
+  onAssign?: (row: ProcessRow) => void
+  onDecide?: (row: ProcessRow) => void
   refreshKey?: number
+  viewMode?: 'actionable' | 'monitor'
 }) {
   const searchParams = useSearchParams()
   const searchKey = searchParams?.toString() || ''
@@ -60,6 +62,7 @@ export function ManuscriptsProcessPanel({
   }, [rows])
 
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
+  const readOnlyView = viewMode === 'monitor'
   const scopeHint = useMemo(() => buildProcessScopeEmptyHint(rbacContext), [rbacContext])
   const emptyText =
     scopeHint && rows.length === 0
@@ -179,18 +182,23 @@ export function ManuscriptsProcessPanel({
         <ManuscriptTable
           rows={rows}
           emptyText={emptyText}
-          onAssign={onAssign}
-          onDecide={onDecide}
+          onAssign={readOnlyView ? undefined : onAssign}
+          onDecide={readOnlyView ? undefined : onDecide}
           onOwnerBound={() => load(filters, { silent: true })}
-          canBindOwner={capability.canBindOwner}
-          canAssign={capability.canViewProcess}
-          canDecide={capability.canRecordFirstDecision || capability.canSubmitFinalDecision}
-          canQuickPrecheck={capability.canRecordFirstDecision}
-          onRowUpdated={(u) => {
-            applyRowUpdate(u)
-            // 轻量“后台同步”：避免本地状态与服务端过滤/排序偏离
-            load(filters, { silent: true, suppressErrorToast: true })
-          }}
+          canBindOwner={!readOnlyView && capability.canBindOwner}
+          canAssign={!readOnlyView && capability.canViewProcess}
+          canDecide={!readOnlyView && (capability.canRecordFirstDecision || capability.canSubmitFinalDecision)}
+          canQuickPrecheck={!readOnlyView && capability.canRecordFirstDecision}
+          readOnly={readOnlyView}
+          onRowUpdated={
+            readOnlyView
+              ? undefined
+              : (u) => {
+                  applyRowUpdate(u)
+                  // 轻量“后台同步”：避免本地状态与服务端过滤/排序偏离
+                  load(filters, { silent: true, suppressErrorToast: true })
+                }
+          }
         />
       )}
     </div>

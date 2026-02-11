@@ -45,6 +45,7 @@ export function ManuscriptTable({
   canAssign = true,
   canDecide = true,
   canQuickPrecheck = true,
+  readOnly = false,
   emptyText = 'No manuscripts found.',
 }: {
   rows: ProcessRow[]
@@ -56,6 +57,7 @@ export function ManuscriptTable({
   canAssign?: boolean
   canDecide?: boolean
   canQuickPrecheck?: boolean
+  readOnly?: boolean
   emptyText?: string
 }) {
   return (
@@ -63,17 +65,17 @@ export function ManuscriptTable({
       <Table className="table-fixed">
         <TableHeader>
           <TableRow className="bg-slate-50/50">
-            <TableHead className="w-[25%]">Manuscript</TableHead>
-            <TableHead className="w-[33%]">Status</TableHead>
-            <TableHead className="w-[14%]">Updated</TableHead>
-            <TableHead className="w-[20%]">People</TableHead>
-            <TableHead className="w-[8%] text-right">Actions</TableHead>
+            <TableHead className={readOnly ? 'w-[26%]' : 'w-[25%]'}>Manuscript</TableHead>
+            <TableHead className={readOnly ? 'w-[35%]' : 'w-[33%]'}>Status</TableHead>
+            <TableHead className={readOnly ? 'w-[15%]' : 'w-[14%]'}>Updated</TableHead>
+            <TableHead className={readOnly ? 'w-[24%]' : 'w-[20%]'}>People</TableHead>
+            {!readOnly ? <TableHead className="w-[8%] text-right">Actions</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={readOnly ? 4 : 5} className="py-10 text-center text-sm text-slate-500">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -132,12 +134,14 @@ export function ManuscriptTable({
                           <span className="text-slate-500">Owner:</span>{' '}
                           <span className="font-medium text-slate-700">{ownerLabel}</span>
                         </p>
-                        <BindingOwnerDropdown
-                          manuscriptId={r.id}
-                          currentOwner={r.owner}
-                          onBound={onOwnerBound}
-                          disabled={!canBindOwner}
-                        />
+                        {!readOnly ? (
+                          <BindingOwnerDropdown
+                            manuscriptId={r.id}
+                            currentOwner={r.owner}
+                            onBound={onOwnerBound}
+                            disabled={!canBindOwner}
+                          />
+                        ) : null}
                       </div>
                       {showAssigneeLine ? (
                         <p className="truncate text-xs">
@@ -147,17 +151,19 @@ export function ManuscriptTable({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <ManuscriptActions
-                      row={r}
-                      onAssign={onAssign}
-                      onDecide={onDecide}
-                      onRowUpdated={onRowUpdated}
-                      canAssign={canAssign}
-                      canDecide={canDecide}
-                      canQuickPrecheck={canQuickPrecheck}
-                    />
-                  </TableCell>
+                  {!readOnly ? (
+                    <TableCell className="text-right">
+                      <ManuscriptActions
+                        row={r}
+                        onAssign={onAssign}
+                        onDecide={onDecide}
+                        onRowUpdated={onRowUpdated}
+                        canAssign={canAssign}
+                        canDecide={canDecide}
+                        canQuickPrecheck={canQuickPrecheck}
+                      />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               )
             })
