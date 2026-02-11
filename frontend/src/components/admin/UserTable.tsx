@@ -58,7 +58,9 @@ export function UserTable({ users, isLoading, page, perPage, total, onPageChange
                     {user.roles.map(role => (
                       <span key={role} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                         role === 'admin' ? 'bg-destructive/10 text-destructive' :
-                        role === 'editor' ? 'bg-primary/10 text-primary' :
+                        role === 'managing_editor' ? 'bg-primary/10 text-primary' :
+                        role === 'assistant_editor' ? 'bg-indigo-100 text-indigo-700' :
+                        role === 'editor_in_chief' ? 'bg-purple-100 text-purple-700' :
                         role === 'reviewer' ? 'bg-secondary text-secondary-foreground' :
                         'bg-muted text-muted-foreground'
                       }`}>

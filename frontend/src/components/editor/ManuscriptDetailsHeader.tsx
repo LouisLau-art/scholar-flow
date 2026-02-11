@@ -84,11 +84,10 @@ export function ManuscriptDetailsHeader({ ms }: { ms: ManuscriptDetailsHeaderDat
         </div>
       </div>
 
-      <Link href="/dashboard?tab=editor" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
+      <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
         <ArrowLeft className="h-4 w-4" />
         返回编辑台
       </Link>
     </div>
   )
 }
-

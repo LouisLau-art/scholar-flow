@@ -67,7 +67,7 @@ export default function ManuscriptsProcessPage() {
               <p className="mt-1 text-slate-500 font-medium">统一表格视图管理稿件生命周期</p>
             </div>
           </div>
-          <Link href="/dashboard?tab=editor" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
+          <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
             <ArrowLeft className="h-4 w-4" />
             返回编辑台
           </Link>

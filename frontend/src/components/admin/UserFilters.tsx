@@ -35,7 +35,9 @@ export function UserFilters({ search, role, onSearchChange, onRoleChange }: User
             <SelectItem value="__all">All Roles</SelectItem>
             <SelectItem value="author">Author</SelectItem>
             <SelectItem value="reviewer">Reviewer</SelectItem>
-            <SelectItem value="editor">Editor</SelectItem>
+            <SelectItem value="assistant_editor">Assistant Editor</SelectItem>
+            <SelectItem value="managing_editor">Managing Editor</SelectItem>
+            <SelectItem value="editor_in_chief">Editor-in-Chief</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>

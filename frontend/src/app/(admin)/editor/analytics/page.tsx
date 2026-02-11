@@ -103,7 +103,7 @@ function AnalyticsDashboardContent() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/dashboard?tab=editor"
+            href="/dashboard"
             className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
           >
             <ArrowLeft className="h-4 w-4" />

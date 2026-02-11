@@ -17,7 +17,6 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = 
   { value: 'assistant_editor', label: 'Assistant Editor', helper: 'Technical pre-check' },
   { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配' },
   { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: 'Academic pre-check / final decision' },
-  { value: 'editor', label: 'Editor', helper: 'Legacy editor pipeline' },
   { value: 'admin', label: 'Admin', helper: '全局管理权限' },
 ]
 

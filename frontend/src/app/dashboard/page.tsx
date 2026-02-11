@@ -6,7 +6,6 @@ import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, U
 import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReviewerDashboard from "@/components/ReviewerDashboard"
-import EditorDashboard from "@/components/EditorDashboard"
 import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
 import { useSearchParams } from 'next/navigation'
@@ -16,7 +15,6 @@ import { Button } from '@/components/ui/button'
 type DashboardTab =
   | 'author'
   | 'reviewer'
-  | 'editor'
   | 'managing_editor'
   | 'assistant_editor'
   | 'editor_in_chief'
@@ -25,7 +23,6 @@ type DashboardTab =
 const DASHBOARD_TABS: DashboardTab[] = [
   'author',
   'reviewer',
-  'editor',
   'managing_editor',
   'assistant_editor',
   'editor_in_chief',
@@ -39,7 +36,6 @@ function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardT
     'managing_editor',
     'assistant_editor',
     'editor_in_chief',
-    'editor',
     'admin',
   ]
   for (const tab of order) {
@@ -162,14 +158,10 @@ function DashboardPageContent() {
   const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
   const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
-  // Legacy editor 仅做路由兼容；当用户已有新角色时不再展示该 tab。
-  const hasModernEditorialRole = canSeeManagingEditor || canSeeAssistantEditor || canSeeEditorInChief
-  const canSeeEditor = roleSet.has('editor') && !hasModernEditorialRole
   const allowedTabs: Record<DashboardTab, boolean> = useMemo(
     () => ({
       author: canSeeAuthor,
       reviewer: canSeeReviewer,
-      editor: canSeeEditor,
       managing_editor: canSeeManagingEditor,
       assistant_editor: canSeeAssistantEditor,
       editor_in_chief: canSeeEditorInChief,
@@ -178,7 +170,6 @@ function DashboardPageContent() {
     [
       canSeeAuthor,
       canSeeReviewer,
-      canSeeEditor,
       canSeeManagingEditor,
       canSeeAssistantEditor,
       canSeeEditorInChief,
@@ -409,12 +400,6 @@ function DashboardPageContent() {
                   { label: 'Analytics Dashboard', href: '/editor/analytics', helper: 'Track decision velocity and acceptance trends.' },
                 ]}
               />
-            </TabsContent>
-          )}
-
-          {canSeeEditor && (
-            <TabsContent value="editor" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <EditorDashboard />
             </TabsContent>
           )}
 

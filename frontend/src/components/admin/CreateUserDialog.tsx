@@ -14,7 +14,7 @@ interface CreateUserDialogProps {
 export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialogProps) {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>('editor');
+  const [role, setRole] = useState<UserRole>('author');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +41,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
       // Reset form
       setEmail('');
       setFullName('');
-      setRole('editor');
+      setRole('author');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user');
@@ -99,8 +99,11 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="editor">Editor</SelectItem>
+                <SelectItem value="author">Author</SelectItem>
                 <SelectItem value="reviewer">Reviewer</SelectItem>
+                <SelectItem value="assistant_editor">Assistant Editor</SelectItem>
+                <SelectItem value="managing_editor">Managing Editor</SelectItem>
+                <SelectItem value="editor_in_chief">Editor-in-Chief</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
