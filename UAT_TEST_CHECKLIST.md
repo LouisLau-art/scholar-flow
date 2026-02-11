@@ -64,6 +64,13 @@ ADMIN_API_KEY=<your_admin_key> ./scripts/validate-production-rollout.sh \
 - [ ] 打开 `/editor/process` 成功显示表格
 - [ ] 按 `q`、`journal`、`assign editor`、`status`、`overdue` 筛选可用
 - [ ] 点击稿件可进入详情页
+- [ ] 排序规则符合预期：最近 `Updated` 的稿件应排在最上方
+
+### SMOKE-02B 角色可见范围（Process/Intake）
+
+- [ ] 使用 `assistant_editor` 登录：`/editor/process` 仅显示“分配给我”的稿件
+- [ ] 使用 `managing_editor` 登录：`/editor/intake` 与 `/editor/process` 仅显示其分管 Journal 范围
+- [ ] 使用 `admin` 登录：可查看全局稿件（不受 journal scope 限制）
 
 ### SMOKE-03 Author 详情访问控制
 
@@ -171,6 +178,15 @@ ADMIN_API_KEY=<your_admin_key> ./scripts/validate-production-rollout.sh \
 - [ ] 能创建 run、执行 readiness/regression/finalize
 - [ ] 报告可读，结果能区分 `go` / `no-go`
 
+### AD-04 Journal Management 与 Scope 绑定
+
+- [ ] 打开 `/admin/journals`，可查看期刊列表
+- [ ] 创建新期刊成功（title + slug 唯一）
+- [ ] 可编辑期刊信息并保存成功
+- [ ] 可停用/重新启用期刊（is_active 生效）
+- [ ] `supabase db push --linked` 后，确认 `journals.is_active` / `journals.updated_at` 字段存在
+- [ ] （可选）在 `journal_role_scopes` 配置 ME/EIC 的 journal 范围后，Process/Intake 列表可见范围立即变化
+
 ---
 
 ## 5. 性能与体验专项（本轮重点）
@@ -230,4 +246,3 @@ ADMIN_API_KEY=<your_admin_key> ./scripts/validate-production-rollout.sh \
 - 详细场景版：`docs/UAT_SCENARIOS.md`
 - 上线验收脚本：`scripts/validate-production-rollout.sh`
 - GAP 总计划：`docs/GAP_ANALYSIS_AND_ACTION_PLAN.md`
-

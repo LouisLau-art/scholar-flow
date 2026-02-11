@@ -667,14 +667,22 @@ async def get_intake_queue(
     page_size: int = 20,
     q: str | None = Query(None, max_length=100),
     overdue_only: bool = Query(False),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     List manuscripts in Managing Editor Intake Queue.
     Status: pre_check, Sub-status: intake
     """
     try:
-        return EditorService().get_intake_queue(page, page_size, q=q, overdue_only=overdue_only)
+        return EditorService().get_intake_queue(
+            page,
+            page_size,
+            q=q,
+            overdue_only=overdue_only,
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
+        )
     except HTTPException:
         raise
     except Exception as e:

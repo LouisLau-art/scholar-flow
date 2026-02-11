@@ -158,7 +158,7 @@ export function ManuscriptsProcessPanel({
 
   return (
     <div className="space-y-4">
-      <ProcessFilterBar />
+      <ProcessFilterBar rbacContext={rbacContext} />
       {scopeHint ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           {scopeHint}

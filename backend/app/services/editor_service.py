@@ -9,7 +9,11 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.core.journal_scope import filter_rows_by_journal_scope
+from app.core.journal_scope import (
+    filter_rows_by_journal_scope,
+    get_user_scope_journal_ids,
+    is_scope_enforcement_enabled,
+)
 from app.core.role_matrix import normalize_roles
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
@@ -146,6 +150,65 @@ class EditorService:
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _apply_process_visibility_scope(
+        self,
+        *,
+        rows: list[dict[str, Any]],
+        viewer_user_id: str | None,
+        viewer_roles: list[str] | None,
+    ) -> list[dict[str, Any]]:
+        """
+        统一处理 Process/Intake 列表的角色可见范围。
+
+        规则：
+        - admin：不裁剪；
+        - assistant_editor（且不具备 ME/EIC 全局角色）：仅看 `assistant_editor_id == 自己`；
+        - managing_editor / editor_in_chief（含 legacy editor 映射）：
+          若已配置 journal scopes，则默认按 scope 裁剪；
+          若 scope 为空且 `JOURNAL_SCOPE_ENFORCEMENT=1`，返回空列表；
+        - 其余角色沿用现有灰度开关逻辑（filter_rows_by_journal_scope）。
+        """
+        if not viewer_user_id or viewer_roles is None:
+            return rows
+
+        normalized_viewer_roles = normalize_roles(viewer_roles)
+        if "admin" in normalized_viewer_roles:
+            return rows
+
+        has_global_process_scope = bool({"managing_editor", "editor_in_chief"} & normalized_viewer_roles)
+        is_pure_assistant_editor = (
+            "assistant_editor" in normalized_viewer_roles and not has_global_process_scope
+        )
+
+        out = rows
+        if is_pure_assistant_editor:
+            out = [
+                row for row in out if str(row.get("assistant_editor_id") or "") == str(viewer_user_id)
+            ]
+
+        # 非 admin 的 ME/EIC：默认按已配置 scope 裁剪（即使灰度开关关闭也生效）。
+        if has_global_process_scope:
+            scoped_journal_ids = get_user_scope_journal_ids(
+                user_id=str(viewer_user_id),
+                roles=list(normalized_viewer_roles),
+            )
+            if scoped_journal_ids:
+                out = [
+                    row for row in out if str(row.get("journal_id") or "").strip() in scoped_journal_ids
+                ]
+            elif is_scope_enforcement_enabled():
+                out = []
+
+        # 其余角色继续走现有灰度策略，兼容旧环境。
+        out = filter_rows_by_journal_scope(
+            rows=out,
+            user_id=str(viewer_user_id),
+            roles=list(normalized_viewer_roles),
+            journal_key="journal_id",
+            allow_admin_bypass=True,
+        )
+        return out
 
     def _build_process_query(self, *, filters: ProcessListFilters, select_clause: str):
         q = (
@@ -804,28 +867,11 @@ class EditorService:
         if filters.overdue_only:
             rows = [row for row in rows if bool(row.get("is_overdue"))]
 
-        # AE 视角默认仅看“分配给我”的稿件；ME/EIC/Admin 保持全局 Process 视图。
-        if viewer_user_id and viewer_roles is not None:
-            normalized_viewer_roles = normalize_roles(viewer_roles)
-            is_admin_viewer = "admin" in normalized_viewer_roles
-            has_global_process_scope = bool({"managing_editor", "editor_in_chief"} & normalized_viewer_roles)
-            if "assistant_editor" in normalized_viewer_roles and not is_admin_viewer and not has_global_process_scope:
-                rows = [
-                    row for row in rows if str(row.get("assistant_editor_id") or "") == str(viewer_user_id)
-                ]
-
-        # GAP-P1-05: 同角色跨期刊默认隔离（admin bypass）。
-        # 中文注释:
-        # - 仅在调用方传入 viewer 上下文时启用作用域裁剪；
-        # - 旧调用路径不传上下文时保持兼容，避免一次性行为变更。
-        if viewer_user_id and viewer_roles is not None:
-            rows = filter_rows_by_journal_scope(
-                rows=rows,
-                user_id=str(viewer_user_id),
-                roles=viewer_roles,
-                journal_key="journal_id",
-                allow_admin_bypass=True,
-            )
+        rows = self._apply_process_visibility_scope(
+            rows=rows,
+            viewer_user_id=viewer_user_id,
+            viewer_roles=viewer_roles,
+        )
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
@@ -837,6 +883,8 @@ class EditorService:
         *,
         q: str | None = None,
         overdue_only: bool = False,
+        viewer_user_id: str | None = None,
+        viewer_roles: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """
         ME Intake Queue: Status=PRE_CHECK, PreCheckStatus=INTAKE
@@ -855,6 +903,7 @@ class EditorService:
                     .select(select_clause)
                     .eq("status", ManuscriptStatus.PRE_CHECK.value)
                     .or_(f"pre_check_status.eq.{PreCheckStatus.INTAKE.value},pre_check_status.is.null")
+                    .order("updated_at", desc=True)
                     .order("created_at", desc=True)
                     .range((page - 1) * page_size, page * page_size - 1)
                 )
@@ -947,6 +996,12 @@ class EditorService:
 
         if overdue_only:
             out = [row for row in out if bool(row.get("is_overdue"))]
+
+        out = self._apply_process_visibility_scope(
+            rows=out,
+            viewer_user_id=viewer_user_id,
+            viewer_roles=viewer_roles,
+        )
 
         return out
 

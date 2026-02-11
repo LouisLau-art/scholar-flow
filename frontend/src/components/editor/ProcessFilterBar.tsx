@@ -5,8 +5,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EditorApi } from '@/services/editorApi'
 import { ChevronDown, Loader2, Search, RotateCcw } from 'lucide-react'
+import type { EditorRbacContext } from '@/types/rbac'
 
 type JournalOption = { id: string; title: string; slug?: string }
 type StaffOption = { id: string; email?: string; full_name?: string }
@@ -33,8 +35,10 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 
 export function ProcessFilterBar({
   className,
+  rbacContext,
 }: {
   className?: string
+  rbacContext?: EditorRbacContext | null
 }) {
   const router = useRouter()
   const pathname = usePathname() ?? '/editor/process'
@@ -67,6 +71,19 @@ export function ProcessFilterBar({
   const [statuses, setStatuses] = useState<string[]>(applied.statuses)
   const [overdueOnly, setOverdueOnly] = useState<boolean>(applied.overdueOnly)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+
+  const normalizedRoles = useMemo(() => {
+    const rows = rbacContext?.normalized_roles || []
+    return new Set(rows.map((item) => String(item).toLowerCase()))
+  }, [rbacContext])
+  const canFilterByJournal = useMemo(
+    () =>
+      normalizedRoles.has('admin') ||
+      normalizedRoles.has('managing_editor') ||
+      normalizedRoles.has('editor_in_chief'),
+    [normalizedRoles]
+  )
+  const canFilterByEditor = canFilterByJournal
 
   const qDebounceTimer = useRef<number | null>(null)
   const mountedRef = useRef(false)
@@ -142,6 +159,14 @@ export function ProcessFilterBar({
       document.removeEventListener('mousedown', handleOutsideClick)
     }
   }, [])
+
+  useEffect(() => {
+    if (!canFilterByJournal && journalId) setJournalId('')
+  }, [canFilterByJournal, journalId])
+
+  useEffect(() => {
+    if (!canFilterByEditor && editorId) setEditorId('')
+  }, [canFilterByEditor, editorId])
 
   // URL -> Draft 同步（支持浏览器前进/后退）
   useEffect(() => {
@@ -230,41 +255,47 @@ export function ProcessFilterBar({
           <Input className="mt-1" placeholder="Energy, 9286... (UUID) ..." value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
 
-        <div className="md:col-span-3">
-          <Label className="text-xs text-slate-600">Journal</Label>
-          <div className="mt-1">
-            <select
-              value={journalId}
-              onChange={(e) => setJournalId(e.target.value)}
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            >
-              <option value="">{loadingJournals ? 'Loading…' : 'All journals'}</option>
-              {journals.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.title}
-                </option>
-              ))}
-            </select>
+        {canFilterByJournal ? (
+          <div className="md:col-span-3">
+            <Label className="text-xs text-slate-600">Journal</Label>
+            <div className="mt-1">
+              <Select value={journalId || '__all'} onValueChange={(value) => setJournalId(value === '__all' ? '' : value)}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder={loadingJournals ? 'Loading…' : 'All journals'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">{loadingJournals ? 'Loading…' : 'All journals'}</SelectItem>
+                  {journals.map((j) => (
+                    <SelectItem key={j.id} value={j.id}>
+                      {j.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="md:col-span-3">
-          <Label className="text-xs text-slate-600">Assign Editor</Label>
-          <div className="mt-1">
-            <select
-              value={editorId}
-              onChange={(e) => setEditorId(e.target.value)}
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            >
-              <option value="">{loadingStaff ? 'Loading…' : 'All editors'}</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name || s.email || s.id}
-                </option>
-              ))}
-            </select>
+        {canFilterByEditor ? (
+          <div className="md:col-span-3">
+            <Label className="text-xs text-slate-600">Assign Editor</Label>
+            <div className="mt-1">
+              <Select value={editorId || '__all'} onValueChange={(value) => setEditorId(value === '__all' ? '' : value)}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder={loadingStaff ? 'Loading…' : 'All editors'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">{loadingStaff ? 'Loading…' : 'All editors'}</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.full_name || s.email || s.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="md:col-span-2">
           <Label className="text-xs text-slate-600">Status</Label>
@@ -331,8 +362,8 @@ export function ProcessFilterBar({
               setStatusDropdownOpen(false)
               updateUrl({
                 q,
-                journalId: journalId || null,
-                editorId: editorId || null,
+                journalId: canFilterByJournal ? journalId || null : null,
+                editorId: canFilterByEditor ? editorId || null : null,
                 statuses: statuses.length ? statuses : null,
                 overdueOnly,
               })
