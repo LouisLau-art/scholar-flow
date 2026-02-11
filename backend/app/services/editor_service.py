@@ -1147,6 +1147,8 @@ class EditorService:
         ae_id: UUID,
         current_user_id: UUID,
         *,
+        start_external_review: bool = False,
+        bind_owner_if_empty: bool = False,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -1161,6 +1163,7 @@ class EditorService:
         status = normalize_status(str(ms.get("status") or ""))
         pre = self._normalize_precheck_status(ms.get("pre_check_status"))
         ae_before = str(ms.get("assistant_editor_id") or "")
+        owner_before = str(ms.get("owner_id") or "")
 
         if status != ManuscriptStatus.PRE_CHECK.value:
             raise HTTPException(status_code=400, detail="AE assignment only allowed in pre_check")
@@ -1180,6 +1183,11 @@ class EditorService:
             "pre_check_status": PreCheckStatus.TECHNICAL.value,
             "updated_at": now,
         }
+        if bind_owner_if_empty and not owner_before:
+            # 中文注释:
+            # - Intake 一键分配场景下，若 owner 为空可自动兜底绑定当前 ME；
+            # - 避免稿件离开 Intake 后由于 owner 为空造成后续权限/协作信息缺失。
+            data["owner_id"] = actor
         # 条件更新，避免并发覆盖
         q = (
             self.client.table("manuscripts")
@@ -1216,12 +1224,42 @@ class EditorService:
                 "pre_check_to": PreCheckStatus.TECHNICAL.value,
                 "assistant_editor_before": ae_before or None,
                 "assistant_editor_after": ae_id_str,
+                "owner_before": owner_before or None,
+                "owner_after": data.get("owner_id") if data.get("owner_id") else (owner_before or None),
                 "decision": None,
                 "idempotency_key": idempotency_key,
             },
             created_at=now,
         )
-        return self._map_precheck_row(updated)
+        mapped = self._map_precheck_row(updated)
+
+        if not start_external_review:
+            return mapped
+
+        # 中文注释:
+        # - 入口页“通过并分配 AE”可选择一键进入 under_review；
+        # - 该路径等价于 ME 完成技术审查后直接发起外审，避免稿件掉出 Intake 但仍停留 pre_check。
+        moved = self.editorial.update_status(
+            manuscript_id=manuscript_id_str,
+            to_status=ManuscriptStatus.UNDER_REVIEW.value,
+            changed_by=actor,
+            comment="intake approve + assign AE + start external review",
+            allow_skip=False,
+            extra_updates={"pre_check_status": None},
+            payload={
+                "action": "precheck_assign_ae_start_review",
+                "pre_check_from": PreCheckStatus.TECHNICAL.value,
+                "pre_check_to": None,
+                "assistant_editor_before": ae_before or None,
+                "assistant_editor_after": ae_id_str,
+                "owner_before": owner_before or None,
+                "owner_after": data.get("owner_id") if data.get("owner_id") else (owner_before or None),
+                "decision": "pass",
+                "source": "intake_assign_modal",
+                "idempotency_key": idempotency_key,
+            },
+        )
+        return moved
 
     def request_intake_revision(
         self,

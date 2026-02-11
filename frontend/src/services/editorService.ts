@@ -50,8 +50,16 @@ export const editorService = {
     return res
   },
 
-  assignAE: async (manuscriptId: string, aeId: string) => {
-    const res = await EditorApi.assignAE(manuscriptId, { ae_id: aeId })
+  assignAE: async (
+    manuscriptId: string,
+    aeId: string,
+    options?: { startExternalReview?: boolean; bindOwnerIfEmpty?: boolean }
+  ) => {
+    const res = await EditorApi.assignAE(manuscriptId, {
+      ae_id: aeId,
+      start_external_review: options?.startExternalReview ?? false,
+      bind_owner_if_empty: options?.bindOwnerIfEmpty ?? false,
+    })
     if (!res?.message) {
       throw new Error(res?.detail || res?.message || 'Failed to assign AE')
     }

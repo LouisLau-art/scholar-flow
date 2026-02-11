@@ -58,6 +58,8 @@ export type ProductionCycleCreatePayload = {
 
 export type AssignAEPayload = {
   ae_id: string
+  start_external_review?: boolean
+  bind_owner_if_empty?: boolean
   idempotency_key?: string
 }
 

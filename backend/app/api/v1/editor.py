@@ -298,15 +298,20 @@ async def assign_ae(
 ):
     """
     Assign an Assistant Editor (AE) to a manuscript.
-    Moves manuscript from 'intake' to 'technical'.
+    默认仅从 'intake' 进入 'technical'。
+    可选：一键推进到 under_review（由前端显式传 start_external_review=true）。
     """
     try:
         updated = EditorService().assign_ae(
             id,
             request.ae_id,
             current_user["id"],
+            start_external_review=bool(request.start_external_review),
+            bind_owner_if_empty=bool(request.bind_owner_if_empty),
             idempotency_key=request.idempotency_key,
         )
+        if request.start_external_review:
+            return {"message": "AE assigned and moved to under_review", "data": updated}
         return {"message": "AE assigned successfully", "data": updated}
     except HTTPException:
         raise
