@@ -5,7 +5,9 @@ import {
   CreateUserRequest, 
   UpdateRoleRequest, 
   InviteReviewerRequest,
-  RoleChangeLog
+  RoleChangeLog,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
 } from '@/types/user';
 
 const API_BASE = '/api/v1/admin/users';
@@ -63,6 +65,23 @@ export const adminUserService = {
     if (!res.ok) {
       const error = await res.json();
       throw new Error(error.detail || 'Failed to update role');
+    }
+    return res.json();
+  },
+
+  async resetUserPassword(
+    userId: string,
+    data: ResetPasswordRequest = { temporary_password: '12345678' }
+  ): Promise<ResetPasswordResponse> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/${userId}/reset-password`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Failed to reset password');
     }
     return res.json();
   },

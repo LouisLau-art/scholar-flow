@@ -158,6 +158,40 @@ describe('adminUserService', () => {
     });
   });
 
+  describe('resetUserPassword', () => {
+    it('resets password successfully', async () => {
+      (globalThis.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: '1',
+          temporary_password: '12345678',
+          must_change_password: true,
+        }),
+      });
+
+      const result = await adminUserService.resetUserPassword('1');
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/admin/users/1/reset-password',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ temporary_password: '12345678' }),
+        })
+      );
+      expect(result.must_change_password).toBe(true);
+      expect(result.temporary_password).toBe('12345678');
+    });
+
+    it('throws error when reset password fails', async () => {
+      (globalThis.fetch as any).mockResolvedValue({
+        ok: false,
+        json: async () => ({ detail: 'User not found' }),
+      });
+
+      await expect(adminUserService.resetUserPassword('1')).rejects.toThrow('User not found');
+    });
+  });
+
   describe('inviteReviewer', () => {
     const inviteData = {
       email: 'reviewer@example.com',

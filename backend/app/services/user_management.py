@@ -268,6 +268,71 @@ class UserManagementService:
             print(f"Failed to fetch role history: {e}")
             return []
 
+    def reset_user_password(
+        self,
+        *,
+        target_user_id: UUID,
+        changed_by: UUID,
+        temporary_password: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Admin 重置用户密码。
+        默认临时密码：12345678（可被请求参数覆盖）。
+        """
+        target_id_str = str(target_user_id)
+        pwd = str(temporary_password or "12345678").strip()
+        if len(pwd) < 8:
+            raise ValueError("Temporary password must be at least 8 characters")
+
+        profile_email: Optional[str] = None
+        try:
+            profile_resp = (
+                self.admin_client.table("user_profiles")
+                .select("id,email")
+                .eq("id", target_id_str)
+                .maybe_single()
+                .execute()
+            )
+            profile = getattr(profile_resp, "data", None) or {}
+            profile_email = profile.get("email")
+        except Exception:
+            # user_profiles 读取失败不阻塞密码重置主流程
+            profile_email = None
+
+        try:
+            # 兼容现有登录流程：直接设置临时密码并打上 metadata 标记。
+            # 前端可据此提示用户尽快到设置页修改密码。
+            self.admin_client.auth.admin.update_user_by_id(
+                target_id_str,
+                {
+                    "password": pwd,
+                    "user_metadata": {"must_change_password": True},
+                },
+            )
+        except Exception as e:
+            msg = str(e)
+            if "not found" in msg.lower() or "user not found" in msg.lower():
+                raise ValueError("User not found")
+            raise Exception(f"Failed to reset password: {msg}") from e
+
+        # 审计：复用邮件日志表记录一次密码重置行为（不发送真实邮件）。
+        try:
+            self.log_email_notification(
+                recipient_email=profile_email or f"user:{target_id_str}",
+                notification_type="admin_password_reset",
+                status="sent",
+                error_message=f"reset_by={changed_by}",
+            )
+        except Exception:
+            pass
+
+        return {
+            "id": target_id_str,
+            "email": profile_email,
+            "temporary_password": pwd,
+            "must_change_password": True,
+        }
+
     # --- T083, T084, T085, T086: Implement user creation logic ---
 
     def create_internal_user(self, email: str, full_name: str, role: str, created_by: UUID) -> Dict[str, Any]:

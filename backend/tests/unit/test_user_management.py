@@ -550,6 +550,70 @@ class TestUpdateUserRole:
             assert "User not found" in str(exc_info.value)
 
 
+class TestResetUserPassword:
+    """Test admin reset password functionality"""
+
+    def test_reset_password_success(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.maybe_single.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(
+                data={"id": "user-1", "email": "user@test.com"}
+            )
+            mock_client.table.return_value = mock_table
+            mock_client.auth.admin.update_user_by_id.return_value = MagicMock()
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            result = service.reset_user_password(
+                target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                changed_by=UUID("00000000-0000-0000-0000-000000000002"),
+                temporary_password="12345678",
+            )
+
+            assert result["temporary_password"] == "12345678"
+            assert result["must_change_password"] is True
+            mock_client.auth.admin.update_user_by_id.assert_called_once()
+
+    def test_reset_password_short_password(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            with pytest.raises(ValueError) as exc_info:
+                service.reset_user_password(
+                    target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                    changed_by=UUID("00000000-0000-0000-0000-000000000002"),
+                    temporary_password="123",
+                )
+            assert "at least 8 characters" in str(exc_info.value)
+
+    def test_reset_password_user_not_found(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.maybe_single.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(data=None)
+            mock_client.table.return_value = mock_table
+            mock_client.auth.admin.update_user_by_id.side_effect = Exception("User not found")
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            with pytest.raises(ValueError) as exc_info:
+                service.reset_user_password(
+                    target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                    changed_by=UUID("00000000-0000-0000-0000-000000000002"),
+                    temporary_password="12345678",
+                )
+            assert "User not found" in str(exc_info.value)
+
+
 class TestGetRoleChanges:
     """Test role change history retrieval"""
 

@@ -228,6 +228,43 @@ async def test_update_role_self_remove_admin_forbidden(client: AsyncClient, auth
 
     app.dependency_overrides.pop(get_current_profile, None)
 
+# === Password Reset ===
+
+@pytest.mark.asyncio
+async def test_reset_password_success(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
+    user_id = str(uuid4())
+    mock_admin_service.reset_user_password.return_value = {
+        "id": user_id,
+        "email": "target@example.com",
+        "temporary_password": "12345678",
+        "must_change_password": True,
+    }
+
+    response = await client.post(
+        f"/api/v1/admin/users/{user_id}/reset-password",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"temporary_password": "12345678"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["temporary_password"] == "12345678"
+    assert data["must_change_password"] is True
+
+
+@pytest.mark.asyncio
+async def test_reset_password_not_found(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
+    user_id = str(uuid4())
+    mock_admin_service.reset_user_password.side_effect = ValueError("User not found")
+
+    response = await client.post(
+        f"/api/v1/admin/users/{user_id}/reset-password",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"temporary_password": "12345678"},
+    )
+
+    assert response.status_code == 404
+
 # === T073-T081: User Story 3 (Direct Member Invitation) ===
 
 @pytest.mark.asyncio

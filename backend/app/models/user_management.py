@@ -141,3 +141,23 @@ class InviteReviewerRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
     manuscript_id: Optional[UUID] = None  # Context for the invitation
+
+
+class ResetPasswordRequest(BaseModel):
+    """
+    Admin 重置密码请求。
+    默认值遵循产品约定：12345678
+    """
+
+    temporary_password: str = Field(default="12345678", min_length=8, max_length=128)
+
+
+class ResetPasswordResponse(BaseModel):
+    """
+    Admin 重置密码响应。
+    """
+
+    id: UUID
+    email: Optional[EmailStr] = None
+    temporary_password: str
+    must_change_password: bool = True

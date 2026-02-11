@@ -2,6 +2,7 @@
 
 import { User } from '@/types/user';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface UserTableProps {
   users: User[];
@@ -11,9 +12,10 @@ interface UserTableProps {
   total: number;
   onPageChange: (newPage: number) => void;
   onEdit: (user: User) => void;
+  onResetPassword: (user: User) => void;
 }
 
-export function UserTable({ users, isLoading, page, perPage, total, onPageChange, onEdit }: UserTableProps) {
+export function UserTable({ users, isLoading, page, perPage, total, onPageChange, onEdit, onResetPassword }: UserTableProps) {
   const totalPages = Math.ceil(total / perPage);
 
   if (isLoading) {
@@ -76,12 +78,24 @@ export function UserTable({ users, isLoading, page, perPage, total, onPageChange
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  <button 
-                    onClick={() => onEdit(user)}
-                    className="text-primary hover:underline font-bold text-xs"
-                  >
-                    Edit Role
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onEdit(user)}
+                    >
+                      Edit Role
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onResetPassword(user)}
+                    >
+                      Reset Password
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

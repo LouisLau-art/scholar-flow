@@ -15,7 +15,9 @@ from app.models.user_management import (
     CreateUserRequest, 
     UpdateRoleRequest, 
     InviteReviewerRequest,
-    RoleChangeLog
+    RoleChangeLog,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
 )
 
 # T016: Create admin users API router
@@ -376,6 +378,35 @@ async def invite_reviewer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.post("/admin/users/{user_id}/reset-password", response_model=ResetPasswordResponse)
+async def reset_user_password(
+    user_id: UUID,
+    request: ResetPasswordRequest,
+    _admin: dict = Depends(admin_only),
+    service: UserManagementService = Depends(get_user_management_service),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Admin 将指定用户密码重置为临时密码（默认 12345678）。
+    """
+    try:
+        return service.reset_user_password(
+            target_user_id=user_id,
+            changed_by=UUID(current_user["id"]),
+            temporary_password=request.temporary_password,
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "User not found" in msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )
 
 

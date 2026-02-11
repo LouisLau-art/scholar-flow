@@ -55,6 +55,17 @@ export interface UpdateRoleRequest {
   reason: string;
 }
 
+export interface ResetPasswordRequest {
+  temporary_password?: string;
+}
+
+export interface ResetPasswordResponse {
+  id: string;
+  email?: string | null;
+  temporary_password: string;
+  must_change_password: boolean;
+}
+
 export interface InviteReviewerRequest {
   email: string;
   full_name: string;

@@ -8,6 +8,7 @@ import { UserTable } from '@/components/admin/UserTable';
 import { UserFilters } from '@/components/admin/UserFilters';
 import { UserRoleDialog } from '@/components/admin/UserRoleDialog';
 import { CreateUserDialog } from '@/components/admin/CreateUserDialog';
+import { ResetPasswordDialog } from '@/components/admin/ResetPasswordDialog';
 import { User, UserRole } from '@/types/user';
 import { toast } from 'sonner';
 import { Loader2, ShieldAlert } from 'lucide-react';
@@ -31,6 +32,7 @@ export default function UserManagementPage() {
   // Dialog State
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
   // Debounce search
@@ -110,6 +112,11 @@ export default function UserManagementPage() {
     setIsRoleDialogOpen(true);
   };
 
+  const handleResetPasswordClick = (user: User) => {
+    setSelectedUser(user);
+    setIsResetDialogOpen(true);
+  };
+
   const handleRoleUpdate = async (userId: string, newRoles: UserRole[], reason: string) => {
     try {
       await adminUserService.updateUserRole(userId, { new_roles: newRoles, reason });
@@ -129,6 +136,16 @@ export default function UserManagementPage() {
     } catch (error) {
       console.error('Invite failed:', error);
       throw error; 
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    try {
+      await adminUserService.resetUserPassword(userId, { temporary_password: '12345678' });
+      toast.success('Password reset to 12345678');
+    } catch (error) {
+      console.error('Reset password failed:', error);
+      throw error;
     }
   };
 
@@ -182,6 +199,7 @@ export default function UserManagementPage() {
             total={total}
             onPageChange={setPage}
             onEdit={handleEditClick}
+            onResetPassword={handleResetPasswordClick}
           />
         </div>
 
@@ -196,6 +214,13 @@ export default function UserManagementPage() {
           isOpen={isInviteDialogOpen}
           onClose={() => setIsInviteDialogOpen(false)}
           onConfirm={handleInviteUser}
+        />
+
+        <ResetPasswordDialog
+          isOpen={isResetDialogOpen}
+          onClose={() => setIsResetDialogOpen(false)}
+          onConfirm={handleResetPassword}
+          user={selectedUser}
         />
       </div>
     );
