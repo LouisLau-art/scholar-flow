@@ -614,14 +614,15 @@ async def get_manuscript_reviews(
 
     中文注释:
     - Author 只能看到公开字段（comments_for_author/content/score）
-    - Editor/Admin 可以看到机密字段（confidential_comments_to_editor/attachment_path）
+    - Internal（admin / managing_editor / editor_in_chief / assistant_editor）可读取内部视图
+    - assistant_editor 仅可读取自己被分配稿件，避免越权
     """
     user_id = str(current_user.get("id"))
-    roles = set((profile or {}).get("roles") or [])
+    roles = {str(role).strip().lower() for role in ((profile or {}).get("roles") or []) if str(role).strip()}
 
     ms_resp = (
         supabase_admin.table("manuscripts")
-        .select("id, author_id")
+        .select("id, author_id, assistant_editor_id")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
@@ -631,9 +632,18 @@ async def get_manuscript_reviews(
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
     is_author = str(ms.get("author_id") or "") == user_id
-    is_editor = bool(roles.intersection({"admin", "managing_editor"}))
-    if not (is_author or is_editor):
+    is_internal = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief", "assistant_editor"}))
+    if not (is_author or is_internal):
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    # 中文注释:
+    # - assistant_editor 只能查看自己名下稿件的审稿反馈；
+    # - 对 admin / managing_editor / editor_in_chief 保持现有内部可见行为。
+    has_privileged_internal_role = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"}))
+    if not is_author and "assistant_editor" in roles and not has_privileged_internal_role:
+        assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
+        if not assigned_ae_id or assigned_ae_id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
     rr_resp = (
         supabase_admin.table("review_reports")

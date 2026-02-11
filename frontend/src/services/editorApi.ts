@@ -241,6 +241,11 @@ export const EditorApi = {
     return res.json()
   },
 
+  async getManuscriptReviews(manuscriptId: string) {
+    const res = await authedFetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/reviews`)
+    return res.json()
+  },
+
   async getDecisionContext(manuscriptId: string) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-context`)
     return res.json()

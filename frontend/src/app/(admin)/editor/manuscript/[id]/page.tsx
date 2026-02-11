@@ -47,6 +47,20 @@ const FileHubCard = dynamic(
   { ssr: false }
 )
 
+type ReviewerFeedbackItem = {
+  id: string
+  reviewer_id?: string | null
+  reviewer_name?: string | null
+  reviewer_email?: string | null
+  status?: string | null
+  score?: number | null
+  comments_for_author?: string | null
+  content?: string | null
+  confidential_comments_to_editor?: string | null
+  attachment_path?: string | null
+  created_at?: string | null
+}
+
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -70,6 +84,9 @@ export default function EditorManuscriptDetailPage() {
   const [transitionDialogOpen, setTransitionDialogOpen] = useState(false)
   const [transitionReason, setTransitionReason] = useState('')
   const [viewerEmail, setViewerEmail] = useState<string>('')
+  const [reviewReports, setReviewReports] = useState<ReviewerFeedbackItem[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewsError, setReviewsError] = useState<string | null>(null)
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceInfoForm>({
@@ -126,6 +143,25 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [])
 
+  const loadReviewReports = useCallback(async () => {
+    if (!id) return
+    try {
+      setReviewsLoading(true)
+      setReviewsError(null)
+      const reviewRes = await EditorApi.getManuscriptReviews(id)
+      if (!reviewRes?.success) {
+        throw new Error(reviewRes?.detail || reviewRes?.message || 'Failed to load reviewer feedback')
+      }
+      const rows = Array.isArray(reviewRes?.data) ? (reviewRes.data as ReviewerFeedbackItem[]) : []
+      setReviewReports(rows)
+    } catch (e) {
+      setReviewReports([])
+      setReviewsError(e instanceof Error ? e.message : 'Failed to load reviewer feedback')
+    } finally {
+      setReviewsLoading(false)
+    }
+  }, [id])
+
   const refreshDetail = useCallback(async () => {
     if (!id) return
     try {
@@ -134,11 +170,12 @@ export default function EditorManuscriptDetailPage() {
         throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       }
       applyDetail(detailRes.data)
+      void loadReviewReports()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
     }
-  }, [applyDetail, id])
+  }, [applyDetail, id, loadReviewReports])
 
   async function load() {
     try {
@@ -563,6 +600,78 @@ export default function EditorManuscriptDetailPage() {
                       <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
                     )}
                 </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-slate-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Reviewer Feedback Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {reviewsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading reviewer feedback...
+                  </div>
+                ) : reviewsError ? (
+                  <div className="space-y-2">
+                    <div className="text-sm text-rose-600">{reviewsError}</div>
+                    <Button size="sm" variant="outline" onClick={() => void loadReviewReports()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : reviewReports.length === 0 ? (
+                  <div className="text-sm text-slate-500">No reviewer feedback submitted yet.</div>
+                ) : (
+                  reviewReports.map((report) => {
+                    const publicComment = String(
+                      report.comments_for_author || report.content || ''
+                    ).trim()
+                    const confidentialComment = String(
+                      report.confidential_comments_to_editor || ''
+                    ).trim()
+                    return (
+                      <div key={report.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                          <div className="font-medium text-slate-700">
+                            {report.reviewer_name || report.reviewer_email || report.reviewer_id || 'Reviewer'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {typeof report.score === 'number' ? (
+                              <Badge variant="outline">Score {report.score}</Badge>
+                            ) : null}
+                            {report.status ? (
+                              <Badge variant="secondary">{String(report.status)}</Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {report.created_at
+                            ? format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')
+                            : 'Submitted time unavailable'}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                            Comments for Author
+                          </div>
+                          <div className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                            {publicComment || '—'}
+                          </div>
+                        </div>
+                        {confidentialComment ? (
+                          <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
+                            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+                              Confidential to Editor
+                            </div>
+                            <div className="whitespace-pre-wrap text-sm leading-6 text-amber-900">
+                              {confidentialComment}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })
+                )}
+              </CardContent>
             </Card>
             
             {/* Action Panel / Workflow */}
