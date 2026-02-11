@@ -415,39 +415,17 @@ export default function ReviewerAssignModal({
 
   const handleOwnerChange = async (nextOwnerId: string) => {
     if (!manuscriptId) return
+    if (!nextOwnerId || nextOwnerId === '__unassigned') return
+    if (nextOwnerId === ownerId) return
     const prev = ownerId
     setOwnerId(nextOwnerId)
     setSavingOwner(true)
     const toastId = toast.loading('Updating owner...')
     try {
-      const token = await authService.getAccessToken()
-      if (!token) {
-        toast.error('Please sign in again.', { id: toastId })
-        setOwnerId(prev)
-        return
-      }
-      const res = await fetch(`/api/v1/manuscripts/${manuscriptId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ owner_id: nextOwnerId ? nextOwnerId : null }),
-      })
-      const raw = await res.text().catch(() => '')
-      let payload: any = null
-      try {
-        payload = raw ? JSON.parse(raw) : null
-      } catch {
-        payload = null
-      }
-      if (!res.ok || payload?.success === false) {
-        const msg =
-          payload?.detail ||
-          payload?.message ||
-          (typeof raw === 'string' && raw.trim() ? raw.trim() : '') ||
-          `HTTP ${res.status}`
-        throw new Error(msg)
+      // 统一走 editor bind-owner 接口，避免通用 manuscripts PATCH 的权限/语义漂移。
+      const res = await EditorApi.bindOwner(manuscriptId, nextOwnerId)
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || 'Failed to update owner')
       }
       toast.success('Owner updated', { id: toastId })
     } catch (e: any) {
@@ -518,14 +496,16 @@ export default function ReviewerAssignModal({
                 />
                 <Select
                   value={ownerId || '__unassigned'}
-                  onValueChange={(value) => handleOwnerChange(value === '__unassigned' ? '' : value)}
+                  onValueChange={handleOwnerChange}
                   disabled={savingOwner || loadingOwner}
                 >
                   <SelectTrigger className="w-full" data-testid="owner-select">
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__unassigned">Unassigned</SelectItem>
+                    <SelectItem value="__unassigned" disabled>
+                      Unassigned
+                    </SelectItem>
                     {filteredInternalStaff.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
                         {(u.full_name || u.email || u.id) as string}
