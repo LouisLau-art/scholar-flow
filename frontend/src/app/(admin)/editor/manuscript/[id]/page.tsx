@@ -90,7 +90,25 @@ export default function EditorManuscriptDetailPage() {
     () => normalizedRoles.includes('managing_editor') || normalizedRoles.includes('admin'),
     [normalizedRoles]
   )
-  const currentAeId = String(ms?.editor?.id || '')
+  const currentAeId = String(
+    ms?.assistant_editor_id || ms?.role_queue?.current_assignee?.id || ''
+  ).trim()
+  const currentAeName = String(
+    ms?.role_queue?.current_assignee?.full_name ||
+      ms?.role_queue?.current_assignee?.email ||
+      ''
+  ).trim()
+  const aeOptionsForSelect = useMemo(() => {
+    const rows = [...aeOptions]
+    if (currentAeId && !rows.some((row) => String(row.id) === currentAeId)) {
+      rows.unshift({
+        id: currentAeId,
+        full_name: currentAeName || undefined,
+        email: undefined,
+      })
+    }
+    return rows
+  }, [aeOptions, currentAeId, currentAeName])
   const requiresTransitionReason = useMemo(() => {
     const target = String(pendingTransition || '').toLowerCase()
     return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
@@ -243,28 +261,25 @@ export default function EditorManuscriptDetailPage() {
     [statusLower]
   )
 
-  const assignAeFromDetail = useCallback(async () => {
-    const targetAeId = String(selectedAeId || '').trim()
-    if (!targetAeId) {
-      toast.error('Please select an Assistant Editor first.')
-      return
-    }
-    if (targetAeId === currentAeId) {
-      toast.message('Assistant Editor is already assigned.')
-      return
-    }
-    try {
-      setAssigningAe(true)
-      const res = await EditorApi.assignAE(id, { ae_id: targetAeId })
-      if (res?.detail) throw new Error(String(res.detail))
-      toast.success('Assistant Editor assigned')
-      await refreshDetail()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to assign assistant editor')
-    } finally {
-      setAssigningAe(false)
-    }
-  }, [currentAeId, id, refreshDetail, selectedAeId])
+  const assignAeFromDetail = useCallback(
+    async (targetAeId: string) => {
+      const nextAeId = String(targetAeId || '').trim()
+      if (!nextAeId || nextAeId === currentAeId) return
+      try {
+        setAssigningAe(true)
+        const res = await EditorApi.assignAE(id, { ae_id: nextAeId })
+        if (res?.detail) throw new Error(String(res.detail))
+        toast.success('Assistant Editor assigned')
+        await refreshDetail()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to assign assistant editor')
+        setSelectedAeId(currentAeId)
+      } finally {
+        setAssigningAe(false)
+      }
+    },
+    [currentAeId, id, refreshDetail]
+  )
 
   const openTransitionDialog = useCallback(
     (nextStatus: string) => {
@@ -406,6 +421,13 @@ export default function EditorManuscriptDetailPage() {
                         {/* Owner Binding */}
                         <div>
                             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Owner (Sales)</div>
+                            <div className="mb-2 min-h-6 text-sm font-medium text-slate-900">
+                              {ms.owner ? (
+                                ms.owner.full_name || ms.owner.email
+                              ) : (
+                                <span className="italic text-slate-400">Unassigned</span>
+                              )}
+                            </div>
                             <BindingOwnerDropdown
                               manuscriptId={id}
                               currentOwner={ms.owner as any}
@@ -421,46 +443,44 @@ export default function EditorManuscriptDetailPage() {
                               <div className="space-y-2">
                                 <Select
                                   value={selectedAeId || undefined}
-                                  onValueChange={(value) => setSelectedAeId(value)}
+                                  onValueChange={(value) => {
+                                    setSelectedAeId(value)
+                                    void assignAeFromDetail(value)
+                                  }}
                                   disabled={loadingAeOptions || assigningAe}
                                 >
                                   <SelectTrigger className="h-9">
                                     <SelectValue placeholder={loadingAeOptions ? 'Loading assistant editors…' : 'Select Assistant Editor'} />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {aeOptions.map((ae) => (
+                                    {aeOptionsForSelect.map((ae) => (
                                       <SelectItem key={ae.id} value={ae.id}>
                                         {ae.full_name || ae.email || ae.id}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={assignAeFromDetail}
-                                    disabled={assigningAe || !selectedAeId || selectedAeId === currentAeId}
-                                  >
-                                    {assigningAe ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-                                    {currentAeId ? 'Update AE' : 'Assign AE'}
-                                  </Button>
+                                <div className="flex items-center gap-2 text-xs">
+                                  {assigningAe ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
                                   {currentAeId ? (
-                                    <span className="text-xs text-slate-500">Current: {ms.editor?.full_name || ms.editor?.email || currentAeId}</span>
+                                    <span className="text-slate-500">
+                                      Current: {currentAeName || aeOptionsForSelect.find((x) => x.id === currentAeId)?.full_name || aeOptionsForSelect.find((x) => x.id === currentAeId)?.email || currentAeId}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs text-amber-600">Unassigned</span>
+                                    <span className="text-amber-600">Unassigned</span>
                                   )}
                                 </div>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 h-9">
-                                  {ms.editor ? (
+                                  {currentAeId ? (
                                       <>
                                           <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
-                                              {(ms.editor.full_name || ms.editor.email || 'E').substring(0, 1).toUpperCase()}
+                                              {(currentAeName || 'E').substring(0, 1).toUpperCase()}
                                           </div>
-                                          <span className="text-sm font-medium truncate">{ms.editor.full_name || ms.editor.email}</span>
+                                          <span className="text-sm font-medium truncate">
+                                            {currentAeName || currentAeId}
+                                          </span>
                                       </>
                                   ) : (
                                       <span className="text-sm text-slate-400 italic">Unassigned</span>
