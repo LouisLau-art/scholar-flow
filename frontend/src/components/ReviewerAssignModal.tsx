@@ -96,14 +96,15 @@ export default function ReviewerAssignModal({
     if (!manuscriptId) return
     setLoadingOwner(true)
     try {
-      const res = await fetch(`/api/v1/manuscripts/articles/${manuscriptId}`)
-      const payload = await res.json().catch(() => null)
+      // 中文注释：不能使用公开 articles 接口读取 owner（未发表稿件会 404）。
+      // 统一走 editor 私有详情接口，确保 Assign Reviewer 弹窗能读到已绑定 owner。
+      const payload = await EditorApi.getManuscriptDetail(manuscriptId)
       const ms = payload?.data || {}
-      const raw = ms?.owner_id || ms?.kpi_owner_id || ''
+      const raw = ms?.owner_id || ms?.owner?.id || ms?.kpi_owner_id || ''
       setOwnerId(typeof raw === 'string' ? raw : raw ? String(raw) : '')
     } catch (e) {
       console.error('Failed to load manuscript owner', e)
-      setOwnerId('')
+      // 保持现有值，避免临时请求失败把已选 owner 清空。
     } finally {
       setLoadingOwner(false)
     }
@@ -250,8 +251,7 @@ export default function ReviewerAssignModal({
   const handleAssign = async () => {
     if (selectedReviewers.length > 0) {
       if (!ownerId) {
-        toast.error('请先绑定 Internal Owner（用于 KPI 归属），再分配审稿人。')
-        return
+        toast.message('未绑定 Owner：将由后端自动绑定为当前操作人。')
       }
       if (selectedOverrideReviewers.length > 0) {
         if (!canCurrentUserOverrideCooldown) {
@@ -540,7 +540,7 @@ export default function ReviewerAssignModal({
               </div>
               {!ownerId && (
                 <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  未绑定 Owner：后端会拒绝分配审稿人（KPI 必须先绑定）。
+                  未绑定 Owner：分配时后端会自动绑定为当前操作人（建议你先手动确认归属人）。
                 </div>
               )}
             </div>
