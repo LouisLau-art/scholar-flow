@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, Calendar, User, DollarSign, ArrowRight, AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -19,6 +18,7 @@ import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignment
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
 import { getStatusLabel, getStatusColor } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
+import { BindingAssistantEditorDropdown } from '@/components/editor/BindingAssistantEditorDropdown'
 import { format } from 'date-fns'
 import type { EditorRbacContext } from '@/types/rbac'
 import { deriveEditorCapability } from '@/lib/rbac'
@@ -29,7 +29,6 @@ import {
   getNextActionCard,
   type ManuscriptDetail,
 } from './helpers'
-import { getAssistantEditors, peekAssistantEditorsCache, type AssistantEditorOption } from '@/services/assistantEditorsCache'
 
 const InternalNotebook = dynamic(
   () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
@@ -80,10 +79,6 @@ export default function EditorManuscriptDetailPage() {
     fundingInfo: '',
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
-  const [aeOptions, setAeOptions] = useState<AssistantEditorOption[]>([])
-  const [loadingAeOptions, setLoadingAeOptions] = useState(false)
-  const [selectedAeId, setSelectedAeId] = useState('')
-  const [assigningAe, setAssigningAe] = useState(false)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
   const normalizedRoles = useMemo(() => rbacContext?.normalized_roles || [], [rbacContext])
   const canAssignAE = useMemo(
@@ -98,17 +93,6 @@ export default function EditorManuscriptDetailPage() {
       ms?.role_queue?.current_assignee?.email ||
       ''
   ).trim()
-  const aeOptionsForSelect = useMemo(() => {
-    const rows = [...aeOptions]
-    if (currentAeId && !rows.some((row) => String(row.id) === currentAeId)) {
-      rows.unshift({
-        id: currentAeId,
-        full_name: currentAeName || undefined,
-        email: undefined,
-      })
-    }
-    return rows
-  }, [aeOptions, currentAeId, currentAeName])
   const requiresTransitionReason = useMemo(() => {
     const target = String(pendingTransition || '').toLowerCase()
     return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
@@ -187,36 +171,6 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [])
 
-  useEffect(() => {
-    setSelectedAeId(currentAeId)
-  }, [currentAeId])
-
-  useEffect(() => {
-    if (!canAssignAE) return
-    let alive = true
-    const cached = peekAssistantEditorsCache()
-    if (cached?.length) {
-      setAeOptions(cached)
-    }
-    async function loadAes() {
-      try {
-        if (!cached?.length) setLoadingAeOptions(true)
-        const rows = await getAssistantEditors()
-        if (!alive) return
-        setAeOptions(rows)
-      } catch (e) {
-        if (!alive) return
-        toast.error(e instanceof Error ? e.message : 'Failed to load assistant editors')
-      } finally {
-        if (alive) setLoadingAeOptions(false)
-      }
-    }
-    loadAes()
-    return () => {
-      alive = false
-    }
-  }, [canAssignAE])
-
   // --- Derived State ---
   const status = String(ms?.status || '')
   const statusLower = status.toLowerCase()
@@ -259,26 +213,6 @@ export default function EditorManuscriptDetailPage() {
       return `Move to ${getStatusLabel(nextStatus)}`
     },
     [statusLower]
-  )
-
-  const assignAeFromDetail = useCallback(
-    async (targetAeId: string) => {
-      const nextAeId = String(targetAeId || '').trim()
-      if (!nextAeId || nextAeId === currentAeId) return
-      try {
-        setAssigningAe(true)
-        const res = await EditorApi.assignAE(id, { ae_id: nextAeId })
-        if (res?.detail) throw new Error(String(res.detail))
-        toast.success('Assistant Editor assigned')
-        await refreshDetail()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to assign assistant editor')
-        setSelectedAeId(currentAeId)
-      } finally {
-        setAssigningAe(false)
-      }
-    },
-    [currentAeId, id, refreshDetail]
   )
 
   const openTransitionDialog = useCallback(
@@ -439,38 +373,27 @@ export default function EditorManuscriptDetailPage() {
                         {/* AE Info */}
                         <div>
                             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Assistant Editor</div>
+                            <div className="mb-2 min-h-6 text-sm font-medium text-slate-900">
+                              {currentAeId ? (
+                                currentAeName || currentAeId
+                              ) : (
+                                <span className="italic text-slate-400">Unassigned</span>
+                              )}
+                            </div>
                             {canAssignAE ? (
-                              <div className="space-y-2">
-                                <Select
-                                  value={selectedAeId || undefined}
-                                  onValueChange={(value) => {
-                                    setSelectedAeId(value)
-                                    void assignAeFromDetail(value)
-                                  }}
-                                  disabled={loadingAeOptions || assigningAe}
-                                >
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder={loadingAeOptions ? 'Loading assistant editors…' : 'Select Assistant Editor'} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {aeOptionsForSelect.map((ae) => (
-                                      <SelectItem key={ae.id} value={ae.id}>
-                                        {ae.full_name || ae.email || ae.id}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <div className="flex items-center gap-2 text-xs">
-                                  {assigningAe ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
-                                  {currentAeId ? (
-                                    <span className="text-slate-500">
-                                      Current: {currentAeName || aeOptionsForSelect.find((x) => x.id === currentAeId)?.full_name || aeOptionsForSelect.find((x) => x.id === currentAeId)?.email || currentAeId}
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-600">Unassigned</span>
-                                  )}
-                                </div>
-                              </div>
+                              <BindingAssistantEditorDropdown
+                                manuscriptId={id}
+                                currentAssistantEditor={
+                                  currentAeId
+                                    ? {
+                                        id: currentAeId,
+                                        full_name: currentAeName || undefined,
+                                      }
+                                    : null
+                                }
+                                onAssigned={refreshDetail}
+                                disabled={!canAssignAE}
+                              />
                             ) : (
                               <div className="flex items-center gap-2 h-9">
                                   {currentAeId ? (
