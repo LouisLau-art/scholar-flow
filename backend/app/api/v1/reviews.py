@@ -658,7 +658,8 @@ async def _require_magic_link_scope(
 
     if not assignment:
         raise HTTPException(status_code=401, detail="Assignment not found")
-    if str(assignment.get("status") or "").lower() == "cancelled":
+    status = str(assignment.get("status") or "").lower()
+    if status == "cancelled":
         raise HTTPException(status_code=401, detail="Invitation revoked")
     if str(assignment.get("manuscript_id")) != str(payload.manuscript_id):
         raise HTTPException(status_code=401, detail="Magic link scope mismatch")
