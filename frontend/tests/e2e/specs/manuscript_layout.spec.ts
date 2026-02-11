@@ -29,6 +29,20 @@ test.describe('Manuscript detail layout (mocked backend)', () => {
       if (pathname === '/api/v1/user/profile') {
         return fulfillJson(route, 200, { success: true, data: { roles: ['admin', 'editor'] } })
       }
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            roles: ['admin', 'editor'],
+            allowed_actions: ['*', 'invoice:update_info', 'invoice:override_apc', 'manuscript:view_detail'],
+            journal_scope: {
+              enforcement_enabled: false,
+              is_admin: true,
+              allowed_journal_ids: [],
+            },
+          },
+        })
+      }
       if (pathname === '/api/v1/notifications') {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
@@ -102,7 +116,7 @@ test.describe('Manuscript detail layout (mocked backend)', () => {
     await expect(page.getByRole('heading', { name: 'Metadata & Staff' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Document Repository' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Editorial Actions' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Status History' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Activity Timeline' })).toBeVisible()
 
     // File hub sub-sections
     await expect(page.getByText('Manuscript Versions')).toBeVisible()

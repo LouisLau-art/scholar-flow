@@ -134,6 +134,7 @@ export function AuditLogTimeline({
   >([])
   const [category, setCategory] = useState<TimelineCategory>('all')
   const [loading, setLoading] = useState(true)
+  const [taskActivityLoading, setTaskActivityLoading] = useState(false)
 
   const getActionLabel = (log: AuditLog) => {
     const action = String(log.payload?.action || '')
@@ -145,12 +146,14 @@ export function AuditLogTimeline({
   useEffect(() => {
     let mounted = true
     setLoading(true)
+    setTaskActivityLoading(false)
+    setTaskActivities([])
     Promise.all([
       EditorApi.getAuditLogs(manuscriptId),
       EditorApi.getInternalComments(manuscriptId),
       EditorApi.listInternalTasks(manuscriptId),
     ])
-      .then(async ([auditRes, commentRes, taskRes]) => {
+      .then(([auditRes, commentRes, taskRes]) => {
         if (!mounted) return
         if (auditRes?.success) setLogs(Array.isArray(auditRes.data) ? auditRes.data : [])
         if (commentRes?.success) setComments(Array.isArray(commentRes.data) ? commentRes.data : [])
@@ -158,26 +161,35 @@ export function AuditLogTimeline({
         const taskRows: InternalTask[] = taskRes?.success && Array.isArray(taskRes.data) ? taskRes.data : []
         setTasks(taskRows)
 
-        // 中文注释: 任务活动逐任务拉取，失败降级为仅显示任务基础事件，避免 timeline 整体不可用。
-        const activityResults = await Promise.allSettled(
-          taskRows.slice(0, 50).map(async (task) => {
-            const activityRes = await EditorApi.getInternalTaskActivity(manuscriptId, task.id)
-            const rows: InternalTaskActivity[] =
-              activityRes?.success && Array.isArray(activityRes.data) ? activityRes.data : []
-            return rows.map((item) => ({
-              ...item,
-              task_title: task.title || null,
-            }))
-          })
-        )
-        if (!mounted) return
-        const mergedActivities: Array<InternalTaskActivity & { task_title?: string | null }> = []
-        for (const result of activityResults) {
-          if (result.status === 'fulfilled') {
-            mergedActivities.push(...result.value)
+        // 中文注释：任务活动改为后台补齐，不阻塞 timeline 首屏。
+        const loadTaskActivities = async () => {
+          if (!mounted || taskRows.length === 0) return
+          setTaskActivityLoading(true)
+          try {
+            const activityResults = await Promise.allSettled(
+              taskRows.slice(0, 50).map(async (task) => {
+                const activityRes = await EditorApi.getInternalTaskActivity(manuscriptId, task.id)
+                const rows: InternalTaskActivity[] =
+                  activityRes?.success && Array.isArray(activityRes.data) ? activityRes.data : []
+                return rows.map((item) => ({
+                  ...item,
+                  task_title: task.title || null,
+                }))
+              })
+            )
+            if (!mounted) return
+            const mergedActivities: Array<InternalTaskActivity & { task_title?: string | null }> = []
+            for (const result of activityResults) {
+              if (result.status === 'fulfilled') {
+                mergedActivities.push(...result.value)
+              }
+            }
+            setTaskActivities(mergedActivities)
+          } finally {
+            if (mounted) setTaskActivityLoading(false)
           }
         }
-        setTaskActivities(mergedActivities)
+        void loadTaskActivities()
       })
       .catch(() => {
         if (!mounted) return
@@ -185,6 +197,7 @@ export function AuditLogTimeline({
         setComments([])
         setTasks([])
         setTaskActivities([])
+        setTaskActivityLoading(false)
       })
       .finally(() => {
         if (mounted) setLoading(false)
@@ -364,6 +377,7 @@ export function AuditLogTimeline({
 
         <div className="relative pl-4 border-l-2 border-slate-100 space-y-6 max-h-[520px] overflow-auto pr-1">
           {loading ? <div className="text-xs text-slate-400">Loading timeline...</div> : null}
+          {!loading && taskActivityLoading ? <div className="text-xs text-slate-400">Syncing task activities...</div> : null}
           {!loading && filteredEvents.map((event, idx) => (
             <div key={event.id} className={`relative ${idx > 0 ? 'opacity-90' : ''}`}>
               <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-white ${dotClass(event.category)}`}></div>

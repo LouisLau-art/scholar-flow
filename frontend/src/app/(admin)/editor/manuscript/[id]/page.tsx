@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { EditorApi } from '@/services/editorApi'
@@ -17,170 +18,33 @@ import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignment
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
 import { getStatusLabel, getStatusColor } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
-import { InternalNotebook } from '@/components/editor/InternalNotebook'
-import { InternalTasksPanel } from '@/components/editor/InternalTasksPanel'
-import { AuditLogTimeline } from '@/components/editor/AuditLogTimeline'
-import { FileHubCard, type FileItem } from '@/components/editor/FileHubCard'
-import { filterFilesByType, type ManuscriptFile } from './utils'
 import { format } from 'date-fns'
 import type { EditorRbacContext } from '@/types/rbac'
 import { deriveEditorCapability } from '@/lib/rbac'
+import {
+  allowedNext,
+  buildAuthorResponseHistory,
+  buildFileHubProps,
+  getNextActionCard,
+  type ManuscriptDetail,
+} from './helpers'
 
-// ... (Reuse types and logic)
-type ManuscriptDetail = {
-  id: string
-  title?: string | null
-  abstract?: string | null
-  status?: string | null
-  created_at?: string | null
-  updated_at?: string | null
-  final_pdf_path?: string | null
-  owner?: { full_name?: string | null; email?: string | null } | null
-  editor?: { full_name?: string | null; email?: string | null } | null
-  invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
-  invoice?: { status?: string | null; amount?: number | string | null } | null
-  signed_files?: any
-  files?: ManuscriptFile[] | null
-  journals?: { title?: string } | null
-  role_queue?: {
-    current_role?: string | null
-    current_assignee?: { id: string; full_name?: string | null; email?: string | null } | null
-    assigned_at?: string | null
-    technical_completed_at?: string | null
-    academic_completed_at?: string | null
-  } | null
-  precheck_timeline?: Array<{
-    id: string
-    created_at?: string | null
-    payload?: { action?: string; decision?: string } | null
-    comment?: string | null
-  }> | null
-  reviewer_invites?: Array<{
-    id: string
-    reviewer_name?: string | null
-    reviewer_email?: string | null
-    status: string
-    due_at?: string | null
-    invited_at?: string | null
-    opened_at?: string | null
-    accepted_at?: string | null
-    declined_at?: string | null
-    submitted_at?: string | null
-    decline_reason?: string | null
-  }> | null
-  task_summary?: {
-    open_tasks_count?: number
-    overdue_tasks_count?: number
-    is_overdue?: boolean
-    nearest_due_at?: string | null
-  } | null
-  author_response_history?: Array<{
-    id?: string | null
-    response_letter?: string | null
-    submitted_at?: string | null
-    round?: number | null
-  }> | null
-  latest_author_response_letter?: string | null
-  latest_author_response_submitted_at?: string | null
-  latest_author_response_round?: number | null
-}
-
-type AuthorResponseHistoryItem = {
-  id: string
-  text: string
-  submittedAt: string | null
-  round: number | null
-}
-
-function normalizeResponseLetterText(raw: unknown): string {
-  const source = String(raw || '').trim()
-  if (!source) return ''
-  return source
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
-}
-
-function allowedNext(status: string): string[] {
-  const s = (status || '').toLowerCase()
-  if (s === 'pre_check') return ['under_review', 'minor_revision']
-  if (s === 'under_review') return ['decision']
-  if (s === 'resubmitted') return ['under_review', 'decision']
-  if (s === 'decision') return ['decision_done']
-  if (s === 'decision_done') return ['approved', 'major_revision', 'minor_revision', 'rejected']
-  return []
-}
-
-function getNextActionCard(
-  manuscript: ManuscriptDetail,
-  capability: ReturnType<typeof deriveEditorCapability>
-): { phase: string; title: string; description: string; blockers: string[] } {
-  const status = String(manuscript.status || '').toLowerCase()
-  const blockers: string[] = []
-  const amount = Number(manuscript.invoice?.amount ?? manuscript.invoice_metadata?.apc_amount ?? 0)
-  const invoiceStatus = String(manuscript.invoice?.status || '').toLowerCase()
-
-  if (status === 'pre_check') {
-    return {
-      phase: 'Pre-check',
-      title: '先完成入口技术审查，再决定分配 AE 或退回作者',
-      description: '当前阶段不应直接进入终审动作。请先确认材料完整性与格式规范。',
-      blockers,
-    }
-  }
-
-  if (status === 'under_review' || status === 'resubmitted') {
-    if ((manuscript.reviewer_invites || []).length === 0) blockers.push('尚未发出审稿邀请')
-    return {
-      phase: 'External Review',
-      title: '推进外审并收集可决策意见',
-      description: 'AE 需跟进邀请接受率与审稿提交率，达到阈值后进入 Decision。',
-      blockers,
-    }
-  }
-
-  if (status === 'decision' || status === 'decision_done') {
-    if (!(capability.canRecordFirstDecision || capability.canSubmitFinalDecision)) {
-      blockers.push('当前账号无决策权限')
-    }
-    return {
-      phase: 'Decision',
-      title: '在 Decision Workspace 完成首轮/终轮学术决策',
-      description: '请确保审稿依据充分并写明决策理由，关键状态流转需保留审计痕迹。',
-      blockers,
-    }
-  }
-
-  if (['approved', 'layout', 'english_editing', 'proofreading'].includes(status)) {
-    if (amount > 0 && invoiceStatus !== 'paid') blockers.push('Payment Gate 未满足（发票未确认 paid）')
-    if (!manuscript.final_pdf_path) blockers.push('Proof Gate 未满足（final PDF 尚未上传）')
-    return {
-      phase: 'Production',
-      title: '并行推进 Production 与 Finance，满足双门禁后发布',
-      description: '发布前必须同时满足付款确认与校对完成条件。',
-      blockers,
-    }
-  }
-
-  if (status === 'published') {
-    return {
-      phase: 'Published',
-      title: '稿件已发布',
-      description: '当前进入公开传播阶段，可继续跟踪下载与引用。',
-      blockers,
-    }
-  }
-
-  return {
-    phase: 'Workflow',
-    title: '请按当前状态继续推进流程',
-    description: '若出现状态异常，请先在审计日志核对最近一次流转。',
-    blockers,
-  }
-}
+const InternalNotebook = dynamic(
+  () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
+  { ssr: false }
+)
+const InternalTasksPanel = dynamic(
+  () => import('@/components/editor/InternalTasksPanel').then((mod) => mod.InternalTasksPanel),
+  { ssr: false }
+)
+const AuditLogTimeline = dynamic(
+  () => import('@/components/editor/AuditLogTimeline').then((mod) => mod.AuditLogTimeline),
+  { ssr: false }
+)
+const FileHubCard = dynamic(
+  () => import('@/components/editor/FileHubCard').then((mod) => mod.FileHubCard),
+  { ssr: false }
+)
 
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
@@ -220,6 +84,18 @@ export default function EditorManuscriptDetailPage() {
     return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
   }, [pendingTransition])
 
+  const applyDetail = useCallback((detail: ManuscriptDetail) => {
+    setMs(detail)
+    const meta = (detail?.invoice_metadata as any) || {}
+    const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
+    setInvoiceForm({
+      authors: String(meta.authors || ownerFallback || ''),
+      affiliation: String(meta.affiliation || ''),
+      apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
+      fundingInfo: String(meta.funding_info || ''),
+    })
+  }, [])
+
   const loadRbacContext = useCallback(async () => {
     const rbacRes = await EditorApi.getRbacContext()
     if (rbacRes?.success && rbacRes?.data) {
@@ -236,41 +112,19 @@ export default function EditorManuscriptDetailPage() {
       if (!detailRes?.success) {
         throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       }
-      const detail = detailRes.data
-      setMs(detail)
-
-      const meta = (detail?.invoice_metadata as any) || {}
-      const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
-      setInvoiceForm({
-        authors: String(meta.authors || ownerFallback || ''),
-        affiliation: String(meta.affiliation || ''),
-        apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
-        fundingInfo: String(meta.funding_info || ''),
-      })
+      applyDetail(detailRes.data)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
     }
-  }, [id])
+  }, [applyDetail, id])
 
   async function load() {
     try {
       setLoading(true)
-      const detailRes = await EditorApi.getManuscriptDetail(id)
-      if (!detailRes?.success) throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
-      const detail = detailRes.data
-      setMs(detail)
+      await refreshDetail()
       // 不阻塞详情页首屏；RBAC 信息后台刷新。
       void loadRbacContext().catch(() => setRbacContext(null))
-
-      const meta = (detail?.invoice_metadata as any) || {}
-      const ownerFallback = String(detail?.owner?.full_name || detail?.owner?.email || '').trim()
-      setInvoiceForm({
-        authors: String(meta.authors || ownerFallback || ''),
-        affiliation: String(meta.affiliation || ''),
-        apcAmount: meta.apc_amount != null ? String(meta.apc_amount) : '',
-        fundingInfo: String(meta.funding_info || ''),
-      })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
@@ -314,60 +168,11 @@ export default function EditorManuscriptDetailPage() {
     String(ms?.owner?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
-  const authorResponseHistory = useMemo<AuthorResponseHistoryItem[]>(() => {
-    const rawHistory = Array.isArray(ms?.author_response_history) ? ms.author_response_history : []
-    const normalized = rawHistory
-      .map((item, idx) => {
-        const text = normalizeResponseLetterText(item?.response_letter)
-        if (!text) return null
-        const rawRound = item?.round
-        const round = typeof rawRound === 'number' ? rawRound : rawRound != null ? Number(rawRound) : null
-        return {
-          id: String(item?.id || `response-${idx}`),
-          text,
-          submittedAt: item?.submitted_at || null,
-          round: Number.isFinite(round as number) ? (round as number) : null,
-        }
-      })
-      .filter((item): item is AuthorResponseHistoryItem => Boolean(item))
-
-    if (normalized.length > 0) return normalized
-
-    const fallbackText = normalizeResponseLetterText(ms?.latest_author_response_letter)
-    if (!fallbackText) return []
-    return [
-      {
-        id: 'latest-fallback',
-        text: fallbackText,
-        submittedAt: ms?.latest_author_response_submitted_at || null,
-        round: typeof ms?.latest_author_response_round === 'number' ? ms.latest_author_response_round : null,
-      },
-    ]
-  }, [
-    ms?.author_response_history,
-    ms?.latest_author_response_letter,
-    ms?.latest_author_response_submitted_at,
-    ms?.latest_author_response_round,
-  ])
+  const authorResponseHistory = useMemo(() => buildAuthorResponseHistory(ms), [ms])
   const latestAuthorResponse = authorResponseHistory[0] || null
 
   // --- File Processing ---
-  const mapFile = (f: ManuscriptFile, type: FileItem['type']): FileItem => ({
-    id: String(f.id),
-    label: f.label || 'Unknown File',
-    type,
-    url: f.signed_url || undefined,
-    date: f.created_at ? format(new Date(f.created_at), 'yyyy-MM-dd') : undefined,
-  })
-
-  const fileHubProps = useMemo(() => {
-    const rawFiles = ms?.files || []
-    return {
-      manuscriptFiles: filterFilesByType(rawFiles, 'manuscript').map((f) => mapFile(f, 'pdf')),
-      coverFiles: filterFilesByType(rawFiles, 'cover_letter').map((f) => mapFile(f, 'doc')),
-      reviewFiles: filterFilesByType(rawFiles, 'review_attachment').map((f) => mapFile(f, 'pdf')),
-    }
-  }, [ms?.files])
+  const fileHubProps = useMemo(() => buildFileHubProps(ms?.files), [ms?.files])
 
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
@@ -526,7 +331,7 @@ export default function EditorManuscriptDetailPage() {
                             <BindingOwnerDropdown
                               manuscriptId={id}
                               currentOwner={ms.owner as any}
-                              onBound={load}
+                              onBound={refreshDetail}
                               disabled={!capability.canBindOwner}
                             />
                         </div>
@@ -585,7 +390,7 @@ export default function EditorManuscriptDetailPage() {
                 manuscriptFiles={fileHubProps.manuscriptFiles}
                 coverFiles={fileHubProps.coverFiles}
                 reviewFiles={fileHubProps.reviewFiles}
-                onUploadReviewFile={load}
+                onUploadReviewFile={refreshDetail}
             />
 
             {/* 3. Author Resubmission History */}
@@ -705,7 +510,7 @@ export default function EditorManuscriptDetailPage() {
                             <div className="text-xs font-semibold text-slate-500 mb-2">ASSIGN REVIEWERS</div>
                             <ReviewerAssignmentSearch
                               manuscriptId={id}
-                              onChanged={load}
+                              onChanged={refreshDetail}
                               disabled={!capability.canRecordFirstDecision}
                             />
                         </div>
