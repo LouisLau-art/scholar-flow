@@ -22,6 +22,7 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "reviewer:submit_report",
     },
     "assistant_editor": {
+        "process:view",
         "precheck:technical_check",
         "manuscript:view_detail",
     },

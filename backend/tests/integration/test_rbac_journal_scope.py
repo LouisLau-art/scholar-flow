@@ -157,18 +157,24 @@ def _cleanup_decision_records(db, manuscript_id: str, user_ids: list[str]) -> No
 
 
 @pytest.mark.asyncio
-async def test_process_role_matrix_denies_assistant_editor(
+async def test_process_role_matrix_allows_assistant_editor(
     client: AsyncClient,
     auth_token: str,
     override_profile_role,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     override_profile_role(["assistant_editor"])
+    monkeypatch.setattr(
+        "app.api.v1.editor.EditorService.list_manuscripts_process",
+        lambda self, **kwargs: [],
+    )
     response = await client.get(
         "/api/v1/editor/manuscripts/process",
         headers={"Authorization": f"Bearer {auth_token}"},
     )
-    assert response.status_code == 403
-    assert "process:view" in str(response.json().get("detail", ""))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body.get("success") is True
 
 
 @pytest.mark.asyncio
