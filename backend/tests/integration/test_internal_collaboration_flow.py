@@ -39,7 +39,7 @@ async def test_internal_comment_mentions_flow_with_dedup(
             return [row for row in self._rows if row.get("manuscript_id") == manuscript_id]
 
     stub = _StubCollabService()
-    monkeypatch.setattr("app.api.v1.editor.InternalCollaborationService", lambda: stub)
+    monkeypatch.setattr("app.api.v1.editor_internal_collaboration.InternalCollaborationService", lambda: stub)
 
     post_res = await client.post(
         f"/api/v1/editor/manuscripts/{manuscript_id}/comments",
@@ -76,7 +76,10 @@ async def test_internal_comments_endpoint_gracefully_degrades_when_table_missing
         def list_comments(self, _manuscript_id: str):
             raise RuntimeError('Could not find the table "public.internal_comments" in the schema cache')
 
-    monkeypatch.setattr("app.api.v1.editor.InternalCollaborationService", lambda: _MissingTableService())
+    monkeypatch.setattr(
+        "app.api.v1.editor_internal_collaboration.InternalCollaborationService",
+        lambda: _MissingTableService(),
+    )
 
     res = await client.get(
         f"/api/v1/editor/manuscripts/{manuscript_id}/comments",
@@ -139,7 +142,7 @@ async def test_internal_task_create_update_and_activity_flow(
             return self._activity
 
     stub = _StubTaskService()
-    monkeypatch.setattr("app.api.v1.editor.InternalTaskService", lambda: stub)
+    monkeypatch.setattr("app.api.v1.editor_internal_collaboration.InternalTaskService", lambda: stub)
 
     create_res = await client.post(
         f"/api/v1/editor/manuscripts/{manuscript_id}/tasks",
