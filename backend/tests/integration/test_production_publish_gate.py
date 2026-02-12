@@ -60,15 +60,23 @@ def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
 
 
 def _seed_invoice_paid(db, *, manuscript_id: str) -> None:
-    db.table("invoices").upsert(
-        {
-            "manuscript_id": manuscript_id,
-            "amount": 100,
-            "status": "paid",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        },
-        on_conflict="manuscript_id",
-    ).execute()
+    payload = {
+        "manuscript_id": manuscript_id,
+        "amount": 100,
+        "status": "paid",
+        # 部分云端/历史 schema 可能没有 invoices.updated_at，这里做兼容回退。
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        db.table("invoices").upsert(payload, on_conflict="manuscript_id").execute()
+        return
+    except APIError as e:
+        msg = getattr(e, "message", str(e))
+        if "updated_at" in msg and ("schema cache" in msg.lower() or "could not find" in msg.lower()):
+            payload.pop("updated_at", None)
+            db.table("invoices").upsert(payload, on_conflict="manuscript_id").execute()
+            return
+        raise
 
 
 def _seed_cycle(db, *, manuscript_id: str, editor_id: str, author_id: str, status: str) -> None:

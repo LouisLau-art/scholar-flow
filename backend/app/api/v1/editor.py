@@ -2381,7 +2381,16 @@ async def submit_final_decision(
         current_status = normalize_status(str(manuscript.get("status") or ""))
         if not current_status:
             raise HTTPException(status_code=404, detail="Manuscript not found")
-        if current_status not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
+        allowed_statuses = {
+            ManuscriptStatus.DECISION.value,
+            ManuscriptStatus.DECISION_DONE.value,
+        }
+        # 中文注释:
+        # - Accept 后（approved）仍允许再次“accept”以便调整 APC / 触发 invoice upsert（幂等）。
+        # - Reject 不允许在 approved 后执行，避免破坏已进入 Production 的稿件。
+        if decision == "accept":
+            allowed_statuses.add("approved")
+        if current_status not in allowed_statuses:
             raise HTTPException(
                 status_code=400,
                 detail=(

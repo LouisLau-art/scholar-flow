@@ -18,6 +18,13 @@ def _cleanup(db, manuscript_id: str) -> None:
             db.table(table).delete().eq(column, manuscript_id).execute()
         except Exception:
             pass
+    # 清理测试用的 decision-attachments 对象（避免 storage 泄漏）。
+    try:
+        db.storage.from_("decision-attachments").remove(
+            [f"decision_letters/{manuscript_id}/att-123_demo.pdf"]
+        )
+    except Exception:
+        pass
 
 
 def _require_decision_schema(db) -> None:
@@ -42,6 +49,15 @@ async def test_author_can_only_access_attachment_after_final_submit(
 
     manuscript_id = str(uuid4())
     attachment_ref = f"att-123|decision_letters/{manuscript_id}/att-123_demo.pdf"
+    # Seed: 决策附件必须在 Storage 里存在，否则 Supabase 的 sign 接口可能返回 400。
+    try:
+        supabase_admin_client.storage.from_("decision-attachments").upload(
+            f"decision_letters/{manuscript_id}/att-123_demo.pdf",
+            b"%PDF-1.4\n%decision-visibility\n",
+            {"content-type": "application/pdf", "upsert": "true"},
+        )
+    except Exception:
+        pass
     insert_manuscript(
         supabase_admin_client,
         manuscript_id=manuscript_id,

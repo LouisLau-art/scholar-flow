@@ -327,27 +327,60 @@ class ProductionWorkspaceService:
         comment: str,
         payload: dict[str, Any],
     ) -> None:
-        base_payload = {
+        now = _utc_now_iso()
+        base_row = {
             "manuscript_id": manuscript_id,
             "from_status": from_status,
             "to_status": to_status,
             "comment": comment,
             "changed_by": changed_by,
-            "created_at": _utc_now_iso(),
-            "payload": payload,
+            "created_at": now,
         }
-        try:
-            self.client.table("status_transition_logs").insert(base_payload).execute()
-            return
-        except Exception as e:
-            if _is_missing_column_error(e, "payload"):
-                fallback = dict(base_payload)
-                fallback.pop("payload", None)
-                try:
-                    self.client.table("status_transition_logs").insert(fallback).execute()
-                except Exception:
-                    pass
-            return
+        rows: list[dict[str, Any]] = []
+
+        # 1) 优先写入带 payload 的版本（审计事件完整）。
+        row_with_payload = dict(base_row)
+        row_with_payload["payload"] = payload
+        rows.append(row_with_payload)
+
+        # 2) 兼容：某些云端/老 schema 可能缺 payload 列（写入降级）。
+        rows.append(dict(base_row))
+
+        # 3) 兼容：changed_by 外键指向 auth.users，在测试/种子数据下可能不存在。
+        #    用 changed_by=None 写入，同时把原值放进 payload 以便追溯。
+        row_no_fk = dict(base_row)
+        row_no_fk["changed_by"] = None
+        row_no_fk["payload"] = {**payload, "changed_by_raw": changed_by}
+        rows.append(row_no_fk)
+
+        # 4) 最小兜底：避免所有 insert 都失败导致无审计。
+        rows.append(
+            {
+                "manuscript_id": manuscript_id,
+                "from_status": from_status,
+                "to_status": to_status,
+                "comment": comment,
+                "changed_by": None,
+                "created_at": now,
+            }
+        )
+
+        for row in rows:
+            try:
+                self.client.table("status_transition_logs").insert(row).execute()
+                return
+            except Exception as e:
+                # 缺 payload 列时，尝试去掉 payload 再写一次
+                if "payload" in row and _is_missing_column_error(e, "payload"):
+                    fallback = dict(row)
+                    fallback.pop("payload", None)
+                    try:
+                        self.client.table("status_transition_logs").insert(fallback).execute()
+                        return
+                    except Exception:
+                        pass
+                continue
+        return
 
     def _notify(self, *, user_id: str | None, manuscript_id: str, title: str, content: str, action_url: str) -> None:
         uid = str(user_id or "").strip()

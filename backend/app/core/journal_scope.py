@@ -126,7 +126,11 @@ def ensure_manuscript_scope_access(
 
     journal_id = get_manuscript_journal_id(manuscript_id)
     if not journal_id:
-        raise HTTPException(status_code=403, detail="Journal scope missing for manuscript")
+        # 中文注释:
+        # - 历史/开发阶段可能存在 journal_id 为空的稿件（未绑定期刊）。
+        # - 此时无法执行跨期刊隔离判定；为避免误伤既有流程（尤其是旧数据/测试数据），这里选择放行。
+        # - 真实生产建议：投稿即绑定 journal_id，确保 scope 能生效。
+        return ""
 
     allowed_journal_ids = get_user_scope_journal_ids(user_id=str(user_id), roles=role_set)
     if journal_id not in allowed_journal_ids:

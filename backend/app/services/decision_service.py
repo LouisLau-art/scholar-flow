@@ -228,6 +228,10 @@ class DecisionService:
         if not p:
             return None
         try:
+            # 中文注释:
+            # - UAT/开发环境可能还没跑 storage bucket migration，导致 create_signed_url 直接失败。
+            # - 这里做一次性兜底创建，避免“只因为缺桶就 500”。
+            self._ensure_bucket(bucket, public=False)
             signed = self.client.storage.from_(bucket).create_signed_url(p, expires_in)
             return (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
         except Exception:
