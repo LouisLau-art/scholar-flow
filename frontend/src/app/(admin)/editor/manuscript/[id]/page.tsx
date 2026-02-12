@@ -112,6 +112,8 @@ export default function EditorManuscriptDetailPage() {
   const currentAeName = String(
     ms?.role_queue?.current_assignee?.full_name ||
       ms?.role_queue?.current_assignee?.email ||
+      ms?.assistant_editor?.full_name ||
+      ms?.assistant_editor?.email ||
       ''
   ).trim()
   const requiresTransitionReason = useMemo(() => {

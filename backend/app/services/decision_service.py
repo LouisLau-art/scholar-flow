@@ -68,6 +68,21 @@ class DecisionService:
     def _roles(self, profile_roles: list[str] | None) -> set[str]:
         return {str(r).strip().lower() for r in (profile_roles or []) if str(r).strip()}
 
+    def _can_decision_action(self, *, action: str, roles: set[str]) -> bool:
+        """
+        决策权限兼容口径：
+        - 常规按 action 精确匹配；
+        - submit_final 默认包含 record_first（EIC/Admin 不应出现“全灰不可编辑”）。
+        """
+        if can_perform_action(action=action, roles=roles):
+            return True
+        if action == "decision:record_first" and can_perform_action(
+            action="decision:submit_final",
+            roles=roles,
+        ):
+            return True
+        return False
+
     def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
         select_candidates = [
             # 首选：完整字段（含 version + assistant_editor_id）
@@ -150,7 +165,7 @@ class DecisionService:
         - route 层已经做过一次校验，这里再做 service 层防线，避免旁路调用绕过；
         - 仅对内部编辑入口生效，作者入口仍走 _ensure_author_or_internal_access。
         """
-        if not can_perform_action(action=action, roles=roles):
+        if not self._can_decision_action(action=action, roles=roles):
             raise HTTPException(status_code=403, detail=f"Insufficient permission for action: {action}")
         self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
 
@@ -614,7 +629,7 @@ class DecisionService:
             raise HTTPException(status_code=400, detail=f"Decision workspace unavailable in status: {status}")
 
         reports = self._list_submitted_reports(manuscript_id)
-        can_record_first = can_perform_action(action="decision:record_first", roles=roles)
+        can_record_first = self._can_decision_action(action="decision:record_first", roles=roles)
         can_submit_final = can_perform_action(action="decision:submit_final", roles=roles)
         has_submitted_author_revision = self._has_submitted_author_revision(manuscript_id)
         is_final_status_allowed = status in {

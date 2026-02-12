@@ -98,7 +98,7 @@ export default function DecisionWorkspacePage() {
             initialDraft={context.draft || null}
             templateContent={context.templates?.[0]?.content || ''}
             canSubmit={Boolean(context.permissions?.can_submit)}
-            canRecordFirst={Boolean(context.permissions?.can_record_first ?? true)}
+            canRecordFirst={Boolean((context.permissions?.can_record_first ?? true) || context.permissions?.can_submit_final)}
             canSubmitFinal={Boolean(context.permissions?.can_submit_final)}
             hasSubmittedAuthorRevision={Boolean(context.permissions?.has_submitted_author_revision)}
             finalBlockingReasons={context.permissions?.final_blocking_reasons || []}

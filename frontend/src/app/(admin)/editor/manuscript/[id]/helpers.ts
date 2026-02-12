@@ -15,6 +15,7 @@ export type ManuscriptDetail = {
   author?: { full_name?: string | null; email?: string | null; affiliation?: string | null } | null
   owner?: { full_name?: string | null; email?: string | null } | null
   editor?: { id?: string | null; full_name?: string | null; email?: string | null } | null
+  assistant_editor?: { id?: string | null; full_name?: string | null; email?: string | null } | null
   assistant_editor_id?: string | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
   invoice?: { status?: string | null; amount?: number | string | null } | null

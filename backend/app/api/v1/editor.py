@@ -840,6 +840,7 @@ async def get_editor_manuscript_detail(
     aid = str(ms.get("author_id") or "")
     oid = str(ms.get("owner_id") or "")
     eid = str(ms.get("editor_id") or "")
+    aeid = str(ms.get("assistant_editor_id") or "")
     ms["author"] = (
         {
             "id": aid,
@@ -858,6 +859,15 @@ async def get_editor_manuscript_detail(
     ms["editor"] = (
         {"id": eid, "full_name": (profiles_map.get(eid) or {}).get("full_name"), "email": (profiles_map.get(eid) or {}).get("email")}
         if eid
+        else None
+    )
+    ms["assistant_editor"] = (
+        {
+            "id": aeid,
+            "full_name": (profiles_map.get(aeid) or {}).get("full_name"),
+            "email": (profiles_map.get(aeid) or {}).get("email"),
+        }
+        if aeid
         else None
     )
 
@@ -2085,18 +2095,22 @@ async def get_decision_workspace_context(
     """
     Feature 041: 获取决策工作台聚合上下文。
     """
-    _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
+    decision_roles = profile.get("roles") or []
+    can_record_first = can_perform_action(action="decision:record_first", roles=decision_roles)
+    can_submit_final = can_perform_action(action="decision:submit_final", roles=decision_roles)
+    if not (can_record_first or can_submit_final):
+        _require_action_or_403(action="decision:record_first", roles=decision_roles)
     ensure_manuscript_scope_access(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
+        roles=decision_roles,
         allow_admin_bypass=True,
     )
 
     data = DecisionService().get_decision_context(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
+        profile_roles=decision_roles,
     )
     return {"success": True, "data": data}
 
@@ -2111,21 +2125,25 @@ async def submit_decision_workspace(
     """
     Feature 041: 保存草稿或提交最终决策。
     """
-    _require_action_or_403(
-        action="decision:submit_final" if payload.is_final else "decision:record_first",
-        roles=profile.get("roles") or [],
-    )
+    decision_roles = profile.get("roles") or []
+    if payload.is_final:
+        _require_action_or_403(action="decision:submit_final", roles=decision_roles)
+    else:
+        can_record_first = can_perform_action(action="decision:record_first", roles=decision_roles)
+        can_submit_final = can_perform_action(action="decision:submit_final", roles=decision_roles)
+        if not (can_record_first or can_submit_final):
+            _require_action_or_403(action="decision:record_first", roles=decision_roles)
     ensure_manuscript_scope_access(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
+        roles=decision_roles,
         allow_admin_bypass=True,
     )
 
     data = DecisionService().submit_decision(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
+        profile_roles=decision_roles,
         request=payload,
     )
     return {"success": True, "data": data}

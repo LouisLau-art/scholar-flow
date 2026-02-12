@@ -62,6 +62,7 @@ export function DecisionEditor({
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const baselineRef = useRef('')
+  const canEditDraft = canRecordFirst || canSubmitFinal
 
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
   const decisionSpecificBlockingReasons = useMemo(() => {
@@ -184,7 +185,7 @@ export function DecisionEditor({
 
   const submit = async (isFinal: boolean) => {
     if (isReadOnly) return
-    if (!isFinal && !canRecordFirst) {
+    if (!isFinal && !canEditDraft) {
       toast.error('Current role cannot save first decision draft')
       return
     }
@@ -280,7 +281,7 @@ export function DecisionEditor({
             <button
               type="button"
               onClick={handleGenerateDraft}
-              disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canRecordFirst}
+              disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
               className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-60"
             >
               <WandSparkles className="h-3.5 w-3.5" />
@@ -301,7 +302,7 @@ export function DecisionEditor({
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Attachments</label>
           <input
             type="file"
-            disabled={isReadOnly || isUploading || !canRecordFirst}
+            disabled={isReadOnly || isUploading || !canEditDraft}
             onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
             className="block w-full text-xs text-slate-600"
           />
@@ -330,7 +331,7 @@ export function DecisionEditor({
           <button
             type="button"
             onClick={() => void submit(false)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canRecordFirst}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
           >
             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
