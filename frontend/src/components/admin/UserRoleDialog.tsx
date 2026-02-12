@@ -36,6 +36,7 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = 
   { value: 'author', label: 'Author', helper: '投稿与修回' },
   { value: 'reviewer', label: 'Reviewer', helper: '审稿工作台与意见提交' },
   { value: 'assistant_editor', label: 'Assistant Editor', helper: '仅可处理分配到自己的稿件' },
+  { value: 'production_editor', label: 'Production Editor', helper: '排版与校对协作（仅可处理分配到自己的 Production Cycle）' },
   { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配（必须绑定期刊）' },
   { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: '学术决策（必须绑定期刊）' },
   { value: 'admin', label: 'Admin', helper: '全局管理权限' },

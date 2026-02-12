@@ -11,6 +11,7 @@ ALLOWED_USER_ROLES = {
     "reviewer",
     "managing_editor",
     "assistant_editor",
+    "production_editor",
     "editor_in_chief",
     "admin",
 }

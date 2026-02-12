@@ -52,8 +52,8 @@ from app.api.v1.editor_common import (
 )
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
-INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
-EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief"]
+EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief"]
 EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 router.include_router(internal_collab_router)
 
@@ -1377,7 +1377,7 @@ async def list_internal_staff(
             supabase_admin.table("user_profiles")
             .select("id, email, full_name, roles")
             .or_(
-                "roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
+                "roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{production_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
             )
         )
         resp = query.execute()
@@ -2250,7 +2250,7 @@ async def upload_production_galley(
     version_note: str = Form(...),
     proof_due_at: str | None = Form(default=None),
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 上传生产轮次清样并进入 awaiting_author。
@@ -2282,7 +2282,7 @@ async def get_production_galley_signed_url_editor(
     id: str,
     cycle_id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 编辑端获取清样 signed URL。
@@ -2301,7 +2301,7 @@ async def approve_production_cycle(
     id: str,
     cycle_id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     """
     Feature 042: 编辑确认发布前核准（approved_for_publish）。
@@ -2311,6 +2311,24 @@ async def approve_production_cycle(
         cycle_id=cycle_id,
         user_id=str(current_user.get("id") or ""),
         profile_roles=profile.get("roles") or [],
+    )
+    return {"success": True, "data": data}
+
+
+@router.get("/production/queue")
+async def list_production_queue(
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["production_editor", "admin"])),
+):
+    """
+    Production Editor Queue:
+    - 返回当前 production_editor 被分配（layout_editor_id）的活跃 production cycles。
+    """
+    data = ProductionWorkspaceService().list_my_queue(
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        limit=limit,
     )
     return {"success": True, "data": data}
 

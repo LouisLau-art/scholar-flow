@@ -102,6 +102,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
                 <SelectItem value="author">Author</SelectItem>
                 <SelectItem value="reviewer">Reviewer</SelectItem>
                 <SelectItem value="assistant_editor">Assistant Editor</SelectItem>
+                <SelectItem value="production_editor">Production Editor</SelectItem>
                 <SelectItem value="managing_editor">Managing Editor</SelectItem>
                 <SelectItem value="editor_in_chief">Editor-in-Chief</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>

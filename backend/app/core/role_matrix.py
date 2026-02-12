@@ -26,6 +26,10 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "review:view_assignments",
         "review:unassign",
     },
+    "production_editor": {
+        # 生产角色的最小闭环：能查看稿件详情与进入 production workspace（稿件级访问仍由后端按分配控制）。
+        "manuscript:view_detail",
+    },
     "managing_editor": {
         "process:view",
         "manuscript:view_detail",

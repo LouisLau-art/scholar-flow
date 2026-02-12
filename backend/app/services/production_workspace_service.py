@@ -27,6 +27,7 @@ ACTIVE_CYCLE_STATUSES = {
     "draft",
     "awaiting_author",
     "author_corrections_submitted",
+    "author_confirmed",
     "in_layout_revision",
 }
 
@@ -141,7 +142,14 @@ class ProductionWorkspaceService:
             raise HTTPException(status_code=404, detail="Manuscript not found")
         return row
 
-    def _ensure_editor_access(self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]) -> None:
+    def _ensure_editor_access(
+        self,
+        *,
+        manuscript: dict[str, Any],
+        user_id: str,
+        roles: set[str],
+        cycle: dict[str, Any] | None = None,
+    ) -> None:
         if roles.intersection({"admin", "editor_in_chief"}):
             return
 
@@ -155,6 +163,11 @@ class ProductionWorkspaceService:
             )
         if "assistant_editor" in roles:
             allowed.add(str(manuscript.get("assistant_editor_id") or "").strip())
+        # Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
+        if "production_editor" in roles and cycle is not None:
+            layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
+            if layout_editor_id:
+                allowed.add(layout_editor_id)
 
         if str(user_id) in {a for a in allowed if a}:
             return
@@ -349,13 +362,16 @@ class ProductionWorkspaceService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
-
         cycles = self._get_cycles(manuscript_id)
         active = next((c for c in cycles if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=active)
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
-        can_manage_production = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"}))
+        can_manage_production = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"})) or bool(
+            "production_editor" in roles
+            and active
+            and str(active.get("layout_editor_id") or "").strip() == str(user_id)
+        )
         can_create = can_manage_production and manuscript_status in POST_ACCEPTANCE_ALLOWED and active is None
 
         return {
@@ -468,6 +484,93 @@ class ProductionWorkspaceService:
 
         return self._format_cycle(row, include_signed_url=False)
 
+    def list_my_queue(
+        self,
+        *,
+        user_id: str,
+        profile_roles: list[str] | None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """
+        Production Editor Queue:
+        - 仅返回 layout_editor_id == 当前用户 且处于活跃状态的 production cycles。
+        - 返回值用于前端 /editor/production 列表页。
+        """
+        roles = self._roles(profile_roles)
+        if not roles.intersection({"admin", "production_editor"}):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        safe_limit = max(1, min(int(limit or 50), 200))
+        active_statuses = sorted(ACTIVE_CYCLE_STATUSES)
+
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at,created_at")
+                .eq("layout_editor_id", str(user_id))
+                .in_("status", active_statuses)
+                .order("updated_at", desc=True)
+                .limit(safe_limit)
+                .execute()
+            )
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycles"):
+                raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from e
+            raise HTTPException(status_code=500, detail=f"Failed to list production queue: {e}") from e
+
+        cycles: list[dict[str, Any]] = getattr(resp, "data", None) or []
+        if not cycles:
+            return []
+
+        manuscript_ids = [str(c.get("manuscript_id") or "").strip() for c in cycles if str(c.get("manuscript_id") or "").strip()]
+        manuscript_ids = list(dict.fromkeys(manuscript_ids))
+        if not manuscript_ids:
+            return []
+
+        try:
+            ms_resp = (
+                self.client.table("manuscripts")
+                .select("id,title,status,journal_id,journals(title,slug)")
+                .in_("id", manuscript_ids)
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to load manuscripts for production queue: {e}") from e
+
+        ms_rows: list[dict[str, Any]] = getattr(ms_resp, "data", None) or []
+        ms_map = {str(row.get("id") or ""): row for row in ms_rows if str(row.get("id") or "").strip()}
+
+        out: list[dict[str, Any]] = []
+        for cycle in cycles:
+            mid = str(cycle.get("manuscript_id") or "").strip()
+            ms = ms_map.get(mid) or {}
+            journal_row = ms.get("journals") or None
+            out.append(
+                {
+                    "manuscript": {
+                        "id": mid,
+                        "title": ms.get("title") or "Untitled",
+                        "status": ms.get("status"),
+                        "journal": {
+                            "id": ms.get("journal_id"),
+                            "title": (journal_row or {}).get("title"),
+                            "slug": (journal_row or {}).get("slug"),
+                        }
+                        if ms.get("journal_id") or journal_row
+                        else None,
+                    },
+                    "cycle": {
+                        "id": cycle.get("id"),
+                        "cycle_no": cycle.get("cycle_no"),
+                        "status": cycle.get("status"),
+                        "proof_due_at": cycle.get("proof_due_at"),
+                        "updated_at": cycle.get("updated_at") or cycle.get("created_at"),
+                    },
+                    "action_url": f"/editor/production/{mid}",
+                }
+            )
+        return out
+
     def upload_galley(
         self,
         *,
@@ -483,7 +586,6 @@ class ProductionWorkspaceService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
 
         if not content:
             raise HTTPException(status_code=400, detail="Galley file is empty")
@@ -497,6 +599,7 @@ class ProductionWorkspaceService:
             raise HTTPException(status_code=422, detail="version_note is required")
 
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
         old_status = str(cycle.get("status") or "")
         if old_status not in {"draft", "in_layout_revision", "author_corrections_submitted"}:
             raise HTTPException(status_code=409, detail=f"Cannot upload galley in cycle status '{old_status}'")
@@ -585,9 +688,9 @@ class ProductionWorkspaceService:
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
         roles = self._roles(profile_roles)
 
-        is_internal = roles.intersection({"admin", "managing_editor", "editor_in_chief"})
+        is_internal = roles.intersection({"admin", "managing_editor", "editor_in_chief", "production_editor"})
         if is_internal:
-            self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+            self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
         else:
             self._ensure_author_or_internal_access(
                 manuscript=manuscript,
@@ -836,9 +939,8 @@ class ProductionWorkspaceService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
-
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
         if str(cycle.get("status") or "") != "author_confirmed":
             raise HTTPException(
                 status_code=422,

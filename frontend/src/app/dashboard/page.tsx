@@ -17,6 +17,7 @@ type DashboardTab =
   | 'reviewer'
   | 'managing_editor'
   | 'assistant_editor'
+  | 'production_editor'
   | 'editor_in_chief'
   | 'admin'
 
@@ -25,6 +26,7 @@ const DASHBOARD_TABS: DashboardTab[] = [
   'reviewer',
   'managing_editor',
   'assistant_editor',
+  'production_editor',
   'editor_in_chief',
   'admin',
 ]
@@ -35,6 +37,7 @@ const KNOWN_ROLE_TOKENS = [
   'reviewer',
   'managing_editor',
   'assistant_editor',
+  'production_editor',
   'editor_in_chief',
 ] as const
 
@@ -44,6 +47,7 @@ function pickFirstAllowedTab(allowed: Record<DashboardTab, boolean>): DashboardT
     'reviewer',
     'managing_editor',
     'assistant_editor',
+    'production_editor',
     'editor_in_chief',
     'admin',
   ]
@@ -192,6 +196,7 @@ function DashboardPageContent() {
   const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
   const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')
+  const canSeeProductionEditor = canSeeAdmin || roleSet.has('production_editor')
   const canSeeEditorInChief = canSeeAdmin || roleSet.has('editor_in_chief')
   const allowedTabs: Record<DashboardTab, boolean> = useMemo(
     () => ({
@@ -199,6 +204,7 @@ function DashboardPageContent() {
       reviewer: canSeeReviewer,
       managing_editor: canSeeManagingEditor,
       assistant_editor: canSeeAssistantEditor,
+      production_editor: canSeeProductionEditor,
       editor_in_chief: canSeeEditorInChief,
       admin: canSeeAdmin,
     }),
@@ -207,6 +213,7 @@ function DashboardPageContent() {
       canSeeReviewer,
       canSeeManagingEditor,
       canSeeAssistantEditor,
+      canSeeProductionEditor,
       canSeeEditorInChief,
       canSeeAdmin,
     ]
@@ -271,6 +278,11 @@ function DashboardPageContent() {
                 {canSeeAssistantEditor && (
                   <TabsTrigger value="assistant_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
                     <Shield className="h-4 w-4" /> Assistant Editor
+                  </TabsTrigger>
+                )}
+                {canSeeProductionEditor && (
+                  <TabsTrigger value="production_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                    <Shield className="h-4 w-4" /> Production Editor
                   </TabsTrigger>
                 )}
                 {canSeeEditorInChief && (
@@ -435,6 +447,18 @@ function DashboardPageContent() {
                 actions={[
                   { label: 'AE Workspace', href: '/editor/workspace', helper: 'Focus on your in-flight manuscripts with status-based actions.' },
                   { label: 'Manuscripts Process', href: '/editor/process', helper: 'Inspect lifecycle updates (sorted by most recently updated).' },
+                ]}
+              />
+            </TabsContent>
+          )}
+
+          {canSeeProductionEditor && (
+            <TabsContent value="production_editor">
+              <RoleWorkspacePanel
+                title="Production Editor Workspace"
+                description="Manage galley proofs, author corrections, and approve production cycles for publish gates."
+                actions={[
+                  { label: 'Production Queue', href: '/editor/production', helper: 'See production cycles assigned to you (layout_editor_id).' },
                 ]}
               />
             </TabsContent>

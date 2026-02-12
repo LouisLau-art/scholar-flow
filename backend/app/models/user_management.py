@@ -10,6 +10,7 @@ ALLOWED_USER_ROLES = {
     "reviewer",
     "managing_editor",
     "assistant_editor",
+    "production_editor",
     "editor_in_chief",
     "admin",
 }
@@ -100,7 +101,10 @@ class CreateUserRequest(BaseModel):
     """
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(..., pattern="^(reviewer|managing_editor|assistant_editor|editor_in_chief|admin)$")
+    role: str = Field(
+        ...,
+        pattern="^(reviewer|managing_editor|assistant_editor|production_editor|editor_in_chief|admin)$",
+    )
 
 class UpdateRoleRequest(BaseModel):
     """

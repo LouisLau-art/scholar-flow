@@ -339,6 +339,13 @@ export const EditorApi = {
     return res.json()
   },
 
+  async listMyProductionQueue(limit = 50) {
+    const qs = new URLSearchParams()
+    qs.set('limit', String(limit))
+    const res = await authedFetch(`/api/v1/editor/production/queue?${qs.toString()}`)
+    return res.json()
+  },
+
   async patchManuscriptStatus(manuscriptId: string, status: string, comment?: string) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/status`, {
       method: 'PATCH',

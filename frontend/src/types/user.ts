@@ -7,6 +7,7 @@ export type UserRole =
   | 'admin'
   | 'managing_editor'
   | 'assistant_editor'
+  | 'production_editor'
   | 'editor_in_chief';
 
 export interface User {
