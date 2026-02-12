@@ -23,7 +23,16 @@ export default function DecisionWorkspacePage() {
     try {
       const res = await EditorApi.getDecisionContext(manuscriptId)
       if (!res?.success || !res?.data) {
-        throw new Error(res?.detail || res?.message || 'Failed to load decision workspace')
+        const detail = String(res?.detail || res?.message || 'Failed to load decision workspace')
+        if (
+          detail.toLowerCase().includes('decision workspace unavailable') ||
+          detail.toLowerCase().includes('unavailable in status')
+        ) {
+          toast.info('稿件已离开决策阶段，已返回详情页。')
+          router.replace(`/editor/manuscript/${encodeURIComponent(manuscriptId)}`)
+          return
+        }
+        throw new Error(detail)
       }
       setContext(res.data as DecisionContext)
     } catch (error) {
