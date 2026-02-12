@@ -240,3 +240,64 @@ async def test_author_submit_corrections_persists_items(
         assert len(items) == 2
     finally:
         _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id, intruder.id])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_proofreading_context_keeps_readonly_after_author_submit(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    editor = make_user(email="proof_editor_context_after_submit@example.com")
+    author = make_user(email="proof_author_context_after_submit@example.com")
+    set_admin_emails([editor.email])
+    _require_schema(supabase_admin_client)
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="layout",
+        title="Proof Context After Submit",
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["admin", "managing_editor", "author"],
+    )
+    _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
+
+    try:
+        cycle_id = await _prepare_awaiting_author_cycle(
+            client=client,
+            manuscript_id=manuscript_id,
+            editor_token=editor.token,
+            editor_id=editor.id,
+            author_id=author.id,
+        )
+
+        submit = await client.post(
+            f"/api/v1/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading",
+            headers={"Authorization": f"Bearer {author.token}"},
+            json={
+                "decision": "submit_corrections",
+                "summary": "Need small fixes",
+                "corrections": [{"suggested_text": "Fix typo in abstract"}],
+            },
+        )
+        assert submit.status_code == 200, submit.text
+
+        ctx = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/proofreading-context",
+            headers={"Authorization": f"Bearer {author.token}"},
+        )
+        assert ctx.status_code == 200, ctx.text
+        data = ctx.json()["data"]
+        assert data["cycle"]["status"] == "author_corrections_submitted"
+        assert data["is_read_only"] is True
+        assert data["can_submit"] is False
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])

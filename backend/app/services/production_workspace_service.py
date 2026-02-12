@@ -30,6 +30,12 @@ ACTIVE_CYCLE_STATUSES = {
     "in_layout_revision",
 }
 
+AUTHOR_CONTEXT_VISIBLE_STATUSES = {
+    "awaiting_author",
+    "author_corrections_submitted",
+    "author_confirmed",
+}
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -589,7 +595,9 @@ class ProductionWorkspaceService:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
 
-        # 作者侧默认读取最新 awaiting_author 轮次。
+        # 作者侧读取“当前可见”轮次：
+        # - awaiting_author: 可提交
+        # - author_corrections_submitted / author_confirmed: 提交后回看（只读）
         try:
             resp = (
                 self.client.table("production_cycles")
@@ -598,8 +606,9 @@ class ProductionWorkspaceService:
                     "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
                 )
                 .eq("manuscript_id", manuscript_id)
-                .eq("status", "awaiting_author")
+                .in_("status", sorted(AUTHOR_CONTEXT_VISIBLE_STATUSES))
                 .order("cycle_no", desc=True)
+                .order("updated_at", desc=True)
                 .limit(1)
                 .execute()
             )
@@ -623,8 +632,10 @@ class ProductionWorkspaceService:
             roles=roles,
         )
 
+        cycle_status = str(cycle.get("status") or "")
+        can_act_on_cycle = cycle_status == "awaiting_author"
         latest = self._get_latest_response(str(cycle.get("id") or ""))
-        read_only = latest is not None
+        read_only = (not can_act_on_cycle) or (latest is not None)
 
         due_raw = cycle.get("proof_due_at")
         due_at: datetime | None = None
@@ -646,7 +657,7 @@ class ProductionWorkspaceService:
                 "status": manuscript.get("status"),
             },
             "cycle": self._format_cycle(cycle, include_signed_url=True),
-            "can_submit": not read_only,
+            "can_submit": can_act_on_cycle and not read_only,
             "is_read_only": read_only,
         }
 
