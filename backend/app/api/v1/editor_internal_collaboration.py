@@ -18,7 +18,13 @@ from app.services.internal_collaboration_service import (
 from app.services.internal_task_service import InternalTaskSchemaMissingError, InternalTaskService
 
 router = APIRouter(tags=["Editor Internal Collaboration"])
-INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+INTERNAL_COLLAB_ALLOWED_ROLES = [
+    "admin",
+    "managing_editor",
+    "assistant_editor",
+    "production_editor",
+    "editor_in_chief",
+]
 
 
 @router.get("/manuscripts/{id}/comments")

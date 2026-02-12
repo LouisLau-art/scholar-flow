@@ -16,6 +16,7 @@ INTERNAL_COLLAB_ROLES = {
     "admin",
     "assistant_editor",
     "managing_editor",
+    "production_editor",
     "editor_in_chief",
 }
 
