@@ -13,12 +13,13 @@ type LocalAttachment = DecisionAttachment & { ref: string }
 type DecisionEditorProps = {
   manuscriptId: string
   reports: DecisionReport[]
+  manuscriptStatus?: string | null
   initialDraft?: DecisionDraft | null
   templateContent?: string
   canSubmit: boolean
   canRecordFirst: boolean
   canSubmitFinal: boolean
-  canSubmitFinalNow: boolean
+  hasSubmittedAuthorRevision: boolean
   finalBlockingReasons: string[]
   isReadOnly: boolean
   onDirtyChange: (dirty: boolean) => void
@@ -41,12 +42,13 @@ function normalizeAttachment(raw: LocalAttachment): LocalAttachment {
 export function DecisionEditor({
   manuscriptId,
   reports,
+  manuscriptStatus,
   initialDraft,
   templateContent,
   canSubmit,
   canRecordFirst,
   canSubmitFinal,
-  canSubmitFinalNow,
+  hasSubmittedAuthorRevision,
   finalBlockingReasons,
   isReadOnly,
   onDirtyChange,
@@ -60,6 +62,26 @@ export function DecisionEditor({
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const baselineRef = useRef('')
+
+  const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  const decisionSpecificBlockingReasons = useMemo(() => {
+    const reasons = [...finalBlockingReasons]
+    if (decision === 'major_revision' || decision === 'minor_revision') {
+      if (!['under_review', 'resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
+        reasons.push('Revision decision is only allowed in under_review/resubmitted/decision/decision_done stage')
+      }
+      return reasons
+    }
+    if (!['resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
+      reasons.push('Final accept/reject requires manuscript status in resubmitted/decision/decision_done')
+    }
+    if (!hasSubmittedAuthorRevision) {
+      reasons.push('Final decision requires at least one submitted author revision')
+    }
+    return reasons
+  }, [decision, finalBlockingReasons, hasSubmittedAuthorRevision, normalizedStatus])
+
+  const canSubmitFinalNow = canSubmitFinal && decisionSpecificBlockingReasons.length === 0
 
   const snapshot = useMemo(
     () =>
@@ -175,7 +197,7 @@ export function DecisionEditor({
       return
     }
     if (isFinal && !canSubmitFinalNow) {
-      toast.error(finalBlockingReasons[0] || 'Final decision is blocked by workflow requirements')
+      toast.error(decisionSpecificBlockingReasons[0] || 'Final decision is blocked by workflow requirements')
       return
     }
 
@@ -225,7 +247,7 @@ export function DecisionEditor({
         <div className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">
           <div className="font-semibold">Final submission blocked</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {finalBlockingReasons.map((reason) => (
+            {decisionSpecificBlockingReasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>

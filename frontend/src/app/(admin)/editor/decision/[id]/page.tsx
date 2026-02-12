@@ -94,12 +94,13 @@ export default function DecisionWorkspacePage() {
           <DecisionEditor
             manuscriptId={manuscriptId}
             reports={context.reports || []}
+            manuscriptStatus={context.manuscript.status || ''}
             initialDraft={context.draft || null}
             templateContent={context.templates?.[0]?.content || ''}
             canSubmit={Boolean(context.permissions?.can_submit)}
             canRecordFirst={Boolean(context.permissions?.can_record_first ?? true)}
             canSubmitFinal={Boolean(context.permissions?.can_submit_final)}
-            canSubmitFinalNow={Boolean(context.permissions?.can_submit_final_now)}
+            hasSubmittedAuthorRevision={Boolean(context.permissions?.has_submitted_author_revision)}
             finalBlockingReasons={context.permissions?.final_blocking_reasons || []}
             isReadOnly={Boolean(context.permissions?.is_read_only)}
             onDirtyChange={setDirty}

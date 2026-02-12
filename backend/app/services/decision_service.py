@@ -618,6 +618,7 @@ class DecisionService:
         can_submit_final = can_perform_action(action="decision:submit_final", roles=roles)
         has_submitted_author_revision = self._has_submitted_author_revision(manuscript_id)
         is_final_status_allowed = status in {
+            ManuscriptStatus.UNDER_REVIEW.value,
             ManuscriptStatus.RESUBMITTED.value,
             ManuscriptStatus.DECISION.value,
             ManuscriptStatus.DECISION_DONE.value,
@@ -626,11 +627,9 @@ class DecisionService:
         final_blocking_reasons: list[str] = []
         if len(reports) == 0:
             final_blocking_reasons.append("At least one submitted review report is required")
-        if not has_submitted_author_revision:
-            final_blocking_reasons.append("Final decision requires at least one submitted author revision")
         if not is_final_status_allowed:
             final_blocking_reasons.append(
-                "Final decision is only allowed in resubmitted/decision/decision_done stage"
+                "Decision submission is only allowed in under_review/resubmitted/decision/decision_done stage"
             )
 
         draft = self._get_latest_letter(
@@ -721,24 +720,39 @@ class DecisionService:
 
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
         if request.is_final:
-            if current_status not in {
-                ManuscriptStatus.RESUBMITTED.value,
-                ManuscriptStatus.DECISION.value,
-                ManuscriptStatus.DECISION_DONE.value,
-            }:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        "Final decision is only allowed after author resubmission "
-                        "(status must be resubmitted/decision/decision_done)"
-                    ),
-                )
-            has_submitted_revision = self._has_submitted_author_revision(manuscript_id)
-            if not has_submitted_revision:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Final decision requires at least one submitted author revision",
-                )
+            if decision in {"major_revision", "minor_revision"}:
+                if current_status not in {
+                    ManuscriptStatus.UNDER_REVIEW.value,
+                    ManuscriptStatus.RESUBMITTED.value,
+                    ManuscriptStatus.DECISION.value,
+                    ManuscriptStatus.DECISION_DONE.value,
+                }:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            "Revision decision is only allowed in under_review/"
+                            "resubmitted/decision/decision_done stage"
+                        ),
+                    )
+            else:
+                if current_status not in {
+                    ManuscriptStatus.RESUBMITTED.value,
+                    ManuscriptStatus.DECISION.value,
+                    ManuscriptStatus.DECISION_DONE.value,
+                }:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            "Final decision is only allowed after author resubmission "
+                            "(status must be resubmitted/decision/decision_done)"
+                        ),
+                    )
+                has_submitted_revision = self._has_submitted_author_revision(manuscript_id)
+                if not has_submitted_revision:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Final decision requires at least one submitted author revision",
+                    )
 
         existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
         row = self._save_letter(

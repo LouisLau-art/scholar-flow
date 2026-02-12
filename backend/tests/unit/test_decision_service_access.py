@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.models.decision import DecisionSubmitRequest
 from app.services.decision_service import DecisionService
 
 
@@ -215,3 +216,82 @@ def test_internal_decision_access_managing_editor_still_checks_scope(
         action="decision:record_first",
     )
     assert called["scope"] is True
+
+
+def test_submit_decision_allows_revision_without_submitted_author_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_has_submitted_author_revision", lambda _id: False)
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **_kwargs: {"id": "dl-1", "status": "final", "updated_at": "2026-02-12T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(svc, "_transition_for_final_decision", lambda **_kwargs: "major_revision")
+    monkeypatch.setattr(svc, "_notify_author", lambda **_kwargs: None)
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="eic-1",
+        profile_roles=["editor_in_chief"],
+        request=DecisionSubmitRequest(
+            content="Need major revision",
+            decision="major_revision",
+            is_final=True,
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+    assert out["manuscript_status"] == "major_revision"
+
+
+def test_submit_decision_blocks_accept_without_submitted_author_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_has_submitted_author_revision", lambda _id: False)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_decision(
+            manuscript_id="ms-1",
+            user_id="eic-1",
+            profile_roles=["editor_in_chief"],
+            request=DecisionSubmitRequest(
+                content="Accept",
+                decision="accept",
+                is_final=True,
+                attachment_paths=[],
+                last_updated_at=None,
+            ),
+        )
+    assert exc.value.status_code == 422
