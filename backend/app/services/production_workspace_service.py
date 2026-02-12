@@ -113,7 +113,9 @@ class ProductionWorkspaceService:
             try:
                 resp = (
                     self.client.table("manuscripts")
-                    .select("id,title,status,author_id,editor_id,owner_id,file_path,final_pdf_path,updated_at")
+                    .select(
+                        "id,title,status,author_id,editor_id,owner_id,assistant_editor_id,file_path,final_pdf_path,updated_at"
+                    )
                     .eq("id", manuscript_id)
                     .single()
                     .execute()
@@ -122,7 +124,9 @@ class ProductionWorkspaceService:
                 if _is_missing_column_error(first_err, "final_pdf_path"):
                     resp = (
                         self.client.table("manuscripts")
-                        .select("id,title,status,author_id,editor_id,owner_id,file_path,updated_at")
+                        .select(
+                            "id,title,status,author_id,editor_id,owner_id,assistant_editor_id,file_path,updated_at"
+                        )
                         .eq("id", manuscript_id)
                         .single()
                         .execute()
@@ -140,13 +144,18 @@ class ProductionWorkspaceService:
     def _ensure_editor_access(self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]) -> None:
         if roles.intersection({"admin", "editor_in_chief"}):
             return
-        if "managing_editor" not in roles:
-            raise HTTPException(status_code=403, detail="Forbidden")
 
-        allowed = {
-            str(manuscript.get("editor_id") or "").strip(),
-            str(manuscript.get("owner_id") or "").strip(),
-        }
+        allowed = set()
+        if "managing_editor" in roles:
+            allowed.update(
+                {
+                    str(manuscript.get("editor_id") or "").strip(),
+                    str(manuscript.get("owner_id") or "").strip(),
+                }
+            )
+        if "assistant_editor" in roles:
+            allowed.add(str(manuscript.get("assistant_editor_id") or "").strip())
+
         if str(user_id) in {a for a in allowed if a}:
             return
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -346,7 +355,8 @@ class ProductionWorkspaceService:
         active = next((c for c in cycles if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
-        can_create = manuscript_status in POST_ACCEPTANCE_ALLOWED and active is None
+        can_manage_production = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"}))
+        can_create = can_manage_production and manuscript_status in POST_ACCEPTANCE_ALLOWED and active is None
 
         return {
             "manuscript": {
@@ -356,14 +366,24 @@ class ProductionWorkspaceService:
                 "author_id": manuscript.get("author_id"),
                 "editor_id": manuscript.get("editor_id"),
                 "owner_id": manuscript.get("owner_id"),
+                "assistant_editor_id": manuscript.get("assistant_editor_id"),
                 "pdf_url": self._signed_url("manuscripts", str(manuscript.get("file_path") or "")),
             },
             "active_cycle": self._format_cycle(active, include_signed_url=True) if active else None,
             "cycle_history": [self._format_cycle(c, include_signed_url=False) for c in cycles],
             "permissions": {
                 "can_create_cycle": can_create,
-                "can_upload_galley": bool(active and str(active.get("status") or "") in {"draft", "in_layout_revision", "author_corrections_submitted"}),
-                "can_approve": bool(active and str(active.get("status") or "") == "author_confirmed"),
+                "can_upload_galley": bool(
+                    can_manage_production
+                    and active
+                    and str(active.get("status") or "")
+                    in {"draft", "in_layout_revision", "author_corrections_submitted"}
+                ),
+                "can_approve": bool(
+                    can_manage_production
+                    and active
+                    and str(active.get("status") or "") == "author_confirmed"
+                ),
             },
         }
 

@@ -2210,7 +2210,7 @@ async def get_decision_attachment_signed_url_editor(
 async def get_production_workspace_context(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     """
     Feature 042: 编辑端生产工作间上下文。
