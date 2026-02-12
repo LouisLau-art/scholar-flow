@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import ADMIN_ROLE
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.models.production_workspace import (
@@ -150,17 +152,24 @@ class ProductionWorkspaceService:
         roles: set[str],
         cycle: dict[str, Any] | None = None,
     ) -> None:
-        if roles.intersection({"admin", "editor_in_chief"}):
+        # Admin 永远放行；其余角色按“期刊 scope / 分配”组合判定。
+        if ADMIN_ROLE in roles:
+            return
+
+        # Managing Editor / Editor-in-Chief: 以 journal_role_scopes 为准（强隔离）。
+        # 中文注释:
+        # - 避免依赖 manuscripts.editor_id 是否回填导致的 403；
+        # - scope 为空时应该直接 403（按约定 ME/EIC 必须绑定期刊）。
+        if roles.intersection({"managing_editor", "editor_in_chief"}):
+            ensure_manuscript_scope_access(
+                manuscript_id=str(manuscript.get("id") or ""),
+                user_id=str(user_id),
+                roles=list(roles),
+                allow_admin_bypass=True,
+            )
             return
 
         allowed = set()
-        if "managing_editor" in roles:
-            allowed.update(
-                {
-                    str(manuscript.get("editor_id") or "").strip(),
-                    str(manuscript.get("owner_id") or "").strip(),
-                }
-            )
         if "assistant_editor" in roles:
             allowed.add(str(manuscript.get("assistant_editor_id") or "").strip())
         # Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
