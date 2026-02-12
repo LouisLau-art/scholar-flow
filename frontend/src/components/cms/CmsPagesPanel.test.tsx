@@ -50,8 +50,12 @@ describe('CmsPagesPanel', () => {
     expect(await screen.findByText('Pages')).toBeInTheDocument()
     expect(listCmsPages).toHaveBeenCalled()
 
+    // 等待选中页回填完成，避免 useEffect 后续重置发布态造成测试抖动。
+    expect(await screen.findByDisplayValue('About')).toBeInTheDocument()
     const checkbox = await screen.findByRole('checkbox')
+    expect(checkbox).not.toBeChecked()
     fireEvent.click(checkbox)
+    expect(checkbox).toBeChecked()
 
     const saveButton = await screen.findByRole('button', { name: 'Save' })
     fireEvent.click(saveButton)
@@ -61,4 +65,3 @@ describe('CmsPagesPanel', () => {
     })
   })
 })
-
