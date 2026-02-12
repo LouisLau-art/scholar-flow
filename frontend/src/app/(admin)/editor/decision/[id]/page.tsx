@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
@@ -12,6 +12,7 @@ import type { DecisionContext } from '@/types/decision'
 
 export default function DecisionWorkspacePage() {
   const params = useParams()
+  const router = useRouter()
   const manuscriptId = String((params as Record<string, string>)?.id || '')
   const [context, setContext] = useState<DecisionContext | null>(null)
   const [loading, setLoading] = useState(true)
@@ -106,6 +107,15 @@ export default function DecisionWorkspacePage() {
             onDirtyChange={setDirty}
             onSubmitted={(_status) => {
               setDirty(false)
+              const nextStatus = String(_status || '').toLowerCase()
+              // Final 提交后若已离开决策阶段，直接回详情页，避免停留在“blocked + 灰按钮”状态。
+              if (
+                nextStatus &&
+                !['under_review', 'resubmitted', 'decision', 'decision_done'].includes(nextStatus)
+              ) {
+                router.replace(`/editor/manuscript/${encodeURIComponent(manuscriptId)}`)
+                return
+              }
               void load()
             }}
           />

@@ -623,8 +623,6 @@ class DecisionService:
             ManuscriptStatus.RESUBMITTED.value,
             ManuscriptStatus.DECISION.value,
             ManuscriptStatus.DECISION_DONE.value,
-            ManuscriptStatus.MAJOR_REVISION.value,
-            ManuscriptStatus.MINOR_REVISION.value,
         }:
             raise HTTPException(status_code=400, detail=f"Decision workspace unavailable in status: {status}")
 
