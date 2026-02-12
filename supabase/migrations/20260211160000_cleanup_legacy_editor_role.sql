@@ -21,7 +21,7 @@ with normalized_user_roles as (
         ),
         '{}'::text[]
       )
-      from (
+      from lateral (
         select distinct role
         from unnest(
           array_append(
