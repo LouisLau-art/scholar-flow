@@ -103,11 +103,15 @@ class DecisionService:
     def _ensure_editor_access(
         self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]
     ) -> None:
-        # admin / editor_in_chief 可跨稿件访问；assigned managing_editor 仅可访问自己稿件
+        # admin / editor_in_chief 可跨稿件访问；
+        # managing_editor 按 editor_id 绑定访问，assistant_editor 按 assistant_editor_id 绑定访问。
         if roles.intersection({"admin", "editor_in_chief"}):
             return
         assigned_editor_id = str(manuscript.get("editor_id") or "")
         if assigned_editor_id and assigned_editor_id == str(user_id):
+            return
+        assigned_ae_id = str(manuscript.get("assistant_editor_id") or "")
+        if assigned_ae_id and assigned_ae_id == str(user_id):
             return
         raise HTTPException(status_code=403, detail="Forbidden")
 

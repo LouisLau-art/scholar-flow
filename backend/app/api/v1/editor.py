@@ -54,7 +54,7 @@ from app.api.v1.editor_common import (
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
-EDITOR_DECISION_ROLES = ["admin", "managing_editor", "editor_in_chief"]
+EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 router.include_router(internal_collab_router)
 
 

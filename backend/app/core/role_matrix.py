@@ -21,6 +21,7 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "process:view",
         "precheck:technical_check",
         "manuscript:view_detail",
+        "decision:record_first",
         "review:assign",
         "review:view_assignments",
         "review:unassign",

@@ -25,3 +25,8 @@ def test_list_allowed_actions_unions_roles() -> None:
     actions = list_allowed_actions(["assistant_editor", "managing_editor"])
     assert "precheck:technical_check" in actions
     assert "manuscript:bind_owner" in actions
+
+
+def test_assistant_editor_can_record_first_but_not_submit_final() -> None:
+    assert can_perform_action(action="decision:record_first", roles=["assistant_editor"]) is True
+    assert can_perform_action(action="decision:submit_final", roles=["assistant_editor"]) is False
