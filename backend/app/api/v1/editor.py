@@ -475,6 +475,32 @@ async def get_academic_queue(
         raise HTTPException(status_code=500, detail="Failed to fetch academic queue")
 
 
+@router.get("/final-decision")
+async def get_final_decision_queue(
+    page: int = 1,
+    page_size: int = 20,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+):
+    """
+    EIC Final Decision Queue:
+    - 聚焦终审阶段（decision/decision_done）
+    - 供 EIC 从 AE first-decision 草稿接手最终学术决策
+    """
+    try:
+        return EditorService().get_final_decision_queue(
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
+            page=page,
+            page_size=page_size,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[FinalDecisionQueue] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch final decision queue")
+
+
 @router.post("/manuscripts/{id}/academic-check")
 async def submit_academic_check(
     id: UUID,

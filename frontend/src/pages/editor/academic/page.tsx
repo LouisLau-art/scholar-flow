@@ -14,13 +14,20 @@ import type { EditorRbacContext } from '@/types/rbac'
 interface Manuscript {
   id: string
   title: string
-  pre_check_status: string
+  status?: string
+  pre_check_status?: string
   journal?: { title?: string | null } | null
   updated_at?: string | null
+  latest_first_decision_draft?: {
+    id?: string
+    decision?: string
+    updated_at?: string
+  } | null
 }
 
 export default function EICAcademicQueuePage() {
-  const [manuscripts, setManuscripts] = useState<Manuscript[]>([])
+  const [academicManuscripts, setAcademicManuscripts] = useState<Manuscript[]>([])
+  const [finalDecisionManuscripts, setFinalDecisionManuscripts] = useState<Manuscript[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [rbacContext, setRbacContext] = useState<EditorRbacContext | null>(null)
@@ -33,12 +40,17 @@ export default function EICAcademicQueuePage() {
     setLoading(true)
     setError('')
     try {
-      const data = await editorService.getAcademicQueue()
-      setManuscripts(data as unknown as Manuscript[])
+      const [academicRows, finalRows] = await Promise.all([
+        editorService.getAcademicQueue(),
+        editorService.getFinalDecisionQueue(),
+      ])
+      setAcademicManuscripts(academicRows as unknown as Manuscript[])
+      setFinalDecisionManuscripts(finalRows as unknown as Manuscript[])
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to fetch academic queue')
-      setManuscripts([])
+      setAcademicManuscripts([])
+      setFinalDecisionManuscripts([])
     } finally {
       setLoading(false)
     }
@@ -96,6 +108,10 @@ export default function EICAcademicQueuePage() {
           {error ? (
             <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error}</div>
           ) : null}
+          <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+            <h2 className="text-sm font-semibold text-slate-900">Academic Pre-check Queue</h2>
+            <p className="mt-1 text-xs text-slate-500">仅展示 AE 主动送审到 academic 的稿件。</p>
+          </div>
           <table className="w-full table-fixed">
             <thead className="bg-slate-50/70">
               <tr>
@@ -111,14 +127,14 @@ export default function EICAcademicQueuePage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
                 </tr>
-              ) : manuscripts.length === 0 ? (
+              ) : academicManuscripts.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
                     {scopeHint ? 'No manuscript in your assigned journal scope.' : 'No manuscripts awaiting academic check.'}
                   </td>
                 </tr>
               ) : (
-                manuscripts.map((m) => (
+                academicManuscripts.map((m) => (
                   <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                     <td className="px-4 py-3 text-sm text-slate-900">{m.title}</td>
                     <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '—'}</td>
@@ -131,6 +147,67 @@ export default function EICAcademicQueuePage() {
                       >
                         Make Decision
                       </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+            <h2 className="text-sm font-semibold text-slate-900">Final Decision Queue</h2>
+            <p className="mt-1 text-xs text-slate-500">终审阶段稿件（decision/decision_done），可直接进入 Decision Workspace 完成终审。</p>
+          </div>
+          <table className="w-full table-fixed">
+            <thead className="bg-slate-50/70">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
+                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Latest First Draft</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</th>
+                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                </tr>
+              ) : finalDecisionManuscripts.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                    {scopeHint ? 'No final-decision manuscript in your assigned journal scope.' : 'No manuscripts awaiting final decision.'}
+                  </td>
+                </tr>
+              ) : (
+                finalDecisionManuscripts.map((m) => (
+                  <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                    <td className="px-4 py-3 text-sm text-slate-900">{m.title}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{m.status || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {m.latest_first_decision_draft?.decision ? (
+                        <div>
+                          <div className="font-medium text-slate-800">{m.latest_first_decision_draft.decision}</div>
+                          <div className="text-xs text-slate-500">
+                            {m.latest_first_decision_draft.updated_at
+                              ? new Date(m.latest_first_decision_draft.updated_at).toLocaleString()
+                              : '—'}
+                          </div>
+                        </div>
+                      ) : (
+                        'No draft'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/editor/decision/${encodeURIComponent(m.id)}`}
+                        className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                      >
+                        Open Decision Workspace
+                      </Link>
                     </td>
                   </tr>
                 ))

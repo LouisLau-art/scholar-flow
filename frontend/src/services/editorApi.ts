@@ -215,6 +215,14 @@ export const EditorApi = {
     return res.json()
   },
 
+  async getFinalDecisionQueue(page = 1, pageSize = 20) {
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    const res = await authedFetch(`/api/v1/editor/final-decision?${params.toString()}`)
+    return res.json()
+  },
+
   async submitAcademicCheck(manuscriptId: string, payload: SubmitAcademicCheckPayload) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/academic-check`, {
       method: 'POST',

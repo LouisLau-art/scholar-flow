@@ -133,3 +133,49 @@ def test_get_decision_context_returns_role_based_permission_flags(
     assert permissions.get("can_record_first") is True
     assert permissions.get("can_submit_final") is False
     assert permissions.get("can_submit") is True
+
+
+def test_internal_decision_access_pure_assistant_editor_skips_scope_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    called = {"scope": False}
+
+    def _scope_guard(**_kwargs):
+        called["scope"] = True
+        raise AssertionError("scope check should not be called for pure assistant_editor")
+
+    monkeypatch.setattr("app.services.decision_service.ensure_manuscript_scope_access", _scope_guard)
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+
+    svc._ensure_internal_decision_access(
+        manuscript={"assistant_editor_id": "ae-1"},
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        roles={"assistant_editor"},
+        action="decision:record_first",
+    )
+    assert called["scope"] is False
+
+
+def test_internal_decision_access_managing_editor_still_checks_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    called = {"scope": False}
+
+    def _scope_ok(**_kwargs):
+        called["scope"] = True
+        return ""
+
+    monkeypatch.setattr("app.services.decision_service.ensure_manuscript_scope_access", _scope_ok)
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+
+    svc._ensure_internal_decision_access(
+        manuscript={"editor_id": "me-1"},
+        manuscript_id="ms-1",
+        user_id="me-1",
+        roles={"managing_editor"},
+        action="decision:record_first",
+    )
+    assert called["scope"] is True

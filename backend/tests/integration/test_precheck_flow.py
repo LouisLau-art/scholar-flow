@@ -158,3 +158,26 @@ async def test_eic_check_flow(client, mocker):
     response = await client.post(f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/academic-check", json={"decision": "review"})
     assert response.status_code == 200
     assert response.json()["message"] == "Academic check submitted"
+
+
+async def test_eic_final_decision_queue_flow(client, mocker):
+    """
+    EIC 终审队列接口集成校验。
+    """
+    mocker.patch("app.core.auth_utils.get_current_user", return_value={"id": MOCK_EIC_ID, "roles": ["editor_in_chief"]})
+    mock_rows = [
+        {
+            "id": MOCK_MANUSCRIPT_ID,
+            "title": "Decision Manuscript",
+            "status": ManuscriptStatus.DECISION.value,
+            "updated_at": "2026-02-11T00:00:00Z",
+            "latest_first_decision_draft": {"decision": "minor_revision"},
+        }
+    ]
+    mocker.patch("app.services.editor_service.EditorService.get_final_decision_queue", return_value=mock_rows)
+
+    response = await client.get("/api/v1/editor/final-decision")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["status"] == "decision"

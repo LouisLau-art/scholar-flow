@@ -101,6 +101,14 @@ export const editorService = {
     return res
   },
 
+  getFinalDecisionQueue: async (page = 1, pageSize = 20) => {
+    const res = await EditorApi.getFinalDecisionQueue(page, pageSize)
+    if (!Array.isArray(res)) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch final decision queue')
+    }
+    return res
+  },
+
   submitAcademicCheck: async (id: string, decision: AcademicDecision, comment?: string) => {
     const res = await EditorApi.submitAcademicCheck(id, { decision, comment })
     if (!res?.message) {

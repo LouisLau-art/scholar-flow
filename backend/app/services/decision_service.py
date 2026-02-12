@@ -152,13 +152,22 @@ class DecisionService:
         """
         if not can_perform_action(action=action, roles=roles):
             raise HTTPException(status_code=403, detail=f"Insufficient permission for action: {action}")
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+
+        # 中文注释:
+        # - assistant_editor 采用“已分配稿件可访问”策略，不强制绑定 journal scope；
+        # - managing_editor/editor_in_chief/admin 继续走 journal scope 强约束。
+        if "assistant_editor" in roles and not roles.intersection(
+            {"admin", "managing_editor", "editor_in_chief"}
+        ):
+            return
+
         ensure_manuscript_scope_access(
             manuscript_id=manuscript_id,
             user_id=str(user_id),
             roles=list(roles),
             allow_admin_bypass=True,
         )
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
 
     def _safe_insert_audit_log(
         self,

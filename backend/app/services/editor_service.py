@@ -1610,6 +1610,78 @@ class EditorService:
 
         return out
 
+    def get_final_decision_queue(
+        self,
+        *,
+        viewer_user_id: UUID | str,
+        viewer_roles: Iterable[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        EIC Final Decision Queue:
+        - Status in decision / decision_done（终审阶段）
+        - 允许展示 AE 保存的 first decision 草稿摘要，便于 EIC 接手终审
+        """
+        normalized_roles = set(normalize_roles(viewer_roles))
+        q = (
+            self.client.table("manuscripts")
+            .select("id,title,status,updated_at,journal_id,journals(title,slug),assistant_editor_id,owner_id")
+            .in_("status", [ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value])
+            .order("updated_at", desc=True)
+            .order("created_at", desc=True)
+            .range((page - 1) * page_size, page * page_size - 1)
+        )
+        resp = q.execute()
+        rows = getattr(resp, "data", None) or []
+
+        if "admin" not in normalized_roles:
+            scoped_journal_ids = get_user_scope_journal_ids(
+                user_id=str(viewer_user_id),
+                roles=normalized_roles,
+            )
+            has_global_scope_role = bool({"managing_editor", "editor_in_chief"} & normalized_roles)
+            if scoped_journal_ids:
+                rows = [
+                    row
+                    for row in rows
+                    if str(row.get("journal_id") or "").strip() in scoped_journal_ids
+                ]
+            elif has_global_scope_role or is_scope_enforcement_enabled():
+                return []
+
+        manuscript_ids = [str(row.get("id") or "").strip() for row in rows if str(row.get("id") or "").strip()]
+        latest_draft_map: dict[str, dict[str, Any]] = {}
+        if manuscript_ids:
+            try:
+                draft_resp = (
+                    self.client.table("decision_letters")
+                    .select("id,manuscript_id,editor_id,decision,status,updated_at")
+                    .eq("status", "draft")
+                    .in_("manuscript_id", manuscript_ids)
+                    .order("updated_at", desc=True)
+                    .execute()
+                )
+                for row in (getattr(draft_resp, "data", None) or []):
+                    mid = str(row.get("manuscript_id") or "").strip()
+                    if mid and mid not in latest_draft_map:
+                        latest_draft_map[mid] = row
+            except Exception as e:
+                print(f"[FinalDecisionQueue] load draft decision letters failed (ignored): {e}")
+
+        for row in rows:
+            draft = latest_draft_map.get(str(row.get("id") or "").strip())
+            if draft:
+                row["latest_first_decision_draft"] = {
+                    "id": draft.get("id"),
+                    "editor_id": draft.get("editor_id"),
+                    "decision": draft.get("decision"),
+                    "updated_at": draft.get("updated_at"),
+                }
+            else:
+                row["latest_first_decision_draft"] = None
+        return rows
+
     def submit_academic_check(
         self,
         manuscript_id: UUID,

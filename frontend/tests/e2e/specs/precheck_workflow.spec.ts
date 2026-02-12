@@ -127,6 +127,10 @@ test.describe('Pre-check workflow (mocked)', () => {
         return fulfillJson(route, 200, data)
       }
 
+      if (pathname === '/api/v1/editor/final-decision' && req.method() === 'GET') {
+        return fulfillJson(route, 200, [])
+      }
+
       if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/academic-check` && req.method() === 'POST') {
         stage = 'done'
         return fulfillJson(route, 200, {
