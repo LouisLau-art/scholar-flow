@@ -166,7 +166,7 @@ test.describe('Pre-check workflow (mocked)', () => {
 
     // 3) EIC Academic -> send to review
     await page.goto('/editor/academic')
-    await expect(page.getByRole('heading', { name: 'EIC Academic Pre-check Queue' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Editor-in-Chief Workspace' })).toBeVisible()
     await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
     await page.getByRole('button', { name: 'Make Decision' }).click()
     await page.getByLabel('Send to External Review').check()

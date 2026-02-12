@@ -24,9 +24,13 @@ export default function DecisionWorkspacePage() {
       const res = await EditorApi.getDecisionContext(manuscriptId)
       if (!res?.success || !res?.data) {
         const detail = String(res?.detail || res?.message || 'Failed to load decision workspace')
+        const normalizedDetail = detail.toLowerCase()
         if (
-          detail.toLowerCase().includes('decision workspace unavailable') ||
-          detail.toLowerCase().includes('unavailable in status')
+          normalizedDetail.includes('decision workspace unavailable') ||
+          normalizedDetail.includes('unavailable in status') ||
+          normalizedDetail.includes('decision submission is only allowed') ||
+          normalizedDetail.includes('forbidden by journal scope') ||
+          normalizedDetail.includes('insufficient permission for action')
         ) {
           toast.info('稿件已离开决策阶段，已返回详情页。')
           router.replace(`/editor/manuscript/${encodeURIComponent(manuscriptId)}`)

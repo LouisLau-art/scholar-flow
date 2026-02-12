@@ -1620,14 +1620,27 @@ class EditorService:
     ) -> list[dict[str, Any]]:
         """
         EIC Final Decision Queue:
-        - Status in decision / decision_done（终审阶段）
-        - 允许展示 AE 保存的 first decision 草稿摘要，便于 EIC 接手终审
+        - 常规展示 status in decision / decision_done（终审阶段）
+        - 额外展示“已有 first decision 草稿”的 under_review / resubmitted 稿件，
+          便于 EIC 从 AE 草稿接手终审。
         """
         normalized_roles = set(normalize_roles(viewer_roles))
+        decision_stage_statuses = {
+            ManuscriptStatus.DECISION.value,
+            ManuscriptStatus.DECISION_DONE.value,
+        }
         q = (
             self.client.table("manuscripts")
             .select("id,title,status,updated_at,journal_id,journals(title,slug),assistant_editor_id,owner_id")
-            .in_("status", [ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value])
+            .in_(
+                "status",
+                [
+                    ManuscriptStatus.UNDER_REVIEW.value,
+                    ManuscriptStatus.RESUBMITTED.value,
+                    ManuscriptStatus.DECISION.value,
+                    ManuscriptStatus.DECISION_DONE.value,
+                ],
+            )
             .order("updated_at", desc=True)
             .order("created_at", desc=True)
             .range((page - 1) * page_size, page * page_size - 1)
@@ -1680,7 +1693,14 @@ class EditorService:
                 }
             else:
                 row["latest_first_decision_draft"] = None
-        return rows
+
+        filtered_rows: list[dict[str, Any]] = []
+        for row in rows:
+            status = normalize_status(str(row.get("status") or ""))
+            has_draft = row.get("latest_first_decision_draft") is not None
+            if status in decision_stage_statuses or has_draft:
+                filtered_rows.append(row)
+        return filtered_rows
 
     def submit_academic_check(
         self,

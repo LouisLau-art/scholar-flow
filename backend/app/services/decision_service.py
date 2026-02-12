@@ -342,19 +342,30 @@ class DecisionService:
         判断是否存在“作者已提交修回”记录。
 
         中文注释:
-        - 不能只看 limit 1 + submitted_at 排序，否则在 NULL 排序场景会误判；
-        - 这里扫描稿件全部 revisions，命中任意 submitted/submitted_at 即视为满足。
+        - 兼容不同环境 revisions 列差异（updated_at 可能不存在）；
+        - 扫描稿件全部 revisions，命中任意 submitted/submitted_at 即视为满足。
         """
-        try:
-            rev = (
-                self.client.table("revisions")
-                .select("id,status,submitted_at,updated_at,created_at")
-                .eq("manuscript_id", manuscript_id)
-                .order("updated_at", desc=True)
-                .execute()
-            )
-            rev_rows = getattr(rev, "data", None) or []
-        except Exception:
+        rev_rows: list[dict[str, Any]] = []
+        select_candidates = [
+            ("id,status,submitted_at,updated_at,created_at", "updated_at"),
+            ("id,status,submitted_at,created_at", "created_at"),
+            ("id,status,submitted_at", None),
+        ]
+        for select_clause, order_key in select_candidates:
+            try:
+                q = (
+                    self.client.table("revisions")
+                    .select(select_clause)
+                    .eq("manuscript_id", manuscript_id)
+                )
+                if order_key:
+                    q = q.order(order_key, desc=True)
+                rev = q.execute()
+                rev_rows = getattr(rev, "data", None) or []
+                break
+            except Exception:
+                continue
+        if not rev_rows:
             return False
 
         for row in rev_rows:
@@ -806,11 +817,57 @@ class DecisionService:
                 manuscript=manuscript, manuscript_id=manuscript_id, decision=decision
             )
         else:
-            # 中文注释: first decision 仅记录草稿审计事件，不触发状态流转。
+            # 中文注释:
+            # - first decision 草稿默认只记录审计；
+            # - 但若当前仍在 under_review/resubmitted，则自动推进到 decision，
+            #   形成 AE -> EIC 的显式交接队列，避免“草稿已保存但 EIC 看不到”。
+            if current_status in {
+                ManuscriptStatus.UNDER_REVIEW.value,
+                ManuscriptStatus.RESUBMITTED.value,
+            }:
+                try:
+                    transitioned = self.editorial.update_status(
+                        manuscript_id=manuscript_id,
+                        to_status=ManuscriptStatus.DECISION.value,
+                        changed_by=user_id,
+                        comment="first decision saved, routed to decision queue",
+                        allow_skip=False,
+                        payload={
+                            "action": "first_decision_to_queue",
+                            "source": "decision_workspace",
+                            "reason": "ae_or_me_saved_first_decision",
+                            "decision_letter_id": row.get("id"),
+                            "before": {"status": current_status},
+                            "after": {"status": ManuscriptStatus.DECISION.value},
+                        },
+                    )
+                    new_status = str(
+                        transitioned.get("status") or ManuscriptStatus.DECISION.value
+                    )
+                except HTTPException:
+                    transitioned = self.editorial.update_status(
+                        manuscript_id=manuscript_id,
+                        to_status=ManuscriptStatus.DECISION.value,
+                        changed_by=user_id,
+                        comment="first decision saved, routed to decision queue",
+                        allow_skip=True,
+                        payload={
+                            "action": "first_decision_to_queue",
+                            "source": "decision_workspace",
+                            "reason": "ae_or_me_saved_first_decision_allow_skip",
+                            "decision_letter_id": row.get("id"),
+                            "before": {"status": current_status},
+                            "after": {"status": ManuscriptStatus.DECISION.value},
+                        },
+                    )
+                    new_status = str(
+                        transitioned.get("status") or ManuscriptStatus.DECISION.value
+                    )
+
             self._safe_insert_audit_log(
                 manuscript_id=manuscript_id,
                 from_status=current_status,
-                to_status=current_status,
+                to_status=new_status,
                 changed_by=user_id,
                 comment="first decision saved",
                 payload={

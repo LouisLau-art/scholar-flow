@@ -90,8 +90,8 @@ export default function EICAcademicQueuePage() {
               <GraduationCap className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">EIC Academic Pre-check Queue</h1>
-              <p className="mt-1 text-slate-500 font-medium">Review technical outcomes and make academic pre-check decisions.</p>
+              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Editor-in-Chief Workspace</h1>
+              <p className="mt-1 text-slate-500 font-medium">Editor-in-Chief workspace for optional academic pre-check and final decision handoff.</p>
             </div>
           </div>
 
@@ -109,8 +109,8 @@ export default function EICAcademicQueuePage() {
             <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error}</div>
           ) : null}
           <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">Academic Pre-check Queue</h2>
-            <p className="mt-1 text-xs text-slate-500">仅展示 AE 主动送审到 academic 的稿件。</p>
+            <h2 className="text-sm font-semibold text-slate-900">Academic Review Queue (Optional)</h2>
+            <p className="mt-1 text-xs text-slate-500">仅展示 AE 主动送到 academic 的稿件；可继续送外审或转入决策阶段。</p>
           </div>
           <table className="w-full table-fixed">
             <thead className="bg-slate-50/70">
@@ -158,7 +158,7 @@ export default function EICAcademicQueuePage() {
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-900">Final Decision Queue</h2>
-            <p className="mt-1 text-xs text-slate-500">终审阶段稿件（decision/decision_done），可直接进入 Decision Workspace 完成终审。</p>
+            <p className="mt-1 text-xs text-slate-500">终审稿件（decision/decision_done）+ 已有 first decision 草稿的稿件，可直接进入 Decision Workspace。</p>
           </div>
           <table className="w-full table-fixed">
             <thead className="bg-slate-50/70">
