@@ -18,6 +18,8 @@ type DecisionEditorProps = {
   canSubmit: boolean
   canRecordFirst: boolean
   canSubmitFinal: boolean
+  canSubmitFinalNow: boolean
+  finalBlockingReasons: string[]
   isReadOnly: boolean
   onDirtyChange: (dirty: boolean) => void
   onSubmitted: (manuscriptStatus: string) => void
@@ -44,6 +46,8 @@ export function DecisionEditor({
   canSubmit,
   canRecordFirst,
   canSubmitFinal,
+  canSubmitFinalNow,
+  finalBlockingReasons,
   isReadOnly,
   onDirtyChange,
   onSubmitted,
@@ -170,8 +174,8 @@ export function DecisionEditor({
       toast.error('Only Editor-in-Chief/Admin can submit final decision')
       return
     }
-    if (isFinal && !canSubmit) {
-      toast.error('At least one submitted review report is required')
+    if (isFinal && !canSubmitFinalNow) {
+      toast.error(finalBlockingReasons[0] || 'Final decision is blocked by workflow requirements')
       return
     }
 
@@ -216,6 +220,16 @@ export function DecisionEditor({
         <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
           当前账号仅可记录 First Decision 草稿；Final Decision 需由 Editor-in-Chief/Admin 提交。
         </p>
+      ) : null}
+      {canSubmitFinal && !canSubmitFinalNow ? (
+        <div className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">
+          <div className="font-semibold">Final submission blocked</div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {finalBlockingReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       <div className="mt-4 space-y-4">
@@ -303,7 +317,7 @@ export function DecisionEditor({
           <button
             type="button"
             onClick={() => void submit(true)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmit}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmitFinalNow}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             {isSubmittingFinal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

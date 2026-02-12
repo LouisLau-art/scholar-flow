@@ -48,6 +48,9 @@ export type DecisionContext = {
     can_record_first?: boolean
     can_submit_final?: boolean
     can_submit: boolean
+    can_submit_final_now?: boolean
+    final_blocking_reasons?: string[]
+    has_submitted_author_revision?: boolean
     is_read_only: boolean
   }
 }

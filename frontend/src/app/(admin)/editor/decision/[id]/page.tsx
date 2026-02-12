@@ -99,6 +99,8 @@ export default function DecisionWorkspacePage() {
             canSubmit={Boolean(context.permissions?.can_submit)}
             canRecordFirst={Boolean(context.permissions?.can_record_first ?? true)}
             canSubmitFinal={Boolean(context.permissions?.can_submit_final)}
+            canSubmitFinalNow={Boolean(context.permissions?.can_submit_final_now)}
+            finalBlockingReasons={context.permissions?.final_blocking_reasons || []}
             isReadOnly={Boolean(context.permissions?.is_read_only)}
             onDirtyChange={setDirty}
             onSubmitted={(_status) => {

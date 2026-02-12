@@ -71,6 +71,31 @@ class _ClientStub:
         return self.query
 
 
+class _RevisionQueryStub:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self._rows)
+
+
+class _RevisionClientStub:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def table(self, _name: str):
+        return _RevisionQueryStub(self._rows)
+
+
 def test_get_manuscript_falls_back_when_assistant_editor_column_missing() -> None:
     svc = _svc()
     client = _ClientStub(
@@ -133,6 +158,17 @@ def test_get_decision_context_returns_role_based_permission_flags(
     assert permissions.get("can_record_first") is True
     assert permissions.get("can_submit_final") is False
     assert permissions.get("can_submit") is True
+
+
+def test_has_submitted_author_revision_scans_all_rows_not_only_latest() -> None:
+    svc = _svc()
+    svc.client = _RevisionClientStub(  # type: ignore[assignment]
+        rows=[
+            {"id": "rev-2", "status": "pending", "submitted_at": None},
+            {"id": "rev-1", "status": "submitted", "submitted_at": "2026-02-12T00:00:00+00:00"},
+        ]
+    )
+    assert svc._has_submitted_author_revision("ms-1") is True
 
 
 def test_internal_decision_access_pure_assistant_editor_skips_scope_check(

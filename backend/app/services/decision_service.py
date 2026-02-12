@@ -322,6 +322,33 @@ class DecisionService:
         )
         return "\n".join(parts)
 
+    def _has_submitted_author_revision(self, manuscript_id: str) -> bool:
+        """
+        判断是否存在“作者已提交修回”记录。
+
+        中文注释:
+        - 不能只看 limit 1 + submitted_at 排序，否则在 NULL 排序场景会误判；
+        - 这里扫描稿件全部 revisions，命中任意 submitted/submitted_at 即视为满足。
+        """
+        try:
+            rev = (
+                self.client.table("revisions")
+                .select("id,status,submitted_at,updated_at,created_at")
+                .eq("manuscript_id", manuscript_id)
+                .order("updated_at", desc=True)
+                .execute()
+            )
+            rev_rows = getattr(rev, "data", None) or []
+        except Exception:
+            return False
+
+        for row in rev_rows:
+            if str(row.get("status") or "").strip().lower() == "submitted":
+                return True
+            if row.get("submitted_at"):
+                return True
+        return False
+
     def _get_latest_letter(
         self, *, manuscript_id: str, editor_id: str, status: str | None = None
     ) -> dict[str, Any] | None:
@@ -589,6 +616,23 @@ class DecisionService:
         reports = self._list_submitted_reports(manuscript_id)
         can_record_first = can_perform_action(action="decision:record_first", roles=roles)
         can_submit_final = can_perform_action(action="decision:submit_final", roles=roles)
+        has_submitted_author_revision = self._has_submitted_author_revision(manuscript_id)
+        is_final_status_allowed = status in {
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.DECISION.value,
+            ManuscriptStatus.DECISION_DONE.value,
+        }
+
+        final_blocking_reasons: list[str] = []
+        if len(reports) == 0:
+            final_blocking_reasons.append("At least one submitted review report is required")
+        if not has_submitted_author_revision:
+            final_blocking_reasons.append("Final decision requires at least one submitted author revision")
+        if not is_final_status_allowed:
+            final_blocking_reasons.append(
+                "Final decision is only allowed in resubmitted/decision/decision_done stage"
+            )
+
         draft = self._get_latest_letter(
             manuscript_id=manuscript_id,
             editor_id=user_id,
@@ -635,6 +679,9 @@ class DecisionService:
                 "can_record_first": can_record_first,
                 "can_submit_final": can_submit_final,
                 "can_submit": len(reports) > 0,
+                "can_submit_final_now": can_submit_final and len(final_blocking_reasons) == 0,
+                "final_blocking_reasons": final_blocking_reasons,
+                "has_submitted_author_revision": has_submitted_author_revision,
                 "is_read_only": False,
             },
         }
@@ -672,19 +719,6 @@ class DecisionService:
                 status_code=422, detail="At least one submitted review report is required"
             )
 
-        existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
-        row = self._save_letter(
-            existing=existing,
-            manuscript_id=manuscript_id,
-            manuscript_version=int(manuscript.get("version") or 1),
-            editor_id=user_id,
-            content=content,
-            decision=decision,
-            status="final" if request.is_final else "draft",
-            attachment_paths=list(request.attachment_paths or []),
-            last_updated_at=request.last_updated_at,
-        )
-
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
         if request.is_final:
             if current_status not in {
@@ -699,31 +733,25 @@ class DecisionService:
                         "(status must be resubmitted/decision/decision_done)"
                     ),
                 )
-            try:
-                rev = (
-                    self.client.table("revisions")
-                    .select("id,status,submitted_at")
-                    .eq("manuscript_id", manuscript_id)
-                    .order("submitted_at", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-                rev_rows = getattr(rev, "data", None) or []
-                latest = rev_rows[0] if rev_rows else None
-                has_submitted_revision = bool(
-                    latest
-                    and (
-                        str(latest.get("status") or "").strip().lower() == "submitted"
-                        or bool(latest.get("submitted_at"))
-                    )
-                )
-            except Exception:
-                has_submitted_revision = False
+            has_submitted_revision = self._has_submitted_author_revision(manuscript_id)
             if not has_submitted_revision:
                 raise HTTPException(
                     status_code=422,
                     detail="Final decision requires at least one submitted author revision",
                 )
+
+        existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
+        row = self._save_letter(
+            existing=existing,
+            manuscript_id=manuscript_id,
+            manuscript_version=int(manuscript.get("version") or 1),
+            editor_id=user_id,
+            content=content,
+            decision=decision,
+            status="final" if request.is_final else "draft",
+            attachment_paths=list(request.attachment_paths or []),
+            last_updated_at=request.last_updated_at,
+        )
         new_status = current_status
 
         if request.is_final:
