@@ -16,6 +16,8 @@ type DecisionEditorProps = {
   initialDraft?: DecisionDraft | null
   templateContent?: string
   canSubmit: boolean
+  canRecordFirst: boolean
+  canSubmitFinal: boolean
   isReadOnly: boolean
   onDirtyChange: (dirty: boolean) => void
   onSubmitted: (manuscriptStatus: string) => void
@@ -40,6 +42,8 @@ export function DecisionEditor({
   initialDraft,
   templateContent,
   canSubmit,
+  canRecordFirst,
+  canSubmitFinal,
   isReadOnly,
   onDirtyChange,
   onSubmitted,
@@ -154,8 +158,16 @@ export function DecisionEditor({
 
   const submit = async (isFinal: boolean) => {
     if (isReadOnly) return
+    if (!isFinal && !canRecordFirst) {
+      toast.error('Current role cannot save first decision draft')
+      return
+    }
     if (isFinal && !content.trim()) {
       toast.error('Final submission requires decision letter content')
+      return
+    }
+    if (isFinal && !canSubmitFinal) {
+      toast.error('Only Editor-in-Chief/Admin can submit final decision')
       return
     }
     if (isFinal && !canSubmit) {
@@ -200,6 +212,11 @@ export function DecisionEditor({
       <p className="mt-1 text-xs text-slate-500">
         Draft content and attachments remain private until <strong>Submit Final Decision</strong>.
       </p>
+      {!canSubmitFinal ? (
+        <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+          当前账号仅可记录 First Decision 草稿；Final Decision 需由 Editor-in-Chief/Admin 提交。
+        </p>
+      ) : null}
 
       <div className="mt-4 space-y-4">
         <div>
@@ -227,7 +244,7 @@ export function DecisionEditor({
             <button
               type="button"
               onClick={handleGenerateDraft}
-              disabled={isReadOnly || isSavingDraft || isSubmittingFinal}
+              disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canRecordFirst}
               className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-60"
             >
               <WandSparkles className="h-3.5 w-3.5" />
@@ -248,7 +265,7 @@ export function DecisionEditor({
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Attachments</label>
           <input
             type="file"
-            disabled={isReadOnly || isUploading}
+            disabled={isReadOnly || isUploading || !canRecordFirst}
             onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
             className="block w-full text-xs text-slate-600"
           />
@@ -277,7 +294,7 @@ export function DecisionEditor({
           <button
             type="button"
             onClick={() => void submit(false)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canRecordFirst}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
           >
             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -286,7 +303,7 @@ export function DecisionEditor({
           <button
             type="button"
             onClick={() => void submit(true)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmit}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             {isSubmittingFinal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

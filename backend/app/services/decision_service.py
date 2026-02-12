@@ -578,6 +578,8 @@ class DecisionService:
             raise HTTPException(status_code=400, detail=f"Decision workspace unavailable in status: {status}")
 
         reports = self._list_submitted_reports(manuscript_id)
+        can_record_first = can_perform_action(action="decision:record_first", roles=roles)
+        can_submit_final = can_perform_action(action="decision:submit_final", roles=roles)
         draft = self._get_latest_letter(
             manuscript_id=manuscript_id,
             editor_id=user_id,
@@ -621,6 +623,8 @@ class DecisionService:
                 {"id": "default", "name": "Default Decision Template", "content": template_content}
             ],
             "permissions": {
+                "can_record_first": can_record_first,
+                "can_submit_final": can_submit_final,
                 "can_submit": len(reports) > 0,
                 "is_read_only": False,
             },

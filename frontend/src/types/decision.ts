@@ -45,6 +45,8 @@ export type DecisionContext = {
   draft?: DecisionDraft | null
   templates: Array<{ id: string; name: string; content: string }>
   permissions?: {
+    can_record_first?: boolean
+    can_submit_final?: boolean
     can_submit: boolean
     is_read_only: boolean
   }

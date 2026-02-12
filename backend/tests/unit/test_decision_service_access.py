@@ -94,3 +94,42 @@ def test_get_manuscript_falls_back_when_assistant_editor_column_missing() -> Non
     assert row["version"] == 1
     assert row["assistant_editor_id"] is None
     assert len(client.query.select_calls) == 2
+
+
+def test_get_decision_context_returns_role_based_permission_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "title": "Demo",
+            "abstract": "A",
+            "status": "under_review",
+            "file_path": "manuscripts/demo.pdf",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "editor-1",
+            "assistant_editor_id": "ae-1",
+            "updated_at": "2026-02-12T00:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1"}])
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
+    monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
+
+    context = svc.get_decision_context(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+    )
+
+    permissions = context.get("permissions") or {}
+    assert permissions.get("can_record_first") is True
+    assert permissions.get("can_submit_final") is False
+    assert permissions.get("can_submit") is True
