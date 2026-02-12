@@ -69,35 +69,42 @@ class DecisionService:
         return {str(r).strip().lower() for r in (profile_roles or []) if str(r).strip()}
 
     def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
-        try:
+        select_candidates = [
+            # 首选：完整字段（含 version + assistant_editor_id）
+            "id,title,abstract,status,file_path,version,author_id,editor_id,assistant_editor_id,updated_at",
+            # 兼容：旧 schema 缺少 version
+            "id,title,abstract,status,file_path,author_id,editor_id,assistant_editor_id,updated_at",
+            # 兼容：更旧 schema 缺少 version + assistant_editor_id
+            "id,title,abstract,status,file_path,author_id,editor_id,updated_at",
+        ]
+        resp = None
+        last_error: Exception | None = None
+        for select_fields in select_candidates:
             try:
                 resp = (
                     self.client.table("manuscripts")
-                    .select("id,title,abstract,status,file_path,version,author_id,editor_id,updated_at")
+                    .select(select_fields)
                     .eq("id", manuscript_id)
                     .single()
                     .execute()
                 )
-            except Exception as first_err:
-                text = str(first_err).lower()
-                if "column" in text and "version" in text:
-                    # 兼容云端 schema 落后场景
-                    resp = (
-                        self.client.table("manuscripts")
-                        .select("id,title,abstract,status,file_path,author_id,editor_id,updated_at")
-                        .eq("id", manuscript_id)
-                        .single()
-                        .execute()
-                    )
-                else:
+                last_error = None
+                break
+            except Exception as err:
+                last_error = err
+                # 只有列缺失才尝试下一档 schema；其他错误直接抛出。
+                if "column" not in str(err).lower():
                     raise
-        except Exception as e:
-            raise HTTPException(status_code=404, detail="Manuscript not found") from e
+                continue
+
+        if last_error is not None:
+            raise HTTPException(status_code=404, detail="Manuscript not found") from last_error
         row = getattr(resp, "data", None) or None
         if not row:
             raise HTTPException(status_code=404, detail="Manuscript not found")
         if row.get("version") is None:
             row["version"] = 1
+        row.setdefault("assistant_editor_id", None)
         return row
 
     def _ensure_editor_access(
