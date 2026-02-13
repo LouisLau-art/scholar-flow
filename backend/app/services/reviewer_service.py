@@ -688,6 +688,50 @@ class ReviewerWorkspaceService:
             raise PermissionError("Assignment does not belong to current reviewer")
         return assignment
 
+    def _ensure_invitation_accepted(
+        self,
+        *,
+        assignment_id: UUID,
+        assignment: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        中文注释:
+        - UAT/外部 reviewer 场景下，流程应尽量“点开就能开始 review”，避免被卡在 accept 页；
+        - 云端 schema 可能缺 invited_at/opened_at/accepted_at 等字段，更新失败时做多档降级；
+        - 即便降级更新失败，也尽量在内存里标记为 accepted 让 workspace 可用，
+          避免 reviewer 端因表字段漂移/轻微写入失败被 403 阻断。
+        """
+        state = ReviewerInviteService()._derive_invite_state(assignment)
+        if state != "invited":
+            return assignment
+
+        now_iso = _utc_now_iso()
+        # 1) 最完整写入：pending + accepted_at + opened_at
+        try:
+            supabase_admin.table("review_assignments").update(
+                {"status": "pending", "accepted_at": now_iso, "opened_at": now_iso}
+            ).eq("id", str(assignment_id)).execute()
+            assignment["status"] = "pending"
+            assignment["accepted_at"] = now_iso
+            assignment["opened_at"] = assignment.get("opened_at") or now_iso
+            return assignment
+        except Exception:
+            pass
+
+        # 2) 降级：仅写 status=accepted（兼容缺失时间戳列的环境）
+        try:
+            supabase_admin.table("review_assignments").update({"status": "accepted"}).eq(
+                "id", str(assignment_id)
+            ).execute()
+        except Exception:
+            # 3) 最后兜底：允许继续（token scope 已保证 assignment/reviewer 绑定）
+            pass
+
+        assignment["status"] = "accepted"
+        assignment["accepted_at"] = assignment.get("accepted_at") or now_iso
+        assignment["opened_at"] = assignment.get("opened_at") or now_iso
+        return assignment
+
     def _extract_signed_url(self, signed: Any) -> str | None:
         if isinstance(signed, dict):
             value = signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")
@@ -920,29 +964,8 @@ class ReviewerWorkspaceService:
 
     def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        assignment = self._ensure_invitation_accepted(assignment_id=assignment_id, assignment=assignment)
         state = ReviewerInviteService()._derive_invite_state(assignment)
-        if state == "invited":
-            # 中文注释:
-            # - UAT/内测阶段允许“打开 workspace 即视为接受邀请”，避免 reviewer 被强制卡在 accept 页面。
-            # - 兼容云端 schema 漂移：accepted_at/opened_at 可能缺失，缺失时退化为 status=accepted。
-            now_iso = _utc_now_iso()
-            try:
-                supabase_admin.table("review_assignments").update(
-                    {"status": "pending", "accepted_at": now_iso, "opened_at": now_iso}
-                ).eq("id", str(assignment_id)).execute()
-                assignment["status"] = "pending"
-                assignment["accepted_at"] = now_iso
-                assignment["opened_at"] = assignment.get("opened_at") or now_iso
-            except Exception as e:
-                if _is_missing_column_error(e):
-                    try:
-                        supabase_admin.table("review_assignments").update({"status": "accepted"}).eq(
-                            "id", str(assignment_id)
-                        ).execute()
-                        assignment["status"] = "accepted"
-                    except Exception:
-                        pass
-            state = ReviewerInviteService()._derive_invite_state(assignment)
         if state == "declined":
             raise PermissionError("Invitation has been declined")
         if state == "invited":
@@ -1059,6 +1082,7 @@ class ReviewerWorkspaceService:
         payload: ReviewSubmission,
     ) -> Dict[str, Any]:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        assignment = self._ensure_invitation_accepted(assignment_id=assignment_id, assignment=assignment)
         state = ReviewerInviteService()._derive_invite_state(assignment)
         if state == "submitted":
             raise ValueError("Review already submitted")

@@ -8,6 +8,9 @@ import { toast } from 'sonner'
 import { ManuscriptApi } from '@/services/manuscriptApi'
 import { ProofreadingForm } from '@/components/author/proofreading/ProofreadingForm'
 import type { ProofreadingContext } from '@/types/production'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 export default function ProofreadingPage() {
   const params = useParams()
@@ -16,16 +19,31 @@ export default function ProofreadingPage() {
   const [loading, setLoading] = useState(true)
   const [context, setContext] = useState<ProofreadingContext | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [noTaskMessage, setNoTaskMessage] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
     try {
       const res = await ManuscriptApi.getProofreadingContext(manuscriptId)
       if (!res?.success || !res?.data) {
-        throw new Error(res?.detail || res?.message || 'Failed to load proofreading context')
+        const msg = String(res?.detail || res?.message || '').trim()
+        const lowered = msg.toLowerCase()
+        if (
+          lowered.includes('no proofreading task') ||
+          lowered.includes('no active proofreading task') ||
+          lowered.includes('not found')
+        ) {
+          // 中文注释: 作者可能已提交校对反馈或该稿件尚未进入校对阶段，此时不应作为“报错”处理。
+          setContext(null)
+          setPdfUrl(null)
+          setNoTaskMessage(msg || '当前没有可操作的校对任务。')
+          return
+        }
+        throw new Error(msg || 'Failed to load proofreading context')
       }
       const next = res.data as ProofreadingContext
       setContext(next)
+      setNoTaskMessage(null)
 
       if (next.cycle?.galley_signed_url) {
         setPdfUrl(next.cycle.galley_signed_url)
@@ -41,6 +59,7 @@ export default function ProofreadingPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to load proofreading context')
       setContext(null)
       setPdfUrl(null)
+      setNoTaskMessage(null)
     } finally {
       setLoading(false)
     }
@@ -64,8 +83,22 @@ export default function ProofreadingPage() {
 
   if (!context) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-sm text-slate-600">
-        No active proofreading task for this manuscript.
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
+        <Card className="w-full max-w-xl">
+          <CardHeader>
+            <CardTitle className="text-base">作者校对</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-slate-600">
+            <p>{noTaskMessage || '当前没有可操作的校对任务。'}</p>
+            <p className="text-xs text-slate-500">
+              如果你刚提交完校对反馈：说明本轮校对已结束或已进入编辑处理阶段，请返回 Dashboard 查看最新状态。
+            </p>
+            <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
+              <ArrowLeft className="h-4 w-4" />
+              返回 Dashboard
+            </Link>
+          </CardContent>
+        </Card>
       </main>
     )
   }
