@@ -156,29 +156,37 @@ class ProductionWorkspaceService:
         if ADMIN_ROLE in roles:
             return
 
-        # Managing Editor / Editor-in-Chief: 以 journal_role_scopes 为准（强隔离）。
         # 中文注释:
-        # - 避免依赖 manuscripts.editor_id 是否回填导致的 403；
-        # - scope 为空时应该直接 403（按约定 ME/EIC 必须绑定期刊）。
+        # - 一个用户可能同时拥有多个角色（例如 assistant_editor + managing_editor）。
+        # - 访问控制应按“任一角色满足即可放行”，避免因为缺少 journal scope 把已被分配的 AE 挡掉。
+        allowed = False
+
+        # Managing Editor / Editor-in-Chief: 以 journal_role_scopes 为准（强隔离）。
         if roles.intersection({"managing_editor", "editor_in_chief"}):
-            ensure_manuscript_scope_access(
-                manuscript_id=str(manuscript.get("id") or ""),
-                user_id=str(user_id),
-                roles=list(roles),
-                allow_admin_bypass=True,
-            )
-            return
+            try:
+                ensure_manuscript_scope_access(
+                    manuscript_id=str(manuscript.get("id") or ""),
+                    user_id=str(user_id),
+                    roles=list(roles),
+                    allow_admin_bypass=True,
+                )
+                allowed = True
+            except HTTPException:
+                # 不直接 raise，允许后续以“被分配角色”兜底放行（例如 assistant_editor_id 命中）。
+                pass
 
-        allowed = set()
-        if "assistant_editor" in roles:
-            allowed.add(str(manuscript.get("assistant_editor_id") or "").strip())
+        # Assistant Editor: 仅允许访问“分配给自己”的稿件。
+        if not allowed and "assistant_editor" in roles:
+            if str(user_id).strip() and str(manuscript.get("assistant_editor_id") or "").strip() == str(user_id).strip():
+                allowed = True
+
         # Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
-        if "production_editor" in roles and cycle is not None:
+        if not allowed and "production_editor" in roles and cycle is not None:
             layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
-            if layout_editor_id:
-                allowed.add(layout_editor_id)
+            if layout_editor_id and layout_editor_id == str(user_id).strip():
+                allowed = True
 
-        if str(user_id) in {a for a in allowed if a}:
+        if allowed:
             return
         raise HTTPException(status_code=403, detail="Forbidden")
 

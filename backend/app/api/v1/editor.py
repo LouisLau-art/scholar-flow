@@ -2100,12 +2100,6 @@ async def get_decision_workspace_context(
     can_submit_final = can_perform_action(action="decision:submit_final", roles=decision_roles)
     if not (can_record_first or can_submit_final):
         _require_action_or_403(action="decision:record_first", roles=decision_roles)
-    ensure_manuscript_scope_access(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        roles=decision_roles,
-        allow_admin_bypass=True,
-    )
 
     data = DecisionService().get_decision_context(
         manuscript_id=id,
@@ -2133,12 +2127,6 @@ async def submit_decision_workspace(
         can_submit_final = can_perform_action(action="decision:submit_final", roles=decision_roles)
         if not (can_record_first or can_submit_final):
             _require_action_or_403(action="decision:record_first", roles=decision_roles)
-    ensure_manuscript_scope_access(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        roles=decision_roles,
-        allow_admin_bypass=True,
-    )
 
     data = DecisionService().submit_decision(
         manuscript_id=id,
@@ -2160,12 +2148,6 @@ async def upload_decision_attachment(
     Feature 041: 决策信附件上传（编辑态）。
     """
     _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
-    ensure_manuscript_scope_access(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
-        allow_admin_bypass=True,
-    )
 
     raw = await file.read()
     data = DecisionService().upload_attachment(
@@ -2190,12 +2172,6 @@ async def get_decision_attachment_signed_url_editor(
     Feature 041: 编辑端获取决策附件 signed URL。
     """
     _require_action_or_403(action="decision:record_first", roles=profile.get("roles") or [])
-    ensure_manuscript_scope_access(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
-        allow_admin_bypass=True,
-    )
 
     signed_url = DecisionService().get_attachment_signed_url_for_editor(
         manuscript_id=id,

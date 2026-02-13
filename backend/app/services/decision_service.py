@@ -172,9 +172,14 @@ class DecisionService:
         # 中文注释:
         # - assistant_editor 采用“已分配稿件可访问”策略，不强制绑定 journal scope；
         # - managing_editor/editor_in_chief/admin 继续走 journal scope 强约束。
-        if "assistant_editor" in roles and not roles.intersection(
-            {"admin", "managing_editor", "editor_in_chief"}
-        ):
+        # 注意：用户可能同时拥有多个角色（例如 assistant_editor + managing_editor）。
+        # 对于“记录 First Decision 草稿/附件”等非最终决策动作，只要其作为 AE 被分配到该稿件，
+        # 就应该放行，以避免因缺少 journal scope 导致 AE 工作台/决策工作台被错误阻断。
+        assigned_ae_id = str(manuscript.get("assistant_editor_id") or "").strip()
+        if action != "decision:submit_final" and assigned_ae_id and assigned_ae_id == str(user_id).strip():
+            return
+
+        if "assistant_editor" in roles and not roles.intersection({"admin", "managing_editor", "editor_in_chief"}):
             return
 
         ensure_manuscript_scope_access(
