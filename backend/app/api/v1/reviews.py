@@ -969,7 +969,7 @@ async def submit_review_via_magic_link(
     except Exception as e:
         print(f"[Reviews] update assignment failed (ignored): {e}")
 
-    # 3) 若全部评审完成，推动稿件进入待终审状态（沿用既有逻辑）
+    # 3) 若全部评审完成，推动稿件进入 decision（避免 legacy pending_decision 导致前端/队列卡死）
     try:
         pending = (
             supabase_admin.table("review_assignments")
@@ -979,9 +979,18 @@ async def submit_review_via_magic_link(
             .execute()
         )
         if not (getattr(pending, "data", None) or []):
-            supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq(
-                "id", str(payload.manuscript_id)
-            ).execute()
+            ms_row = (
+                supabase_admin.table("manuscripts")
+                .select("status")
+                .eq("id", str(payload.manuscript_id))
+                .single()
+                .execute()
+            ).data or {}
+            current_raw = str(ms_row.get("status") or "").strip().lower()
+            if current_raw in {"under_review", "resubmitted", "pending_decision"}:
+                supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
+                    "id", str(payload.manuscript_id)
+                ).execute()
     except Exception:
         pass
 

@@ -1111,7 +1111,7 @@ class ReviewerWorkspaceService:
 
         supabase_admin.table("review_assignments").update({"status": "completed"}).eq("id", str(assignment_id)).execute()
 
-        # 当该稿件所有 assignment 都 completed 时，推进到 pending_decision
+        # 当该稿件所有 assignment 都 completed 时，推进到 decision
         pending = (
             supabase_admin.table("review_assignments")
             .select("id")
@@ -1120,6 +1120,20 @@ class ReviewerWorkspaceService:
             .execute()
         )
         if not (getattr(pending, "data", None) or []):
-            supabase_admin.table("manuscripts").update({"status": "pending_decision"}).eq("id", manuscript_id).execute()
+            try:
+                ms_row = (
+                    supabase_admin.table("manuscripts")
+                    .select("status")
+                    .eq("id", manuscript_id)
+                    .single()
+                    .execute()
+                ).data or {}
+                current_raw = str(ms_row.get("status") or "").strip().lower()
+                # 兼容：历史环境可能仍存在 pending_decision 文本状态。
+                if current_raw in {"under_review", "resubmitted", "pending_decision"}:
+                    supabase_admin.table("manuscripts").update({"status": "decision"}).eq("id", manuscript_id).execute()
+            except Exception as e:
+                # 中文注释：审稿提交优先，不应因“推进 decision 失败”导致 reviewer 端 500。
+                print(f"[ReviewerSubmit] advance manuscript to decision failed (ignored): {e}")
 
         return {"success": True, "status": "completed"}

@@ -595,6 +595,11 @@ async def get_editor_manuscript_detail(
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
+    # 兼容：历史状态（submitted/pending_decision 等）在读路径统一归一化，避免前端工作台/动作门禁卡死。
+    normalized_status = normalize_status(str(ms.get("status") or ""))
+    if normalized_status:
+        ms["status"] = normalized_status
+
     # RBAC / Journal Scope:
     # - admin: always allow
     # - assistant_editor: allow if assigned to this manuscript (even if user also has managing_editor role but missing scope)

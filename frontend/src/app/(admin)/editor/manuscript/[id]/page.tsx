@@ -27,6 +27,7 @@ import {
   buildAuthorResponseHistory,
   buildFileHubProps,
   getNextActionCard,
+  normalizeWorkflowStatus,
   type ManuscriptDetail,
 } from './helpers'
 
@@ -216,7 +217,7 @@ export default function EditorManuscriptDetailPage() {
 
   // --- Derived State ---
   const status = String(ms?.status || '')
-  const statusLower = status.toLowerCase()
+  const statusLower = normalizeWorkflowStatus(status)
   const isPrecheckActive = statusLower === 'pre_check'
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])

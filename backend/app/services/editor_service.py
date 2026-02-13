@@ -1368,6 +1368,7 @@ class EditorService:
         ]
 
         rows: list[dict[str, Any]] = []
+        select_used: str | None = None
         last_error: Exception | None = None
         for select_clause in selects:
             try:
@@ -1382,6 +1383,7 @@ class EditorService:
                 )
                 resp = q.execute()
                 rows = getattr(resp, "data", None) or []
+                select_used = select_clause
                 break
             except Exception as e:
                 last_error = e
@@ -1394,11 +1396,52 @@ class EditorService:
             if "schema cache" in lowered or "could not find" in lowered:
                 raise last_error
 
+        # 兼容：历史环境可能仍存在 manuscripts.status='pending_decision'（TEXT）。
+        # 注意：若 status 已迁移为 ENUM，则该过滤会触发 “invalid input value for enum”，因此必须忽略错误。
+        legacy_rows: list[dict[str, Any]] = []
+        if select_used:
+            try:
+                legacy_resp = (
+                    self.client.table("manuscripts")
+                    .select(select_used)
+                    .eq("assistant_editor_id", str(ae_id))
+                    .eq("status", "pending_decision")
+                    .order("updated_at", desc=True)
+                    .order("created_at", desc=True)
+                    .range((page - 1) * page_size, page * page_size - 1)
+                    .execute()
+                )
+                legacy_rows = getattr(legacy_resp, "data", None) or []
+            except Exception as e:
+                msg = str(e).lower()
+                if "invalid input value" not in msg and "enum" not in msg and "pending_decision" not in msg:
+                    print(f"[AEWorkspace] legacy pending_decision query failed (ignored): {e}")
+                legacy_rows = []
+
+        if legacy_rows:
+            merged: dict[str, dict[str, Any]] = {}
+            for r in rows + legacy_rows:
+                mid = str(r.get("id") or "").strip()
+                if not mid:
+                    continue
+                merged[mid] = r
+            rows = list(merged.values())
+            rows.sort(
+                key=lambda r: (
+                    str(r.get("updated_at") or ""),
+                    str(r.get("created_at") or ""),
+                ),
+                reverse=True,
+            )
+            rows = rows[:page_size]
+
         raw_enriched = self._enrich_precheck_rows(rows)
         out: list[dict[str, Any]] = []
         for row in raw_enriched:
             normalized_status = normalize_status(str(row.get("status") or ""))
             normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))
+            if normalized_status:
+                row["status"] = normalized_status
             if normalized_status == ManuscriptStatus.PRE_CHECK.value and normalized_precheck not in {
                 PreCheckStatus.TECHNICAL.value,
                 PreCheckStatus.ACADEMIC.value,

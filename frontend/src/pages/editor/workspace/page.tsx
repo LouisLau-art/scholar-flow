@@ -95,7 +95,7 @@ function deriveBucket(m: Manuscript): WorkspaceBucket {
   if (status === 'pre_check' && pre === 'academic') return 'academic_pending'
   if (status === 'under_review') return 'under_review'
   if (status === 'resubmitted' || status === 'major_revision' || status === 'minor_revision') return 'revision_followup'
-  if (status === 'decision') return 'decision'
+  if (status === 'decision' || status === 'pending_decision') return 'decision'
   return 'other'
 }
 

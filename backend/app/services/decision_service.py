@@ -698,7 +698,8 @@ class DecisionService:
                 "id": manuscript.get("id"),
                 "title": manuscript.get("title"),
                 "abstract": manuscript.get("abstract"),
-                "status": manuscript.get("status"),
+                # 兼容：隐藏 legacy pending_decision 等历史状态，统一返回归一化后的 status。
+                "status": status or manuscript.get("status"),
                 "version": manuscript.get("version") or 1,
                 "pdf_url": self._signed_url("manuscripts", str(manuscript.get("file_path") or "")),
             },

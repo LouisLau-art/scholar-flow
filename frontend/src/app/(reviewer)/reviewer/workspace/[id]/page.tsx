@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -235,10 +234,8 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
             <CardContent className="space-y-2 text-sm text-slate-600">
               <p>You can view only this assignment and its communication records.</p>
               <p>Author identity and other reviewers’ data are hidden by policy.</p>
-              <div className="pt-2">
-                <Link href="/review/invite" className="text-blue-600 hover:text-blue-500">
-                  Back to invite page
-                </Link>
+              <div className="pt-2 text-xs text-slate-500">
+                If you need to revisit the invitation, please use the original email link.
               </div>
             </CardContent>
           </Card>

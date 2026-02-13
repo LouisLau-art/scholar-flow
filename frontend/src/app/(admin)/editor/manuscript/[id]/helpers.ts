@@ -85,8 +85,20 @@ export function normalizeResponseLetterText(raw: unknown): string {
     .trim()
 }
 
+export function normalizeWorkflowStatus(raw: unknown): string {
+  const s = String(raw || '').toLowerCase().trim()
+  const legacyMap: Record<string, string> = {
+    submitted: 'pre_check',
+    pending_quality: 'pre_check',
+    pending_decision: 'decision',
+    revision_requested: 'minor_revision',
+    returned_for_revision: 'minor_revision',
+  }
+  return legacyMap[s] || s
+}
+
 export function allowedNext(status: string): string[] {
-  const s = (status || '').toLowerCase()
+  const s = normalizeWorkflowStatus(status)
   if (s === 'pre_check') return ['under_review', 'minor_revision']
   if (s === 'under_review') return ['decision']
   if (s === 'resubmitted') return ['under_review', 'decision']
@@ -99,7 +111,7 @@ export function getNextActionCard(
   manuscript: ManuscriptDetail,
   capability: EditorCapability
 ): { phase: string; title: string; description: string; blockers: string[] } {
-  const status = String(manuscript.status || '').toLowerCase()
+  const status = normalizeWorkflowStatus(manuscript.status)
   const blockers: string[] = []
   const amount = Number(manuscript.invoice?.amount ?? manuscript.invoice_metadata?.apc_amount ?? 0)
   const invoiceStatus = String(manuscript.invoice?.status || '').toLowerCase()
