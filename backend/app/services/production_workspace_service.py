@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -151,43 +151,58 @@ class ProductionWorkspaceService:
         user_id: str,
         roles: set[str],
         cycle: dict[str, Any] | None = None,
+        purpose: Literal["read", "write"] = "read",
     ) -> None:
         # Admin 永远放行；其余角色按“期刊 scope / 分配”组合判定。
         if ADMIN_ROLE in roles:
             return
 
+        uid = str(user_id or "").strip()
+        manuscript_id = str(manuscript.get("id") or "").strip()
+
         # 中文注释:
         # - 一个用户可能同时拥有多个角色（例如 assistant_editor + managing_editor）。
         # - 访问控制应按“任一角色满足即可放行”，避免因为缺少 journal scope 把已被分配的 AE 挡掉。
-        allowed = False
+        # - 但“写操作”必须严格按角色语义执行，避免 ME/EIC 缺 scope 时被 AE 分配兜底放行造成越权。
 
-        # Managing Editor / Editor-in-Chief: 以 journal_role_scopes 为准（强隔离）。
-        if roles.intersection({"managing_editor", "editor_in_chief"}):
-            try:
+        # 1) Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
+        #    说明：write/read 都允许，但必须基于 cycle 的真实分配关系。
+        if "production_editor" in roles and cycle is not None:
+            layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
+            if layout_editor_id and layout_editor_id == uid:
+                return
+
+        # 2) 写操作：ME/EIC 必须通过 journal scope；其余角色一律不允许写入 production。
+        if purpose == "write":
+            if roles.intersection({"managing_editor", "editor_in_chief"}):
                 ensure_manuscript_scope_access(
-                    manuscript_id=str(manuscript.get("id") or ""),
-                    user_id=str(user_id),
+                    manuscript_id=manuscript_id,
+                    user_id=uid,
                     roles=list(roles),
                     allow_admin_bypass=True,
                 )
-                allowed = True
+                return
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        # 3) 读操作：ME/EIC 尝试按 journal scope 放行；失败时允许 AE 以“分配稿件”兜底读取。
+        if roles.intersection({"managing_editor", "editor_in_chief"}):
+            try:
+                ensure_manuscript_scope_access(
+                    manuscript_id=manuscript_id,
+                    user_id=uid,
+                    roles=list(roles),
+                    allow_admin_bypass=True,
+                )
+                return
             except HTTPException:
-                # 不直接 raise，允许后续以“被分配角色”兜底放行（例如 assistant_editor_id 命中）。
                 pass
 
-        # Assistant Editor: 仅允许访问“分配给自己”的稿件。
-        if not allowed and "assistant_editor" in roles:
-            if str(user_id).strip() and str(manuscript.get("assistant_editor_id") or "").strip() == str(user_id).strip():
-                allowed = True
+        # 4) Assistant Editor: 仅允许访问“分配给自己”的稿件（读）。
+        if "assistant_editor" in roles:
+            assigned_ae = str(manuscript.get("assistant_editor_id") or "").strip()
+            if assigned_ae and assigned_ae == uid:
+                return
 
-        # Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
-        if not allowed and "production_editor" in roles and cycle is not None:
-            layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
-            if layout_editor_id and layout_editor_id == str(user_id).strip():
-                allowed = True
-
-        if allowed:
-            return
         raise HTTPException(status_code=403, detail="Forbidden")
 
     def _ensure_author_or_internal_access(
@@ -414,7 +429,9 @@ class ProductionWorkspaceService:
         roles = self._roles(profile_roles)
         cycles = self._get_cycles(manuscript_id)
         active = next((c for c in cycles if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=active)
+        self._ensure_editor_access(
+            manuscript=manuscript, user_id=user_id, roles=roles, cycle=active, purpose="read"
+        )
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
         can_manage_production = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"})) or bool(
@@ -463,7 +480,7 @@ class ProductionWorkspaceService:
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, purpose="write")
 
         status = normalize_status(str(manuscript.get("status") or "")) or ""
         if status not in POST_ACCEPTANCE_ALLOWED:
@@ -649,7 +666,9 @@ class ProductionWorkspaceService:
             raise HTTPException(status_code=422, detail="version_note is required")
 
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
+        self._ensure_editor_access(
+            manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle, purpose="write"
+        )
         old_status = str(cycle.get("status") or "")
         if old_status not in {"draft", "in_layout_revision", "author_corrections_submitted"}:
             raise HTTPException(status_code=409, detail=f"Cannot upload galley in cycle status '{old_status}'")
@@ -740,7 +759,9 @@ class ProductionWorkspaceService:
 
         is_internal = roles.intersection({"admin", "managing_editor", "editor_in_chief", "production_editor"})
         if is_internal:
-            self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
+            self._ensure_editor_access(
+                manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle, purpose="read"
+            )
         else:
             self._ensure_author_or_internal_access(
                 manuscript=manuscript,
@@ -990,7 +1011,9 @@ class ProductionWorkspaceService:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
-        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle)
+        self._ensure_editor_access(
+            manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle, purpose="write"
+        )
         if str(cycle.get("status") or "") != "author_confirmed":
             raise HTTPException(
                 status_code=422,
