@@ -5,9 +5,10 @@ import SiteHeader from '@/components/layout/SiteHeader'
 import { authService } from '@/services/auth'
 import { Loader2, FileText, ArrowLeft, Download, Clock3, Shield } from 'lucide-react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 type TimelineAttachment =
   | { type: 'review_attachment'; label: string; download_url: string }
@@ -42,6 +43,14 @@ type AuthorContextPayload = {
       signed_url: string | null
     }>
   }
+  proofreading_task?: {
+    cycle_id?: string
+    cycle_no?: number
+    status?: string
+    proof_due_at?: string | null
+    action_required?: boolean
+    url?: string
+  } | null
   timeline: TimelineEvent[]
 }
 
@@ -147,6 +156,14 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
                   </div>
 
                   <div className="flex flex-wrap gap-3">
+                    {ctx.proofreading_task?.action_required ? (
+                      <Link
+                        href={ctx.proofreading_task.url || `/proofreading/${ctx.manuscript.id}`}
+                        className={cn(buttonVariants({ variant: 'default', size: 'sm' }))}
+                      >
+                        开始校对 Proof
+                      </Link>
+                    ) : null}
                     {ctx.files.current_pdf_signed_url ? (
                       <Button
                         variant="outline"

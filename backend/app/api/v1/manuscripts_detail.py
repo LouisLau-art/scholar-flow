@@ -250,6 +250,49 @@ def _load_cover_letter_files(manuscript_id: str) -> list[dict]:
         return []
 
 
+def _load_latest_author_proofreading_task(manuscript_id: str, author_id: str) -> dict | None:
+    """
+    Feature 042: 作者侧校对任务入口（awaiting_author / 提交后回看）。
+
+    中文注释:
+    - 这里不做签名 URL（作者真正进入 /proofreading/{id} 页面再取 context）。
+    - 若云端缺表/未迁移，保守返回 None，避免阻塞作者侧时间线。
+    """
+    try:
+        resp = (
+            _m()
+            .supabase_admin.table("production_cycles")
+            .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at")
+            .eq("manuscript_id", manuscript_id)
+            .eq("proofreader_author_id", author_id)
+            .in_("status", ["awaiting_author", "author_confirmed", "author_corrections_submitted"])
+            .order("cycle_no", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            return None
+        row = rows[0]
+        status = str(row.get("status") or "").strip()
+        return {
+            "cycle_id": row.get("id"),
+            "cycle_no": row.get("cycle_no"),
+            "status": status,
+            "proof_due_at": row.get("proof_due_at"),
+            "action_required": status == "awaiting_author",
+            "url": f"/proofreading/{manuscript_id}",
+        }
+    except Exception as e:
+        lowered = str(e).lower()
+        if "production_cycles" in lowered and (
+            "does not exist" in lowered or "schema cache" in lowered or "pgrst205" in lowered
+        ):
+            return None
+        return None
+
+
 @router.get("/manuscripts/{manuscript_id}/author-context")
 async def get_manuscript_author_context(
     manuscript_id: UUID,
@@ -494,6 +537,7 @@ async def get_manuscript_author_context(
         )
 
     current_pdf_url = _sign_storage_url(bucket="manuscripts", path=str(ms.get("file_path") or ""), expires_in_sec=60 * 10)
+    proofreading_task = _load_latest_author_proofreading_task(manuscript_id_str, author_id=user_id)
 
     return {
         "success": True,
@@ -510,6 +554,7 @@ async def get_manuscript_author_context(
                 "current_pdf_signed_url": current_pdf_url,
                 "cover_letters": cover_letter_items,
             },
+            "proofreading_task": proofreading_task,
             "timeline": events,
         },
     }

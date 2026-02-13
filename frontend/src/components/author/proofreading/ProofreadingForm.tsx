@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ManuscriptApi } from '@/services/manuscriptApi'
@@ -32,6 +32,38 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
   const [submitting, setSubmitting] = useState(false)
 
   const isReadOnly = !context.can_submit || context.is_read_only
+  const latest = context?.cycle?.latest_response || null
+
+  // 中文注释: 若该轮次已经提交过校对反馈，表单需要回显并只读。
+  // 否则作者会误以为“提交失败/内容丢失”，无法形成可追溯证据链。
+  useEffect(() => {
+    if (!context?.cycle?.id) return
+
+    if (!latest?.id) {
+      setDecision('confirm_clean')
+      setSummary('')
+      setItems([{ ...EMPTY_ITEM }])
+      return
+    }
+
+    setDecision(latest.decision)
+    setSummary(String(latest.summary || ''))
+
+    if (latest.decision === 'submit_corrections') {
+      const normalized = (latest.corrections || []).map((row) => ({
+        id: row.id,
+        line_ref: row.line_ref || '',
+        original_text: row.original_text || '',
+        suggested_text: String(row.suggested_text || ''),
+        reason: row.reason || '',
+        sort_order: row.sort_order,
+      }))
+      setItems(normalized.length > 0 ? normalized : [{ ...EMPTY_ITEM }])
+    } else {
+      setItems([{ ...EMPTY_ITEM }])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context?.cycle?.id, latest?.id])
 
   const canSubmit = useMemo(() => {
     return canSubmitProofreading(decision, items, isReadOnly)
@@ -91,6 +123,9 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
       <div>
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Proofreading Response</h2>
         <p className="mt-1 text-xs text-slate-500">请选择“确认无误”或“提交修正清单”。</p>
+        {latest?.submitted_at ? (
+          <p className="mt-2 text-xs text-slate-500">已提交于 {new Date(latest.submitted_at).toLocaleString()}</p>
+        ) : null}
       </div>
 
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3">

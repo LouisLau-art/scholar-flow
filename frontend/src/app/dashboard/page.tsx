@@ -10,7 +10,8 @@ import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 type DashboardTab =
   | 'author'
@@ -361,6 +362,14 @@ function DashboardPageContent() {
                                     className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                                   >
                                     Submit Revision
+                                  </Link>
+                                )}
+                                {item?.proofreading_task?.action_required && (
+                                  <Link
+                                    href={String(item?.proofreading_task?.url || `/proofreading/${item.id}`)}
+                                    className={cn(buttonVariants({ size: 'sm' }))}
+                                  >
+                                    Proofreading
                                   </Link>
                                 )}
                                 {item.status === 'approved' && (

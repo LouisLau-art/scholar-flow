@@ -771,7 +771,63 @@ async def get_my_manuscripts(current_user: dict = Depends(get_current_user)):
             .order("created_at", desc=True)
             .execute()
         )
-        return {"success": True, "data": response.data}
+        rows = response.data or []
+
+        # 中文注释: 生产校对（Proofreading）任务入口。
+        # - 作者端需要知道哪些稿件“正在等待作者校对”，否则只看到发票/稿件下载会造成流程断裂。
+        # - 为避免前端对每条稿件再发 N 次请求，这里做一次批量查询并把结果附在列表项上（向后兼容）。
+        proofreading_by_ms: dict[str, dict] = {}
+        try:
+            manuscript_ids = [str(r.get("id") or "").strip() for r in rows if r.get("id")]
+            manuscript_ids = [mid for mid in manuscript_ids if mid]
+            if manuscript_ids:
+                pc_resp = (
+                    supabase.table("production_cycles")
+                    .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at")
+                    .in_("manuscript_id", manuscript_ids)
+                    .eq("proofreader_author_id", str(current_user.get("id") or ""))
+                    .in_("status", ["awaiting_author", "author_confirmed", "author_corrections_submitted"])
+                    .order("cycle_no", desc=True)
+                    .order("updated_at", desc=True)
+                    .execute()
+                )
+                pc_rows = getattr(pc_resp, "data", None) or []
+                for row in pc_rows:
+                    mid = str(row.get("manuscript_id") or "").strip()
+                    if not mid:
+                        continue
+                    current = proofreading_by_ms.get(mid)
+                    if not current:
+                        proofreading_by_ms[mid] = row
+                        continue
+                    try:
+                        if int(row.get("cycle_no") or 0) > int(current.get("cycle_no") or 0):
+                            proofreading_by_ms[mid] = row
+                    except Exception:
+                        # 保守: 不因为脏数据影响列表
+                        pass
+        except Exception as e:
+            # 保守兜底：某些环境可能尚未迁移 production_cycles；作者列表不应被阻塞。
+            print(f"[AuthorMine] proofreading task probe failed (ignored): {e}")
+            proofreading_by_ms = {}
+
+        for r in rows:
+            mid = str(r.get("id") or "").strip()
+            task = proofreading_by_ms.get(mid)
+            if task:
+                status = str(task.get("status") or "").strip()
+                r["proofreading_task"] = {
+                    "cycle_id": task.get("id"),
+                    "cycle_no": task.get("cycle_no"),
+                    "status": status,
+                    "proof_due_at": task.get("proof_due_at"),
+                    "action_required": status == "awaiting_author",
+                    "url": f"/proofreading/{mid}",
+                }
+            else:
+                r["proofreading_task"] = None
+
+        return {"success": True, "data": rows}
     except Exception as e:
         print(f"作者稿件查询失败: {str(e)}")
         return {"success": False, "data": []}
