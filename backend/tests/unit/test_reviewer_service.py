@@ -277,7 +277,8 @@ def test_review_policy_marks_cooldown_conflict_and_overdue(monkeypatch: pytest.M
 
     assert policy["r-1"]["cooldown_active"] is True
     assert policy["r-1"]["overdue_risk"] is True
-    assert policy["r-1"]["can_assign"] is False
-    assert policy["r-1"]["allow_override"] is True
+    # 冷却期在 UAT/MVP 仅作为“提醒”而不是强制门禁：仍允许指派
+    assert policy["r-1"]["can_assign"] is True
+    assert policy["r-1"]["allow_override"] is False
     assert policy["author-1"]["conflict"] is True
     assert policy["author-1"]["can_assign"] is False
