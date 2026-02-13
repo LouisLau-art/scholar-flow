@@ -1121,17 +1121,18 @@ class ReviewerWorkspaceService:
         )
         if not (getattr(pending, "data", None) or []):
             try:
-                ms_row = (
-                    supabase_admin.table("manuscripts")
-                    .select("status")
-                    .eq("id", manuscript_id)
-                    .single()
-                    .execute()
-                ).data or {}
-                current_raw = str(ms_row.get("status") or "").strip().lower()
-                # 兼容：历史环境可能仍存在 pending_decision 文本状态。
-                if current_raw in {"under_review", "resubmitted", "pending_decision"}:
-                    supabase_admin.table("manuscripts").update({"status": "decision"}).eq("id", manuscript_id).execute()
+                # 首选：仅在 under_review/resubmitted/decision 时推进，避免把已进入 production 的稿件回滚。
+                supabase_admin.table("manuscripts").update({"status": "decision"}).eq("id", manuscript_id).in_(
+                    "status",
+                    ["under_review", "resubmitted", "decision"],
+                ).execute()
+                # 兼容：历史环境可能仍存在 pending_decision（TEXT）状态；enum 环境会报错，忽略即可。
+                try:
+                    supabase_admin.table("manuscripts").update({"status": "decision"}).eq("id", manuscript_id).eq(
+                        "status", "pending_decision"
+                    ).execute()
+                except Exception:
+                    pass
             except Exception as e:
                 # 中文注释：审稿提交优先，不应因“推进 decision 失败”导致 reviewer 端 500。
                 print(f"[ReviewerSubmit] advance manuscript to decision failed (ignored): {e}")

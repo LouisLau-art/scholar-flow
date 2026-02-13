@@ -979,18 +979,17 @@ async def submit_review_via_magic_link(
             .execute()
         )
         if not (getattr(pending, "data", None) or []):
-            ms_row = (
-                supabase_admin.table("manuscripts")
-                .select("status")
-                .eq("id", str(payload.manuscript_id))
-                .single()
-                .execute()
-            ).data or {}
-            current_raw = str(ms_row.get("status") or "").strip().lower()
-            if current_raw in {"under_review", "resubmitted", "pending_decision"}:
+            # 首选：仅在 under_review/resubmitted/decision 时推进，避免把已进入 production 的稿件回滚。
+            supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
+                "id", str(payload.manuscript_id)
+            ).in_("status", ["under_review", "resubmitted", "decision"]).execute()
+            # 兼容：历史环境可能仍存在 pending_decision（TEXT）状态；enum 环境会报错，忽略即可。
+            try:
                 supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
                     "id", str(payload.manuscript_id)
-                ).execute()
+                ).eq("status", "pending_decision").execute()
+            except Exception:
+                pass
     except Exception:
         pass
 
