@@ -22,8 +22,14 @@ ProofreadingDecision = Literal["confirm_clean", "submit_corrections"]
 
 class CreateProductionCycleRequest(BaseModel):
     layout_editor_id: UUID
+    collaborator_editor_ids: list[UUID] = Field(default_factory=list)
     proofreader_author_id: UUID
     proof_due_at: datetime
+
+
+class UpdateProductionCycleEditorsRequest(BaseModel):
+    layout_editor_id: UUID | None = None
+    collaborator_editor_ids: list[UUID] | None = None
 
 
 class CorrectionItemInput(BaseModel):
@@ -53,6 +59,7 @@ class ProductionCyclePayload(BaseModel):
     cycle_no: int
     status: ProductionCycleStatus
     layout_editor_id: str
+    collaborator_editor_ids: list[str] = Field(default_factory=list)
     proofreader_author_id: str
     galley_bucket: str | None = None
     galley_path: str | None = None

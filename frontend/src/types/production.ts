@@ -36,6 +36,7 @@ export type ProductionCycle = {
   cycle_no: number
   status: ProductionCycleStatus
   layout_editor_id: string
+  collaborator_editor_ids?: string[]
   proofreader_author_id: string
   galley_bucket?: string | null
   galley_path?: string | null
@@ -63,6 +64,7 @@ export type ProductionWorkspaceContext = {
   cycle_history: ProductionCycle[]
   permissions?: {
     can_create_cycle: boolean
+    can_manage_editors?: boolean
     can_upload_galley: boolean
     can_approve: boolean
   }

@@ -15,6 +15,7 @@ type StaffOption = {
   id: string
   name: string
   email?: string | null
+  roles?: string[] | null
 }
 
 export default function EditorProductionWorkspacePage() {
@@ -42,6 +43,7 @@ export default function EditorProductionWorkspacePage() {
         id: String(item.id || ''),
         name: String(item.full_name || item.name || item.email || item.id || ''),
         email: item.email ? String(item.email) : null,
+        roles: Array.isArray(item.roles) ? (item.roles as string[]) : null,
       }))
 
       setContext(ctxRes.data as ProductionWorkspaceContext)

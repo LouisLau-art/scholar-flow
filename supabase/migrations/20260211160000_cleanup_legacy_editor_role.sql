@@ -2,7 +2,7 @@
 -- Idempotent migration for cloud/staging databases.
 
 -- 1) user_profiles.roles: remove editor, add managing_editor (deduplicated).
-update public.user_profiles up
+update public.user_profiles
 set roles = (
   select coalesce(
     array_agg(r.role order by
@@ -10,9 +10,11 @@ set roles = (
         when 'admin' then 1
         when 'managing_editor' then 2
         when 'assistant_editor' then 3
-        when 'editor_in_chief' then 4
-        when 'reviewer' then 5
-        when 'author' then 6
+        when 'production_editor' then 4
+        when 'editor_in_chief' then 5
+        when 'owner' then 6
+        when 'reviewer' then 7
+        when 'author' then 8
         else 99
       end,
       r.role
@@ -21,15 +23,15 @@ set roles = (
   )
   from (
     select distinct role
-    from lateral unnest(
+    from unnest(
       array_append(
-        array_remove(coalesce(up.roles, '{}'::text[]), 'editor'),
+        array_remove(coalesce(roles, '{}'::text[]), 'editor'),
         'managing_editor'
       )
     ) as role
   ) as r
 )
-where coalesce(up.roles, '{}'::text[]) @> array['editor']::text[];
+where coalesce(roles, '{}'::text[]) @> array['editor']::text[];
 
 -- 2) journal_role_scopes.role: migrate editor -> managing_editor and tighten check constraint.
 do $$

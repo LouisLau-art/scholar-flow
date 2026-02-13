@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Upload } from 'lucide-react'
+import { Loader2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,7 @@ type StaffOption = {
   id: string
   name: string
   email?: string | null
+  roles?: string[] | null
 }
 
 type Props = {
@@ -46,7 +48,24 @@ function formatDate(raw: string | null | undefined): string {
 export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReload }: Props) {
   const activeCycle = context.active_cycle || null
 
-  const [layoutEditorId, setLayoutEditorId] = useState(staff[0]?.id || '')
+  const productionStaff = useMemo(() => {
+    return staff.filter((row) => {
+      const roles = (row.roles || []).map((r) => String(r || '').toLowerCase())
+      return roles.includes('production_editor') || roles.includes('admin')
+    })
+  }, [staff])
+
+  const staffNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    staff.forEach((row) => {
+      map.set(String(row.id), String(row.name || row.email || row.id))
+    })
+    return map
+  }, [staff])
+
+  const [layoutEditorId, setLayoutEditorId] = useState(productionStaff[0]?.id || '')
+  const [collaboratorIds, setCollaboratorIds] = useState<string[]>([])
+  const [collaboratorPick, setCollaboratorPick] = useState<string>('')
   const [proofDueAt, setProofDueAt] = useState(() => {
     const n = new Date(Date.now() + 3 * 24 * 3600 * 1000)
     n.setMinutes(n.getMinutes() - n.getTimezoneOffset())
@@ -62,10 +81,19 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
   const assignedAuthorId = useMemo(() => String(context.manuscript.author_id || ''), [context.manuscript.author_id])
 
   useEffect(() => {
-    if (!layoutEditorId && staff[0]?.id) {
-      setLayoutEditorId(staff[0].id)
+    if (!layoutEditorId && productionStaff[0]?.id) {
+      setLayoutEditorId(productionStaff[0].id)
     }
-  }, [layoutEditorId, staff])
+  }, [layoutEditorId, productionStaff])
+
+  useEffect(() => {
+    if (!activeCycle) return
+    // active cycle -> sync UI state (ME/EIC/Admin may adjust editors)
+    setLayoutEditorId(String(activeCycle.layout_editor_id || ''))
+    setCollaboratorIds((activeCycle.collaborator_editor_ids || []).map((v) => String(v)))
+    setCollaboratorPick('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCycle?.id])
 
   const handleCreateCycle = async () => {
     if (!layoutEditorId) {
@@ -85,6 +113,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
     try {
       const res = await EditorApi.createProductionCycle(manuscriptId, {
         layout_editor_id: layoutEditorId,
+        collaborator_editor_ids: collaboratorIds,
         proofreader_author_id: assignedAuthorId,
         proof_due_at: new Date(proofDueAt).toISOString(),
       })
@@ -95,6 +124,30 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
       await onReload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '创建生产轮次失败')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const handleUpdateEditors = async () => {
+    if (!activeCycle) return
+    if (!layoutEditorId) {
+      toast.error('请选择排版负责人')
+      return
+    }
+    setCreateLoading(true)
+    try {
+      const res = await EditorApi.updateProductionCycleEditors(manuscriptId, activeCycle.id, {
+        layout_editor_id: layoutEditorId,
+        collaborator_editor_ids: collaboratorIds,
+      })
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || '更新负责人失败')
+      }
+      toast.success('负责人已更新')
+      await onReload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '更新负责人失败')
     } finally {
       setCreateLoading(false)
     }
@@ -166,11 +219,62 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
                 <SelectValue placeholder="Select editor" />
               </SelectTrigger>
               <SelectContent>
-                {staff.map((item) => (
+                {productionStaff.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
                     {item.name || item.email || item.id}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            {productionStaff.length === 0 ? (
+              <p className="mt-1 text-xs text-amber-700">未找到 production_editor 账号，请先在 Admin User Management 里分配 Production Editor 角色。</p>
+            ) : null}
+          </div>
+
+          <div>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Collaborators (Optional)</Label>
+            {collaboratorIds.length ? (
+              <div className="flex flex-wrap gap-2 pb-2">
+                {collaboratorIds.map((cid) => (
+                  <Badge key={cid} variant="secondary" className="gap-1">
+                    {staffNameById.get(cid) || cid}
+                    <button
+                      type="button"
+                      className="ml-1 inline-flex items-center text-slate-500 hover:text-slate-700"
+                      onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
+                      aria-label="Remove collaborator"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+            <Select
+              value={collaboratorPick}
+              onValueChange={(value) => {
+                const v = String(value || '').trim()
+                if (!v) return
+                if (v === layoutEditorId) {
+                  toast.error('协作者不能与主负责人重复')
+                  setCollaboratorPick('')
+                  return
+                }
+                setCollaboratorIds((prev) => (prev.includes(v) ? prev : [...prev, v]))
+                setCollaboratorPick('')
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Add collaborator…" />
+              </SelectTrigger>
+              <SelectContent>
+                {productionStaff
+                  .filter((item) => item.id !== layoutEditorId && !collaboratorIds.includes(item.id))
+                  .map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name || item.email || item.id}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -200,6 +304,75 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             <p>Status: <span className="font-semibold">{activeCycle.status}</span></p>
             <p>Due: <span className="font-semibold">{formatDate(activeCycle.proof_due_at)}</span></p>
           </div>
+
+          {context.permissions?.can_manage_editors ? (
+            <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Editors</p>
+              <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select layout editor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {productionStaff.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name || item.email || item.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {collaboratorIds.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {collaboratorIds.map((cid) => (
+                    <Badge key={cid} variant="secondary" className="gap-1">
+                      {staffNameById.get(cid) || cid}
+                      <button
+                        type="button"
+                        className="ml-1 inline-flex items-center text-slate-500 hover:text-slate-700"
+                        onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
+                        aria-label="Remove collaborator"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+
+              <Select
+                value={collaboratorPick}
+                onValueChange={(value) => {
+                  const v = String(value || '').trim()
+                  if (!v) return
+                  if (v === layoutEditorId) {
+                    toast.error('协作者不能与主负责人重复')
+                    setCollaboratorPick('')
+                    return
+                  }
+                  setCollaboratorIds((prev) => (prev.includes(v) ? prev : [...prev, v]))
+                  setCollaboratorPick('')
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Add collaborator…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {productionStaff
+                    .filter((item) => item.id !== layoutEditorId && !collaboratorIds.includes(item.id))
+                    .map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name || item.email || item.id}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+
+              <Button type="button" variant="outline" onClick={() => void handleUpdateEditors()} disabled={createLoading}>
+                {createLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Update Editors
+              </Button>
+            </div>
+          ) : null}
 
           <Button
             type="button"

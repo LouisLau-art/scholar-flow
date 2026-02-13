@@ -27,7 +27,7 @@ from app.services.matchmaking_service import MatchmakingService
 from app.services.editor_service import EditorService, ProcessListFilters, FinanceListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
-from app.models.production_workspace import CreateProductionCycleRequest
+from app.models.production_workspace import CreateProductionCycleRequest, UpdateProductionCycleEditorsRequest
 from app.services.production_workspace_service import ProductionWorkspaceService
 from typing import Any, Literal
 from io import BytesIO
@@ -2311,6 +2311,27 @@ async def create_production_cycle(
     """
     data = ProductionWorkspaceService().create_cycle(
         manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+    )
+    return {"success": True, "data": {"cycle": data}}
+
+
+@router.patch("/manuscripts/{id}/production-cycles/{cycle_id}/editors")
+async def update_production_cycle_editors(
+    id: str,
+    cycle_id: str,
+    payload: UpdateProductionCycleEditorsRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+):
+    """
+    Feature 042B: 更新生产轮次的负责人/协作者列表（仅 ME/EIC/Admin）。
+    """
+    data = ProductionWorkspaceService().update_cycle_editors(
+        manuscript_id=id,
+        cycle_id=cycle_id,
         user_id=str(current_user.get("id") or ""),
         profile_roles=profile.get("roles") or [],
         request=payload,

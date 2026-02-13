@@ -52,8 +52,14 @@ export type DecisionSubmissionPayload = {
 
 export type ProductionCycleCreatePayload = {
   layout_editor_id: string
+  collaborator_editor_ids?: string[]
   proofreader_author_id: string
   proof_due_at: string
+}
+
+export type ProductionCycleEditorsUpdatePayload = {
+  layout_editor_id?: string
+  collaborator_editor_ids?: string[] | null
 }
 
 export type AssignAEPayload = {
@@ -301,6 +307,18 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
+    return res.json()
+  },
+
+  async updateProductionCycleEditors(manuscriptId: string, cycleId: string, payload: ProductionCycleEditorsUpdatePayload) {
+    const res = await authedFetch(
+      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/editors`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    )
     return res.json()
   },
 

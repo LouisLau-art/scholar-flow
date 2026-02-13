@@ -14,6 +14,7 @@ from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.models.production_workspace import (
     CreateProductionCycleRequest,
     SubmitProofreadingRequest,
+    UpdateProductionCycleEditorsRequest,
 )
 from app.services.notification_service import NotificationService
 
@@ -88,6 +89,45 @@ class ProductionWorkspaceService:
 
     def _roles(self, profile_roles: list[str] | None) -> set[str]:
         return {str(r).strip().lower() for r in (profile_roles or []) if str(r).strip()}
+
+    def _normalize_uuid_list(self, raw: Any) -> list[str]:
+        """
+        中文注释：
+        - Supabase REST 返回 uuid[] 时可能是 list[str] / list[UUID]；
+        - 这里统一成去重后的 string 列表，便于权限判断与序列化。
+        """
+        if raw is None:
+            return []
+        if isinstance(raw, (str, bytes)):
+            value = str(raw).strip()
+            return [value] if value else []
+        if not isinstance(raw, list):
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in raw:
+            s = str(item or "").strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+        return out
+
+    def _get_profile_roles(self, user_id: str) -> set[str] | None:
+        """
+        返回 user_profiles.roles 的归一化集合；不存在则返回 None。
+        """
+        uid = str(user_id or "").strip()
+        if not uid:
+            return None
+        try:
+            resp = self.client.table("user_profiles").select("id,roles").eq("id", uid).single().execute()
+            row = getattr(resp, "data", None) or None
+        except Exception:
+            return None
+        if not row:
+            return None
+        return self._roles(row.get("roles") or [])
 
     def _ensure_bucket(self, bucket: str, *, public: bool = False) -> None:
         storage = getattr(self.client, "storage", None)
@@ -187,7 +227,8 @@ class ProductionWorkspaceService:
         #    说明：write/read 都允许，但必须基于 cycle 的真实分配关系。
         if "production_editor" in roles and cycle is not None:
             layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
-            if layout_editor_id and layout_editor_id == uid:
+            collaborators = set(self._normalize_uuid_list(cycle.get("collaborator_editor_ids")))
+            if (layout_editor_id and layout_editor_id == uid) or (uid and uid in collaborators):
                 return
 
         # 2) 写操作：ME/EIC 必须通过 journal scope；其余角色一律不允许写入 production。
@@ -246,7 +287,7 @@ class ProductionWorkspaceService:
             resp = (
                 self.client.table("production_cycles")
                 .select(
-                    "id,manuscript_id,cycle_no,status,layout_editor_id,proofreader_author_id,"
+                    "id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
                     "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
                 )
                 .eq("manuscript_id", manuscript_id)
@@ -267,7 +308,7 @@ class ProductionWorkspaceService:
             resp = (
                 self.client.table("production_cycles")
                 .select(
-                    "id,manuscript_id,cycle_no,status,layout_editor_id,proofreader_author_id,"
+                    "id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
                     "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
                 )
                 .eq("manuscript_id", manuscript_id)
@@ -336,6 +377,7 @@ class ProductionWorkspaceService:
             "cycle_no": row.get("cycle_no"),
             "status": row.get("status"),
             "layout_editor_id": row.get("layout_editor_id"),
+            "collaborator_editor_ids": self._normalize_uuid_list(row.get("collaborator_editor_ids")),
             "proofreader_author_id": row.get("proofreader_author_id"),
             "galley_bucket": bucket or None,
             "galley_path": path or None,
@@ -452,10 +494,10 @@ class ProductionWorkspaceService:
         )
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
+        active_layout_id = str((active or {}).get("layout_editor_id") or "").strip() if active else ""
+        active_collabs = set(self._normalize_uuid_list((active or {}).get("collaborator_editor_ids"))) if active else set()
         can_manage_production = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"})) or bool(
-            "production_editor" in roles
-            and active
-            and str(active.get("layout_editor_id") or "").strip() == str(user_id)
+            "production_editor" in roles and active and (active_layout_id == str(user_id) or str(user_id) in active_collabs)
         )
         can_create = can_manage_production and manuscript_status in POST_ACCEPTANCE_ALLOWED and active is None
 
@@ -474,6 +516,7 @@ class ProductionWorkspaceService:
             "cycle_history": [self._format_cycle(c, include_signed_url=False) for c in cycles],
             "permissions": {
                 "can_create_cycle": can_create,
+                "can_manage_editors": bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"})),
                 "can_upload_galley": bool(
                     can_manage_production
                     and active
@@ -525,12 +568,42 @@ class ProductionWorkspaceService:
                 detail="proofreader_author_id must match manuscript author_id in MVP",
             )
 
+        # 中文注释：
+        # - Production workspace 的写操作只允许 production_editor/admin 等角色；
+        # - 如果 layout_editor_id 不是 production_editor，会导致被分配的人无法进入队列/上传清样。
+        layout_editor_id = str(request.layout_editor_id)
+        layout_roles = self._get_profile_roles(layout_editor_id)
+        if not layout_roles:
+            raise HTTPException(status_code=422, detail="layout_editor_id user not found")
+        if not layout_roles.intersection({"production_editor", "admin"}):
+            raise HTTPException(status_code=422, detail="layout_editor_id must have production_editor role")
+
+        raw_collabs = [str(uid) for uid in (request.collaborator_editor_ids or [])]
+        collab_ids = []
+        seen = set()
+        for cid in raw_collabs:
+            c = str(cid or "").strip()
+            if not c or c == layout_editor_id or c in seen:
+                continue
+            seen.add(c)
+            collab_ids.append(c)
+        # 防止异常 payload 导致过大数组写入
+        if len(collab_ids) > 20:
+            raise HTTPException(status_code=422, detail="Too many collaborator editors (max 20)")
+        for cid in collab_ids:
+            roles_set = self._get_profile_roles(cid)
+            if not roles_set:
+                raise HTTPException(status_code=422, detail="collaborator_editor_ids contains unknown user")
+            if not roles_set.intersection({"production_editor", "admin"}):
+                raise HTTPException(status_code=422, detail="collaborator_editor_ids must have production_editor role")
+
         now = _utc_now_iso()
         payload = {
             "manuscript_id": manuscript_id,
             "cycle_no": self._next_cycle_no(manuscript_id),
             "status": "draft",
-            "layout_editor_id": str(request.layout_editor_id),
+            "layout_editor_id": layout_editor_id,
+            "collaborator_editor_ids": collab_ids,
             "proofreader_author_id": str(request.proofreader_author_id),
             "proof_due_at": request.proof_due_at.isoformat(),
             "created_at": now,
@@ -569,6 +642,106 @@ class ProductionWorkspaceService:
 
         return self._format_cycle(row, include_signed_url=False)
 
+    def update_cycle_editors(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        request: UpdateProductionCycleEditorsRequest,
+    ) -> dict[str, Any]:
+        """
+        更新 production cycle 的负责人/协作者列表（仅 ME/EIC/Admin）。
+        """
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        if not roles.intersection({"admin", "managing_editor", "editor_in_chief"}):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(manuscript=manuscript, user_id=user_id, roles=roles, cycle=cycle, purpose="write")
+
+        now = _utc_now_iso()
+        patch: dict[str, Any] = {"updated_at": now}
+
+        # 1) layout editor
+        next_layout_id = str(cycle.get("layout_editor_id") or "").strip()
+        if request.layout_editor_id is not None:
+            next_layout_id = str(request.layout_editor_id)
+            next_layout_roles = self._get_profile_roles(next_layout_id)
+            if not next_layout_roles:
+                raise HTTPException(status_code=422, detail="layout_editor_id user not found")
+            if not next_layout_roles.intersection({"production_editor", "admin"}):
+                raise HTTPException(status_code=422, detail="layout_editor_id must have production_editor role")
+            patch["layout_editor_id"] = next_layout_id
+
+        # 2) collaborators
+        if request.collaborator_editor_ids is not None:
+            raw_collabs = [str(uid) for uid in (request.collaborator_editor_ids or [])]
+            collab_ids: list[str] = []
+            seen: set[str] = set()
+            for cid in raw_collabs:
+                c = str(cid or "").strip()
+                if not c or c == next_layout_id or c in seen:
+                    continue
+                seen.add(c)
+                collab_ids.append(c)
+            if len(collab_ids) > 20:
+                raise HTTPException(status_code=422, detail="Too many collaborator editors (max 20)")
+            for cid in collab_ids:
+                r = self._get_profile_roles(cid)
+                if not r:
+                    raise HTTPException(status_code=422, detail="collaborator_editor_ids contains unknown user")
+                if not r.intersection({"production_editor", "admin"}):
+                    raise HTTPException(status_code=422, detail="collaborator_editor_ids must have production_editor role")
+            patch["collaborator_editor_ids"] = collab_ids
+        else:
+            # 若只改 layout editor，也要确保协作者列表不包含新的 layout editor
+            existing = self._normalize_uuid_list(cycle.get("collaborator_editor_ids"))
+            cleaned = [cid for cid in existing if str(cid).strip() and str(cid) != next_layout_id]
+            if cleaned != existing:
+                patch["collaborator_editor_ids"] = cleaned
+
+        # No-op guard: 仅 updated_at 则不写
+        if set(patch.keys()) == {"updated_at"}:
+            return self._format_cycle(cycle, include_signed_url=False)
+
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .update(patch)
+                .eq("id", cycle_id)
+                .eq("manuscript_id", manuscript_id)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to update production cycle editors")
+            row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as e:
+            if _is_missing_column_error(e, "collaborator_editor_ids"):
+                raise HTTPException(status_code=500, detail="DB not migrated: collaborator_editor_ids column missing") from e
+            raise HTTPException(status_code=500, detail=f"Failed to update production cycle editors: {e}") from e
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=str(cycle.get("status") or ""),
+            to_status=str(row.get("status") or ""),
+            changed_by=user_id,
+            comment="production cycle editors updated",
+            payload={
+                "event_type": "production_cycle_editors_updated",
+                "cycle_id": cycle_id,
+                "layout_editor_id": row.get("layout_editor_id"),
+                "collaborator_editor_ids": self._normalize_uuid_list(row.get("collaborator_editor_ids")),
+            },
+        )
+
+        return self._format_cycle(row, include_signed_url=False)
+
     def list_my_queue(
         self,
         *,
@@ -578,7 +751,7 @@ class ProductionWorkspaceService:
     ) -> list[dict[str, Any]]:
         """
         Production Editor Queue:
-        - 仅返回 layout_editor_id == 当前用户 且处于活跃状态的 production cycles。
+        - 返回 layout_editor_id == 当前用户 或 collaborator_editor_ids 包含当前用户，且处于活跃状态的 production cycles。
         - 返回值用于前端 /editor/production 列表页。
         """
         roles = self._roles(profile_roles)
@@ -588,22 +761,53 @@ class ProductionWorkspaceService:
         safe_limit = max(1, min(int(limit or 50), 200))
         active_statuses = sorted(ACTIVE_CYCLE_STATUSES)
 
+        uid = str(user_id)
+        cycles: list[dict[str, Any]] = []
         try:
-            resp = (
+            primary = (
                 self.client.table("production_cycles")
                 .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at,created_at")
-                .eq("layout_editor_id", str(user_id))
+                .eq("layout_editor_id", uid)
                 .in_("status", active_statuses)
                 .order("updated_at", desc=True)
                 .limit(safe_limit)
                 .execute()
             )
+            cycles.extend(getattr(primary, "data", None) or [])
         except Exception as e:
             if _is_table_missing_error(e, "production_cycles"):
                 raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from e
             raise HTTPException(status_code=500, detail=f"Failed to list production queue: {e}") from e
 
-        cycles: list[dict[str, Any]] = getattr(resp, "data", None) or []
+        # 协作者队列：支持多个 production editor 协作同一轮次
+        try:
+            collab = (
+                self.client.table("production_cycles")
+                .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at,created_at")
+                .contains("collaborator_editor_ids", [uid])
+                .in_("status", active_statuses)
+                .order("updated_at", desc=True)
+                .limit(safe_limit)
+                .execute()
+            )
+            cycles.extend(getattr(collab, "data", None) or [])
+        except Exception:
+            # 中文注释：部分老环境可能未迁移 collaborator_editor_ids；忽略协作者队列即可。
+            pass
+
+        # 去重 + 排序（updated_at 优先）
+        uniq: dict[str, dict[str, Any]] = {}
+        for row in cycles:
+            cid = str(row.get("id") or "").strip()
+            if not cid:
+                continue
+            uniq[cid] = row
+        cycles = list(uniq.values())
+        cycles.sort(
+            key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""),
+            reverse=True,
+        )
+        cycles = cycles[:safe_limit]
         if not cycles:
             return []
 
@@ -995,13 +1199,24 @@ class ProductionWorkspaceService:
         )
 
         if decision == "submit_corrections":
-            self._notify(
-                user_id=str(cycle.get("layout_editor_id") or manuscript.get("editor_id") or ""),
-                manuscript_id=manuscript_id,
-                title="Proof Corrections Submitted",
-                content=f"Author submitted corrections for manuscript '{manuscript.get('title') or manuscript_id}'.",
-                action_url=f"/editor/production/{manuscript_id}",
-            )
+            recipients: list[str] = []
+            layout_id = str(cycle.get("layout_editor_id") or "").strip()
+            if layout_id:
+                recipients.append(layout_id)
+            recipients.extend(self._normalize_uuid_list(cycle.get("collaborator_editor_ids")))
+            if not recipients:
+                fallback = str(manuscript.get("editor_id") or "").strip()
+                if fallback:
+                    recipients.append(fallback)
+            recipients = list(dict.fromkeys([r for r in recipients if str(r).strip()]))
+            for uid in recipients:
+                self._notify(
+                    user_id=uid,
+                    manuscript_id=manuscript_id,
+                    title="Proof Corrections Submitted",
+                    content=f"Author submitted corrections for manuscript '{manuscript.get('title') or manuscript_id}'.",
+                    action_url=f"/editor/production/{manuscript_id}",
+                )
         else:
             self._notify(
                 user_id=str(manuscript.get("editor_id") or manuscript.get("owner_id") or ""),

@@ -21,6 +21,7 @@ venv/
 /frontend/coverage/
 htmlcov/
 *.coverage
+.coverage.*
 *.xml
 *.html
 !backend/app/core/templates/*.html
