@@ -35,6 +35,7 @@ interface UserRoleDialogProps {
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = [
   { value: 'author', label: 'Author', helper: '投稿与修回' },
   { value: 'reviewer', label: 'Reviewer', helper: '审稿工作台与意见提交' },
+  { value: 'owner', label: 'Owner', helper: '销售/BD/KPI 归属人（可被绑定为稿件 Owner）' },
   { value: 'assistant_editor', label: 'Assistant Editor', helper: '仅可处理分配到自己的稿件' },
   { value: 'production_editor', label: 'Production Editor', helper: '排版与校对协作（仅可处理分配到自己的 Production Cycle）' },
   { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配（必须绑定期刊）' },

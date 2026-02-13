@@ -362,12 +362,9 @@ export default function ReviewerAssignModal({
     (reviewerId: string) => {
       const policy = policyByReviewerId[reviewerId] || {}
       if (policy.conflict) return true
-      if (policy.cooldown_active) {
-        if (!(policy.allow_override && canCurrentUserOverrideCooldown)) return true
-      }
       return false
     },
-    [policyByReviewerId, canCurrentUserOverrideCooldown]
+    [policyByReviewerId]
   )
 
   const toggleReviewer = (reviewerId: string) => {
@@ -664,8 +661,7 @@ export default function ReviewerAssignModal({
             </div>
 
             <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal), conflict-of-interest hard block, overdue risk warning.
-              {canCurrentUserOverrideCooldown ? ' You can override cooldown with audit reason.' : ' Cooldown override requires higher privilege.'}
+              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is warning-only, conflict-of-interest is hard block, overdue risk is warning-only.
             </div>
 
             {isLoading ? (

@@ -53,10 +53,11 @@ export const editorService = {
   assignAE: async (
     manuscriptId: string,
     aeId: string,
-    options?: { startExternalReview?: boolean; bindOwnerIfEmpty?: boolean }
+    options?: { startExternalReview?: boolean; bindOwnerIfEmpty?: boolean; ownerId?: string }
   ) => {
     const res = await EditorApi.assignAE(manuscriptId, {
       ae_id: aeId,
+      owner_id: options?.ownerId,
       start_external_review: options?.startExternalReview ?? false,
       bind_owner_if_empty: options?.bindOwnerIfEmpty ?? false,
     })

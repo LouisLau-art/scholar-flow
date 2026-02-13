@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 ALLOWED_USER_ROLES = {
     "author",
     "reviewer",
+    "owner",
     "managing_editor",
     "assistant_editor",
     "production_editor",
@@ -103,7 +104,7 @@ class CreateUserRequest(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=100)
     role: str = Field(
         ...,
-        pattern="^(reviewer|managing_editor|assistant_editor|production_editor|editor_in_chief|admin)$",
+        pattern="^(reviewer|owner|managing_editor|assistant_editor|production_editor|editor_in_chief|admin)$",
     )
 
 class UpdateRoleRequest(BaseModel):

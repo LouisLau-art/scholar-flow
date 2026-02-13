@@ -200,8 +200,11 @@ class ReviewPolicyService:
                 hit_at = latest_cooldown_at[rid]
                 cooldown_until = (hit_at + timedelta(days=cooldown_days)).date().isoformat()
                 base[rid]["cooldown_active"] = True
-                base[rid]["can_assign"] = False
-                base[rid]["allow_override"] = not base[rid]["conflict"]
+                # 中文注释:
+                # - 冷却期改为“提醒”而不是强制拦截（editor 仍可选择并指派）。
+                # - 仅在 UI 上展示 warning badge；后端不再要求 override。
+                base[rid]["can_assign"] = not base[rid]["conflict"]
+                base[rid]["allow_override"] = False
                 base[rid]["cooldown_last_invited_at"] = hit_at.isoformat()
                 base[rid]["cooldown_until"] = cooldown_until
                 base[rid]["hits"].append(
@@ -209,7 +212,7 @@ class ReviewPolicyService:
                         "code": "cooldown",
                         "label": "Cooldown active",
                         "severity": "warning",
-                        "blocking": True,
+                        "blocking": False,
                         "detail": f"Invited within {cooldown_days} days in the same journal. Cooldown until {cooldown_until}.",
                     }
                 )
@@ -918,6 +921,28 @@ class ReviewerWorkspaceService:
     def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
         state = ReviewerInviteService()._derive_invite_state(assignment)
+        if state == "invited":
+            # 中文注释:
+            # - UAT/内测阶段允许“打开 workspace 即视为接受邀请”，避免 reviewer 被强制卡在 accept 页面。
+            # - 兼容云端 schema 漂移：accepted_at/opened_at 可能缺失，缺失时退化为 status=accepted。
+            now_iso = _utc_now_iso()
+            try:
+                supabase_admin.table("review_assignments").update(
+                    {"status": "pending", "accepted_at": now_iso, "opened_at": now_iso}
+                ).eq("id", str(assignment_id)).execute()
+                assignment["status"] = "pending"
+                assignment["accepted_at"] = now_iso
+                assignment["opened_at"] = assignment.get("opened_at") or now_iso
+            except Exception as e:
+                if _is_missing_column_error(e):
+                    try:
+                        supabase_admin.table("review_assignments").update({"status": "accepted"}).eq(
+                            "id", str(assignment_id)
+                        ).execute()
+                        assignment["status"] = "accepted"
+                    except Exception:
+                        pass
+            state = ReviewerInviteService()._derive_invite_state(assignment)
         if state == "declined":
             raise PermissionError("Invitation has been declined")
         if state == "invited":

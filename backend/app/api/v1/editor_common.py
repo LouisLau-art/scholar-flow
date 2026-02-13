@@ -61,6 +61,7 @@ class QuickPrecheckPayload(BaseModel):
 
 class AssignAERequest(BaseModel):
     ae_id: UUID
+    owner_id: UUID | None = None
     start_external_review: bool = False
     bind_owner_if_empty: bool = False
     idempotency_key: str | None = Field(default=None, max_length=64)

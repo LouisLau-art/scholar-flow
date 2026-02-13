@@ -2,42 +2,34 @@
 -- Idempotent migration for cloud/staging databases.
 
 -- 1) user_profiles.roles: remove editor, add managing_editor (deduplicated).
-with normalized_user_roles as (
-  select
-    up.id,
-    (
-      select coalesce(
-        array_agg(r.role order by
-          case r.role
-            when 'admin' then 1
-            when 'managing_editor' then 2
-            when 'assistant_editor' then 3
-            when 'editor_in_chief' then 4
-            when 'reviewer' then 5
-            when 'author' then 6
-            else 99
-          end,
-          r.role
-        ),
-        '{}'::text[]
-      )
-      from lateral (
-        select distinct role
-        from unnest(
-          array_append(
-            array_remove(coalesce(up.roles, '{}'::text[]), 'editor'),
-            'managing_editor'
-          )
-        ) as role
-      ) as r
-    ) as roles
-  from public.user_profiles up
-  where coalesce(up.roles, '{}'::text[]) @> array['editor']::text[]
-)
 update public.user_profiles up
-set roles = nur.roles
-from normalized_user_roles nur
-where up.id = nur.id;
+set roles = (
+  select coalesce(
+    array_agg(r.role order by
+      case r.role
+        when 'admin' then 1
+        when 'managing_editor' then 2
+        when 'assistant_editor' then 3
+        when 'editor_in_chief' then 4
+        when 'reviewer' then 5
+        when 'author' then 6
+        else 99
+      end,
+      r.role
+    ),
+    '{}'::text[]
+  )
+  from (
+    select distinct role
+    from lateral unnest(
+      array_append(
+        array_remove(coalesce(up.roles, '{}'::text[]), 'editor'),
+        'managing_editor'
+      )
+    ) as role
+  ) as r
+)
+where coalesce(up.roles, '{}'::text[]) @> array['editor']::text[];
 
 -- 2) journal_role_scopes.role: migrate editor -> managing_editor and tighten check constraint.
 do $$

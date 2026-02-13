@@ -1147,6 +1147,7 @@ class EditorService:
         ae_id: UUID,
         current_user_id: UUID,
         *,
+        owner_id: UUID | None = None,
         start_external_review: bool = False,
         bind_owner_if_empty: bool = False,
         idempotency_key: str | None = None,
@@ -1183,7 +1184,20 @@ class EditorService:
             "pre_check_status": PreCheckStatus.TECHNICAL.value,
             "updated_at": now,
         }
-        if bind_owner_if_empty and not owner_before:
+        owner_override = str(owner_id or "").strip()
+        if owner_override:
+            # 中文注释:
+            # - ME 在 Intake Queue 可一次性分配 AE + Owner；
+            # - Owner 必须是内部员工（admin/managing_editor/owner），避免外键/越权问题。
+            try:
+                from app.services.owner_binding_service import validate_internal_owner_id
+                validate_internal_owner_id(UUID(owner_override))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid owner_id: {e}") from e
+            data["owner_id"] = owner_override
+        elif bind_owner_if_empty and not owner_before:
             # 中文注释:
             # - Intake 一键分配场景下，若 owner 为空可自动兜底绑定当前 ME；
             # - 避免稿件离开 Intake 后由于 owner 为空造成后续权限/协作信息缺失。
@@ -1212,6 +1226,7 @@ class EditorService:
             raise HTTPException(status_code=409, detail="Assignment conflict: manuscript state changed")
 
         updated = rows[0]
+        owner_after = (data.get("owner_id") if data.get("owner_id") else (owner_before or None))
         self._safe_insert_transition_log(
             manuscript_id=manuscript_id_str,
             from_status=ManuscriptStatus.PRE_CHECK.value,
@@ -1225,7 +1240,7 @@ class EditorService:
                 "assistant_editor_before": ae_before or None,
                 "assistant_editor_after": ae_id_str,
                 "owner_before": owner_before or None,
-                "owner_after": data.get("owner_id") if data.get("owner_id") else (owner_before or None),
+                "owner_after": owner_after,
                 "decision": None,
                 "idempotency_key": idempotency_key,
             },
@@ -1253,7 +1268,7 @@ class EditorService:
                 "assistant_editor_before": ae_before or None,
                 "assistant_editor_after": ae_id_str,
                 "owner_before": owner_before or None,
-                "owner_after": data.get("owner_id") if data.get("owner_id") else (owner_before or None),
+                "owner_after": owner_after,
                 "decision": "pass",
                 "source": "intake_assign_modal",
                 "idempotency_key": idempotency_key,

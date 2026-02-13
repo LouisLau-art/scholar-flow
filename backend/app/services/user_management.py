@@ -6,9 +6,19 @@ from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
 
+def _is_production_env() -> bool:
+    value = (
+        os.environ.get("GO_ENV")
+        or os.environ.get("ENVIRONMENT")
+        or os.environ.get("APP_ENV")
+        or ""
+    )
+    return str(value).strip().lower() in {"prod", "production"}
+
 ALLOWED_USER_ROLES = {
     "author",
     "reviewer",
+    "owner",
     "managing_editor",
     "assistant_editor",
     "production_editor",
@@ -290,7 +300,13 @@ class UserManagementService:
         - 若未显式传入临时密码，则自动生成强随机密码。
         """
         target_id_str = str(target_user_id)
-        pwd = str(temporary_password or self._generate_temporary_password()).strip()
+        # 中文注释:
+        # - 开发/UAT 阶段为了提速与可复现，默认使用固定口令；
+        # - 生产环境必须使用强随机密码，避免弱口令风险。
+        if temporary_password is None:
+            pwd = "12345678" if not _is_production_env() else self._generate_temporary_password()
+        else:
+            pwd = str(temporary_password).strip()
         if len(pwd) < 8:
             raise ValueError("Temporary password must be at least 8 characters")
 
@@ -376,7 +392,8 @@ class UserManagementService:
             # So we might want `create_user` with `email_confirm=True` and a generated password, 
             # then send our own email.
             
-            temp_password = self._generate_temporary_password(16)
+            # 中文注释: 同 reset password，开发/UAT 默认固定口令；生产使用强随机。
+            temp_password = "12345678" if not _is_production_env() else self._generate_temporary_password(16)
             
             # Note: auth.admin is accessed via self.admin_client.auth.admin
             user_response = self.admin_client.auth.admin.create_user({
@@ -471,7 +488,7 @@ class UserManagementService:
             # Step 2a: Create user (shadow account)
             user_id = None
             try:
-                temp_password = self._generate_temporary_password(16)
+                temp_password = "12345678" if not _is_production_env() else self._generate_temporary_password(16)
                 
                 user_response = self.admin_client.auth.admin.create_user({
                     "email": email,

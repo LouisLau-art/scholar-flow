@@ -61,6 +61,8 @@ export function UserTable({ users, isLoading, page, perPage, total, onPageChange
                         role === 'managing_editor' ? 'bg-primary/10 text-primary' :
                         role === 'assistant_editor' ? 'bg-indigo-100 text-indigo-700' :
                         role === 'editor_in_chief' ? 'bg-purple-100 text-purple-700' :
+                        role === 'owner' ? 'bg-emerald-100 text-emerald-700' :
+                        role === 'production_editor' ? 'bg-amber-100 text-amber-700' :
                         role === 'reviewer' ? 'bg-secondary text-secondary-foreground' :
                         'bg-muted text-muted-foreground'
                       }`}>

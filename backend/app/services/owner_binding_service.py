@@ -6,7 +6,10 @@ from uuid import UUID
 from app.lib.api_client import supabase_admin
 
 
-INTERNAL_ROLES = {"admin", "managing_editor"}
+# 中文注释:
+# - Owner 是“销售/BD/KPI 归属人”，用于对外作者沟通与拉新；
+# - 因此允许 owner 作为 manuscript.owner_id 的候选。
+INTERNAL_ROLES = {"admin", "managing_editor", "owner"}
 
 
 def get_profile_for_owner(owner_id: UUID) -> Optional[dict]:
@@ -40,11 +43,11 @@ def is_internal_staff_profile(profile: Optional[dict]) -> bool:
 
 def validate_internal_owner_id(owner_id: UUID) -> dict:
     """
-    显性逻辑：owner_id 必须属于内部员工（managing_editor/admin）。
+    显性逻辑：owner_id 必须属于内部员工（admin/managing_editor/owner）。
     """
     profile = get_profile_for_owner(owner_id)
     if not profile:
         raise ValueError("owner_id profile not found")
     if not is_internal_staff_profile(profile):
-        raise ValueError("owner_id must be managing_editor/admin")
+        raise ValueError("owner_id must be admin/managing_editor/owner")
     return profile

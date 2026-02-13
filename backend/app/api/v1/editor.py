@@ -52,7 +52,7 @@ from app.api.v1.editor_common import (
 )
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
-INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief"]
+INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief", "owner"]
 EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief"]
 EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 router.include_router(internal_collab_router)
@@ -306,6 +306,7 @@ async def assign_ae(
             id,
             request.ae_id,
             current_user["id"],
+            owner_id=request.owner_id,
             start_external_review=bool(request.start_external_review),
             bind_owner_if_empty=bool(request.bind_owner_if_empty),
             idempotency_key=request.idempotency_key,
@@ -573,7 +574,7 @@ async def quick_precheck(
 async def get_editor_manuscript_detail(
     id: str,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES + ["owner"])),
 ):
     """
     Feature 028 / US2: Editor 专用稿件详情（包含 invoice_metadata、owner/editor profile、journal 信息）。
@@ -604,49 +605,54 @@ async def get_editor_manuscript_detail(
     viewer_role_set = set(viewer_roles)
 
     if "admin" not in viewer_role_set:
-        assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
-        if assigned_ae_id and assigned_ae_id == viewer_user_id:
+        # Owner（销售/BD）：仅允许查看归属到自己的稿件。
+        assigned_owner_id = str(ms.get("owner_id") or "").strip()
+        if assigned_owner_id and assigned_owner_id == viewer_user_id and "owner" in viewer_role_set:
             pass
         else:
-            allowed = False
-            if viewer_role_set.intersection({"managing_editor", "editor_in_chief"}):
-                # 强隔离：管理角色必须通过期刊 scope
-                ensure_manuscript_scope_access(
-                    manuscript_id=id,
-                    user_id=viewer_user_id,
-                    roles=viewer_roles,
-                    allow_admin_bypass=True,
-                )
-                allowed = True
-
-            if (not allowed) and ("production_editor" in viewer_role_set):
-                # 生产角色只允许看自己负责的活跃 production cycle。
-                try:
-                    pc = (
-                        supabase_admin.table("production_cycles")
-                        .select("id")
-                        .eq("manuscript_id", id)
-                        .eq("layout_editor_id", viewer_user_id)
-                        .in_(
-                            "status",
-                            [
-                                "draft",
-                                "awaiting_author",
-                                "author_corrections_submitted",
-                                "author_confirmed",
-                                "in_layout_revision",
-                            ],
-                        )
-                        .limit(1)
-                        .execute()
+            assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
+            if assigned_ae_id and assigned_ae_id == viewer_user_id:
+                pass
+            else:
+                allowed = False
+                if viewer_role_set.intersection({"managing_editor", "editor_in_chief"}):
+                    # 强隔离：管理角色必须通过期刊 scope
+                    ensure_manuscript_scope_access(
+                        manuscript_id=id,
+                        user_id=viewer_user_id,
+                        roles=viewer_roles,
+                        allow_admin_bypass=True,
                     )
-                    if getattr(pc, "data", None):
-                        allowed = True
-                except Exception:
-                    allowed = False
+                    allowed = True
 
-            if not allowed:
-                raise HTTPException(status_code=403, detail="Forbidden")
+                if (not allowed) and ("production_editor" in viewer_role_set):
+                    # 生产角色只允许看自己负责的活跃 production cycle。
+                    try:
+                        pc = (
+                            supabase_admin.table("production_cycles")
+                            .select("id")
+                            .eq("manuscript_id", id)
+                            .eq("layout_editor_id", viewer_user_id)
+                            .in_(
+                                "status",
+                                [
+                                    "draft",
+                                    "awaiting_author",
+                                    "author_corrections_submitted",
+                                    "author_confirmed",
+                                    "in_layout_revision",
+                                ],
+                            )
+                            .limit(1)
+                            .execute()
+                        )
+                        if getattr(pc, "data", None):
+                            allowed = True
+                    except Exception:
+                        allowed = False
+
+                if not allowed:
+                    raise HTTPException(status_code=403, detail="Forbidden")
 
     t_total_start = perf_counter()
     timings: dict[str, float] = {}
@@ -884,6 +890,47 @@ async def get_editor_manuscript_detail(
         except Exception as e:
             print(f"[Profiles] load failed (ignored): {e}")
     _mark("profiles", t0)
+
+    # Profile fallback（Auth -> Email/Name）:
+    # 中文注释:
+    # - 在少数环境下，auth.users 与 public.user_profiles 的同步触发器可能未生效，
+    #   导致内部员工在详情页只显示 UUID（非常影响 UAT 可用性）。
+    # - 这里做“只读兜底”：对缺失 profile 的用户，尝试从 Auth Admin API 拉取 email/full_name。
+    try:
+        missing_ids = [pid for pid in sorted(profile_ids) if pid and pid not in profiles_map]
+    except Exception:
+        missing_ids = []
+
+    if missing_ids:
+        # 限流：避免单次详情页触发过多 admin 调用。
+        for uid in missing_ids[:20]:
+            try:
+                res = supabase_admin.auth.admin.get_user_by_id(str(uid))
+                user = getattr(res, "user", None)
+                if user is None and isinstance(res, dict):
+                    user = res.get("user") or res.get("data")
+                if not user:
+                    continue
+                if isinstance(user, dict):
+                    email = user.get("email")
+                    meta = user.get("user_metadata") or {}
+                else:
+                    email = getattr(user, "email", None)
+                    meta = getattr(user, "user_metadata", None) or {}
+                full_name = None
+                try:
+                    full_name = (meta or {}).get("full_name")
+                except Exception:
+                    full_name = None
+                profiles_map[str(uid)] = {
+                    "id": str(uid),
+                    "email": email,
+                    "full_name": full_name,
+                    "roles": None,
+                    "affiliation": None,
+                }
+            except Exception:
+                continue
 
     aid = str(ms.get("author_id") or "")
     oid = str(ms.get("owner_id") or "")
@@ -1425,7 +1472,7 @@ async def list_internal_staff(
             supabase_admin.table("user_profiles")
             .select("id, email, full_name, roles")
             .or_(
-                "roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{production_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief}"
+                "roles.cs.{admin},roles.cs.{assistant_editor},roles.cs.{production_editor},roles.cs.{managing_editor},roles.cs.{editor_in_chief},roles.cs.{owner}"
             )
         )
         resp = query.execute()

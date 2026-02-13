@@ -4,6 +4,7 @@ export type UserRole =
   | 'author'
   | 'editor'
   | 'reviewer'
+  | 'owner'
   | 'admin'
   | 'managing_editor'
   | 'assistant_editor'

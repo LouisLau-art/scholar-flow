@@ -30,6 +30,12 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         # 生产角色的最小闭环：能查看稿件详情与进入 production workspace（稿件级访问仍由后端按分配控制）。
         "manuscript:view_detail",
     },
+    "owner": {
+        # 中文注释:
+        # - Owner（销售/BD）用于稿件归属与对外沟通；
+        # - MVP 阶段先不开放 Editor Command Center 全量能力，仅允许后端按 owner_id 进行数据裁剪后的查看。
+        "manuscript:view_detail",
+    },
     "managing_editor": {
         "process:view",
         "manuscript:view_detail",

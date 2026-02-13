@@ -160,6 +160,24 @@ class ProductionWorkspaceService:
         uid = str(user_id or "").strip()
         manuscript_id = str(manuscript.get("id") or "").strip()
 
+        # --- 显式稿件归属（read only） ---
+        # 中文注释:
+        # - UAT/开发阶段 user_profiles 可能缺失 journal scope 或存在历史脏数据；
+        # - 若稿件已明确绑定到 editor_id / assistant_editor_id / owner_id，
+        #   则对应角色应至少具备只读访问（避免生产阶段页面 403 导致流程中断）。
+        if purpose == "read":
+            assigned_editor_id = str(manuscript.get("editor_id") or "").strip()
+            if assigned_editor_id and assigned_editor_id == uid and "managing_editor" in roles:
+                return
+
+            assigned_ae_id = str(manuscript.get("assistant_editor_id") or "").strip()
+            if assigned_ae_id and assigned_ae_id == uid and "assistant_editor" in roles:
+                return
+
+            assigned_owner_id = str(manuscript.get("owner_id") or "").strip()
+            if assigned_owner_id and assigned_owner_id == uid and "owner" in roles:
+                return
+
         # 中文注释:
         # - 一个用户可能同时拥有多个角色（例如 assistant_editor + managing_editor）。
         # - 访问控制应按“任一角色满足即可放行”，避免因为缺少 journal scope 把已被分配的 AE 挡掉。
