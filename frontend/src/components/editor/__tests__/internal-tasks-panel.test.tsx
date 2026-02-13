@@ -57,8 +57,8 @@ describe('InternalTasksPanel', () => {
       expect(EditorApi.listInternalTasks).toHaveBeenCalledWith('m1')
     })
 
-    expect(screen.getByText('Only the assignee or internal editor can update this task.')).toBeInTheDocument()
-    const selectTrigger = screen.getByRole('combobox', { name: 'Task Locked Task status' })
+    expect(await screen.findByText('Only the assignee or internal editor can update this task.')).toBeInTheDocument()
+    const selectTrigger = await screen.findByRole('combobox', { name: 'Task Locked Task status' })
     expect(selectTrigger).toBeDisabled()
   })
 
