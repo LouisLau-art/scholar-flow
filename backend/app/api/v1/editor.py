@@ -633,26 +633,41 @@ async def get_editor_manuscript_detail(
                 if (not allowed) and ("production_editor" in viewer_role_set):
                     # 生产角色只允许看自己负责的活跃 production cycle。
                     try:
+                        active_statuses = [
+                            "draft",
+                            "awaiting_author",
+                            "author_corrections_submitted",
+                            "author_confirmed",
+                            "in_layout_revision",
+                        ]
                         pc = (
                             supabase_admin.table("production_cycles")
                             .select("id")
                             .eq("manuscript_id", id)
                             .eq("layout_editor_id", viewer_user_id)
-                            .in_(
-                                "status",
-                                [
-                                    "draft",
-                                    "awaiting_author",
-                                    "author_corrections_submitted",
-                                    "author_confirmed",
-                                    "in_layout_revision",
-                                ],
-                            )
+                            .in_("status", active_statuses)
                             .limit(1)
                             .execute()
                         )
                         if getattr(pc, "data", None):
                             allowed = True
+                        else:
+                            # Feature 042B: 协作者（collaborator_editor_ids）同样可访问详情页。
+                            try:
+                                pc2 = (
+                                    supabase_admin.table("production_cycles")
+                                    .select("id")
+                                    .eq("manuscript_id", id)
+                                    .contains("collaborator_editor_ids", [viewer_user_id])
+                                    .in_("status", active_statuses)
+                                    .limit(1)
+                                    .execute()
+                                )
+                                if getattr(pc2, "data", None):
+                                    allowed = True
+                            except Exception:
+                                # 兼容旧环境未迁移 collaborator_editor_ids：忽略即可
+                                pass
                     except Exception:
                         allowed = False
 
