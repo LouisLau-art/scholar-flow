@@ -125,9 +125,12 @@ class DecisionService:
     def _ensure_editor_access(
         self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]
     ) -> None:
-        # admin / editor_in_chief 可跨稿件访问；
-        # managing_editor 按 editor_id 绑定访问，assistant_editor 按 assistant_editor_id 绑定访问。
+        # admin / editor_in_chief 可跨稿件访问（期刊 scope 会在上层统一约束）。
         if roles.intersection({"admin", "editor_in_chief"}):
+            return
+        # managing_editor 是“按期刊 scope 管理”的角色，不要求 manuscript 级别绑定；
+        # scope 校验会在 _ensure_internal_decision_access 里统一执行。
+        if "managing_editor" in roles:
             return
         assigned_editor_id = str(manuscript.get("editor_id") or "")
         if assigned_editor_id and assigned_editor_id == str(user_id):
