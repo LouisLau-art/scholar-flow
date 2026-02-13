@@ -359,7 +359,7 @@ async def download_invoice_pdf(
 
     ms_resp = (
         supabase_admin.table("manuscripts")
-        .select("id, author_id, title")
+        .select("id, author_id, title, status, invoice_metadata")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
@@ -380,7 +380,46 @@ async def download_invoice_pdf(
     )
     inv_rows = getattr(inv_resp, "data", None) or []
     if not inv_rows:
-        raise HTTPException(status_code=404, detail="Invoice not found")
+        # 中文注释:
+        # - 账单通常在 Final accept 时由 editor 决策接口创建（async 生成 PDF）。
+        # - 但在 UAT/开发阶段可能存在“手动把状态改为 approved”或历史数据，导致 invoices 行缺失。
+        # - 为避免作者端下载 404，这里按稿件 invoice_metadata.apc_amount 兜底创建 invoice（幂等 upsert）。
+        ms_status = str(ms.get("status") or "").strip().lower()
+        if ms_status not in {"approved", "layout", "english_editing", "proofreading", "published"}:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        meta = ms.get("invoice_metadata") if isinstance(ms.get("invoice_metadata"), dict) else {}
+        try:
+            apc_amount = float(meta.get("apc_amount") or 0)
+        except Exception:
+            apc_amount = 0.0
+        if apc_amount < 0:
+            apc_amount = 0.0
+
+        invoice_status = "paid" if apc_amount == 0 else "unpaid"
+        invoice_payload = {
+            "manuscript_id": str(manuscript_id),
+            "amount": apc_amount,
+            "status": invoice_status,
+            "confirmed_at": datetime.now(timezone.utc).isoformat() if invoice_status == "paid" else None,
+        }
+        try:
+            supabase_admin.table("invoices").upsert(invoice_payload, on_conflict="manuscript_id").execute()
+        except Exception as e:
+            print(f"[InvoicePDF] invoice upsert failed: manuscript={manuscript_id} error={e}")
+            raise HTTPException(status_code=500, detail="Failed to create invoice")
+
+        inv_resp = (
+            supabase_admin.table("invoices")
+            .select("id, amount, pdf_path, pdf_error")
+            .eq("manuscript_id", str(manuscript_id))
+            .limit(1)
+            .execute()
+        )
+        inv_rows = getattr(inv_resp, "data", None) or []
+        if not inv_rows:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
     inv = inv_rows[0]
 
     invoice_id = UUID(str(inv.get("id")))
