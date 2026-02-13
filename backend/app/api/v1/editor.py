@@ -579,12 +579,6 @@ async def get_editor_manuscript_detail(
     Feature 028 / US2: Editor 专用稿件详情（包含 invoice_metadata、owner/editor profile、journal 信息）。
     """
     _require_action_or_403(action="manuscript:view_detail", roles=profile.get("roles") or [])
-    ensure_manuscript_scope_access(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        roles=profile.get("roles") or [],
-        allow_admin_bypass=True,
-    )
 
     try:
         resp = (
@@ -599,6 +593,60 @@ async def get_editor_manuscript_detail(
         raise HTTPException(status_code=404, detail="Manuscript not found") from e
     if not ms:
         raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    # RBAC / Journal Scope:
+    # - admin: always allow
+    # - assistant_editor: allow if assigned to this manuscript (even if user also has managing_editor role but missing scope)
+    # - managing_editor/editor_in_chief: enforce journal_role_scopes
+    # - production_editor: allow if assigned to an active production cycle (layout_editor_id matches)
+    viewer_user_id = str(current_user.get("id") or "").strip()
+    viewer_roles = sorted(normalize_roles(profile.get("roles") or []))
+    viewer_role_set = set(viewer_roles)
+
+    if "admin" not in viewer_role_set:
+        assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
+        if assigned_ae_id and assigned_ae_id == viewer_user_id:
+            pass
+        else:
+            allowed = False
+            if viewer_role_set.intersection({"managing_editor", "editor_in_chief"}):
+                # 强隔离：管理角色必须通过期刊 scope
+                ensure_manuscript_scope_access(
+                    manuscript_id=id,
+                    user_id=viewer_user_id,
+                    roles=viewer_roles,
+                    allow_admin_bypass=True,
+                )
+                allowed = True
+
+            if (not allowed) and ("production_editor" in viewer_role_set):
+                # 生产角色只允许看自己负责的活跃 production cycle。
+                try:
+                    pc = (
+                        supabase_admin.table("production_cycles")
+                        .select("id")
+                        .eq("manuscript_id", id)
+                        .eq("layout_editor_id", viewer_user_id)
+                        .in_(
+                            "status",
+                            [
+                                "draft",
+                                "awaiting_author",
+                                "author_corrections_submitted",
+                                "author_confirmed",
+                                "in_layout_revision",
+                            ],
+                        )
+                        .limit(1)
+                        .execute()
+                    )
+                    if getattr(pc, "data", None):
+                        allowed = True
+                except Exception:
+                    allowed = False
+
+            if not allowed:
+                raise HTTPException(status_code=403, detail="Forbidden")
 
     t_total_start = perf_counter()
     timings: dict[str, float] = {}
