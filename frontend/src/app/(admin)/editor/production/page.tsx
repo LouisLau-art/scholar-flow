@@ -92,7 +92,7 @@ export default function ProductionQueuePage() {
               <div>
                 <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Production Queue</h1>
                 <p className="mt-1 text-slate-500 font-medium">
-                  仅展示分配给你（layout_editor_id）的活跃生产轮次：清样上传、作者校对与发布前核准。
+                  仅展示分配给你（layout_editor_id 或协作者）的活跃生产轮次：清样上传、作者校对与发布前核准。
                 </p>
               </div>
             </div>
@@ -163,4 +163,3 @@ export default function ProductionQueuePage() {
     </QueryProvider>
   )
 }
-

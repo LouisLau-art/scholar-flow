@@ -458,7 +458,7 @@ function DashboardPageContent() {
                 title="Production Editor Workspace"
                 description="Manage galley proofs, author corrections, and approve production cycles for publish gates."
                 actions={[
-                  { label: 'Production Queue', href: '/editor/production', helper: 'See production cycles assigned to you (layout_editor_id).' },
+                  { label: 'Production Queue', href: '/editor/production', helper: 'See production cycles assigned to you (layout_editor_id / collaborators).' },
                 ]}
               />
             </TabsContent>
