@@ -268,6 +268,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
+- **Invoice PDF 中文字体（2026-02-24）**：HF Docker 镜像需安装 `fonts-noto-cjk`；`backend/app/core/templates/invoice_pdf.html` 字体栈已包含 `PingFang SC` / `Noto Sans CJK SC` 回退。若本地直接生成发票 PDF，也需在系统安装任一 CJK 字体以避免中文方块字。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
 - **Portal Citation/Topics（Feature 034）**：公开文章引用导出统一走后端 `GET /api/v1/manuscripts/articles/{id}/citation.bib|ris`；`/topics` 统一走 `GET /api/v1/public/topics` 动态聚合（基于已发表文章/期刊关键词推断，MVP 不依赖新增 subject 表字段）。
@@ -310,6 +311,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **Invoice PDF 中文字体修复（2026-02-24）**：Docker 镜像新增 `fonts-noto-cjk`，发票模板字体链路补齐 `PingFang SC`/`Noto Sans CJK SC`，修复作者下载 invoice 时中文显示为方块的问题。
 - **ME Workspace + Cover Letter 补传 + Production 权限收敛（2026-02-24）**：新增 `GET /api/v1/editor/managing-workspace` 与前端页面 `/editor/managing-workspace`（按状态分组展示 ME 跟进稿件）；编辑详情页 File Hub 新增 cover letter 补传入口（`POST /api/v1/editor/manuscripts/{id}/files/cover-letter`）；production workspace 权限收敛为 `admin/managing_editor/editor_in_chief/production_editor`，`assistant_editor` 不再可读访问录用后 production 流程。
 - **Editor 详情页与时间线性能优化（2026-02-24）**：新增聚合接口 `GET /api/v1/editor/manuscripts/{id}/timeline-context`，将时间线组件从多请求收敛为单请求；`editor_detail` 新增 Auth profile fallback 的 5 分钟 TTL 缓存，避免 profile 缺失时每次详情页都串行调用最多 20 次 Auth Admin API。
 - **Editor 详情页卡片延迟加载（2026-02-24）**：`GET /api/v1/editor/manuscripts/{id}` 新增 `skip_cards` 查询参数以跳过首屏统计计算；新增 `GET /api/v1/editor/manuscripts/{id}/cards-context` 独立返回 `task_summary + role_queue`，前端进入卡片区域后再加载，降低详情首屏阻塞。

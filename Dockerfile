@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     libgdk-pixbuf-xlib-2.0-0 \
     shared-mime-info \
     fonts-dejavu-core \
+    fonts-noto-cjk \
     git \
     && rm -rf /var/lib/apt/lists/*
 

@@ -135,3 +135,16 @@ def test_generate_invoice_pdf_handles_amount_parse_errors(monkeypatch, bad_amoun
     )
     assert result.pdf_error is None
 
+
+def test_render_invoice_html_includes_cjk_font_fallback():
+    html = invoice_pdf_service._render_invoice_html(
+        invoice_number="INV-2026-TEST",
+        issue_date="2026-02-24",
+        author_name="张三",
+        manuscript_id="ms-1",
+        manuscript_title="中文标题测试",
+        amount_display="USD 100.00",
+        bank_details="开户行：测试银行",
+    )
+    assert "PingFang SC" in html
+    assert "Noto Sans CJK SC" in html
