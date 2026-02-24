@@ -912,7 +912,7 @@ export default function EditorManuscriptDetailPage() {
                                     onStatusChange={(next) => {
                                         setMs((prev) => (prev ? { ...prev, status: next } : prev))
                                     }}
-                                    onReload={load}
+                                    onReload={refreshDetail}
                                 />
                               </>
                             ) : (
