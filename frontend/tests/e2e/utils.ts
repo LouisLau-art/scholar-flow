@@ -1,6 +1,17 @@
 import type { Page, Route } from '@playwright/test'
 
-const SUPABASE_STORAGE_KEY = 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
+function resolveSupabaseStorageKey(): string {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  try {
+    const ref = new URL(raw).hostname.split('.')[0]
+    if (ref) return `sb-${ref}-auth-token`
+  } catch {
+    // ignore
+  }
+  return 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
+}
+
+const SUPABASE_STORAGE_KEY = resolveSupabaseStorageKey()
 
 function base64UrlEncode(input: string) {
   return Buffer.from(input, 'utf-8')

@@ -39,7 +39,14 @@ test.describe('Decision Workspace flow (mocked)', () => {
             ],
             draft: null,
             templates: [{ id: 'default', name: 'Default', content: 'Template from backend' }],
-            permissions: { can_submit: true, is_read_only: false },
+            permissions: {
+              can_submit: true,
+              can_record_first: true,
+              can_submit_final: true,
+              has_submitted_author_revision: true,
+              final_blocking_reasons: [],
+              is_read_only: false,
+            },
           },
         })
       }

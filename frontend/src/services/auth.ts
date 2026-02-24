@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
 const STORAGE_KEY = 'scholarflow:access_token'
+const SESSION_CACHE_TTL_MS = 10_000
 const SUPABASE_STORAGE_KEY = (() => {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   try {
@@ -13,12 +14,22 @@ const SUPABASE_STORAGE_KEY = (() => {
   return 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
 })()
 
+let sessionCache: { value: Session | null; expiresAt: number } | null = null
+let inflightSessionRequest: Promise<Session | null> | null = null
+
 const cacheToken = (token?: string | null) => {
   if (typeof window === 'undefined') return
   if (token) {
     localStorage.setItem(STORAGE_KEY, token)
   } else {
     localStorage.removeItem(STORAGE_KEY)
+  }
+}
+
+function cacheSession(session: Session | null): void {
+  sessionCache = {
+    value: session,
+    expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
   }
 }
 
@@ -67,17 +78,32 @@ function isLikelyExpired(token: string, skewSeconds = 60): boolean {
 
 export const authService = {
   async getSession(): Promise<Session | null> {
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
-    if (token && !isLikelyExpired(token)) {
-      cacheToken(token)
-      return data.session ?? null
-    }
+    const cached = sessionCache
+    if (cached && cached.expiresAt > Date.now()) return cached.value
+    if (inflightSessionRequest) return inflightSessionRequest
 
-    const refreshed = await supabase.auth.refreshSession().catch(() => null)
-    const refreshedSession = refreshed?.data?.session ?? null
-    cacheToken(refreshedSession?.access_token ?? data.session?.access_token ?? null)
-    return refreshedSession ?? data.session ?? null
+    inflightSessionRequest = (async () => {
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (token && !isLikelyExpired(token)) {
+        cacheToken(token)
+        cacheSession(data.session ?? null)
+        return data.session ?? null
+      }
+
+      const refreshed = await supabase.auth.refreshSession().catch(() => null)
+      const refreshedSession = refreshed?.data?.session ?? null
+      const finalSession = refreshedSession ?? data.session ?? null
+      cacheToken(finalSession?.access_token ?? null)
+      cacheSession(finalSession)
+      return finalSession
+    })()
+
+    try {
+      return await inflightSessionRequest
+    } finally {
+      inflightSessionRequest = null
+    }
   },
   async getAccessToken(): Promise<string | null> {
     const local = readAccessTokenFromLocalStorage()
@@ -93,8 +119,10 @@ export const authService = {
   },
   async forceRefreshAccessToken(): Promise<string | null> {
     const refreshed = await supabase.auth.refreshSession().catch(() => null)
-    const token = refreshed?.data?.session?.access_token ?? null
+    const refreshedSession = refreshed?.data?.session ?? null
+    const token = refreshedSession?.access_token ?? null
     cacheToken(token)
+    cacheSession(refreshedSession)
     return token
   },
   async getUserProfile(): Promise<any> {
@@ -109,10 +137,13 @@ export const authService = {
   async signOut(): Promise<void> {
     await supabase.auth.signOut()
     cacheToken(null)
+    sessionCache = null
+    inflightSessionRequest = null
   },
   onAuthStateChange(handler: (session: Session | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
       cacheToken(session?.access_token)
+      cacheSession(session ?? null)
       handler(session)
     })
   },

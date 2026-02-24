@@ -398,6 +398,7 @@ async def test_detail_cross_journal_forbidden(
         }
     )
     monkeypatch.setattr("app.core.journal_scope.supabase_admin", fake)
+    monkeypatch.setattr("app.api.v1.editor_detail.supabase_admin", fake)
 
     response = await client.get(
         "/api/v1/editor/manuscripts/m-403",
@@ -427,6 +428,7 @@ async def test_detail_me_without_scope_forbidden_when_enforcement_off(
         }
     )
     monkeypatch.setattr("app.core.journal_scope.supabase_admin", fake)
+    monkeypatch.setattr("app.api.v1.editor_detail.supabase_admin", fake)
 
     response = await client.get(
         "/api/v1/editor/manuscripts/m-403",

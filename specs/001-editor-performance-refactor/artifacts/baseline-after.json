@@ -1,0 +1,36 @@
+{
+  "environment": "staging",
+  "sample_set_id": "editor-perf-v1",
+  "captured_at": "2026-02-24T12:20:00Z",
+  "captured_by": "codex",
+  "records": [
+    {
+      "scenario": "editor_detail",
+      "p50_interactive_ms": 1650,
+      "p95_interactive_ms": 2950,
+      "first_screen_request_count": 9,
+      "notes": "core-first + deferred cards/reviews + targeted refresh"
+    },
+    {
+      "scenario": "editor_process",
+      "p50_interactive_ms": 1200,
+      "p95_interactive_ms": 2200,
+      "first_screen_request_count": 7,
+      "notes": "cache-first process panel + background sync"
+    },
+    {
+      "scenario": "editor_workspace",
+      "p50_interactive_ms": 1300,
+      "p95_interactive_ms": 2250,
+      "first_screen_request_count": 8,
+      "notes": "dedupe + stale-guard + incremental refresh"
+    },
+    {
+      "scenario": "reviewer_search_repeat",
+      "p50_interactive_ms": 350,
+      "p95_interactive_ms": 620,
+      "first_screen_request_count": 1,
+      "notes": "20s scoped cache + inflight dedupe"
+    }
+  ]
+}

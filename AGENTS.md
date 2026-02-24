@@ -310,6 +310,14 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-09）
+- **Editor 详情页与时间线性能优化（2026-02-24）**：新增聚合接口 `GET /api/v1/editor/manuscripts/{id}/timeline-context`，将时间线组件从多请求收敛为单请求；`editor_detail` 新增 Auth profile fallback 的 5 分钟 TTL 缓存，避免 profile 缺失时每次详情页都串行调用最多 20 次 Auth Admin API。
+- **Editor 详情页卡片延迟加载（2026-02-24）**：`GET /api/v1/editor/manuscripts/{id}` 新增 `skip_cards` 查询参数以跳过首屏统计计算；新增 `GET /api/v1/editor/manuscripts/{id}/cards-context` 独立返回 `task_summary + role_queue`，前端进入卡片区域后再加载，降低详情首屏阻塞。
+- **Reviewer Feedback 视口惰性加载（2026-02-24）**：详情页审稿反馈卡片新增视口激活逻辑，默认不随 `refreshDetail` 自动请求；仅在卡片进入视口后加载，且 `pre_check` 阶段保持跳过，进一步减少首屏与高频刷新时的网络占用。
+- **RBAC 上下文并发与短缓存（2026-02-24）**：`EditorApi.getRbacContext` 改为缓存 GET，请求与详情主数据并发启动（不再串行触发），减少编辑详情页初始化链路中的重复鉴权上下文请求。
+- **内部协作回调去重（2026-02-24）**：`InternalNotebook` / `InternalTasksPanel` 的变更回调不再触发整页 `refreshDetail`，改为仅在卡片可见时刷新 `cards-context`，减少内部协作高频操作导致的详情重拉。
+- **Reviewer 候选搜索稳态优化（2026-02-24）**：`ReviewerAssignModal` 改为“打开弹窗后加载 + 250ms 搜索防抖 + 20s scoped short cache + inflight dedupe”；缓存键绑定 `manuscript_id + query + role_scope + limit`，并提供 `EditorApi.invalidateReviewerSearchCache` 供上下文切换失效。
+- **Workspace 请求防旧响应覆盖（2026-02-24）**：`/editor/workspace` 前端新增 `requestId` + `AbortController`，旧请求返回不再覆盖新数据；同时增加短缓存与增量刷新按钮（`workspace-refresh-btn`），提交技术检查后仅触发静默局部刷新。
+- **性能基线与门禁脚本（2026-02-24）**：新增 `scripts/perf/capture-editor-baseline.sh`、`compare-editor-baseline.sh`、`write-regression-report.sh` 与 `scripts/validate-editor-performance.sh`，统一产出 `baseline-compare.json` + `regression-report.md` 并执行 GO/NO-GO 判定。
 - **Legacy editor 清理（Phase-1，2026-02-11）**：新增 `supabase/migrations/20260211160000_cleanup_legacy_editor_role.sql`，完成历史 `editor -> managing_editor` 的数据清洗（`user_profiles.roles` + `journal_role_scopes.role`）与约束收敛；为后续彻底移除后端兼容 alias 做前置准备。
 - **鲁总三段决策口径落地（2026-02-11）**：后端 `submit_technical_check` 新增 `academic` 分支（AE 可选送 EIC Academic Queue），`submit_decision` 收紧为“Final 仅允许修回后执行”；前端 `/editor/workspace` 技术检查弹窗升级为三选一（发起外审/送 Academic/技术退回），并同步更新 `docs/upgrade_plan_v3.md + flow_lifecycle_v3.mmd + state_manuscript_v3.mmd` 与新版 PDF。
 - **EIC 决策队列可见性修复（2026-02-12）**：`First Decision` 草稿保存后，稿件会从 `under_review/resubmitted` 自动进入 `decision`；`/api/v1/editor/final-decision` 同时纳入“已有 first draft 的稿件”，避免 AE 已提交草稿但 EIC 队列为空。
@@ -352,13 +360,10 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 001-editor-performance-refactor: Added Python 3.14+（backend）, TypeScript 5.x（frontend） + FastAPI, Pydantic v2, Supabase-py, Next.js 14 App Router, React 18, bun, uv
 - 047-analytics-management-insights: Added analytics management drilldown (editor efficiency ranking, stage duration breakdown, SLA overdue alerts) with `/api/v1/analytics/management`, RBAC + journal-scope filtering, and dashboard UI integration.
 - 048-role-matrix-journal-scope-rbac: Completed GAP-P1-05 end-to-end (role matrix + journal scope isolation + first/final decision semantics + high-risk audit payload + mocked E2E).
-- 047-portal-scholar-toolbox: Added article citation exports (BibTeX/RIS), dynamic subject collections API, and citation_pdf_url metadata wiring for Scholar/SEO
-- 046-finance-invoices-sync: Replaced `/finance` demo data with real invoices list/filter/export and unified Mark Paid conflict+audit flow across Finance and Editor Pipeline
-- 045-internal-collaboration-enhancement: Added @mentions + internal tasks + overdue SLA filters (backend APIs, frontend panels, regression tests)
-- 044-precheck-role-hardening: Added Python 3.14+（本地开发）/ Python 3.12（HF Docker），TypeScript 5.x（Strict） + FastAPI 0.115+, Pydantic v2, Supabase-py v2, Next.js 14.2 (App Router), React 18, Tailwind + Shadcn
 
 ## Active Technologies
-- Python 3.14+（本地）/ Python 3.12（HF Docker），TypeScript 5.x（Strict） + FastAPI 0.115+, Pydantic v2, Supabase-py v2, Next.js 14.2 (App Router), React 18, Tailwind + Shadcn (046-finance-invoices-sync)
-- Supabase PostgreSQL（`invoices`, `manuscripts`, `user_profiles`, `status_transition_logs`），Supabase Storage（复用 `invoices` bucket） (046-finance-invoices-sync)
+- Python 3.14+（backend）, TypeScript 5.x（frontend） + FastAPI, Pydantic v2, Supabase-py, Next.js 14 App Router, React 18, bun, uv (001-editor-performance-refactor)
+- Supabase PostgreSQL（云端）+ 前端内存短缓存（会话级）+ 文档化基线产物（仓库 specs） (001-editor-performance-refactor)

@@ -27,6 +27,46 @@ INTERNAL_COLLAB_ALLOWED_ROLES = [
 ]
 
 
+def _load_audit_logs_with_users(manuscript_id: str) -> list[dict]:
+    """
+    读取稿件状态流转日志并补充操作者信息。
+    """
+    try:
+        resp = (
+            supabase_admin.table("status_transition_logs")
+            .select("*, changed_by")
+            .eq("manuscript_id", manuscript_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        logs = getattr(resp, "data", None) or []
+
+        user_ids = sorted(list(set(log["changed_by"] for log in logs if log.get("changed_by"))))
+        users_map = {}
+        if user_ids:
+            try:
+                u_resp = (
+                    supabase_admin.table("user_profiles")
+                    .select("id, full_name, email")
+                    .in_("id", user_ids)
+                    .execute()
+                )
+                for u in (getattr(u_resp, "data", None) or []):
+                    users_map[u["id"]] = u
+            except Exception:
+                pass
+
+        for log in logs:
+            uid = log.get("changed_by")
+            log["user"] = users_map.get(uid) or {"full_name": "System/Unknown", "email": ""}
+        return logs
+    except Exception as e:
+        print(f"[AuditLogs] fetch failed: {e}")
+        if "does not exist" in str(e):
+            return []
+        raise
+
+
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
     id: str,
@@ -193,6 +233,95 @@ async def get_internal_task_activity(
         raise HTTPException(status_code=500, detail="Failed to fetch task activity")
 
 
+@router.get("/manuscripts/{id}/tasks/activity")
+async def list_internal_task_activity(
+    id: str,
+    task_limit: int = Query(50, ge=1, le=200, description="参与聚合的任务数上限"),
+    activity_limit: int = Query(500, ge=1, le=1000, description="返回活动条数上限"),
+    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    """
+    批量获取稿件任务活动日志（避免前端按任务逐个请求）。
+    """
+    svc = InternalTaskService()
+    try:
+        rows = svc.list_manuscript_activity(
+            manuscript_id=id,
+            task_limit=int(task_limit),
+            activity_limit=int(activity_limit),
+        )
+        return {"success": True, "data": rows}
+    except InternalTaskSchemaMissingError as e:
+        raise HTTPException(status_code=500, detail=f"DB not migrated: {e.table} table missing")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[InternalTasks] manuscript activity failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch manuscript task activity")
+
+
+@router.get("/manuscripts/{id}/timeline-context")
+async def get_internal_timeline_context(
+    id: str,
+    task_limit: int = Query(50, ge=1, le=200, description="参与聚合的任务数上限"),
+    activity_limit: int = Query(500, ge=1, le=1000, description="返回活动条数上限"),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+):
+    """
+    聚合时间线上下文，减少前端并发请求数。
+    """
+    collab_svc = InternalCollaborationService()
+    task_svc = InternalTaskService()
+
+    data = {
+        "audit_logs": [],
+        "comments": [],
+        "tasks": [],
+        "task_activities": [],
+    }
+
+    try:
+        data["audit_logs"] = _load_audit_logs_with_users(id)
+    except Exception as e:
+        print(f"[TimelineContext] audit logs failed: {e}")
+
+    try:
+        data["comments"] = collab_svc.list_comments(id)
+    except InternalCollaborationSchemaMissingError as e:
+        if e.table != "internal_comments":
+            print(f"[TimelineContext] comments schema missing: {e.table}")
+    except Exception as e:
+        if not _is_missing_table_error(e):
+            print(f"[TimelineContext] comments failed: {e}")
+
+    try:
+        data["tasks"] = task_svc.list_tasks(
+            manuscript_id=id,
+            actor_user_id=str(current_user.get("id") or ""),
+            actor_roles=profile.get("roles") or [],
+            status=None,
+            overdue_only=False,
+        )
+    except InternalTaskSchemaMissingError as e:
+        print(f"[TimelineContext] tasks schema missing: {e.table}")
+    except Exception as e:
+        print(f"[TimelineContext] tasks failed: {e}")
+
+    try:
+        data["task_activities"] = task_svc.list_manuscript_activity(
+            manuscript_id=id,
+            task_limit=int(task_limit),
+            activity_limit=int(activity_limit),
+        )
+    except InternalTaskSchemaMissingError as e:
+        print(f"[TimelineContext] task activity schema missing: {e.table}")
+    except Exception as e:
+        print(f"[TimelineContext] task activity failed: {e}")
+
+    return {"success": True, "data": data}
+
+
 @router.get("/manuscripts/{id}/audit-logs")
 async def get_audit_logs(
     id: str,
@@ -202,37 +331,6 @@ async def get_audit_logs(
     Feature 036: Fetch status transition logs.
     """
     try:
-        resp = (
-            supabase_admin.table("status_transition_logs")
-            .select("*, changed_by")
-            .eq("manuscript_id", id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        logs = getattr(resp, "data", None) or []
-
-        user_ids = sorted(list(set(log["changed_by"] for log in logs if log.get("changed_by"))))
-        users_map = {}
-        if user_ids:
-            try:
-                u_resp = (
-                    supabase_admin.table("user_profiles")
-                    .select("id, full_name, email")
-                    .in_("id", user_ids)
-                    .execute()
-                )
-                for u in (getattr(u_resp, "data", None) or []):
-                    users_map[u["id"]] = u
-            except Exception:
-                pass
-
-        for log in logs:
-            uid = log.get("changed_by")
-            log["user"] = users_map.get(uid) or {"full_name": "System/Unknown", "email": ""}
-
-        return {"success": True, "data": logs}
+        return {"success": True, "data": _load_audit_logs_with_users(id)}
     except Exception as e:
-        print(f"[AuditLogs] fetch failed: {e}")
-        if "does not exist" in str(e):
-            return {"success": True, "data": []}
         raise HTTPException(status_code=500, detail="Failed to fetch audit logs")

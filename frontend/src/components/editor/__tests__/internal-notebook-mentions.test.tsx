@@ -51,7 +51,7 @@ describe('InternalNotebook mentions', () => {
 
     await waitFor(() => {
       expect(EditorApi.getInternalComments).toHaveBeenCalledWith('m1')
-      expect(EditorApi.listInternalStaff).toHaveBeenCalledWith('', { excludeCurrentUser: true })
+      expect(EditorApi.listInternalStaff).toHaveBeenCalledWith('')
     })
 
     fireEvent.click(screen.getByRole('button', { name: /expand/i }))
@@ -71,5 +71,27 @@ describe('InternalNotebook mentions', () => {
     expect(screen.getByTestId('notebook-mentions')).toBeInTheDocument()
     expect(screen.getByText('@Alice Editor')).toBeInTheDocument()
     expect(screen.getByText('@Bob Editor')).toBeInTheDocument()
+  })
+
+  it('triggers targeted refresh callback after posting comment', async () => {
+    const onCommentPosted = vi.fn()
+    render(<InternalNotebook manuscriptId="m1" onCommentPosted={onCommentPosted} />)
+
+    await waitFor(() => {
+      expect(EditorApi.getInternalComments).toHaveBeenCalledWith('m1')
+    })
+
+    fireEvent.change(screen.getByPlaceholderText(/Type an internal note/i), {
+      target: { value: 'Only refresh cards context' },
+    })
+    fireEvent.click(screen.getByLabelText('Post internal note'))
+
+    await waitFor(() => {
+      expect(EditorApi.postInternalCommentWithMentions).toHaveBeenCalledWith('m1', {
+        content: 'Only refresh cards context',
+        mention_user_ids: [],
+      })
+      expect(onCommentPosted).toHaveBeenCalledTimes(1)
+    })
   })
 })

@@ -50,10 +50,13 @@ test.describe('Reviewer invite accept flow (mocked)', () => {
 
     await page.goto(`/review/invite?token=fake-token&assignment_id=${assignmentId}`)
     await expect(page.getByText('Accept Flow Manuscript')).toBeVisible()
-    await expect(page.getByLabel('Due date')).toBeVisible()
-    await page.getByRole('button', { name: 'Accept & Continue' }).click()
+    await expect(page.getByText('Due date', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '2026-02-07' })).toBeVisible()
+    await Promise.all([
+      page.waitForURL(new RegExp(`/reviewer/workspace/${assignmentId}$`)),
+      page.getByRole('button', { name: 'Accept & Continue' }).click(),
+    ])
     await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${assignmentId}$`))
-    await expect(page.getByText('Action Panel')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Review Comment' })).toBeVisible()
   })
 })
-

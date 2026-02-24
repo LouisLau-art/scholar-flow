@@ -1,0 +1,585 @@
+openapi: 3.0.3
+info:
+  title: ScholarFlow Editor Performance Refactor Contracts
+  version: 0.1.0
+  description: |
+    Contracts for editor-side performance optimization and regression gating workflows.
+servers:
+  - url: /api/v1
+paths:
+  /editor/manuscripts/{id}:
+    get:
+      tags: [Editor Detail]
+      summary: Get manuscript detail with optional card-skip mode
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: skip_cards
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Return core detail first and skip heavy card calculation when true.
+      responses:
+        '200':
+          description: Manuscript detail payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManuscriptDetailResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden by RBAC or journal scope
+
+  /editor/manuscripts/{id}/cards-context:
+    get:
+      tags: [Editor Detail]
+      summary: Load deferred heavy cards context for manuscript detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deferred cards context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardsContextResponse'
+        '401':
+          description: Unauthorized
+
+  /editor/manuscripts/{id}/timeline-context:
+    get:
+      tags: [Editor Detail]
+      summary: Load consolidated timeline context
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Timeline aggregate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineContextResponse'
+
+  /editor/manuscripts/process:
+    get:
+      tags: [Editor Process]
+      summary: Query process list with search and filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: journal_id
+          schema:
+            type: string
+        - in: query
+          name: manuscript_id
+          schema:
+            type: string
+        - in: query
+          name: owner_id
+          schema:
+            type: string
+        - in: query
+          name: editor_id
+          schema:
+            type: string
+        - in: query
+          name: overdue_only
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: status
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Process rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessListResponse'
+
+  /editor/workspace:
+    get:
+      tags: [Editor Workspace]
+      summary: Query assistant editor workspace list
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Workspace rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+
+  /editor/reviewer-library:
+    get:
+      tags: [Reviewer Assignment]
+      summary: Search reviewer candidates for assignment modal
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+            description: Candidate search keyword, normalized by trim/lowercase in client cache key.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: manuscript_id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reviewer candidates with invite policy metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerLibrarySearchResponse'
+
+  /internal/release-validation/runs:
+    post:
+      tags: [Release Validation]
+      summary: Create a release validation run
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '201':
+          description: Run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRunResponse'
+    get:
+      tags: [Release Validation]
+      summary: List release validation runs
+      security:
+        - adminApiKey: []
+      parameters:
+        - in: query
+          name: environment
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Run list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRunsResponse'
+
+  /internal/release-validation/runs/{run_id}/regression:
+    post:
+      tags: [Release Validation]
+      summary: Execute regression checks for a run
+      security:
+        - adminApiKey: []
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegressionRequest'
+      responses:
+        '200':
+          description: Regression check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationCheckResponse'
+
+  /internal/release-validation/runs/{run_id}/readiness:
+    post:
+      tags: [Release Validation]
+      summary: Execute readiness checks for a run
+      security:
+        - adminApiKey: []
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadinessRequest'
+      responses:
+        '200':
+          description: Readiness check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationCheckResponse'
+
+  /internal/release-validation/runs/{run_id}/finalize:
+    post:
+      tags: [Release Validation]
+      summary: Finalize release decision for a run
+      security:
+        - adminApiKey: []
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeRequest'
+      responses:
+        '200':
+          description: Finalized go/no-go decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalizeResponse'
+
+  /internal/release-validation/runs/{run_id}/report:
+    get:
+      tags: [Release Validation]
+      summary: Get release validation report
+      security:
+        - adminApiKey: []
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Full report for go/no-go decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationReport'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    ManuscriptDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: Core manuscript detail and optionally heavy cards depending on skip_cards.
+
+    CardsContextResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: Deferred card widgets data.
+
+    TimelineContextResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: Unified timeline aggregate for detail page.
+
+    ProcessListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+
+    WorkspaceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+
+    ReviewerLibrarySearchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              full_name:
+                type: string
+              email:
+                type: string
+              invite_policy:
+                type: object
+                properties:
+                  can_assign:
+                    type: boolean
+                  cooldown_active:
+                    type: boolean
+                  allow_override:
+                    type: boolean
+        policy:
+          type: object
+          properties:
+            cooldown_days:
+              type: integer
+            override_roles:
+              type: array
+              items:
+                type: string
+
+    CreateRunRequest:
+      type: object
+      required: [feature_key, environment]
+      properties:
+        feature_key:
+          type: string
+        environment:
+          type: string
+        manuscript_id:
+          type: string
+        triggered_by:
+          type: string
+        note:
+          type: string
+
+    ValidationRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        feature_key:
+          type: string
+        environment:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        summary:
+          type: object
+        rollback_required:
+          type: boolean
+        blocking_count:
+          type: integer
+        failed_count:
+          type: integer
+        skipped_count:
+          type: integer
+
+    CreateRunResponse:
+      type: object
+      properties:
+        run:
+          $ref: '#/components/schemas/ValidationRun'
+
+    ListRunsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationRun'
+
+    RegressionRequest:
+      type: object
+      properties:
+        scenario_keys:
+          type: array
+          items:
+            type: string
+        require_zero_skip:
+          type: boolean
+          default: true
+
+    ReadinessRequest:
+      type: object
+      properties:
+        check_keys:
+          type: array
+          items:
+            type: string
+        strict_blocking:
+          type: boolean
+          default: true
+
+    FinalizeRequest:
+      type: object
+      properties:
+        force_no_go:
+          type: boolean
+          default: false
+        rollback_note:
+          type: string
+
+    ValidationCheckResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        result:
+          type: object
+          properties:
+            status:
+              type: string
+            checks:
+              type: array
+              items:
+                type: object
+                properties:
+                  phase:
+                    type: string
+                  check_key:
+                    type: string
+                  title:
+                    type: string
+                  status:
+                    type: string
+                  is_blocking:
+                    type: boolean
+                  detail:
+                    type: string
+                  evidence:
+                    type: object
+
+    FinalizeResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        release_decision:
+          type: string
+          enum: [go, no-go]
+        report:
+          $ref: '#/components/schemas/ValidationReport'
+
+    ValidationReport:
+      type: object
+      properties:
+        run:
+          $ref: '#/components/schemas/ValidationRun'
+        readiness_checks:
+          type: array
+          items:
+            type: object
+        regression_checks:
+          type: array
+          items:
+            type: object
+        rollback_plan:
+          type: object
+        release_decision:
+          type: string
+          enum: [go, no-go]

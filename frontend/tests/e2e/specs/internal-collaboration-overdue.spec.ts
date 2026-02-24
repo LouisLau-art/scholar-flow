@@ -29,7 +29,7 @@ test.describe('Internal collaboration overdue filter (mocked)', () => {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      if (path === '/api/v1/editor/manuscripts/process' && req.method() === 'GET') {
+      if (path.startsWith('/api/v1/editor/manuscripts/process') && req.method() === 'GET') {
         const overdueOnly = ['1', 'true', 'yes', 'on'].includes((url.searchParams.get('overdue_only') || '').toLowerCase())
         const rows = [
           {
@@ -66,10 +66,20 @@ test.describe('Internal collaboration overdue filter (mocked)', () => {
     await expect(table.getByText(normalId)).toBeVisible()
 
     await page.getByLabel('Overdue only').check()
-    await page.getByText('Search', { exact: true }).click()
+    const searchButton = page.getByRole('main').getByRole('button', { name: 'Search' }).last()
+    await expect(searchButton).toBeEnabled({ timeout: 10_000 })
+    const overdueFilteredResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/v1/editor/manuscripts/process') &&
+        res.url().includes('overdue_only=true') &&
+        res.request().method() === 'GET'
+    )
+    await searchButton.click()
+    await overdueFilteredResponse
+    await expect(page).toHaveURL(/overdue_only=true/)
 
     await expect(table.getByText(overdueId)).toBeVisible()
-    await expect(table.getByText(normalId)).not.toBeVisible()
+    await expect.poll(() => table.getByText(normalId).count(), { timeout: 10_000 }).toBe(0)
     await expect(table.getByText('Overdue')).toBeVisible()
   })
 })

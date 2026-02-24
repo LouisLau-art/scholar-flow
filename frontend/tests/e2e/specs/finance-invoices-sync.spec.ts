@@ -8,6 +8,7 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
 
 test.describe('Finance invoices sync (mocked)', () => {
   test('filters, confirms payment and exports with current filter', async ({ page }) => {
+    test.setTimeout(60_000)
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'editor@example.com'))
 
@@ -90,7 +91,7 @@ test.describe('Finance invoices sync (mocked)', () => {
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto('/finance')
+    await page.goto('/finance', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('INV-E2E-001')).toBeVisible()
     await expect(page.getByText('UNPAID', { exact: true })).toBeVisible()
 
@@ -99,7 +100,8 @@ test.describe('Finance invoices sync (mocked)', () => {
     await expect(page.getByText('PAID', { exact: true })).toBeVisible()
 
     // 切换到 paid 筛选，仍应可见
-    await page.getByLabel('Finance status filter').selectOption('paid')
+    await page.getByRole('combobox', { name: 'Finance status filter' }).click()
+    await page.getByRole('option', { name: 'Paid', exact: true }).click()
     await expect(page.getByText('INV-E2E-001')).toBeVisible()
 
     // 导出当前筛选

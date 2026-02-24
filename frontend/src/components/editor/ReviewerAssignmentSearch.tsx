@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
@@ -17,12 +17,21 @@ export function ReviewerAssignmentSearch(props: {
 }) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const manuscriptId = useMemo(() => String(props.manuscriptId || '').trim(), [props.manuscriptId])
+  const normalizedViewerRoles = useMemo(
+    () =>
+      (props.viewerRoles || [])
+        .map((role) => String(role).trim().toLowerCase())
+        .filter(Boolean)
+        .sort(),
+    [props.viewerRoles]
+  )
 
   const handleAssign = async (
     reviewerIds: string[],
     options?: { overrides?: Array<{ reviewerId: string; reason: string }> }
   ) => {
-    if (!props.manuscriptId) return false
+    if (!manuscriptId) return false
     setSubmitting(true)
     const toastId = toast.loading('Assigning reviewers...')
     try {
@@ -38,7 +47,7 @@ export function ReviewerAssignmentSearch(props: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            manuscript_id: props.manuscriptId,
+            manuscript_id: manuscriptId,
             reviewer_id: reviewerId,
             override_cooldown: Boolean(overrideReason),
             override_reason: overrideReason || undefined,
@@ -79,11 +88,11 @@ export function ReviewerAssignmentSearch(props: {
           isOpen={open}
           onClose={() => setOpen(false)}
           onAssign={handleAssign}
-          manuscriptId={props.manuscriptId}
+          manuscriptId={manuscriptId}
           currentOwnerId={props.currentOwnerId}
           currentOwnerLabel={props.currentOwnerLabel}
           canBindOwner={props.canBindOwner}
-          viewerRoles={props.viewerRoles}
+          viewerRoles={normalizedViewerRoles}
         />
       )}
     </>

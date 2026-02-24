@@ -63,6 +63,7 @@ async function mockApi(
         success: true,
         data: {
           roles: opts.roles,
+          normalized_roles: opts.roles,
           allowed_actions: [
             'process:view',
             'manuscript:view_detail',

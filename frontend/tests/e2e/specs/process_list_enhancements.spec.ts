@@ -6,13 +6,12 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
 }
 
 test.describe('Process list enhancements (mocked backend)', () => {
-  test('Debounced text search + quick pre-check action', async ({ page }) => {
+  test('Debounced text search + monitor read-only behavior', async ({ page }) => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'editor@example.com'))
 
     const manuscriptId = '33333333-3333-3333-3333-333333333333'
     const otherId = '44444444-4444-4444-4444-444444444444'
-    let status = 'pre_check'
     let updatedAt = new Date().toISOString()
 
     await page.route('**/api/v1/**', async (route) => {
@@ -24,13 +23,13 @@ test.describe('Process list enhancements (mocked backend)', () => {
       if (pathname === '/api/v1/editor/journals') return fulfillJson(route, 200, { success: true, data: [] })
       if (pathname === '/api/v1/editor/internal-staff') return fulfillJson(route, 200, { success: true, data: [] })
 
-      if (pathname === '/api/v1/editor/manuscripts/process') {
+      if (pathname.startsWith('/api/v1/editor/manuscripts/process')) {
         const q = (url.searchParams.get('q') || '').toLowerCase()
         const rows = [
           {
             id: manuscriptId,
             title: 'Incoming Energy Paper',
-            status,
+            status: 'pre_check',
             created_at: updatedAt,
             updated_at: updatedAt,
             journals: { title: 'Journal A' },
@@ -48,16 +47,6 @@ test.describe('Process list enhancements (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: filtered })
       }
 
-      const quickPrecheckPrefix = `/api/v1/editor/manuscripts/${manuscriptId}/quick-precheck`
-      if (pathname === quickPrecheckPrefix && req.method() === 'POST') {
-        const body = (await req.postDataJSON()) as any
-        const decision = body?.decision
-        if (decision === 'approve') status = 'under_review'
-        if (decision === 'revision') status = 'minor_revision'
-        updatedAt = new Date().toISOString()
-        return fulfillJson(route, 200, { success: true, data: { id: manuscriptId, status, updated_at: updatedAt } })
-      }
-
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
@@ -69,18 +58,22 @@ test.describe('Process list enhancements (mocked backend)', () => {
 
     // Debounce 搜索：输入 energy 后应仅剩一条
     await page.getByPlaceholder('Energy, 9286... (UUID) ...').fill('energy')
+    const searchButton = page.getByRole('main').getByRole('button', { name: 'Search' }).last()
+    await expect(searchButton).toBeEnabled({ timeout: 10_000 })
+    const filteredResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/v1/editor/manuscripts/process') &&
+        res.url().includes('q=energy') &&
+        res.request().method() === 'GET'
+    )
+    await searchButton.click()
+    await filteredResponse
+    await expect(page).toHaveURL(/q=energy/)
     await expect(table.getByText(manuscriptId)).toBeVisible()
-    await expect(table.getByText(otherId)).not.toBeVisible()
+    await expect.poll(() => table.getByText(otherId).count(), { timeout: 10_000 }).toBe(0)
 
-    // Quick Pre-check：改为 Revision，并要求 comment
-    await page.getByTestId(`quick-precheck-${manuscriptId}`).click()
-    await expect(page.getByRole('heading', { name: 'Quick Pre-check' })).toBeVisible()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByText('Request Revision', { exact: true }).click()
-    await page.getByPlaceholder('Required for revision…').fill('Please fix formatting and reference style.')
-    await page.getByRole('button', { name: 'Confirm' }).click()
-
-    // 表格应更新为 Minor Revision（无需页面刷新）
-    await expect(table.getByText('Minor Revision')).toBeVisible()
+    // /editor/process 当前是只读监控，不应提供 quick-precheck 等动作入口
+    await expect(page.getByRole('columnheader', { name: 'Actions' })).toHaveCount(0)
+    await expect(page.getByTestId(`quick-precheck-${manuscriptId}`)).toHaveCount(0)
   })
 })

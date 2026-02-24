@@ -106,6 +106,11 @@ def db_connection():
         pytest.skip("SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY) must be set for integration tests")
 
     client = create_client(url, key)
+    try:
+        # 中文注释：先做一次连通性探测，避免真实 DB 不可达时出现成片连接错误。
+        client.table("manuscripts").select("id").limit(1).execute()
+    except Exception as e:
+        pytest.skip(f"Supabase DB is not reachable for integration tests: {e}")
     yield client
 
 @pytest.fixture

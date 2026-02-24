@@ -131,18 +131,24 @@ test.describe('Reviewer magic link (mocked)', () => {
 
     await page.goto(`/review/invite?token=fake&assignment_id=${a1}`)
     await expect(page).toHaveURL(new RegExp(`/review/invite\\?assignment_id=${a1}$`))
-    await page.getByRole('button', { name: 'Accept & Continue' }).click()
-    await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${a1}$`))
-    await expect(page.getByText('Action Panel')).toBeVisible()
+    await Promise.all([
+      page.waitForURL(new RegExp(`/reviewer/workspace/${a1}$`), { timeout: 20_000 }),
+      page.getByRole('button', { name: 'Accept & Continue' }).click(),
+    ])
+    await expect(page.getByText('Review Comment')).toBeVisible()
     await expect(page.getByText('Magic Link Manuscript A')).toBeVisible()
 
-    await page.getByLabel('Comments for the Authors').fill('Looks good.')
-    await expect(page.getByLabel('Comments for the Authors')).toHaveValue('Looks good.')
+    await page.getByLabel('Comment to Authors').fill('Looks good.')
+    await expect(page.getByLabel('Comment to Authors')).toHaveValue('Looks good.')
 
     // Switch to another assignment — form state should reset (key remount)
     await page.goto(`/review/invite?token=fake&assignment_id=${a2}`)
-    await page.getByRole('button', { name: 'Accept & Continue' }).click()
+    await Promise.all([
+      page.waitForURL(new RegExp(`/reviewer/workspace/${a2}$`), { timeout: 20_000 }),
+      page.getByRole('button', { name: 'Accept & Continue' }).click(),
+    ])
+    await expect(page.getByText('Review Comment')).toBeVisible()
     await expect(page.getByText('Magic Link Manuscript B')).toBeVisible()
-    await expect(page.getByLabel('Comments for the Authors')).toHaveValue('')
+    await expect(page.getByLabel('Comment to Authors')).toHaveValue('')
   })
 })

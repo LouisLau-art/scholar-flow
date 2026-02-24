@@ -1,0 +1,36 @@
+{
+  "environment": "staging",
+  "sample_set_id": "editor-perf-v1",
+  "captured_at": "2026-02-24T02:00:00Z",
+  "captured_by": "codex",
+  "records": [
+    {
+      "scenario": "editor_detail",
+      "p50_interactive_ms": 3100,
+      "p95_interactive_ms": 4800,
+      "first_screen_request_count": 18,
+      "notes": "detail page before core-first/deferred rollout"
+    },
+    {
+      "scenario": "editor_process",
+      "p50_interactive_ms": 1900,
+      "p95_interactive_ms": 3200,
+      "first_screen_request_count": 12,
+      "notes": "process page before cache-first loading"
+    },
+    {
+      "scenario": "editor_workspace",
+      "p50_interactive_ms": 2100,
+      "p95_interactive_ms": 3400,
+      "first_screen_request_count": 14,
+      "notes": "workspace before stale-response guard"
+    },
+    {
+      "scenario": "reviewer_search_repeat",
+      "p50_interactive_ms": 980,
+      "p95_interactive_ms": 1600,
+      "first_screen_request_count": 4,
+      "notes": "reviewer modal repeated query without short cache"
+    }
+  ]
+}

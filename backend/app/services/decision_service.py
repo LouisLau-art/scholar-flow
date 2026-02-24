@@ -128,10 +128,6 @@ class DecisionService:
         # admin / editor_in_chief 可跨稿件访问（期刊 scope 会在上层统一约束）。
         if roles.intersection({"admin", "editor_in_chief"}):
             return
-        # managing_editor 是“按期刊 scope 管理”的角色，不要求 manuscript 级别绑定；
-        # scope 校验会在 _ensure_internal_decision_access 里统一执行。
-        if "managing_editor" in roles:
-            return
         assigned_editor_id = str(manuscript.get("editor_id") or "")
         if assigned_editor_id and assigned_editor_id == str(user_id):
             return

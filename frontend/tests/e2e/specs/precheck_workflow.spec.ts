@@ -158,6 +158,7 @@ test.describe('Pre-check workflow (mocked)', () => {
     // 2) AE Workspace -> submit academic (optional pre-check path)
     await page.goto('/editor/workspace')
     await expect(page.getByRole('heading', { name: 'Assistant Editor Workspace' })).toBeVisible()
+    await page.getByTestId('workspace-refresh-btn').click()
     await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
     await page.getByRole('button', { name: 'Submit Check' }).click()
     await page.getByRole('dialog').getByRole('combobox').click()
