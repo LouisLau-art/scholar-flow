@@ -653,15 +653,16 @@ async def get_manuscript_reviews(
 
     中文注释:
     - Author 只能看到公开字段（comments_for_author/content/score）
-    - Internal（admin / managing_editor / editor_in_chief / assistant_editor）可读取内部视图
-    - assistant_editor 仅可读取自己被分配稿件，避免越权
+    - Internal（admin / managing_editor / editor_in_chief / assistant_editor / production_editor）可读取内部视图
+    - assistant_editor 仅可读取自己被分配稿件
+    - production_editor 仅可读取自己分配到的活跃 production cycle 稿件
     """
     user_id = str(current_user.get("id"))
     roles = {str(role).strip().lower() for role in ((profile or {}).get("roles") or []) if str(role).strip()}
 
     ms_resp = (
         supabase_admin.table("manuscripts")
-        .select("id, author_id, assistant_editor_id")
+        .select("id, author_id, assistant_editor_id, owner_id")
         .eq("id", str(manuscript_id))
         .single()
         .execute()
@@ -671,17 +672,83 @@ async def get_manuscript_reviews(
         raise HTTPException(status_code=404, detail="Manuscript not found")
 
     is_author = str(ms.get("author_id") or "") == user_id
-    is_internal = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief", "assistant_editor"}))
+    is_internal = bool(
+        roles.intersection(
+            {
+                "admin",
+                "managing_editor",
+                "editor_in_chief",
+                "assistant_editor",
+                "production_editor",
+                "owner",
+            }
+        )
+    )
     if not (is_author or is_internal):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    def _is_assigned_production_editor() -> bool:
+        active_statuses = [
+            "draft",
+            "awaiting_author",
+            "author_corrections_submitted",
+            "author_confirmed",
+            "in_layout_revision",
+        ]
+        try:
+            layout_bound = (
+                supabase_admin.table("production_cycles")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .eq("layout_editor_id", user_id)
+                .in_("status", active_statuses)
+                .limit(1)
+                .execute()
+            )
+            if getattr(layout_bound, "data", None):
+                return True
+        except Exception:
+            return False
+
+        try:
+            collab_bound = (
+                supabase_admin.table("production_cycles")
+                .select("id")
+                .eq("manuscript_id", str(manuscript_id))
+                .contains("collaborator_editor_ids", [user_id])
+                .in_("status", active_statuses)
+                .limit(1)
+                .execute()
+            )
+            return bool(getattr(collab_bound, "data", None))
+        except Exception:
+            # 老环境可能缺少 collaborator_editor_ids，降级为仅 layout_editor_id 校验
+            return False
+
     # 中文注释:
-    # - assistant_editor 只能查看自己名下稿件的审稿反馈；
-    # - 对 admin / managing_editor / editor_in_chief 保持现有内部可见行为。
+    # - admin / managing_editor / editor_in_chief 为全局内部可见；
+    # - assistant_editor 仅看分配稿件；
+    # - production_editor 仅看分配到活跃 production cycle 的稿件；
+    # - owner 仅看 owner_id 归属稿件。
     has_privileged_internal_role = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"}))
-    if not is_author and "assistant_editor" in roles and not has_privileged_internal_role:
-        assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
-        if not assigned_ae_id or assigned_ae_id != user_id:
+    if not is_author and not has_privileged_internal_role:
+        internal_allowed = False
+
+        if "assistant_editor" in roles:
+            assigned_ae_id = str(ms.get("assistant_editor_id") or "").strip()
+            if assigned_ae_id and assigned_ae_id == user_id:
+                internal_allowed = True
+
+        if (not internal_allowed) and ("production_editor" in roles):
+            if _is_assigned_production_editor():
+                internal_allowed = True
+
+        if (not internal_allowed) and ("owner" in roles):
+            owner_id = str(ms.get("owner_id") or "").strip()
+            if owner_id and owner_id == user_id:
+                internal_allowed = True
+
+        if not internal_allowed:
             raise HTTPException(status_code=403, detail="Forbidden")
 
     rr_resp = (
