@@ -4,7 +4,8 @@ from main import app
 
 
 @pytest.mark.asyncio
-async def test_doi_registration_flow():
+async def test_doi_registration_flow(supabase_admin_client):
+    _ = supabase_admin_client
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:

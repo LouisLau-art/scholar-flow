@@ -76,7 +76,14 @@ test.describe('Production pipeline workspace flow (mocked)', () => {
       if (pathname === '/api/v1/editor/internal-staff') {
         return fulfillJson(route, 200, {
           success: true,
-          data: [{ id: '11111111-1111-1111-1111-111111111111', full_name: 'Editor One', email: 'editor@example.com' }],
+          data: [
+            {
+              id: '11111111-1111-1111-1111-111111111111',
+              full_name: 'Editor One',
+              email: 'editor@example.com',
+              roles: ['production_editor'],
+            },
+          ],
         })
       }
 

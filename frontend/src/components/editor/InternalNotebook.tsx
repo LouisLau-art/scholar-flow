@@ -64,13 +64,19 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
   )
   const filteredStaff = useMemo(() => {
     const key = staffSearch.trim().toLowerCase()
-    if (!key) return staff
-    return staff.filter((member) => {
+    const mentionable = staff.filter((member) => {
+      const rowEmail = String(member.email || '').toLowerCase()
+      if (activeUserId && member.id === activeUserId) return false
+      if (activeUserEmail && rowEmail && rowEmail === activeUserEmail) return false
+      return true
+    })
+    if (!key) return mentionable
+    return mentionable.filter((member) => {
       const name = String(member.full_name || '').toLowerCase()
       const email = String(member.email || '').toLowerCase()
       return name.includes(key) || email.includes(key)
     })
-  }, [staff, staffSearch])
+  }, [activeUserEmail, activeUserId, staff, staffSearch])
 
   async function loadComments() {
     try {
@@ -89,7 +95,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
 
   async function loadStaffOptions() {
     try {
-      const res = await EditorApi.listInternalStaff('', { excludeCurrentUser: true })
+      const res = await EditorApi.listInternalStaff('')
       if (!res?.success) return
       const rows: Array<Record<string, unknown>> = Array.isArray(res.data)
         ? (res.data as Array<Record<string, unknown>>)
@@ -100,13 +106,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
           full_name: String(row.full_name || '').trim() || undefined,
           email: String(row.email || '').trim() || undefined,
         }))
-        .filter((row) => {
-          if (!row.id) return false
-          const rowEmail = String(row.email || '').toLowerCase()
-          if (activeUserId && row.id === activeUserId) return false
-          if (activeUserEmail && rowEmail && rowEmail === activeUserEmail) return false
-          return true
-        })
+        .filter((row) => Boolean(row.id))
       setStaff(normalizedRows)
     } catch {
       // ignore and keep notebook usable without mention dropdown
@@ -134,7 +134,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
     loadComments()
     loadStaffOptions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manuscriptId, currentUserId, currentUserEmail, sessionUserId, sessionUserEmail])
+  }, [manuscriptId])
 
   function validateMentions(): string | null {
     const unique = new Set(mentionUserIds)

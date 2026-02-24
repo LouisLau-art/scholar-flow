@@ -25,6 +25,12 @@ function getUserFromSupabaseSessionCookie(req: NextRequest): { id: string; email
   return { id: user.id, email: user.email }
 }
 
+function hasSupabaseSessionCookie(req: NextRequest): boolean {
+  return req.cookies
+    .getAll()
+    .some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token') && Boolean(c.value))
+}
+
 export async function middleware(req: NextRequest) {
   // 0.5) Reviewer Magic Link（Feature 039）
   // 中文注释:
@@ -83,6 +89,8 @@ export async function middleware(req: NextRequest) {
       })
       return resp
     }
+    // 无 token 的邀请页（如 assignment_id 模式）不需要走全量鉴权流程，直接放行。
+    return NextResponse.next()
   }
 
   // 0) Favicon 兜底
@@ -93,6 +101,19 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone()
     url.pathname = '/favicon.svg'
     return NextResponse.rewrite(url)
+  }
+
+  const protectedPaths = ['/dashboard', '/admin', '/submit', '/editor', '/proofreading', '/finance']
+  const isProtected = protectedPaths.some(path =>
+    req.nextUrl.pathname.startsWith(path)
+  )
+  const allowE2EBypass =
+    process.env.NODE_ENV !== 'production' && req.headers.get('x-scholarflow-e2e') === '1'
+  if (isProtected && !allowE2EBypass && !hasSupabaseSessionCookie(req)) {
+    const redirectUrl = req.nextUrl.clone()
+    redirectUrl.pathname = '/login'
+    redirectUrl.searchParams.set('next', req.nextUrl.pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
   // 1. 初始化响应
@@ -165,16 +186,10 @@ export async function middleware(req: NextRequest) {
     getUserErrored = true
   }
 
-  // 4. 定义受保护路径
-  const protectedPaths = ['/dashboard', '/admin', '/submit', '/editor', '/proofreading', '/finance']
-  const isProtected = protectedPaths.some(path => 
-    req.nextUrl.pathname.startsWith(path)
-  )
-
   // 4.5 E2E/开发环境降级：允许通过 header 或 Supabase Auth 不可用时，从 cookie 中识别用户
   const allowBypass =
     process.env.NODE_ENV !== 'production' &&
-    (req.headers.get('x-scholarflow-e2e') === '1' || getUserErrored)
+    (allowE2EBypass || getUserErrored)
   if (isProtected && !user && allowBypass) {
     user = getUserFromSupabaseSessionCookie(req)
   }

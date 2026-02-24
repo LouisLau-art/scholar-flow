@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { EditorApi } from '@/services/editorApi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -67,6 +67,13 @@ interface TimelineEvent {
   content?: string
 }
 
+interface TimelineContextPayload {
+  audit_logs?: AuditLog[]
+  comments?: InternalCommentItem[]
+  tasks?: InternalTask[]
+  task_activities?: Array<InternalTaskActivity & { task_title?: string | null }>
+}
+
 interface AuditLogTimelineProps {
   manuscriptId: string
   authorResponses?: AuthorResponseItem[]
@@ -126,6 +133,7 @@ export function AuditLogTimeline({
   authorResponses = [],
   reviewerInvites = [],
 }: AuditLogTimelineProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [comments, setComments] = useState<InternalCommentItem[]>([])
   const [tasks, setTasks] = useState<InternalTask[]>([])
@@ -134,7 +142,9 @@ export function AuditLogTimeline({
   >([])
   const [category, setCategory] = useState<TimelineCategory>('all')
   const [loading, setLoading] = useState(true)
-  const [taskActivityLoading, setTaskActivityLoading] = useState(false)
+  const [activated, setActivated] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   const getActionLabel = (log: AuditLog) => {
     const action = String(log.payload?.action || '')
@@ -144,52 +154,54 @@ export function AuditLogTimeline({
   }
 
   useEffect(() => {
+    setActivated(false)
+  }, [manuscriptId])
+
+  useEffect(() => {
+    if (activated) return
+    const node = rootRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setActivated(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setActivated(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px 0px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [activated])
+
+  useEffect(() => {
+    if (!activated) {
+      setLoading(false)
+      return
+    }
     let mounted = true
     setLoading(true)
-    setTaskActivityLoading(false)
+    setLoadError(null)
     setTaskActivities([])
-    Promise.all([
-      EditorApi.getAuditLogs(manuscriptId),
-      EditorApi.getInternalComments(manuscriptId),
-      EditorApi.listInternalTasks(manuscriptId),
-    ])
-      .then(([auditRes, commentRes, taskRes]) => {
+    EditorApi.getTimelineContext(manuscriptId, { taskLimit: 50, activityLimit: 500 })
+      .then((ctxRes) => {
         if (!mounted) return
-        if (auditRes?.success) setLogs(Array.isArray(auditRes.data) ? auditRes.data : [])
-        if (commentRes?.success) setComments(Array.isArray(commentRes.data) ? commentRes.data : [])
-
-        const taskRows: InternalTask[] = taskRes?.success && Array.isArray(taskRes.data) ? taskRes.data : []
+        const payload: TimelineContextPayload | null = ctxRes?.success ? (ctxRes.data as TimelineContextPayload) : null
+        const auditRows = Array.isArray(payload?.audit_logs) ? payload.audit_logs : []
+        const commentRows = Array.isArray(payload?.comments) ? payload.comments : []
+        const taskRows: InternalTask[] = Array.isArray(payload?.tasks) ? payload.tasks : []
         setTasks(taskRows)
-
-        // 中文注释：任务活动改为后台补齐，不阻塞 timeline 首屏。
-        const loadTaskActivities = async () => {
-          if (!mounted || taskRows.length === 0) return
-          setTaskActivityLoading(true)
-          try {
-            const activityResults = await Promise.allSettled(
-              taskRows.slice(0, 50).map(async (task) => {
-                const activityRes = await EditorApi.getInternalTaskActivity(manuscriptId, task.id)
-                const rows: InternalTaskActivity[] =
-                  activityRes?.success && Array.isArray(activityRes.data) ? activityRes.data : []
-                return rows.map((item) => ({
-                  ...item,
-                  task_title: task.title || null,
-                }))
-              })
-            )
-            if (!mounted) return
-            const mergedActivities: Array<InternalTaskActivity & { task_title?: string | null }> = []
-            for (const result of activityResults) {
-              if (result.status === 'fulfilled') {
-                mergedActivities.push(...result.value)
-              }
-            }
-            setTaskActivities(mergedActivities)
-          } finally {
-            if (mounted) setTaskActivityLoading(false)
-          }
-        }
-        void loadTaskActivities()
+        const activityRows: Array<InternalTaskActivity & { task_title?: string | null }> = Array.isArray(
+          payload?.task_activities
+        )
+          ? payload.task_activities
+          : []
+        setLogs(auditRows)
+        setComments(commentRows)
+        setTaskActivities(activityRows)
       })
       .catch(() => {
         if (!mounted) return
@@ -197,7 +209,7 @@ export function AuditLogTimeline({
         setComments([])
         setTasks([])
         setTaskActivities([])
-        setTaskActivityLoading(false)
+        setLoadError('Failed to load timeline context.')
       })
       .finally(() => {
         if (mounted) setLoading(false)
@@ -205,7 +217,7 @@ export function AuditLogTimeline({
     return () => {
       mounted = false
     }
-  }, [manuscriptId])
+  }, [activated, manuscriptId, reloadNonce])
 
   const events = useMemo<TimelineEvent[]>(() => {
     const merged: TimelineEvent[] = []
@@ -346,7 +358,7 @@ export function AuditLogTimeline({
   }
 
   return (
-    <Card className="shadow-sm">
+    <Card ref={rootRef} className="shadow-sm">
       <CardHeader className="py-4 border-b">
         <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-slate-700">
           <Activity className="h-4 w-4" />
@@ -376,8 +388,16 @@ export function AuditLogTimeline({
         </div>
 
         <div className="relative pl-4 border-l-2 border-slate-100 space-y-6 max-h-[520px] overflow-auto pr-1">
+          {!activated ? <div className="text-xs text-slate-400">Timeline will load when visible.</div> : null}
           {loading ? <div className="text-xs text-slate-400">Loading timeline...</div> : null}
-          {!loading && taskActivityLoading ? <div className="text-xs text-slate-400">Syncing task activities...</div> : null}
+          {!loading && loadError ? (
+            <div className="space-y-2">
+              <div className="text-xs text-rose-600">{loadError}</div>
+              <Button size="sm" variant="outline" onClick={() => setReloadNonce((prev) => prev + 1)}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
           {!loading && filteredEvents.map((event, idx) => (
             <div key={event.id} className={`relative ${idx > 0 ? 'opacity-90' : ''}`}>
               <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-white ${dotClass(event.category)}`}></div>
@@ -403,7 +423,7 @@ export function AuditLogTimeline({
               ) : null}
             </div>
           ))}
-          {!loading && filteredEvents.length === 0 && <div className="text-xs text-slate-400">No timeline events.</div>}
+          {!loading && !loadError && filteredEvents.length === 0 ? <div className="text-xs text-slate-400">No timeline events.</div> : null}
         </div>
       </CardContent>
     </Card>

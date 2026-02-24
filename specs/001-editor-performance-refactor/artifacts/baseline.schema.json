@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Editor Performance Baseline",
+  "type": "object",
+  "required": [
+    "environment",
+    "sample_set_id",
+    "captured_at",
+    "records"
+  ],
+  "properties": {
+    "environment": {
+      "type": "string",
+      "enum": ["staging", "local-ci"]
+    },
+    "sample_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "captured_by": {
+      "type": "string"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scenario",
+          "p50_interactive_ms",
+          "p95_interactive_ms",
+          "first_screen_request_count"
+        ],
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "enum": [
+              "editor_detail",
+              "editor_process",
+              "editor_workspace",
+              "reviewer_search_repeat"
+            ]
+          },
+          "p50_interactive_ms": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "p95_interactive_ms": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "first_screen_request_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

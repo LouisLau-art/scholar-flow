@@ -48,7 +48,13 @@ def supabase_service_role_key() -> str:
 
 @pytest.fixture(scope="session")
 def supabase_client(supabase_url: str, supabase_anon_key: str) -> Client:
-    return create_client(supabase_url, supabase_anon_key)
+    client = create_client(supabase_url, supabase_anon_key)
+    try:
+        # 中文注释：提前做一次最小连通性探测，避免测试执行期大量抛 SSL/连接异常。
+        client.table("manuscripts").select("id").limit(1).execute()
+    except Exception as e:
+        pytest.skip(f"Supabase (anon) is not reachable in integration tests: {e}")
+    return client
 
 
 @pytest.fixture(scope="session")
@@ -56,7 +62,13 @@ def supabase_admin_client(
     supabase_url: str, supabase_anon_key: str, supabase_service_role_key: str
 ) -> Client:
     # 中文注释: 若未提供 service role，则回退 anon key（本地/测试环境通常足够）
-    return create_client(supabase_url, supabase_service_role_key or supabase_anon_key)
+    client = create_client(supabase_url, supabase_service_role_key or supabase_anon_key)
+    try:
+        # 中文注释：session 级探测，网络不可达时统一 skip 依赖真实 DB 的集成用例。
+        client.table("manuscripts").select("id").limit(1).execute()
+    except Exception as e:
+        pytest.skip(f"Supabase (admin) is not reachable in integration tests: {e}")
+    return client
 
 
 @pytest.fixture(scope="session")

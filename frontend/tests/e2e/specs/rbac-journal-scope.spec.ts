@@ -109,11 +109,62 @@ test.describe('RBAC journal scope (mocked)', () => {
 
     await page.goto('/editor/process')
     await expect(page.getByText(manuscriptId)).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Actions' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Bind' })).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Bind' }).click()
-    await expect(page.getByRole('heading', { name: 'Bind Internal Owner' })).toBeVisible()
-    await page.getByRole('button', { name: 'Select' }).click()
+    const rejected = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/v1/editor/manuscripts/${id}/bind-owner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_id: 'owner-1' }),
+      })
+      return { status: res.status, body: await res.json() }
+    }, manuscriptId)
 
-    await expect(page.getByText('Forbidden by journal scope')).toBeVisible()
+    expect(rejected.status).toBe(403)
+    expect(String((rejected.body as { detail?: string }).detail || '')).toContain('Forbidden by journal scope')
+  })
+
+  test('assistant editor can access workspace within scoped assignments', async ({ page }) => {
+    await enableE2EAuthBypass(page)
+    await seedSession(page, buildSession('cccccccc-cccc-cccc-cccc-cccccccccccc', 'assistant@example.com'))
+
+    await page.route('**/api/v1/**', async (route) => {
+      const req = route.request()
+      const pathname = new URL(req.url()).pathname
+
+      if (pathname === '/api/v1/user/profile') {
+        return fulfillJson(route, 200, { success: true, data: { roles: ['assistant_editor'] } })
+      }
+      if (pathname.startsWith('/api/v1/editor/workspace')) {
+        return fulfillJson(route, 200, [
+          {
+            id: 'ms-technical-1',
+            title: 'Scoped Workspace Manuscript',
+            status: 'pre_check',
+            pre_check_status: 'technical',
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            owner: { id: 'owner-1', full_name: 'Owner One', email: 'owner@example.com' },
+            journal: { title: 'Scoped Journal', slug: 'scoped-journal' },
+          },
+        ])
+      }
+      if (pathname.includes('/submit-check') && req.method() === 'POST') {
+        return fulfillJson(route, 200, { success: true, message: 'ok' })
+      }
+
+      return fulfillJson(route, 200, { success: true, data: {} })
+    })
+
+    await page.goto('/editor/workspace')
+    await expect(page.getByRole('heading', { name: 'Assistant Editor Workspace' })).toBeVisible()
+    const refreshResponse = page.waitForResponse(
+      (res) => res.url().includes('/api/v1/editor/workspace') && res.request().method() === 'GET'
+    )
+    await page.getByTestId('workspace-refresh-btn').click()
+    await refreshResponse
+    await expect(page.getByText('Scoped Workspace Manuscript')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Submit Check' })).toBeVisible()
   })
 })

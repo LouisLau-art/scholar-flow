@@ -72,7 +72,7 @@ class ReviewPolicyService:
 
     def cooldown_override_roles(self) -> list[str]:
         raw = (os.environ.get("REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES") or "admin,managing_editor").strip()
-        roles = [r.strip() for r in raw.split(",") if r.strip()]
+        roles = [str(r).strip().lower() for r in raw.split(",") if str(r).strip()]
         return roles or ["admin", "managing_editor"]
 
     def due_window_days(self) -> tuple[int, int, int]:
@@ -116,6 +116,7 @@ class ReviewPolicyService:
 
         now = datetime.now(timezone.utc)
         cooldown_days = self.cooldown_days()
+        cooldown_override_enabled = bool(self.cooldown_override_roles())
         cooldown_cutoff = now - timedelta(days=cooldown_days)
         done_statuses = {"completed", "cancelled", "declined"}
 
@@ -201,10 +202,10 @@ class ReviewPolicyService:
                 cooldown_until = (hit_at + timedelta(days=cooldown_days)).date().isoformat()
                 base[rid]["cooldown_active"] = True
                 # 中文注释:
-                # - 冷却期改为“提醒”而不是强制拦截（editor 仍可选择并指派）。
-                # - 仅在 UI 上展示 warning badge；后端不再要求 override。
-                base[rid]["can_assign"] = not base[rid]["conflict"]
-                base[rid]["allow_override"] = False
+                # - 冷却期命中默认拦截（can_assign=False）。
+                # - 仅允许高权限角色在分配接口显式 override 后放行。
+                base[rid]["can_assign"] = False
+                base[rid]["allow_override"] = bool(cooldown_override_enabled and not base[rid]["conflict"])
                 base[rid]["cooldown_last_invited_at"] = hit_at.isoformat()
                 base[rid]["cooldown_until"] = cooldown_until
                 base[rid]["hits"].append(
@@ -212,7 +213,7 @@ class ReviewPolicyService:
                         "code": "cooldown",
                         "label": "Cooldown active",
                         "severity": "warning",
-                        "blocking": False,
+                        "blocking": True,
                         "detail": f"Invited within {cooldown_days} days in the same journal. Cooldown until {cooldown_until}.",
                     }
                 )

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import app.api.v1.editor as editor_api
+import app.api.v1.editor_detail as editor_detail_api
 
 
 class _FakeQuery:
@@ -44,7 +44,7 @@ class _FakeSupabase:
 @pytest.mark.asyncio
 async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
-    monkeypatch.setattr(editor_api, "_get_signed_url", lambda *_args, **_kwargs: "https://example.com/signed")
+    monkeypatch.setattr(editor_detail_api, "_get_signed_url", lambda *_args, **_kwargs: "https://example.com/signed")
 
     fake_db = _FakeSupabase(
         {
@@ -93,7 +93,7 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
             ],
         }
     )
-    monkeypatch.setattr(editor_api, "supabase_admin", fake_db)
+    monkeypatch.setattr(editor_detail_api, "supabase_admin", fake_db)
 
     res = await client.get(
         "/api/v1/editor/manuscripts/ms-1",
@@ -107,4 +107,3 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
     assert invites[0]["status"] == "accepted"
     assert invites[0]["reviewer_name"] == "Reviewer User"
     assert invites[0]["submitted_at"] == "2026-02-05T00:00:00Z"
-

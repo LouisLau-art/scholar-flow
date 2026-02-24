@@ -181,3 +181,69 @@ async def test_internal_task_create_update_and_activity_flow(
     actions = [row.get("action") for row in (activity_res.json().get("data") or [])]
     assert "task_created" in actions
     assert "status_changed" in actions
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_internal_timeline_context_aggregates_payload(
+    client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    editor = make_user(email="editor_timeline_context@example.com")
+    set_admin_emails([editor.email])
+    manuscript_id = str(uuid4())
+
+    class _StubCollabService:
+        def list_comments(self, _manuscript_id: str):
+            return [
+                {
+                    "id": str(uuid4()),
+                    "manuscript_id": manuscript_id,
+                    "content": "Need follow-up on methodology",
+                    "created_at": "2026-02-24T08:00:00Z",
+                }
+            ]
+
+    class _StubTaskService:
+        def list_tasks(self, **_kwargs):
+            return [
+                {
+                    "id": str(uuid4()),
+                    "manuscript_id": manuscript_id,
+                    "title": "Check revision scope",
+                    "status": "todo",
+                    "created_at": "2026-02-24T08:10:00Z",
+                }
+            ]
+
+        def list_manuscript_activity(self, **_kwargs):
+            return [
+                {
+                    "id": str(uuid4()),
+                    "manuscript_id": manuscript_id,
+                    "task_id": str(uuid4()),
+                    "action": "task_created",
+                    "created_at": "2026-02-24T08:15:00Z",
+                }
+            ]
+
+    monkeypatch.setattr("app.api.v1.editor_internal_collaboration.InternalCollaborationService", lambda: _StubCollabService())
+    monkeypatch.setattr("app.api.v1.editor_internal_collaboration.InternalTaskService", lambda: _StubTaskService())
+    monkeypatch.setattr(
+        "app.api.v1.editor_internal_collaboration._load_audit_logs_with_users",
+        lambda _mid: [{"id": "log-1", "manuscript_id": manuscript_id, "created_at": "2026-02-24T08:20:00Z"}],
+    )
+
+    res = await client.get(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/timeline-context?task_limit=40&activity_limit=120",
+        headers={"Authorization": f"Bearer {editor.token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body.get("success") is True
+    data = body.get("data") or {}
+    assert len(data.get("audit_logs") or []) == 1
+    assert len(data.get("comments") or []) == 1
+    assert len(data.get("tasks") or []) == 1
+    assert len(data.get("task_activities") or []) == 1

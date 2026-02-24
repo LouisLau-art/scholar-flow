@@ -42,6 +42,17 @@ def test_ensure_editor_access_rejects_unassigned_user() -> None:
     assert exc.value.status_code == 403
 
 
+def test_ensure_editor_access_rejects_unassigned_managing_editor() -> None:
+    svc = _svc()
+    with pytest.raises(HTTPException) as exc:
+        svc._ensure_editor_access(
+            manuscript={"editor_id": "editor-1", "assistant_editor_id": "ae-1"},
+            user_id="me-2",
+            roles={"managing_editor"},
+        )
+    assert exc.value.status_code == 403
+
+
 class _QueryStub:
     def __init__(self, outcomes: list[object]) -> None:
         self._outcomes = outcomes

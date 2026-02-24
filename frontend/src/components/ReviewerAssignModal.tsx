@@ -64,7 +64,8 @@ export default function ReviewerAssignModal({
   isOpen,
   onClose,
   onAssign,
-  manuscriptId
+  manuscriptId,
+  viewerRoles,
 }: ReviewerAssignModalProps) {
   const [reviewers, setReviewers] = useState<ReviewerWithPolicy[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -95,6 +96,18 @@ export default function ReviewerAssignModal({
   const [ownerSearch, setOwnerSearch] = useState('')
   const [loadingOwner, setLoadingOwner] = useState(false)
   const [savingOwner, setSavingOwner] = useState(false)
+  const normalizedViewerRoles = useMemo(
+    () =>
+      (viewerRoles || [])
+        .map((role) => String(role).trim().toLowerCase())
+        .filter(Boolean)
+        .sort(),
+    [viewerRoles]
+  )
+  const reviewerSearchScopeKey = useMemo(
+    () => (normalizedViewerRoles.length ? normalizedViewerRoles.join(',') : myRoles.slice().sort().join(',')),
+    [myRoles, normalizedViewerRoles]
+  )
 
   const fetchOwner = useCallback(async () => {
     if (!manuscriptId) return
@@ -134,6 +147,10 @@ export default function ReviewerAssignModal({
   }, [])
 
   const fetchMyRoles = useCallback(async () => {
+    if (normalizedViewerRoles.length) {
+      setMyRoles(normalizedViewerRoles)
+      return
+    }
     try {
       const profile = await authService.getUserProfile()
       const roles = Array.isArray(profile?.roles) ? profile.roles.map((r: any) => String(r).toLowerCase()) : []
@@ -141,7 +158,7 @@ export default function ReviewerAssignModal({
     } catch {
       setMyRoles([])
     }
-  }, [])
+  }, [normalizedViewerRoles])
 
   const fetchExistingReviewers = useCallback(async () => {
     if (!manuscriptId) return
@@ -198,7 +215,9 @@ export default function ReviewerAssignModal({
   const fetchReviewers = useCallback(async (query: string = '') => {
     setIsLoading(true)
     try {
-      const payload = await EditorApi.searchReviewerLibrary(query, 120, manuscriptId)
+      const payload = await EditorApi.searchReviewerLibrary(query, 120, manuscriptId, {
+        roleScopeKey: reviewerSearchScopeKey,
+      })
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
       setReviewers((payload.data || []) as ReviewerWithPolicy[])
       setPolicyMeta(payload?.policy || {})
@@ -208,7 +227,12 @@ export default function ReviewerAssignModal({
     } finally {
       setIsLoading(false)
     }
-  }, [manuscriptId])
+  }, [manuscriptId, reviewerSearchScopeKey])
+
+  useEffect(() => {
+    if (!normalizedViewerRoles.length) return
+    setMyRoles(normalizedViewerRoles)
+  }, [normalizedViewerRoles])
 
   useEffect(() => {
     if (!isOpen) return
@@ -661,7 +685,7 @@ export default function ReviewerAssignModal({
             </div>
 
             <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is warning-only, conflict-of-interest is hard block, overdue risk is warning-only.
+              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is blocked by default, conflict-of-interest is hard block, overdue risk is warning-only.
             </div>
 
             {isLoading ? (

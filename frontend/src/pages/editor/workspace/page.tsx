@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 import SiteHeader from '@/components/layout/SiteHeader'
@@ -43,6 +43,9 @@ type SectionMeta = {
 }
 
 const SECTION_ORDER: WorkspaceBucket[] = ['technical', 'academic_pending', 'under_review', 'revision_followup', 'decision', 'other']
+const WORKSPACE_CACHE_TTL_MS = 20_000
+
+let workspaceRowsCache: { rows: Manuscript[]; cachedAt: number } | null = null
 
 const SECTION_META: Record<WorkspaceBucket, SectionMeta> = {
   technical: {
@@ -102,28 +105,68 @@ function deriveBucket(m: Manuscript): WorkspaceBucket {
 export default function AEWorkspacePage() {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
+  const manuscriptsRef = useRef<Manuscript[]>([])
+  const requestIdRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
-  const fetchWorkspace = useCallback(async () => {
-    setLoading(true)
+  useEffect(() => {
+    manuscriptsRef.current = manuscripts
+  }, [manuscripts])
+
+  const fetchWorkspace = useCallback(async (options?: { preferCache?: boolean; silent?: boolean; forceRefresh?: boolean }) => {
+    const now = Date.now()
+    const cacheValid = Boolean(workspaceRowsCache && now - workspaceRowsCache.cachedAt < WORKSPACE_CACHE_TTL_MS)
+    if (options?.preferCache && cacheValid && workspaceRowsCache) {
+      setManuscripts(workspaceRowsCache.rows)
+    }
+
+    const hasRows = (cacheValid && Boolean(workspaceRowsCache?.rows.length)) || manuscriptsRef.current.length > 0
+    const blockUi = !options?.silent && !hasRows
+    if (blockUi) setLoading(true)
+    else setIsRefreshing(true)
+
+    const currentRequestId = ++requestIdRef.current
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      const data = await editorService.getAEWorkspace()
+      const data = await editorService.getAEWorkspace(1, 20, {
+        forceRefresh: Boolean(options?.forceRefresh),
+        signal: controller.signal,
+      })
+      if (currentRequestId !== requestIdRef.current) return
       setManuscripts(data as unknown as Manuscript[])
+      workspaceRowsCache = {
+        rows: data as unknown as Manuscript[],
+        cachedAt: Date.now(),
+      }
     } catch (err) {
+      if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return
       console.error(err)
     } finally {
-      setLoading(false)
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false)
+        setIsRefreshing(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    fetchWorkspace()
+    void fetchWorkspace({ preferCache: true })
   }, [fetchWorkspace])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   const resetDialog = useCallback(() => {
     setTechnicalDecision('pass')
@@ -155,7 +198,7 @@ export default function AEWorkspacePage() {
         comment: comment.trim() || undefined,
       })
       resetDialog()
-      fetchWorkspace()
+      await fetchWorkspace({ silent: true, forceRefresh: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : '提交技术审查失败')
     } finally {
@@ -208,11 +251,29 @@ export default function AEWorkspacePage() {
               </div>
             </div>
 
-            <Link href="/dashboard?tab=assistant_editor" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
-              <ArrowLeft className="h-4 w-4" />
-              返回编辑台
-            </Link>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void fetchWorkspace({ silent: true, forceRefresh: true })}
+                disabled={isRefreshing}
+                data-testid="workspace-refresh-btn"
+              >
+                {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                刷新列表
+              </Button>
+              <Link href="/dashboard?tab=assistant_editor" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
+                <ArrowLeft className="h-4 w-4" />
+                返回编辑台
+              </Link>
+            </div>
           </div>
+
+          {isRefreshing && !loading ? (
+            <div className="flex items-center justify-end gap-2 text-xs text-slate-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Syncing latest workspace data...
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">Loading...</div>

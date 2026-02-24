@@ -28,7 +28,10 @@ export function NotificationBell({ isAuthenticated }: Props) {
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(20)
-    if (!error) setNotifications((data as Notification[]) ?? [])
+    if (!error) {
+      const rows = Array.isArray(data) ? (data as Notification[]) : []
+      setNotifications(rows)
+    }
     setIsLoading(false)
   }
 
@@ -41,8 +44,8 @@ export function NotificationBell({ isAuthenticated }: Props) {
         setIsLoading(false)
         return
       }
-      const { data } = await supabase.auth.getSession()
-      const uid = data.session?.user?.id ?? null
+      const session = await authService.getSession()
+      const uid = session?.user?.id ?? null
       if (!mounted) return
       setUserId(uid)
       if (!uid) {

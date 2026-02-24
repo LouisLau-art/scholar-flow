@@ -19,6 +19,16 @@ from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, Review
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
 from app.services.reviewer_service import ReviewPolicyService, ReviewerInviteService, ReviewerWorkspaceService
+from app.api.v1.reviews_heavy_handlers import (
+    assign_reviewer_impl,
+    establish_reviewer_workspace_session_impl,
+    get_review_by_token_impl,
+    get_manuscript_assignments_impl,
+    submit_review_by_token_impl,
+    submit_review_impl,
+    submit_review_via_magic_link_impl,
+    unassign_reviewer_impl,
+)
 
 router = APIRouter(tags=["Reviews"])
 
@@ -90,12 +100,7 @@ def _ensure_review_attachments_bucket_exists() -> None:
         raise
 
 def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
-    """
-    判断 Supabase/PostgREST 返回的“表不存在/Schema cache 未更新”等错误。
-
-    中文注释:
-    - 早期开发阶段可能还没建表；但不要对所有异常都“模拟成功”，否则会掩盖外键/权限等真实问题。
-    """
+    """判断是否为缺表/Schema cache 未更新错误。"""
     if not isinstance(err, APIError):
         return False
     text = str(err).lower()
@@ -354,278 +359,27 @@ async def assign_reviewer(
     1. 校验逻辑: 确保 reviewer_id 不是稿件的作者 (通过 manuscripts 表查询)。
     2. 插入 review_assignments 表。
     """
-    requester_roles = set(normalize_roles(_parse_roles(profile)))
-    policy_service = ReviewPolicyService()
-    reviewer_id_str = str(reviewer_id)
-    manuscript_id_str = str(manuscript_id)
-
-    # 读取稿件基础信息（含 journal_id 供冷却期策略判断）
-    ms_res = (
-        supabase.table("manuscripts")
-        .select("id, author_id, title, version, status, owner_id, file_path, journal_id, assistant_editor_id")
-        .eq("id", manuscript_id_str)
-        .single()
-        .execute()
+    return await assign_reviewer_impl(
+        background_tasks=background_tasks,
+        current_user=current_user,
+        profile=profile,
+        manuscript_id=manuscript_id,
+        reviewer_id=reviewer_id,
+        override_cooldown=override_cooldown,
+        override_reason=override_reason,
+        supabase_client=supabase,
+        supabase_admin_client=supabase_admin,
+        normalize_roles_fn=normalize_roles,
+        parse_roles_fn=_parse_roles,
+        review_policy_service_cls=ReviewPolicyService,
+        ensure_review_management_access_fn=_ensure_review_management_access,
+        safe_insert_invite_policy_audit_fn=_safe_insert_invite_policy_audit,
+        notification_service_cls=NotificationService,
+        email_service_obj=email_service,
+        create_magic_link_jwt_fn=create_magic_link_jwt,
+        is_foreign_key_user_error_fn=_is_foreign_key_user_error,
+        is_missing_relation_error_fn=_is_missing_relation_error,
     )
-    manuscript = ms_res.data or {}
-    if not manuscript:
-        raise HTTPException(status_code=404, detail="Manuscript not found")
-    _ensure_review_management_access(
-        manuscript=manuscript,
-        user_id=str(current_user.get("id") or ""),
-        roles=requester_roles,
-    )
-
-    if ms_res.data and str(ms_res.data["author_id"]) == str(reviewer_id):
-        raise HTTPException(status_code=400, detail="作者不能评审自己的稿件")
-
-    # 体验/数据兜底：没有 PDF 的稿件不允许分配审稿人，否则 reviewer 侧无法预览全文
-    file_path = manuscript.get("file_path")
-    if not file_path:
-        raise HTTPException(
-            status_code=400,
-            detail="该稿件缺少 PDF（file_path 为空），无法分配审稿人。请先在投稿/修订流程上传 PDF。",
-        )
-
-    # Feature 023: 初审阶段必须绑定 Internal Owner（KPI 归属人）
-    # 中文注释: 分配审稿人会把稿件推进到 under_review，因此这里强制要求 owner_id 已设置。
-    owner_raw = manuscript.get("owner_id")
-    if not owner_raw:
-        # 体验优化：若 Editor 尚未手动绑定，则默认绑定为当前 Editor（仍满足“初审阶段完成绑定”的业务要求）
-        try:
-            supabase_admin.table("manuscripts").update({"owner_id": str(current_user["id"])}).eq(
-                "id", manuscript_id_str
-            ).execute()
-            owner_raw = str(current_user["id"])
-        except Exception as e:
-            print(f"[OwnerBinding] auto-bind owner_id failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to bind Internal Owner")
-
-    current_version = manuscript.get("version", 1) if manuscript else 1
-
-    try:
-        # 幂等保护：避免同一审稿人被重复指派（UI 可能因“已指派列表”加载失败而重复提交）
-        existing = (
-            supabase_admin.table("review_assignments")
-            .select("id, status, due_at, reviewer_id, round_number")
-            .eq("manuscript_id", manuscript_id_str)
-            .eq("reviewer_id", reviewer_id_str)
-            .eq("round_number", current_version)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        if getattr(existing, "data", None):
-            # 中文注释: 返回现有 assignment，前端可直接刷新展示。
-            return {
-                "success": True,
-                "data": existing.data[0],
-                "policy": policy_service.evaluate_candidates(manuscript=manuscript, reviewer_ids=[reviewer_id_str]).get(
-                    reviewer_id_str
-                )
-                or {},
-                "message": "Reviewer already assigned",
-            }
-
-        policy = policy_service.evaluate_candidates(manuscript=manuscript, reviewer_ids=[reviewer_id_str]).get(
-            reviewer_id_str
-        ) or {
-            "can_assign": True,
-            "allow_override": False,
-            "cooldown_active": False,
-            "conflict": False,
-            "overdue_risk": False,
-            "overdue_open_count": 0,
-            "hits": [],
-        }
-        if policy.get("conflict"):
-            raise HTTPException(status_code=400, detail="Invitation blocked: conflict of interest")
-        # 中文注释:
-        # - 冷却期策略改为“提醒”而不是强制拦截：editor 仍可继续指派；
-        # - override_cooldown/override_reason 仅保留为兼容旧前端字段，不再作为门禁条件。
-        if override_cooldown and not policy.get("cooldown_active"):
-            override_cooldown = False
-
-        # 默认邀请截止时间：+10 天（窗口可配置）
-        _min_days, _max_days, default_days = policy_service.due_window_days()
-        due_at = (datetime.now(timezone.utc) + timedelta(days=default_days)).isoformat()
-        invited_at = datetime.now(timezone.utc).isoformat()
-        insert_payload = {
-            "manuscript_id": manuscript_id_str,
-            "reviewer_id": reviewer_id_str,
-            "status": "pending",
-            "due_at": due_at,
-            "invited_at": invited_at,
-            "round_number": current_version,
-        }
-        try:
-            res = (
-                # 中文注释: 使用 service_role 写入，避免云端 RLS/权限导致“写入成功但读取不到”的不一致体验
-                supabase_admin.table("review_assignments")
-                .insert(insert_payload)
-                .execute()
-            )
-        except Exception as insert_err:
-            # 兼容未迁移 037 的云端：移除 invited_at 再试一次
-            if "invited_at" in str(insert_err).lower() and "column" in str(insert_err).lower():
-                insert_payload.pop("invited_at", None)
-                res = (
-                    supabase_admin.table("review_assignments")
-                    .insert(insert_payload)
-                    .execute()
-                )
-            else:
-                raise
-        # 更新稿件状态为评审中
-        supabase_admin.table("manuscripts").update({"status": "under_review"}).eq(
-            "id", manuscript_id_str
-        ).execute()
-
-        if policy.get("cooldown_active"):
-            _safe_insert_invite_policy_audit(
-                manuscript_id=manuscript_id_str,
-                from_status=str(manuscript.get("status") or ""),
-                to_status="under_review",
-                changed_by=str(current_user.get("id") or ""),
-                comment="reviewer_invite_cooldown_warning",
-                payload={
-                    "action": "reviewer_invite_cooldown_warning",
-                    "reviewer_id": reviewer_id_str,
-                    "manuscript_id": manuscript_id_str,
-                    "override_reason": str(override_reason or "").strip() or None,
-                    "cooldown_days": policy_service.cooldown_days(),
-                    "policy_hits": policy.get("hits") or [],
-                },
-            )
-
-        # === 通知中心 (Feature 011) ===
-        # 站内信：审稿人收到邀请提醒
-        manuscript_title = manuscript.get("title") or "Manuscript"
-        NotificationService().create_notification(
-            user_id=reviewer_id_str,
-            manuscript_id=manuscript_id_str,
-            type="review_invite",
-            title="Review Invitation",
-            content=f"You have been invited to review '{manuscript_title}'.",
-        )
-
-        # 邮件：审稿邀请（含免登录 Token 链接）
-        try:
-            profile_res = (
-                supabase_admin.table("user_profiles")
-                .select("email,full_name")
-                .eq("id", reviewer_id_str)
-                .single()
-                .execute()
-            )
-            reviewer_profile = getattr(profile_res, "data", None) or {}
-            reviewer_email = reviewer_profile.get("email")
-            reviewer_name = reviewer_profile.get("full_name") or "Reviewer"
-        except Exception:
-            reviewer_email = None
-            reviewer_name = "Reviewer"
-
-        journal_title = "ScholarFlow Journal"
-        journal_id = str(manuscript.get("journal_id") or "").strip()
-        if journal_id:
-            try:
-                jr = (
-                    supabase_admin.table("journals")
-                    .select("title")
-                    .eq("id", journal_id)
-                    .single()
-                    .execute()
-                )
-                journal_title = str((getattr(jr, "data", None) or {}).get("title") or journal_title)
-            except Exception:
-                pass
-
-        if reviewer_email:
-            # Feature 039: Magic Link (JWT, 14-day default)
-            assignment_id = None
-            try:
-                assignment_id = (res.data or [])[0].get("id") if isinstance(res.data, list) else None
-            except Exception:
-                assignment_id = None
-            if assignment_id:
-                try:
-                    expires_days = int((os.environ.get("MAGIC_LINK_EXPIRES_DAYS") or "14").strip())
-                except ValueError:
-                    expires_days = 14
-                try:
-                    assignment_uuid = UUID(str(assignment_id))
-                except Exception:
-                    assignment_uuid = None
-                token = None
-                if assignment_uuid:
-                    try:
-                        token = create_magic_link_jwt(
-                            reviewer_id=reviewer_id,
-                            manuscript_id=manuscript_id,
-                            assignment_id=assignment_uuid,
-                            expires_in_days=expires_days,
-                        )
-                    except RuntimeError as e:
-                        # 中文注释:
-                        # - MAGIC_LINK_JWT_SECRET/SECRET_KEY 未配置时不应阻断主流程；
-                        # - 退化为“常规登录后处理”，邮件里不包含 magic link。
-                        if "not configured" in str(e).lower():
-                            print(f"[MagicLink] secret missing (ignored): {e}")
-                            token = None
-                        else:
-                            raise
-                    except Exception as e:
-                        print(f"[MagicLink] token generation failed (ignored): {e}")
-                        token = None
-            else:
-                token = None
-
-            frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
-            review_url = (
-                f"{frontend_base_url}/review/invite?token={quote(str(token))}"
-                if token
-                else f"{frontend_base_url}/dashboard"
-            )
-            
-            background_tasks.add_task(
-                email_service.send_email_background,
-                to_email=reviewer_email,
-                subject="Invitation to Review",
-                template_name="invitation.html",
-                context={
-                    "review_url": review_url,
-                    "reviewer_name": reviewer_name,
-                    "manuscript_title": manuscript_title,
-                    "manuscript_id": str(manuscript_id),
-                    "journal_title": journal_title,
-                    "due_at": due_at,
-                    "due_date": str(due_at).split("T")[0],
-                },
-            )
-
-        row = (getattr(res, "data", None) or [{}])[0]
-        return {"success": True, "data": row, "policy": policy}
-    except HTTPException:
-        raise
-    except APIError as e:
-        # 中文注释:
-        # - reviewer_id 外键指向 auth.users(id)，如果前端列表里混入了“仅 user_profiles 的 mock reviewer”，这里会触发 23503。
-        if _is_foreign_key_user_error(e, constraint="review_assignments_reviewer_id_fkey"):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "该审稿人账号不存在于 Supabase Auth（可能是 mock user_profiles）。"
-                    "请用「Invite New」创建真实账号，或运行 scripts/seed_mock_reviewers_auth.py 生成可指派 reviewer。"
-                ),
-            )
-        if _is_missing_relation_error(e, relation="review_assignments"):
-            raise HTTPException(
-                status_code=500,
-                detail="review_assignments 表不存在或 Schema cache 未更新（请先在云端 Supabase 创建/迁移该表）。",
-            )
-        raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to assign reviewer: {e}")
 
 
 def _get_magic_link_from_cookie(magic_token: str | None) -> str:
@@ -750,88 +504,13 @@ async def establish_reviewer_workspace_session(
     - 内部登录 reviewer 不走邮件链接时，也需要一个 assignment-scoped 的 `sf_review_magic` cookie。
     - 这里严格校验 assignment 属于当前用户后，签发同 scope JWT 并写入 httpOnly cookie。
     """
-    reviewer_id = str(current_user.get("id") or "").strip()
-    if not reviewer_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        a = (
-            supabase_admin.table("review_assignments")
-            .select("id, reviewer_id, manuscript_id, status")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-        assignment = getattr(a, "data", None) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load assignment: {e}")
-
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    if str(assignment.get("reviewer_id") or "") != reviewer_id:
-        raise HTTPException(status_code=403, detail="Not allowed to access this assignment")
-    if str(assignment.get("status") or "").lower() == "cancelled":
-        raise HTTPException(status_code=403, detail="Invitation revoked")
-
-    # 中文注释:
-    # - Reviewer Dashboard 的“Start Review”会直接进入 workspace；
-    # - 但初始 review_assignments 记录默认处于 invited/pending（无 accepted_at），
-    #   ReviewerWorkspaceService 会拒绝进入（403: Please accept invitation first）。
-    # - 这里对“已登录 reviewer”做一次自动 accept（开发/内测体验优先），避免主线 UAT 卡死。
-    try:
-        status_raw = str(assignment.get("status") or "").strip().lower()
-        if status_raw not in {"completed", "declined", "cancelled", "accepted"}:
-            now_iso = datetime.now(timezone.utc).isoformat()
-            # 兼容不同云端 schema：accepted_at/opened_at 可能缺失；缺失则回退为 status=accepted。
-            try:
-                supabase_admin.table("review_assignments").update(
-                    {
-                        "accepted_at": now_iso,
-                        "opened_at": now_iso,
-                    }
-                ).eq("id", str(assignment_id)).execute()
-            except Exception as e:
-                lowered = str(e).lower()
-                if "accepted_at" in lowered or "opened_at" in lowered or "column" in lowered:
-                    try:
-                        supabase_admin.table("review_assignments").update({"status": "accepted"}).eq(
-                            "id", str(assignment_id)
-                        ).execute()
-                    except Exception:
-                        pass
-    except Exception:
-        # fail-open：不影响 cookie 签发；workspace 仍会返回更明确的错误
-        pass
-
-    try:
-        token = create_magic_link_jwt(
-            reviewer_id=UUID(str(assignment.get("reviewer_id"))),
-            manuscript_id=UUID(str(assignment.get("manuscript_id"))),
-            assignment_id=UUID(str(assignment.get("id"))),
-            expires_in_days=14,
-        )
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create reviewer session: {e}")
-
-    secure_cookie = (os.environ.get("GO_ENV") or "").strip().lower() in {"prod", "production"}
-    response.set_cookie(
-        key="sf_review_magic",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=secure_cookie,
-        path="/",
-        max_age=60 * 60 * 24 * 14,
+    return await establish_reviewer_workspace_session_impl(
+        assignment_id=assignment_id,
+        response=response,
+        current_user=current_user,
+        supabase_admin_client=supabase_admin,
+        create_magic_link_jwt_fn=create_magic_link_jwt,
     )
-    return {
-        "success": True,
-        "data": {
-            "assignment_id": str(assignment_id),
-            "redirect_url": f"/reviewer/workspace/{assignment_id}",
-        },
-    }
 
 
 @router.get("/reviews/magic/assignments/{assignment_id}/pdf-signed")
@@ -898,102 +577,17 @@ async def submit_review_via_magic_link(
     attachment: UploadFile | None = File(None),
 ):
     payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-
-    public_comments = (comments_for_author or content or "").strip()
-    if not public_comments:
-        raise HTTPException(status_code=400, detail="comments_for_author is required")
-    if score < 1 or score > 5:
-        raise HTTPException(status_code=400, detail="score must be 1..5")
-
-    attachment_path = None
-    if attachment is not None:
-        file_bytes = await attachment.read()
-        safe_name = (attachment.filename or "attachment").replace("/", "_")
-        # 中文注释: 机密附件仅供编辑查看；存储路径不暴露给作者
-        attachment_path = f"review_reports/{payload.assignment_id}/{safe_name}"
-        try:
-            _ensure_review_attachments_bucket_exists()
-            supabase_admin.storage.from_("review-attachments").upload(
-                attachment_path,
-                file_bytes,
-                {"content-type": attachment.content_type or "application/octet-stream"},
-            )
-        except Exception as e:
-            print(f"[Review Attachment] upload failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to upload attachment")
-
-    # 1) 写 review_reports（双通道评论）
-    rr_payload = {
-        "manuscript_id": str(payload.manuscript_id),
-        "reviewer_id": str(payload.reviewer_id),
-        "status": "completed",
-        "comments_for_author": public_comments,
-        "content": public_comments,  # 兼容旧字段
-        "score": score,
-        "confidential_comments_to_editor": confidential_comments_to_editor,
-        "attachment_path": attachment_path,
-    }
-    try:
-        existing = (
-            supabase_admin.table("review_reports")
-            .select("id")
-            .eq("manuscript_id", str(payload.manuscript_id))
-            .eq("reviewer_id", str(payload.reviewer_id))
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(existing, "data", None) or []
-        if rows:
-            supabase_admin.table("review_reports").update(rr_payload).eq("id", rows[0]["id"]).execute()
-        else:
-            supabase_admin.table("review_reports").insert(
-                {
-                    **rr_payload,
-                    "token": None,
-                    "expiry_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
-                }
-            ).execute()
-    except Exception as e:
-        print(f"[Reviews] upsert review_reports failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to submit review")
-
-    # 2) 同步 review_assignments 状态
-    try:
-        supabase_admin.table("review_assignments").update(
-            {
-                "status": "completed",
-                "comments": public_comments,
-                "scores": {"overall": score},
-            }
-        ).eq("id", str(assignment_id)).execute()
-    except Exception as e:
-        print(f"[Reviews] update assignment failed (ignored): {e}")
-
-    # 3) 若全部评审完成，推动稿件进入 decision（避免 legacy pending_decision 导致前端/队列卡死）
-    try:
-        pending = (
-            supabase_admin.table("review_assignments")
-            .select("id")
-            .eq("manuscript_id", str(payload.manuscript_id))
-            .eq("status", "pending")
-            .execute()
-        )
-        if not (getattr(pending, "data", None) or []):
-            # 首选：仅在 under_review/resubmitted/decision 时推进，避免把已进入 production 的稿件回滚。
-            supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
-                "id", str(payload.manuscript_id)
-            ).in_("status", ["under_review", "resubmitted", "decision"]).execute()
-            # 兼容：历史环境可能仍存在 pending_decision（TEXT）状态；enum 环境会报错，忽略即可。
-            try:
-                supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
-                    "id", str(payload.manuscript_id)
-                ).eq("status", "pending_decision").execute()
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    return {"success": True, "data": {"assignment_id": str(assignment_id)}}
+    return await submit_review_via_magic_link_impl(
+        assignment_id=assignment_id,
+        payload=payload,
+        comments_for_author=comments_for_author,
+        content=content,
+        score=score,
+        confidential_comments_to_editor=confidential_comments_to_editor,
+        attachment=attachment,
+        supabase_admin_client=supabase_admin,
+        ensure_review_attachments_bucket_exists_fn=_ensure_review_attachments_bucket_exists,
+    )
 
 
 @router.delete("/reviews/assign/{assignment_id}")
@@ -1005,76 +599,15 @@ async def unassign_reviewer(
     """
     撤销审稿指派
     """
-    try:
-        # 1. 获取 manuscript_id 以便后续状态检查
-        assign_res = (
-            supabase_admin.table("review_assignments")
-            .select("manuscript_id, reviewer_id, round_number")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-        if not assign_res.data:
-            raise HTTPException(status_code=404, detail="Assignment not found")
-
-        manuscript_id = assign_res.data["manuscript_id"]
-        reviewer_id = assign_res.data["reviewer_id"]
-        round_number = assign_res.data.get("round_number")
-        manuscript_res = (
-            supabase_admin.table("manuscripts")
-            .select("id,journal_id,assistant_editor_id")
-            .eq("id", str(manuscript_id))
-            .single()
-            .execute()
-        )
-        manuscript = getattr(manuscript_res, "data", None) or {}
-        _ensure_review_management_access(
-            manuscript=manuscript,
-            user_id=str(current_user.get("id") or ""),
-            roles=set(normalize_roles(_parse_roles(profile))),
-        )
-
-        # 2. 删除指派
-        # 中文注释: 同一 reviewer 可能被重复指派（历史数据/并发），这里按 reviewer+round 做幂等清理。
-        delete_q = (
-            supabase_admin.table("review_assignments")
-            .delete()
-            .eq("manuscript_id", manuscript_id)
-            .eq("reviewer_id", reviewer_id)
-        )
-        if round_number is not None:
-            delete_q = delete_q.eq("round_number", round_number)
-        delete_q.execute()
-
-        # 3. 尝试删除关联的 review_reports (如果状态是 invited/pending)
-        try:
-            supabase_admin.table("review_reports").delete().eq(
-                "manuscript_id", manuscript_id
-            ).eq("reviewer_id", reviewer_id).in_(
-                "status", ["invited", "pending"]
-            ).execute()
-        except Exception:
-            pass
-
-        # 4. 检查是否还有其他审稿人
-        remaining_res = (
-            supabase_admin.table("review_assignments")
-            .select("id")
-            .eq("manuscript_id", manuscript_id)
-            .execute()
-        )
-        remaining_count = len(remaining_res.data or [])
-
-        # 5. 如果没有审稿人了，回滚稿件状态为 pre_check（进入编辑预检阶段）
-        if remaining_count == 0:
-            supabase_admin.table("manuscripts").update({"status": "pre_check"}).eq(
-                "id", manuscript_id
-            ).execute()
-
-        return {"success": True, "message": "Reviewer unassigned"}
-    except Exception as e:
-        print(f"Unassign failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return await unassign_reviewer_impl(
+        assignment_id=assignment_id,
+        current_user=current_user,
+        profile=profile,
+        supabase_admin_client=supabase_admin,
+        ensure_review_management_access_fn=_ensure_review_management_access,
+        normalize_roles_fn=normalize_roles,
+        parse_roles_fn=_parse_roles,
+    )
 
 
 @router.get("/reviews/assignments/{manuscript_id}")
@@ -1087,126 +620,16 @@ async def get_manuscript_assignments(
     """
     获取某篇稿件的审稿指派列表
     """
-    try:
-        manuscript_res = (
-            supabase_admin.table("manuscripts")
-            .select("id,journal_id,assistant_editor_id")
-            .eq("id", str(manuscript_id))
-            .single()
-            .execute()
-        )
-        manuscript = getattr(manuscript_res, "data", None) or {}
-        if not manuscript:
-            raise HTTPException(status_code=404, detail="Manuscript not found")
-        _ensure_review_management_access(
-            manuscript=manuscript,
-            user_id=str(current_user.get("id") or ""),
-            roles=set(normalize_roles(_parse_roles(profile))),
-        )
-
-        res = (
-            # 使用 service_role 读取，避免 RLS/权限导致编辑端看不到已指派数据
-            supabase_admin.table("review_assignments")
-            .select(
-                "id, status, due_at, reviewer_id, round_number, created_at"
-            )
-            .eq("manuscript_id", str(manuscript_id))
-            .order("created_at", desc=True)
-            .execute()
-        )
-        assignments = res.data or []
-
-        # 中文注释:
-        # - UI 里的“Manage/Assign Reviewer”应默认聚焦在“当前轮次”。
-        # - 但如果当前轮次尚未创建任何指派（例如 resubmitted 但尚未二审分配），则回退到已有的最新轮次，
-        #   这样 Editor 至少能看到上一轮的 reviewer 与完成状态。
-        target_round: int | None = None
-        if round_number is not None:
-            target_round = int(round_number)
-        else:
-            ms_version: int | None = None
-            try:
-                ms = (
-                    supabase_admin.table("manuscripts")
-                    .select("version")
-                    .eq("id", str(manuscript_id))
-                    .single()
-                    .execute()
-                )
-                ms_version = int((getattr(ms, "data", None) or {}).get("version") or 1)
-            except Exception:
-                ms_version = None
-
-            if assignments:
-                try:
-                    max_round = max(int(a.get("round_number") or 1) for a in assignments)
-                except Exception:
-                    max_round = 1
-
-                if ms_version is not None and any(
-                    int(a.get("round_number") or 1) == int(ms_version) for a in assignments
-                ):
-                    target_round = int(ms_version)
-                else:
-                    target_round = int(max_round)
-            else:
-                target_round = ms_version
-
-        if target_round is not None and assignments:
-            assignments = [
-                a
-                for a in assignments
-                if int(a.get("round_number") or 1) == int(target_round)
-            ]
-
-        # 中文注释:
-        # - review_assignments.reviewer_id 外键指向 auth.users(id)，并不指向 public.user_profiles(id)
-        # - 因此不能用 PostgREST embed 语法直接 join user_profiles（会报错/返回空）
-        # - 这里用两次查询做“应用层 join”，保证 UI 能拿到 reviewer_id 并正确预选
-        reviewer_ids = list({a.get("reviewer_id") for a in assignments if a.get("reviewer_id")})
-        profiles_by_id: Dict[str, Dict[str, Any]] = {}
-        if reviewer_ids:
-            try:
-                profiles_res = (
-                    supabase_admin.table("user_profiles")
-                    .select("id, full_name, email")
-                    .in_("id", reviewer_ids)
-                    .execute()
-                )
-                for p in (profiles_res.data or []):
-                    pid = p.get("id")
-                    if pid:
-                        profiles_by_id[str(pid)] = p
-            except Exception as e:
-                # 不阻塞主流程：仍返回 assignments，只是名称/邮箱为空
-                print(f"Fetch reviewer profiles failed (fallback to ids only): {e}")
-
-        # 去重：同一个 reviewer 在同一 round 被重复指派时，只返回最新一条（避免 UI 显示 2 个“同一人”）
-        seen_keys = set()
-        result = []
-        for item in assignments:
-            rid = str(item.get("reviewer_id") or "")
-            rnd = item.get("round_number", 1)
-            key = (rid, rnd)
-            if not rid or key in seen_keys:
-                continue
-            seen_keys.add(key)
-            profile = profiles_by_id.get(rid, {})
-            result.append(
-                {
-                    "id": item["id"],  # assignment_id
-                    "status": item.get("status"),
-                    "due_at": item.get("due_at"),
-                    "round_number": rnd,
-                    "reviewer_id": rid,
-                    "reviewer_name": profile.get("full_name") or "Unknown",
-                    "reviewer_email": profile.get("email") or "",
-                }
-            )
-        return {"success": True, "data": result}
-    except Exception as e:
-        print(f"Fetch assignments failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to load reviewer assignments")
+    return await get_manuscript_assignments_impl(
+        manuscript_id=manuscript_id,
+        round_number=round_number,
+        current_user=current_user,
+        profile=profile,
+        supabase_admin_client=supabase_admin,
+        ensure_review_management_access_fn=_ensure_review_management_access,
+        normalize_roles_fn=normalize_roles,
+        parse_roles_fn=_parse_roles,
+    )
 
 
 # === 2. 获取我的审稿任务 (Reviewer Task) ===
@@ -1256,121 +679,16 @@ async def submit_review(
     """
     提交结构化评审意见
     """
-    public_comments = (comments_for_author or comments or "").strip()
-    if not public_comments:
-        raise HTTPException(status_code=400, detail="comments_for_author is required")
-
-    try:
-        # 逻辑: 更新状态并存储分数
-        assignment_res = (
-            supabase.table("review_assignments")
-            .select("manuscript_id, reviewer_id")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-        manuscript_id = None
-        assignment_data = getattr(assignment_res, "data", None)
-        if isinstance(assignment_data, list):
-            assignment_data = assignment_data[0] if assignment_data else None
-        if assignment_data:
-            manuscript_id = assignment_data.get("manuscript_id")
-            reviewer_id = assignment_data.get("reviewer_id")
-        else:
-            reviewer_id = None
-
-        res = (
-            supabase.table("review_assignments")
-            .update({"status": "completed", "scores": scores, "comments": public_comments})
-            .eq("id", str(assignment_id))
-            .execute()
-        )
-
-        # === Feature 022: Reviewer Privacy（双通道评论落库到 review_reports） ===
-        # 中文注释:
-        # - review_assignments 用于任务状态机；review_reports 用于对外展示（按角色过滤机密字段）。
-        if manuscript_id and reviewer_id:
-            overall_score = None
-            try:
-                vals = list((scores or {}).values())
-                overall_score = round(sum(vals) / max(len(vals), 1)) if vals else None
-            except Exception:
-                overall_score = None
-
-            rr_payload = {
-                "manuscript_id": str(manuscript_id),
-                "reviewer_id": str(reviewer_id),
-                "status": "completed",
-                # 新字段（Author 可见）
-                "comments_for_author": public_comments,
-                # 兼容旧字段：历史页面仍可能读取 content
-                "content": public_comments,
-                "score": overall_score,
-                "confidential_comments_to_editor": confidential_comments_to_editor,
-                "attachment_path": attachment_path,
-            }
-            try:
-                existing = (
-                    supabase_admin.table("review_reports")
-                    .select("id")
-                    .eq("manuscript_id", str(manuscript_id))
-                    .eq("reviewer_id", str(reviewer_id))
-                    .limit(1)
-                    .execute()
-                )
-                existing_rows = getattr(existing, "data", None) or []
-                if existing_rows:
-                    supabase_admin.table("review_reports").update(rr_payload).eq(
-                        "id", existing_rows[0]["id"]
-                    ).execute()
-                else:
-                    supabase_admin.table("review_reports").insert(
-                        {
-                            **rr_payload,
-                            "token": None,
-                            "expiry_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
-                        }
-                    ).execute()
-            except Exception as e:
-                # 中文注释: 不因 review_reports 失败阻塞 review_assignments 主流程
-                print(f"[Reviews] upsert review_reports failed (ignored): {e}")
-
-        # 若全部评审完成，推动稿件进入待终审状态
-        if manuscript_id:
-            try:
-                pending = (
-                    supabase_admin.table("review_assignments")
-                    .select("id")
-                    .eq("manuscript_id", str(manuscript_id))
-                    .eq("status", "pending")
-                    .execute()
-                )
-                pending_rows = getattr(pending, "data", None) or []
-            except Exception:
-                pending = (
-                    supabase.table("review_assignments")
-                    .select("id")
-                    .eq("manuscript_id", str(manuscript_id))
-                    .eq("status", "pending")
-                    .execute()
-                )
-                pending_rows = getattr(pending, "data", None) or []
-
-            if not pending_rows:
-                try:
-                    supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
-                        "id", str(manuscript_id)
-                    ).execute()
-                except Exception:
-                    supabase.table("manuscripts").update({"status": "decision"}).eq(
-                        "id", str(manuscript_id)
-                    ).execute()
-
-        return {"success": True, "data": res.data[0] if res.data else {}}
-    except APIError as e:
-        # 缺表时，给出可读提示，避免 500
-        print(f"Review submit failed: {e}")
-        return {"success": False, "message": "review_assignments table not found"}
+    return await submit_review_impl(
+        assignment_id=assignment_id,
+        scores=scores,
+        comments_for_author=comments_for_author,
+        comments=comments,
+        confidential_comments_to_editor=confidential_comments_to_editor,
+        attachment_path=attachment_path,
+        supabase_client=supabase,
+        supabase_admin_client=supabase_admin,
+    )
 
 
 @router.post("/reviews/assignments/{assignment_id}/attachment")
@@ -1448,62 +766,10 @@ async def get_review_by_token(token: str):
     中文注释:
     - 这是 Reviewer 无需登录的落地页能力；必须严格校验 token 有效性与过期时间。
     """
-    try:
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, expiry_date")
-            .eq("token", token)
-            .single()
-            .execute()
-        )
-        rr = getattr(rr_resp, "data", None) or {}
-        if not rr:
-            raise HTTPException(status_code=404, detail="Review token not found")
-
-        expiry = rr.get("expiry_date")
-        # expiry_date 可能是字符串
-        try:
-            expiry_dt = (
-                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                if isinstance(expiry, str)
-                else expiry
-            )
-        except Exception:
-            expiry_dt = None
-        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="Review token expired")
-
-        ms_resp = (
-            supabase_admin.table("manuscripts")
-            .select("id,title,abstract,file_path,status")
-            .eq("id", rr["manuscript_id"])
-            .single()
-            .execute()
-        )
-        ms = getattr(ms_resp, "data", None) or {}
-
-        # 最新修订信息（用于二审/复审时给 reviewer 展示作者 response letter）
-        latest_revision = None
-        try:
-            rev_resp = (
-                supabase_admin.table("revisions")
-                .select("id, round_number, decision_type, editor_comment, response_letter, status, submitted_at, created_at")
-                .eq("manuscript_id", rr["manuscript_id"])
-                .order("round_number", desc=True)
-                .limit(1)
-                .execute()
-            )
-            revs = getattr(rev_resp, "data", None) or []
-            latest_revision = revs[0] if revs else None
-        except Exception:
-            latest_revision = None
-
-        return {"success": True, "data": {"review_report": rr, "manuscript": ms, "latest_revision": latest_revision}}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Get review by token failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch review task")
+    return await get_review_by_token_impl(
+        token=token,
+        supabase_admin_client=supabase_admin,
+    )
 
 
 @router.get("/reviews/token/{token}/pdf-signed")
@@ -1573,145 +839,16 @@ async def submit_review_by_token(
     """
     免登录审稿提交：支持双通道评论 + 机密附件
     """
-    public_comments = (comments_for_author or content or "").strip()
-    if not public_comments:
-        raise HTTPException(status_code=400, detail="comments_for_author is required")
-    if score < 1 or score > 5:
-        raise HTTPException(status_code=400, detail="score must be 1..5")
-
-    try:
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, expiry_date")
-            .eq("token", token)
-            .single()
-            .execute()
-        )
-        rr = getattr(rr_resp, "data", None) or {}
-        if not rr:
-            raise HTTPException(status_code=404, detail="Review token not found")
-
-        expiry = rr.get("expiry_date")
-        try:
-            expiry_dt = (
-                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                if isinstance(expiry, str)
-                else expiry
-            )
-        except Exception:
-            expiry_dt = None
-        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="Review token expired")
-
-        attachment_path = None
-        if attachment is not None:
-            file_bytes = await attachment.read()
-            # 中文注释: 机密附件仅供编辑查看；存储路径不暴露给作者
-            safe_name = (attachment.filename or "attachment").replace("/", "_")
-            attachment_path = f"review_reports/{rr['id']}/{safe_name}"
-            try:
-                _ensure_review_attachments_bucket_exists()
-                supabase_admin.storage.from_("review-attachments").upload(
-                    attachment_path,
-                    file_bytes,
-                    {"content-type": attachment.content_type or "application/octet-stream"},
-                )
-            except Exception as e:
-                print(f"[Review Attachment] upload failed: {e}")
-                raise HTTPException(status_code=500, detail="Failed to upload attachment")
-
-        update_payload = {
-            # 新字段（Author 可见）
-            "comments_for_author": public_comments,
-            # 兼容旧字段
-            "content": public_comments,
-            "score": score,
-            "status": "completed",
-            "confidential_comments_to_editor": confidential_comments_to_editor,
-            "attachment_path": attachment_path,
-        }
-        supabase_admin.table("review_reports").update(update_payload).eq("id", rr["id"]).execute()
-
-        # === 同步到 review_assignments / manuscripts（修复 Editor 状态不同步）===
-        # 中文注释:
-        # - Editor Pipeline 依赖 review_assignments 的 pending/completed 统计。
-        # - 免登录 token 提交如果只更新 review_reports，会导致 Editor 侧看不到变化。
-        try:
-            ms_version = 1
-            try:
-                ms_v = (
-                    supabase_admin.table("manuscripts")
-                    .select("version")
-                    .eq("id", rr["manuscript_id"])
-                    .single()
-                    .execute()
-                )
-                ms_version = int((getattr(ms_v, "data", None) or {}).get("version") or 1)
-            except Exception:
-                ms_version = 1
-
-            assignment_rows = []
-            try:
-                a = (
-                    supabase_admin.table("review_assignments")
-                    .select("id")
-                    .eq("manuscript_id", str(rr["manuscript_id"]))
-                    .eq("reviewer_id", str(rr["reviewer_id"]))
-                    .eq("round_number", ms_version)
-                    .order("created_at", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-                assignment_rows = getattr(a, "data", None) or []
-            except Exception:
-                assignment_rows = []
-
-            if not assignment_rows:
-                # 兼容旧数据：round_number 可能为空
-                try:
-                    a2 = (
-                        supabase_admin.table("review_assignments")
-                        .select("id")
-                        .eq("manuscript_id", str(rr["manuscript_id"]))
-                        .eq("reviewer_id", str(rr["reviewer_id"]))
-                        .order("created_at", desc=True)
-                        .limit(1)
-                        .execute()
-                    )
-                    assignment_rows = getattr(a2, "data", None) or []
-                except Exception:
-                    assignment_rows = []
-
-            if assignment_rows:
-                supabase_admin.table("review_assignments").update(
-                    {
-                        "status": "completed",
-                        "comments": public_comments,
-                        "scores": {"overall": score},
-                    }
-                ).eq("id", assignment_rows[0]["id"]).execute()
-
-            pending = (
-                supabase_admin.table("review_assignments")
-                .select("id")
-                .eq("manuscript_id", str(rr["manuscript_id"]))
-                .eq("status", "pending")
-                .execute()
-            )
-            if not (getattr(pending, "data", None) or []):
-                supabase_admin.table("manuscripts").update({"status": "decision"}).eq(
-                    "id", str(rr["manuscript_id"])
-                ).execute()
-        except Exception as e:
-            # 中文注释: 不因同步失败阻塞免登录提交主流程，但要打日志便于排查。
-            print(f"[Reviews] token submit sync to assignments/manuscripts failed (ignored): {e}")
-
-        return {"success": True, "data": {"review_report_id": rr["id"]}}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Submit review by token failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to submit review")
+    return await submit_review_by_token_impl(
+        token=token,
+        comments_for_author=comments_for_author,
+        content=content,
+        score=score,
+        confidential_comments_to_editor=confidential_comments_to_editor,
+        attachment=attachment,
+        supabase_admin_client=supabase_admin,
+        ensure_review_attachments_bucket_exists_fn=_ensure_review_attachments_bucket_exists,
+    )
 
 
 @router.get("/reviews/feedback/{manuscript_id}")

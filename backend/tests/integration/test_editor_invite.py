@@ -166,6 +166,7 @@ async def test_editor_assign_blocked_by_cooldown_without_override(
 ):
     monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES", "admin,managing_editor")
 
     manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab")
     reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
@@ -334,3 +335,60 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
         assert payload.get("policy", {}).get("cooldown_active") is True
 
     assert send_mock.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_editor_assign_requires_assistant_editor_ownership_for_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "nobody@example.com")
+
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaae")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbf")
+    profile_user_id = "00000000-0000-0000-0000-000000000222"
+    foreign_ae_id = "11111111-1111-1111-1111-111111111111"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": profile_user_id, "email": "assistant@example.com", "roles": ["assistant_editor"]}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "author_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    "title": "RBAC Ownership Check",
+                    "version": 1,
+                    "status": "under_review",
+                    "owner_id": profile_user_id,
+                    "assistant_editor_id": foreign_ae_id,
+                    "file_path": "manuscripts/x.pdf",
+                    "journal_id": "journal-1",
+                }
+            ],
+        }
+    )
+    supabase_admin = _Client({"review_assignments": [], "manuscripts": []})
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "manuscript_id": str(manuscript_id),
+        "reviewer_id": str(reviewer_id),
+        "override_cooldown": True,
+        "override_reason": "should fail before policy",
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
+    ):
+        resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
+        assert resp.status_code == 403
+        assert "assistant editor" in str(resp.json().get("detail", "")).lower()

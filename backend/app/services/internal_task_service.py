@@ -492,3 +492,75 @@ class InternalTaskService:
                 else None
             )
         return rows
+
+    def list_manuscript_activity(
+        self,
+        *,
+        manuscript_id: str,
+        task_limit: int = 50,
+        activity_limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """
+        批量返回稿件下多个任务的活动日志，避免前端逐任务 N+1 拉取。
+        """
+        safe_task_limit = max(1, min(int(task_limit), 200))
+        safe_activity_limit = max(1, min(int(activity_limit), 1000))
+
+        try:
+            task_resp = (
+                self.client.table("internal_tasks")
+                .select("id,title,updated_at")
+                .eq("manuscript_id", manuscript_id)
+                .order("updated_at", desc=True)
+                .limit(safe_task_limit)
+                .execute()
+            )
+        except Exception as e:
+            table = _missing_table_from_error(e)
+            if table:
+                raise InternalTaskSchemaMissingError(table=table) from e
+            raise
+
+        task_rows = _extract_rows(task_resp)
+        if not task_rows:
+            return []
+
+        task_ids = [str(row.get("id") or "").strip() for row in task_rows if str(row.get("id") or "").strip()]
+        if not task_ids:
+            return []
+        task_title_map = {str(row.get("id") or "").strip(): row.get("title") for row in task_rows}
+
+        try:
+            query = (
+                self.client.table("internal_task_activity_logs")
+                .select("id,task_id,manuscript_id,action,actor_user_id,before_payload,after_payload,created_at")
+                .eq("manuscript_id", manuscript_id)
+                .order("created_at", desc=True)
+                .limit(safe_activity_limit)
+            )
+            if hasattr(query, "in_"):
+                query = query.in_("task_id", task_ids)
+            activity_resp = query.execute()
+        except Exception as e:
+            table = _missing_table_from_error(e)
+            if table:
+                raise InternalTaskSchemaMissingError(table=table) from e
+            raise
+
+        rows = _extract_rows(activity_resp)
+        actor_ids = sorted({str(row.get("actor_user_id") or "").strip() for row in rows if str(row.get("actor_user_id") or "").strip()})
+        profiles_map = self._load_profiles_map(actor_ids)
+        for row in rows:
+            actor_id = str(row.get("actor_user_id") or "").strip()
+            task_id = str(row.get("task_id") or "").strip()
+            row["actor"] = (
+                {
+                    "id": actor_id,
+                    "full_name": (profiles_map.get(actor_id) or {}).get("full_name"),
+                    "email": (profiles_map.get(actor_id) or {}).get("email"),
+                }
+                if actor_id
+                else None
+            )
+            row["task_title"] = task_title_map.get(task_id)
+        return rows

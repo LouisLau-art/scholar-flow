@@ -9,6 +9,36 @@ from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
 from uuid import UUID
 
 
+def extract_supabase_data(response: Any) -> Any:
+    """
+    兼容 supabase-py / postgrest 在不同版本下的 execute() 返回值形态。
+    - 新版: response.data
+    - 旧/自定义 mock: (error, data)
+    """
+    if response is None:
+        return None
+    data = getattr(response, "data", None)
+    if data is not None:
+        return data
+    if isinstance(response, tuple) and len(response) == 2:
+        return response[1]
+    return None
+
+
+def extract_supabase_error(response: Any) -> Any:
+    """
+    兼容不同版本的 supabase-py 错误字段。
+    """
+    if response is None:
+        return None
+    error = getattr(response, "error", None)
+    if error:
+        return error
+    if isinstance(response, tuple) and len(response) == 2:
+        return response[0]
+    return None
+
+
 def require_action_or_403(*, action: str, roles: list[str] | None) -> None:
     """
     统一动作级权限拦截（角色矩阵）。

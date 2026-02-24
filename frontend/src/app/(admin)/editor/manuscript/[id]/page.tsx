@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
@@ -62,6 +62,18 @@ type ReviewerFeedbackItem = {
   created_at?: string | null
 }
 
+const DEFERRED_BLOCK_TIMEOUT_MS = 8_000
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+    promise
+      .then((value) => resolve(value))
+      .catch((error) => reject(error))
+      .finally(() => window.clearTimeout(timer))
+  })
+}
+
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -88,6 +100,9 @@ export default function EditorManuscriptDetailPage() {
   const [reviewReports, setReviewReports] = useState<ReviewerFeedbackItem[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+  const reviewCardRef = useRef<HTMLDivElement | null>(null)
+  const [reviewsActivated, setReviewsActivated] = useState(false)
+  const [reviewsLoadedOnce, setReviewsLoadedOnce] = useState(false)
 
   const [invoiceOpen, setInvoiceOpen] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceInfoForm>({
@@ -97,6 +112,10 @@ export default function EditorManuscriptDetailPage() {
     fundingInfo: '',
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
+  const cardsSectionRef = useRef<HTMLDivElement | null>(null)
+  const [cardsActivated, setCardsActivated] = useState(false)
+  const [cardsLoading, setCardsLoading] = useState(false)
+  const [cardsError, setCardsError] = useState<string | null>(null)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
   const normalizedRoles = useMemo(() => rbacContext?.normalized_roles || [], [rbacContext])
   const canManualStatusTransition = useMemo(
@@ -151,7 +170,11 @@ export default function EditorManuscriptDetailPage() {
     try {
       setReviewsLoading(true)
       setReviewsError(null)
-      const reviewRes = await EditorApi.getManuscriptReviews(id)
+      const reviewRes = await withTimeout(
+        EditorApi.getManuscriptReviews(id),
+        DEFERRED_BLOCK_TIMEOUT_MS,
+        'Reviewer feedback loading timed out.'
+      )
       if (!reviewRes?.success) {
         throw new Error(reviewRes?.detail || reviewRes?.message || 'Failed to load reviewer feedback')
       }
@@ -165,27 +188,76 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [id])
 
+  const loadCardsContext = useCallback(
+    async (force = false) => {
+      if (!id) return
+      try {
+        setCardsLoading(true)
+        setCardsError(null)
+        const cardsRes = await withTimeout(
+          EditorApi.getManuscriptCardsContext(id, { force }),
+          DEFERRED_BLOCK_TIMEOUT_MS,
+          'Task/queue cards loading timed out.'
+        )
+        if (!cardsRes?.success || !cardsRes?.data) {
+          throw new Error(cardsRes?.detail || cardsRes?.message || 'Failed to load cards context')
+        }
+        setMs((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            task_summary: cardsRes.data.task_summary ?? prev.task_summary,
+            role_queue: cardsRes.data.role_queue ?? prev.role_queue,
+          }
+        })
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Failed to load cards context'
+        setCardsError(message)
+      } finally {
+        setCardsLoading(false)
+      }
+    },
+    [id]
+  )
+
+  const refreshCardsIfVisible = useCallback(() => {
+    if (!cardsActivated || !id) return
+    void loadCardsContext(true)
+  }, [cardsActivated, id, loadCardsContext])
+
   const refreshDetail = useCallback(async () => {
     if (!id) return
     try {
-      const detailRes = await EditorApi.getManuscriptDetail(id)
+      const detailRes = await EditorApi.getManuscriptDetail(id, { skipCards: true })
       if (!detailRes?.success) {
         throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       }
-      applyDetail(detailRes.data)
-      void loadReviewReports()
+      const detail = detailRes.data as ManuscriptDetail
+      applyDetail(detail)
+      if (cardsActivated) {
+        void loadCardsContext(true)
+      }
+      const normalizedStatus = normalizeWorkflowStatus(String(detail?.status || ''))
+      if (normalizedStatus === 'pre_check') {
+        setReviewReports([])
+        setReviewsError(null)
+        setReviewsLoading(false)
+        setReviewsLoadedOnce(false)
+      } else if (!reviewsActivated) {
+        setReviewsLoadedOnce(false)
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
     }
-  }, [applyDetail, id, loadReviewReports])
+  }, [applyDetail, cardsActivated, id, loadCardsContext, reviewsActivated])
 
   async function load() {
     try {
       setLoading(true)
-      await refreshDetail()
-      // 不阻塞详情页首屏；RBAC 信息后台刷新。
+      // 与详情并发启动 RBAC 请求，减少首屏等待链路。
       void loadRbacContext().catch(() => setRbacContext(null))
+      await refreshDetail()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
@@ -200,6 +272,72 @@ export default function EditorManuscriptDetailPage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    setReviewsActivated(false)
+    setReviewsLoadedOnce(false)
+    setCardsActivated(false)
+  }, [id])
+
+  useEffect(() => {
+    if (reviewsActivated) return
+    const node = reviewCardRef.current
+    if (!node) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setReviewsActivated(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setReviewsActivated(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px 0px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [ms, reviewsActivated])
+
+  useEffect(() => {
+    if (!reviewsActivated || reviewsLoadedOnce || !id) return
+    const normalizedStatus = normalizeWorkflowStatus(String(ms?.status || ''))
+    if (!normalizedStatus || normalizedStatus === 'pre_check') {
+      setReviewReports([])
+      setReviewsError(null)
+      setReviewsLoading(false)
+      setReviewsLoadedOnce(true)
+      return
+    }
+    void loadReviewReports().finally(() => setReviewsLoadedOnce(true))
+  }, [id, loadReviewReports, ms?.status, reviewsActivated, reviewsLoadedOnce])
+
+  useEffect(() => {
+    if (cardsActivated) return
+    const node = cardsSectionRef.current
+    if (!node) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setCardsActivated(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setCardsActivated(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px 0px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [cardsActivated, ms])
+
+  useEffect(() => {
+    if (!cardsActivated || !id) return
+    void loadCardsContext()
+  }, [cardsActivated, id, loadCardsContext])
 
   useEffect(() => {
     let mounted = true
@@ -544,12 +682,12 @@ export default function EditorManuscriptDetailPage() {
                   manuscriptId={id}
                   currentUserId={rbacContext?.user_id}
                   currentUserEmail={viewerEmail}
-                  onCommentPosted={refreshDetail}
+                  onCommentPosted={refreshCardsIfVisible}
                 />
             </div>
 
             {/* 5. Internal Tasks */}
-            <InternalTasksPanel manuscriptId={id} onChanged={refreshDetail} />
+            <InternalTasksPanel manuscriptId={id} onChanged={refreshCardsIfVisible} />
 
         </div>
 
@@ -612,12 +750,18 @@ export default function EditorManuscriptDetailPage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm border-slate-200">
+            <Card ref={reviewCardRef} className="shadow-sm border-slate-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Reviewer Feedback Summary</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  Reviewer Feedback Summary
+                  {!reviewsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
+                  {reviewsActivated && reviewsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {reviewsLoading ? (
+                {!reviewsActivated ? (
+                  <div className="text-sm text-slate-500">Reviewer feedback will load when this card enters the viewport.</div>
+                ) : reviewsLoading ? (
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading reviewer feedback...
@@ -625,7 +769,14 @@ export default function EditorManuscriptDetailPage() {
                 ) : reviewsError ? (
                   <div className="space-y-2">
                     <div className="text-sm text-rose-600">{reviewsError}</div>
-                    <Button size="sm" variant="outline" onClick={() => void loadReviewReports()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setReviewsError(null)
+                        setReviewsLoadedOnce(false)
+                      }}
+                    >
                       Retry
                     </Button>
                   </div>
@@ -698,6 +849,7 @@ export default function EditorManuscriptDetailPage() {
                               manuscriptId={id}
                               onChanged={refreshDetail}
                               disabled={!capability.canManageReviewers}
+                              viewerRoles={normalizedRoles}
                             />
                         </div>
                     )}
@@ -786,37 +938,63 @@ export default function EditorManuscriptDetailPage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card ref={cardsSectionRef} className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg">Task SLA Summary</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Task SLA Summary
+                  {!cardsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
+                  {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Open Tasks</span>
-                  <span className="font-medium text-slate-900">{ms.task_summary?.open_tasks_count ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Overdue Tasks</span>
-                  <span className={`font-medium ${ms.task_summary?.is_overdue ? 'text-rose-700' : 'text-slate-900'}`}>
-                    {ms.task_summary?.overdue_tasks_count ?? 0}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Nearest Due</span>
-                  <span className="font-medium text-slate-900">
-                    {ms.task_summary?.nearest_due_at ? format(new Date(ms.task_summary.nearest_due_at), 'yyyy-MM-dd HH:mm') : '—'}
-                  </span>
-                </div>
+                {cardsError ? (
+                  <div className="space-y-2">
+                    <div className="text-sm text-rose-600">{cardsError}</div>
+                    <Button size="sm" variant="outline" onClick={() => void loadCardsContext(true)} data-testid="cards-context-retry">
+                      Retry
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Open Tasks</span>
+                      <span className="font-medium text-slate-900">{ms.task_summary?.open_tasks_count ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Overdue Tasks</span>
+                      <span className={`font-medium ${ms.task_summary?.is_overdue ? 'text-rose-700' : 'text-slate-900'}`}>
+                        {ms.task_summary?.overdue_tasks_count ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Nearest Due</span>
+                      <span className="font-medium text-slate-900">
+                        {ms.task_summary?.nearest_due_at ? format(new Date(ms.task_summary.nearest_due_at), 'yyyy-MM-dd HH:mm') : '—'}
+                      </span>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
             {/* Pre-check queue snapshot */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg">Pre-check Role Queue</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Pre-check Role Queue
+                  {!cardsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
+                  {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {isPrecheckActive ? (
+                {cardsError ? (
+                  <div className="space-y-2">
+                    <div className="text-sm text-rose-600">{cardsError}</div>
+                    <Button size="sm" variant="outline" onClick={() => void loadCardsContext(true)} data-testid="precheck-cards-context-retry">
+                      Retry
+                    </Button>
+                  </div>
+                ) : isPrecheckActive ? (
                   <>
                     <div className="space-y-2 text-sm">
                       <div>

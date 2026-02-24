@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
+import { EditorApi } from '@/services/editorApi'
 
 vi.mock('@/services/auth', () => ({
   authService: {
@@ -12,6 +13,7 @@ vi.mock('@/services/auth', () => ({
 
 describe('ReviewerAssignModal AI Recommendations', () => {
   beforeEach(() => {
+    EditorApi.invalidateReviewerSearchCache()
     globalThis.fetch = vi.fn((url: any) => {
       if (String(url).includes('/api/v1/editor/manuscripts/')) {
         return Promise.resolve({
@@ -101,6 +103,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
@@ -276,6 +279,63 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       expect(onAssign).toHaveBeenCalledWith(['r-cool'], {
         overrides: [{ reviewerId: 'r-cool', reason: 'Need domain continuity' }],
       })
+    })
+  })
+
+  it('debounces reviewer search requests and only fires latest query', async () => {
+    const onAssign = vi.fn()
+    const onClose = vi.fn()
+
+    render(<ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" />)
+
+    await screen.findByTestId('owner-select')
+    await waitFor(() => {
+      expect(
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+          String(call[0]).includes('/api/v1/editor/reviewer-library')
+        )
+      ).toBe(true)
+    })
+
+    const searchInput = screen.getByTestId('reviewer-search')
+    fireEvent.change(searchInput, { target: { value: 'Man' } })
+    fireEvent.change(searchInput, { target: { value: 'Manual' } })
+
+    await new Promise((resolve) => setTimeout(resolve, 320))
+
+    await waitFor(() => {
+      const reviewerCalls = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+        String(call[0]).includes('/api/v1/editor/reviewer-library')
+      )
+      expect(reviewerCalls.length).toBe(2)
+      expect(String(reviewerCalls[1][0])).toContain('query=Manual')
+    })
+  })
+
+  it('does not reuse cache across manuscript context switch', async () => {
+    const onAssign = vi.fn()
+    const onClose = vi.fn()
+    const { rerender } = render(
+      <ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" viewerRoles={['admin']} />
+    )
+
+    await screen.findByTestId('owner-select')
+    await waitFor(() => {
+      expect(
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+          String(call[0]).includes('manuscript_id=ms-1')
+        )
+      ).toBe(true)
+    })
+
+    rerender(<ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-2" viewerRoles={['admin']} />)
+
+    await waitFor(() => {
+      expect(
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
+          String(call[0]).includes('manuscript_id=ms-2')
+        )
+      ).toBe(true)
     })
   })
 })

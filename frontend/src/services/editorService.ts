@@ -75,8 +75,16 @@ export const editorService = {
     return res
   },
 
-  getAEWorkspace: async (page = 1, pageSize = 20) => {
-    const res = await EditorApi.getAEWorkspace(page, pageSize)
+  getAEWorkspace: async (
+    page = 1,
+    pageSize = 20,
+    options?: { forceRefresh?: boolean; signal?: AbortSignal; ttlMs?: number }
+  ) => {
+    const res = await EditorApi.getAEWorkspace(page, pageSize, {
+      force: Boolean(options?.forceRefresh),
+      signal: options?.signal,
+      ttlMs: options?.ttlMs,
+    })
     if (!Array.isArray(res)) {
       throw new Error(res?.detail || res?.message || 'Failed to fetch AE workspace')
     }

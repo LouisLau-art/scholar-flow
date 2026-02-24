@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-02-24T04:30:48.378303+00:00",
+  "threshold_ratio": 0.1,
+  "worst_regression_ratio": 0.0,
+  "status": "passed",
+  "rows": [
+    {
+      "scenario": "editor_detail",
+      "before_p95_ms": 4800,
+      "after_p95_ms": 2950,
+      "regression_ratio": -0.3854166666666667,
+      "regressed": false
+    },
+    {
+      "scenario": "editor_process",
+      "before_p95_ms": 3200,
+      "after_p95_ms": 2200,
+      "regression_ratio": -0.3125,
+      "regressed": false
+    },
+    {
+      "scenario": "editor_workspace",
+      "before_p95_ms": 3400,
+      "after_p95_ms": 2250,
+      "regression_ratio": -0.3382352941176471,
+      "regressed": false
+    },
+    {
+      "scenario": "reviewer_search_repeat",
+      "before_p95_ms": 1600,
+      "after_p95_ms": 620,
+      "regression_ratio": -0.6125,
+      "regressed": false
+    }
+  ]
+}

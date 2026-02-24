@@ -96,6 +96,123 @@ async function authedFetch(input: RequestInfo, init?: RequestInit) {
   return fetch(input, { ...init, headers })
 }
 
+type CachedGetOptions = {
+  ttlMs?: number
+  force?: boolean
+}
+
+type ReviewerLibrarySearchOptions = {
+  ttlMs?: number
+  force?: boolean
+  disableCache?: boolean
+  roleScopeKey?: string
+}
+
+type WorkspaceFetchOptions = CachedGetOptions & {
+  signal?: AbortSignal
+}
+
+const GET_CACHE_TTL_MS = 8_000
+const REVIEWER_LIBRARY_CACHE_TTL_MS = 20_000
+const AE_WORKSPACE_CACHE_TTL_MS = 15_000
+const getJsonCache = new Map<string, { expiresAt: number; data: unknown }>()
+const getJsonInflight = new Map<string, Promise<unknown>>()
+const reviewerSearchCache = new Map<string, { expiresAt: number; data: unknown }>()
+const reviewerSearchInflight = new Map<string, Promise<unknown>>()
+const aeWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
+const aeWorkspaceInflight = new Map<string, Promise<unknown>>()
+
+function invalidateGetJsonCache(predicate: (key: string) => boolean) {
+  for (const key of Array.from(getJsonCache.keys())) {
+    if (predicate(key)) getJsonCache.delete(key)
+  }
+  for (const key of Array.from(getJsonInflight.keys())) {
+    if (predicate(key)) getJsonInflight.delete(key)
+  }
+}
+
+function invalidateManuscriptInternalCache(manuscriptId: string) {
+  const base = `/api/v1/editor/manuscripts/${manuscriptId}`
+  invalidateGetJsonCache((key) =>
+    key.startsWith(`${base}/comments`) ||
+    key.startsWith(`${base}/tasks`) ||
+    key.startsWith(`${base}/audit-logs`) ||
+    key.startsWith(`${base}/timeline-context`)
+  )
+}
+
+async function authedGetJsonCached<T = any>(url: string, options: CachedGetOptions = {}): Promise<T> {
+  const ttlMs = options.ttlMs ?? GET_CACHE_TTL_MS
+  const force = Boolean(options.force)
+  const now = Date.now()
+  if (!force) {
+    const cached = getJsonCache.get(url)
+    if (cached && cached.expiresAt > now) {
+      return cached.data as T
+    }
+    const inflight = getJsonInflight.get(url)
+    if (inflight) {
+      return (await inflight) as T
+    }
+  }
+
+  const requestPromise = (async () => {
+    const res = await authedFetch(url)
+    const json = await res.json().catch(() => ({}))
+    if (res.ok) {
+      getJsonCache.set(url, { expiresAt: Date.now() + ttlMs, data: json })
+    }
+    return json
+  })()
+  getJsonInflight.set(url, requestPromise)
+
+  try {
+    return (await requestPromise) as T
+  } finally {
+    if (getJsonInflight.get(url) === requestPromise) {
+      getJsonInflight.delete(url)
+    }
+  }
+}
+
+function normalizeReviewerQuery(query?: string): string {
+  return String(query || '').trim().toLowerCase()
+}
+
+function normalizeRoleScopeKey(scopeKey?: string): string {
+  const normalized = String(scopeKey || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+  return normalized.length ? normalized.join(',') : 'global'
+}
+
+function buildReviewerSearchCacheKey(params: {
+  manuscriptId?: string
+  query?: string
+  limit: number
+  roleScopeKey?: string
+}) {
+  const manuscriptKey = encodeURIComponent(String(params.manuscriptId || '__none__').trim())
+  const queryKey = encodeURIComponent(normalizeReviewerQuery(params.query))
+  const scopeKey = encodeURIComponent(normalizeRoleScopeKey(params.roleScopeKey))
+  return `reviewer-search|ms=${manuscriptKey}|scope=${scopeKey}|limit=${params.limit}|q=${queryKey}`
+}
+
+function invalidateReviewerSearchCacheByPredicate(predicate: (key: string) => boolean) {
+  for (const key of Array.from(reviewerSearchCache.keys())) {
+    if (predicate(key)) reviewerSearchCache.delete(key)
+  }
+  for (const key of Array.from(reviewerSearchInflight.keys())) {
+    if (predicate(key)) reviewerSearchInflight.delete(key)
+  }
+}
+
+function buildWorkspaceCacheKey(page: number, pageSize: number): string {
+  return `workspace|page=${page}|pageSize=${pageSize}`
+}
+
 function getFilenameFromContentDisposition(contentDisposition: string | null) {
   if (!contentDisposition) return 'finance_invoices.csv'
   const m = /filename="?([^"]+)"?/i.exec(contentDisposition)
@@ -148,18 +265,20 @@ export const EditorApi = {
     return res.json()
   },
 
-  async getRbacContext(): Promise<EditorRbacContextResponse> {
-    const res = await authedFetch('/api/v1/editor/rbac/context')
-    return res.json()
+  async getRbacContext(options?: CachedGetOptions): Promise<EditorRbacContextResponse> {
+    return authedGetJsonCached('/api/v1/editor/rbac/context', options)
   },
 
-  async listInternalStaff(search?: string, options?: { excludeCurrentUser?: boolean }) {
+  async listInternalStaff(
+    search?: string,
+    options?: { excludeCurrentUser?: boolean },
+    cacheOptions?: CachedGetOptions
+  ) {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (options?.excludeCurrentUser) params.set('exclude_current_user', 'true')
     const qs = params.toString()
-    const res = await authedFetch(`/api/v1/editor/internal-staff${qs ? `?${qs}` : ''}`)
-    return res.json()
+    return authedGetJsonCached(`/api/v1/editor/internal-staff${qs ? `?${qs}` : ''}`, cacheOptions)
   },
 
   // Feature 044: Pre-check role workflow
@@ -197,12 +316,44 @@ export const EditorApi = {
     return res.json()
   },
 
-  async getAEWorkspace(page = 1, pageSize = 20) {
+  async getAEWorkspace(page = 1, pageSize = 20, options?: WorkspaceFetchOptions) {
+    const force = Boolean(options?.force)
+    const ttlMs = options?.ttlMs ?? AE_WORKSPACE_CACHE_TTL_MS
+    const cacheKey = buildWorkspaceCacheKey(page, pageSize)
+    const now = Date.now()
+    if (!force) {
+      const cached = aeWorkspaceCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.data
+      }
+      const inflight = aeWorkspaceInflight.get(cacheKey)
+      if (inflight) return inflight
+    }
+
     const params = new URLSearchParams()
     params.set('page', String(page))
     params.set('page_size', String(pageSize))
-    const res = await authedFetch(`/api/v1/editor/workspace?${params.toString()}`)
-    return res.json()
+    const requestPromise = (async () => {
+      const res = await authedFetch(`/api/v1/editor/workspace?${params.toString()}`, {
+        signal: options?.signal,
+      })
+      const json = await res.json().catch(() => [])
+      if (res.ok && Array.isArray(json)) {
+        aeWorkspaceCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    aeWorkspaceInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (aeWorkspaceInflight.get(cacheKey) === requestPromise) {
+        aeWorkspaceInflight.delete(cacheKey)
+      }
+    }
   },
 
   async submitTechnicalCheck(manuscriptId: string, payload: SubmitTechnicalCheckPayload) {
@@ -253,9 +404,16 @@ export const EditorApi = {
     return res.json()
   },
 
-  async getManuscriptDetail(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}`)
+  async getManuscriptDetail(manuscriptId: string, options?: { skipCards?: boolean }) {
+    const params = new URLSearchParams()
+    if (options?.skipCards) params.set('skip_cards', 'true')
+    const qs = params.toString()
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}${qs ? `?${qs}` : ''}`)
     return res.json()
+  },
+
+  async getManuscriptCardsContext(manuscriptId: string, options?: CachedGetOptions) {
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/cards-context`, options)
   },
 
   async getManuscriptReviews(manuscriptId: string) {
@@ -467,13 +625,82 @@ export const EditorApi = {
     return res.json()
   },
 
-  async searchReviewerLibrary(query?: string, limit: number = 50, manuscriptId?: string) {
+  async searchReviewerLibrary(
+    query?: string,
+    limit: number = 50,
+    manuscriptId?: string,
+    options: ReviewerLibrarySearchOptions = {}
+  ) {
+    const ttlMs = options.ttlMs ?? REVIEWER_LIBRARY_CACHE_TTL_MS
+    const force = Boolean(options.force)
+    const useCache = !options.disableCache
+    const cacheKey = buildReviewerSearchCacheKey({
+      manuscriptId,
+      query,
+      limit,
+      roleScopeKey: options.roleScopeKey,
+    })
+
+    if (useCache && !force) {
+      const cached = reviewerSearchCache.get(cacheKey)
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.data
+      }
+      const inflight = reviewerSearchInflight.get(cacheKey)
+      if (inflight) {
+        return inflight
+      }
+    }
+
     const params = new URLSearchParams()
     if (query) params.set('query', query)
     params.set('limit', String(limit))
     if (manuscriptId) params.set('manuscript_id', manuscriptId)
-    const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
-    return res.json()
+    const requestPromise = (async () => {
+      const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && useCache) {
+        reviewerSearchCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    reviewerSearchInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (reviewerSearchInflight.get(cacheKey) === requestPromise) {
+        reviewerSearchInflight.delete(cacheKey)
+      }
+    }
+  },
+
+  invalidateReviewerSearchCache(filters?: { manuscriptId?: string; roleScopeKey?: string }) {
+    if (!filters?.manuscriptId && !filters?.roleScopeKey) {
+      reviewerSearchCache.clear()
+      reviewerSearchInflight.clear()
+      return
+    }
+
+    const manuscriptToken = filters?.manuscriptId
+      ? `ms=${encodeURIComponent(String(filters.manuscriptId).trim())}`
+      : null
+    const scopeToken = filters?.roleScopeKey
+      ? `scope=${encodeURIComponent(normalizeRoleScopeKey(filters.roleScopeKey))}`
+      : null
+
+    invalidateReviewerSearchCacheByPredicate((key) => {
+      if (manuscriptToken && !key.includes(manuscriptToken)) return false
+      if (scopeToken && !key.includes(scopeToken)) return false
+      return true
+    })
+  },
+
+  invalidateAEWorkspaceCache() {
+    aeWorkspaceCache.clear()
+    aeWorkspaceInflight.clear()
   },
 
   async updateReviewerLibraryItem(reviewerId: string, payload: Record<string, any>) {
@@ -493,9 +720,8 @@ export const EditorApi = {
   },
 
   // Feature 036: Internal Notebook & Audit
-  async getInternalComments(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`)
-    return res.json()
+  async getInternalComments(manuscriptId: string, options?: CachedGetOptions) {
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, options)
   },
 
   async postInternalComment(manuscriptId: string, content: string) {
@@ -505,7 +731,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
+    return json
   },
 
   async postInternalCommentWithMentions(manuscriptId: string, payload: CreateInternalCommentPayload) {
@@ -514,7 +742,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
+    return json
   },
 
   async listInternalTasks(
@@ -522,14 +752,14 @@ export const EditorApi = {
     filters?: {
       status?: InternalTaskStatus
       overdueOnly?: boolean
-    }
+    },
+    options?: CachedGetOptions
   ) {
     const params = new URLSearchParams()
     if (filters?.status) params.set('status', filters.status)
     if (filters?.overdueOnly) params.set('overdue_only', 'true')
     const query = params.toString()
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks${query ? `?${query}` : ''}`)
-    return res.json()
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks${query ? `?${query}` : ''}`, options)
   },
 
   async createInternalTask(manuscriptId: string, payload: CreateInternalTaskPayload) {
@@ -538,7 +768,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
+    return json
   },
 
   async patchInternalTask(manuscriptId: string, taskId: string, payload: UpdateInternalTaskPayload) {
@@ -547,16 +779,40 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
+    return json
   },
 
-  async getInternalTaskActivity(manuscriptId: string, taskId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}/activity`)
-    return res.json()
+  async getInternalTaskActivity(manuscriptId: string, taskId: string, options?: CachedGetOptions) {
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}/activity`, options)
   },
 
-  async getAuditLogs(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/audit-logs`)
-    return res.json()
+  async getInternalTasksActivity(
+    manuscriptId: string,
+    params?: { taskLimit?: number; activityLimit?: number },
+    options?: CachedGetOptions
+  ) {
+    const query = new URLSearchParams()
+    if (typeof params?.taskLimit === 'number') query.set('task_limit', String(params.taskLimit))
+    if (typeof params?.activityLimit === 'number') query.set('activity_limit', String(params.activityLimit))
+    const qs = query.toString()
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/activity${qs ? `?${qs}` : ''}`, options)
+  },
+
+  async getTimelineContext(
+    manuscriptId: string,
+    params?: { taskLimit?: number; activityLimit?: number },
+    options?: CachedGetOptions
+  ) {
+    const query = new URLSearchParams()
+    if (typeof params?.taskLimit === 'number') query.set('task_limit', String(params.taskLimit))
+    if (typeof params?.activityLimit === 'number') query.set('activity_limit', String(params.activityLimit))
+    const qs = query.toString()
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/timeline-context${qs ? `?${qs}` : ''}`, options)
+  },
+
+  async getAuditLogs(manuscriptId: string, options?: CachedGetOptions) {
+    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/audit-logs`, options)
   },
 }

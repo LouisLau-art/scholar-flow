@@ -84,10 +84,13 @@ test.describe('Reviewer Workspace layout (mocked)', () => {
 
     await page.goto(`/review/invite?token=fake-token&assignment_id=${assignmentId}`)
     await expect(page).toHaveURL(new RegExp(`/review/invite\\?assignment_id=${assignmentId}$`))
-    await page.getByRole('button', { name: 'Accept & Continue' }).click()
+    await Promise.all([
+      page.waitForURL(new RegExp(`/reviewer/workspace/${assignmentId}$`)),
+      page.getByRole('button', { name: 'Accept & Continue' }).click(),
+    ])
     await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${assignmentId}$`))
     await expect(page.getByText('Reviewer Workspace', { exact: true })).toBeVisible()
-    await expect(page.getByText('Action Panel')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Review Comment' })).toBeVisible()
     await expect(page.getByTitle('Manuscript PDF')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Reviewer Workspace Mock' })).toBeVisible()
     await expect(page.getByText('ScholarFlow', { exact: false })).toHaveCount(0)

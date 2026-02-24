@@ -49,11 +49,11 @@ test.describe('Reviewer invite decline flow (mocked)', () => {
 
     await page.goto(`/review/invite?token=fake-token&assignment_id=${assignmentId}`)
     await expect(page.getByText('Decline Flow Manuscript')).toBeVisible()
-    await page.getByLabel('Reason').selectOption('too_busy')
+    await page.getByRole('combobox', { name: 'Reason' }).click()
+    await page.getByRole('option', { name: 'Too busy', exact: true }).click()
     await page.getByLabel('Note (optional)').fill('No bandwidth this week')
     await page.getByRole('button', { name: 'Decline Invitation' }).click()
     await expect(page.getByText(/You declined this invitation/i)).toBeVisible()
     await expect(page.getByText(/No further action available/i)).toBeVisible()
   })
 })
-
