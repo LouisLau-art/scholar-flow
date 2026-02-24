@@ -1,0 +1,8 @@
+from __future__ import annotations
+
+from app.services.editor_service_precheck_intake import EditorServicePrecheckIntakeMixin
+from app.services.editor_service_precheck_workspace import EditorServicePrecheckWorkspaceMixin
+
+
+class EditorServicePrecheckMixin(EditorServicePrecheckIntakeMixin, EditorServicePrecheckWorkspaceMixin):
+    pass
