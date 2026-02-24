@@ -37,6 +37,7 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
   const [loading, setLoading] = useState(false)
 
   const latest = useMemo(() => activeCycle?.latest_response || null, [activeCycle])
+  const correctionItems = useMemo(() => latest?.corrections || [], [latest?.corrections])
 
   const handleApprove = async () => {
     if (!activeCycle) return
@@ -73,7 +74,22 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
             <p>Submitted: {latest.submitted_at ? new Date(latest.submitted_at).toLocaleString() : '--'}</p>
             {latest.summary ? <p>Summary: {latest.summary}</p> : null}
             {latest.decision === 'submit_corrections' ? (
-              <p>Corrections: {(latest.corrections || []).length}</p>
+              <>
+                <p>Corrections: {correctionItems.length}</p>
+                {correctionItems.length > 0 ? (
+                  <div className="mt-2 space-y-2">
+                    {correctionItems.map((item, idx) => (
+                      <div key={`${item.id || idx}`} className="rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-700">
+                        <p className="font-semibold text-slate-600">Item #{idx + 1}</p>
+                        {item.line_ref ? <p>Line Ref: {item.line_ref}</p> : null}
+                        {item.original_text ? <p>Original: {item.original_text}</p> : null}
+                        <p>Suggested: {item.suggested_text}</p>
+                        {item.reason ? <p>Reason: {item.reason}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : (

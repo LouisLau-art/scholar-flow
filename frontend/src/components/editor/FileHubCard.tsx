@@ -1,9 +1,9 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, Download, Upload } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { FileText, Download } from 'lucide-react'
 import { UploadReviewFile } from '@/components/editor/UploadReviewFile'
+import { UploadCoverLetter } from '@/components/editor/UploadCoverLetter'
 
 export interface FileItem {
   id: string
@@ -19,6 +19,7 @@ interface FileHubCardProps {
   reviewFiles: FileItem[]
   coverFiles: FileItem[]
   onUploadReviewFile?: () => void
+  onUploadCoverLetter?: () => void
   manuscriptId: string
 }
 
@@ -58,7 +59,14 @@ function FileRow({ file }: { file: FileItem }) {
   )
 }
 
-export function FileHubCard({ manuscriptFiles, reviewFiles, coverFiles, manuscriptId, onUploadReviewFile }: FileHubCardProps) {
+export function FileHubCard({
+  manuscriptFiles,
+  reviewFiles,
+  coverFiles,
+  manuscriptId,
+  onUploadReviewFile,
+  onUploadCoverLetter,
+}: FileHubCardProps) {
   return (
     <Card className="shadow-sm">
       <CardHeader className="py-4 border-b">
@@ -81,7 +89,12 @@ export function FileHubCard({ manuscriptFiles, reviewFiles, coverFiles, manuscri
 
         {/* Supporting Docs */}
         <div className="border border-slate-100 rounded-md p-3">
-          <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Supporting Documents</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Supporting Documents</div>
+            <div className="scale-90 origin-right">
+              <UploadCoverLetter manuscriptId={manuscriptId} onUploaded={onUploadCoverLetter || (() => {})} />
+            </div>
+          </div>
           <div className="space-y-2">
             {coverFiles.map((f) => (
               <FileRow key={f.id} file={f} />

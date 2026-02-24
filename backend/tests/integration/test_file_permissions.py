@@ -42,3 +42,32 @@ async def test_author_cannot_upload_editor_review_attachment(
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
 
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_author_cannot_upload_editor_cover_letter(
+    client: AsyncClient,
+    supabase_admin_client,
+):
+    """
+    Cover letter 补传仅允许 ME/Admin，Author 禁止。
+    """
+    author = make_user(email="author_no_cover_upload@example.com")
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="under_review",
+        title="No Cover Upload",
+    )
+
+    try:
+        res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/files/cover-letter",
+            headers={"Authorization": f"Bearer {author.token}"},
+            files={"file": ("cover_letter.pdf", b"%PDF-1.4 dummy", "application/pdf")},
+        )
+        assert res.status_code == 403, res.text
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id)

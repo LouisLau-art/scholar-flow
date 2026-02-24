@@ -187,6 +187,33 @@ async def get_ae_workspace(
         raise HTTPException(status_code=500, detail="Failed to fetch AE workspace")
 
 
+@router.get("/managing-workspace")
+async def get_managing_workspace(
+    page: int = 1,
+    page_size: int = 20,
+    q: str | None = Query(None, max_length=100),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    Managing Editor Workspace:
+    - 按状态分桶返回 ME 需要跟进的非终态稿件。
+    """
+    try:
+        return EditorService().get_managing_workspace(
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
+            page=page,
+            page_size=page_size,
+            q=q,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[MEWorkspace] query failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch managing workspace")
+
+
 @router.post("/manuscripts/{id}/submit-check")
 async def submit_technical_check(
     id: UUID,
@@ -333,4 +360,3 @@ async def quick_precheck(
         allow_skip=False,
     )
     return {"success": True, "data": updated}
-

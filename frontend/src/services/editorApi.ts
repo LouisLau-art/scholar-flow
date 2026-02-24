@@ -115,12 +115,15 @@ type WorkspaceFetchOptions = CachedGetOptions & {
 const GET_CACHE_TTL_MS = 8_000
 const REVIEWER_LIBRARY_CACHE_TTL_MS = 20_000
 const AE_WORKSPACE_CACHE_TTL_MS = 15_000
+const MANAGING_WORKSPACE_CACHE_TTL_MS = 15_000
 const getJsonCache = new Map<string, { expiresAt: number; data: unknown }>()
 const getJsonInflight = new Map<string, Promise<unknown>>()
 const reviewerSearchCache = new Map<string, { expiresAt: number; data: unknown }>()
 const reviewerSearchInflight = new Map<string, Promise<unknown>>()
 const aeWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
 const aeWorkspaceInflight = new Map<string, Promise<unknown>>()
+const managingWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
+const managingWorkspaceInflight = new Map<string, Promise<unknown>>()
 
 function invalidateGetJsonCache(predicate: (key: string) => boolean) {
   for (const key of Array.from(getJsonCache.keys())) {
@@ -209,8 +212,9 @@ function invalidateReviewerSearchCacheByPredicate(predicate: (key: string) => bo
   }
 }
 
-function buildWorkspaceCacheKey(page: number, pageSize: number): string {
-  return `workspace|page=${page}|pageSize=${pageSize}`
+function buildWorkspaceCacheKey(kind: 'ae' | 'managing', page: number, pageSize: number, q?: string): string {
+  const query = encodeURIComponent(String(q || '').trim().toLowerCase())
+  return `workspace|kind=${kind}|page=${page}|pageSize=${pageSize}|q=${query}`
 }
 
 function getFilenameFromContentDisposition(contentDisposition: string | null) {
@@ -319,7 +323,7 @@ export const EditorApi = {
   async getAEWorkspace(page = 1, pageSize = 20, options?: WorkspaceFetchOptions) {
     const force = Boolean(options?.force)
     const ttlMs = options?.ttlMs ?? AE_WORKSPACE_CACHE_TTL_MS
-    const cacheKey = buildWorkspaceCacheKey(page, pageSize)
+    const cacheKey = buildWorkspaceCacheKey('ae', page, pageSize)
     const now = Date.now()
     if (!force) {
       const cached = aeWorkspaceCache.get(cacheKey)
@@ -352,6 +356,52 @@ export const EditorApi = {
     } finally {
       if (aeWorkspaceInflight.get(cacheKey) === requestPromise) {
         aeWorkspaceInflight.delete(cacheKey)
+      }
+    }
+  },
+
+  async getManagingWorkspace(
+    page = 1,
+    pageSize = 20,
+    q?: string,
+    options?: WorkspaceFetchOptions
+  ) {
+    const force = Boolean(options?.force)
+    const ttlMs = options?.ttlMs ?? MANAGING_WORKSPACE_CACHE_TTL_MS
+    const cacheKey = buildWorkspaceCacheKey('managing', page, pageSize, q)
+    const now = Date.now()
+    if (!force) {
+      const cached = managingWorkspaceCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.data
+      }
+      const inflight = managingWorkspaceInflight.get(cacheKey)
+      if (inflight) return inflight
+    }
+
+    const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    if (q && String(q).trim()) params.set('q', String(q).trim())
+    const requestPromise = (async () => {
+      const res = await authedFetch(`/api/v1/editor/managing-workspace?${params.toString()}`, {
+        signal: options?.signal,
+      })
+      const json = await res.json().catch(() => [])
+      if (res.ok && Array.isArray(json)) {
+        managingWorkspaceCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    managingWorkspaceInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (managingWorkspaceInflight.get(cacheKey) === requestPromise) {
+        managingWorkspaceInflight.delete(cacheKey)
       }
     }
   },
@@ -608,6 +658,16 @@ export const EditorApi = {
     return res.json()
   },
 
+  async uploadCoverLetterFile(manuscriptId: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/files/cover-letter`, {
+      method: 'POST',
+      body: formData,
+    })
+    return res.json()
+  },
+
   // Feature 030: Reviewer Library
   async addReviewerToLibrary(payload: {
     email: string
@@ -701,6 +761,11 @@ export const EditorApi = {
   invalidateAEWorkspaceCache() {
     aeWorkspaceCache.clear()
     aeWorkspaceInflight.clear()
+  },
+
+  invalidateManagingWorkspaceCache() {
+    managingWorkspaceCache.clear()
+    managingWorkspaceInflight.clear()
   },
 
   async updateReviewerLibraryItem(reviewerId: string, payload: Record<string, any>) {

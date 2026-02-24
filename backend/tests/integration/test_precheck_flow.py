@@ -118,6 +118,31 @@ async def test_ae_check_flow(client, mocker):
     assert response.status_code == 200
     assert response.json()["message"] == "Technical check submitted"
 
+
+async def test_me_workspace_flow(client, mocker):
+    """
+    Managing Editor Workspace 接口集成校验。
+    """
+    mocker.patch("app.core.auth_utils.get_current_user", return_value={"id": MOCK_ME_ID, "roles": ["managing_editor"]})
+    mock_rows = [
+        {
+            "id": MOCK_MANUSCRIPT_ID,
+            "title": "ME Workspace Manuscript",
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+            "workspace_bucket": "intake",
+            "owner_id": MOCK_ME_ID,
+        }
+    ]
+    mocker.patch("app.services.editor_service.EditorService.get_managing_workspace", return_value=mock_rows)
+
+    response = await client.get("/api/v1/editor/managing-workspace")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["workspace_bucket"] == "intake"
+
+
 async def test_eic_check_flow(client, mocker):
     """
     T017: Integration test for EIC academic check flow.

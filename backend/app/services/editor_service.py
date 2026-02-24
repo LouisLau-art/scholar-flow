@@ -1343,6 +1343,193 @@ class EditorService:
             return "decision"
         return "other"
 
+    def _derive_managing_workspace_bucket(self, *, status: str | None, pre_check_status: str | None) -> str:
+        if status == ManuscriptStatus.PRE_CHECK.value:
+            if pre_check_status in {None, "", PreCheckStatus.INTAKE.value}:
+                return "intake"
+            if pre_check_status == PreCheckStatus.TECHNICAL.value:
+                return "technical_followup"
+            if pre_check_status == PreCheckStatus.ACADEMIC.value:
+                return "academic_pending"
+            return "precheck_other"
+        if status == ManuscriptStatus.UNDER_REVIEW.value:
+            return "under_review"
+        if status in {
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.MAJOR_REVISION.value,
+        }:
+            return "revision_followup"
+        if status in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
+            return "decision"
+        if status in {
+            ManuscriptStatus.APPROVED.value,
+            ManuscriptStatus.LAYOUT.value,
+            ManuscriptStatus.ENGLISH_EDITING.value,
+            ManuscriptStatus.PROOFREADING.value,
+        }:
+            return "production"
+        return "other"
+
+    def get_managing_workspace(
+        self,
+        *,
+        viewer_user_id: str,
+        viewer_roles: list[str] | None,
+        page: int = 1,
+        page_size: int = 20,
+        q: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Managing Editor Workspace：
+        - 聚合 ME 需要跟进的全流程稿件，并按状态输出 workspace_bucket。
+        - 仅包含非终态工作流（排除 published/rejected）。
+        """
+        status_scope = [
+            ManuscriptStatus.PRE_CHECK.value,
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.MAJOR_REVISION.value,
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.DECISION.value,
+            ManuscriptStatus.DECISION_DONE.value,
+            ManuscriptStatus.APPROVED.value,
+            ManuscriptStatus.LAYOUT.value,
+            ManuscriptStatus.ENGLISH_EDITING.value,
+            ManuscriptStatus.PROOFREADING.value,
+        ]
+        selects = [
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id,journals(title,slug)",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,journal_id",
+            "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id",
+        ]
+        fetch_end = max(page * page_size - 1, page_size - 1)
+
+        rows: list[dict[str, Any]] = []
+        last_error: Exception | None = None
+        for select_clause in selects:
+            try:
+                resp = (
+                    self.client.table("manuscripts")
+                    .select(select_clause)
+                    .in_("status", status_scope)
+                    .order("updated_at", desc=True)
+                    .order("created_at", desc=True)
+                    .range(0, fetch_end)
+                    .execute()
+                )
+                rows = getattr(resp, "data", None) or []
+                break
+            except Exception as e:
+                last_error = e
+                lowered = str(e).lower()
+                if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
+                    continue
+                raise
+        if not rows and last_error:
+            lowered = str(last_error).lower()
+            if "schema cache" in lowered or "could not find" in lowered:
+                raise last_error
+
+        raw_enriched = self._enrich_precheck_rows(rows)
+        out: list[dict[str, Any]] = []
+        for row in raw_enriched:
+            normalized_status = normalize_status(str(row.get("status") or ""))
+            if not normalized_status:
+                continue
+            normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))
+            if normalized_status == ManuscriptStatus.PRE_CHECK.value and normalized_precheck is None:
+                normalized_precheck = PreCheckStatus.INTAKE.value
+            row["status"] = normalized_status
+            row["pre_check_status"] = normalized_precheck
+            row["workspace_bucket"] = self._derive_managing_workspace_bucket(
+                status=normalized_status,
+                pre_check_status=normalized_precheck,
+            )
+            out.append(row)
+
+        profile_ids = sorted(
+            {
+                str(pid)
+                for row in out
+                for pid in (row.get("owner_id"), row.get("assistant_editor_id"))
+                if str(pid or "").strip()
+            }
+        )
+        profile_map: dict[str, dict[str, Any]] = {}
+        if profile_ids:
+            try:
+                prof = (
+                    self.client.table("user_profiles")
+                    .select("id,full_name,email")
+                    .in_("id", profile_ids)
+                    .execute()
+                )
+                for p in (getattr(prof, "data", None) or []):
+                    pid = str(p.get("id") or "")
+                    if pid:
+                        profile_map[pid] = p
+            except Exception as e:
+                print(f"[MEWorkspace] load profiles failed (ignored): {e}")
+
+        for row in out:
+            oid = str(row.get("owner_id") or "")
+            ae_id = str(row.get("assistant_editor_id") or "")
+            row["owner"] = (
+                {
+                    "id": oid,
+                    "full_name": (profile_map.get(oid) or {}).get("full_name"),
+                    "email": (profile_map.get(oid) or {}).get("email"),
+                }
+                if oid
+                else None
+            )
+            row["assistant_editor"] = (
+                {
+                    "id": ae_id,
+                    "full_name": (profile_map.get(ae_id) or {}).get("full_name"),
+                    "email": (profile_map.get(ae_id) or {}).get("email"),
+                }
+                if ae_id
+                else None
+            )
+            journal = row.get("journals")
+            if isinstance(journal, list):
+                row["journal"] = journal[0] if journal else None
+            elif isinstance(journal, dict):
+                row["journal"] = journal
+            else:
+                row["journal"] = None
+
+        keyword = str(q or "").strip().lower()
+        if keyword:
+            out = [
+                row
+                for row in out
+                if keyword in str(row.get("title") or "").lower()
+                or keyword in str(row.get("id") or "").lower()
+                or keyword in str(((row.get("owner") or {}).get("full_name") or "")).lower()
+                or keyword in str(((row.get("assistant_editor") or {}).get("full_name") or "")).lower()
+                or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
+            ]
+
+        out = self._apply_process_visibility_scope(
+            rows=out,
+            viewer_user_id=viewer_user_id,
+            viewer_roles=viewer_roles,
+        )
+
+        out.sort(
+            key=lambda r: (
+                str(r.get("updated_at") or ""),
+                str(r.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+        start = max((page - 1) * page_size, 0)
+        end = start + page_size
+        return out[start:end]
+
     def get_ae_workspace(self, ae_id: UUID, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
         """
         AE Workspace：返回 AE 在办稿件全集（仅本人分管）。

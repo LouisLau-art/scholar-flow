@@ -49,6 +49,22 @@ def _utc_now_iso() -> str:
     return _utc_now().isoformat()
 
 
+def _to_utc_datetime(raw: Any) -> datetime | None:
+    if isinstance(raw, datetime):
+        if raw.tzinfo is None:
+            return raw.replace(tzinfo=timezone.utc)
+        return raw.astimezone(timezone.utc)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
 def _is_truthy_env(name: str, default: str = "0") -> bool:
     return (os.getenv(name, default) or "").strip().lower() in {
         "1",
@@ -203,15 +219,11 @@ class ProductionWorkspaceService:
         # --- 显式稿件归属（read only） ---
         # 中文注释:
         # - UAT/开发阶段 user_profiles 可能缺失 journal scope 或存在历史脏数据；
-        # - 若稿件已明确绑定到 editor_id / assistant_editor_id / owner_id，
+        # - 若稿件已明确绑定到 editor_id / owner_id，
         #   则对应角色应至少具备只读访问（避免生产阶段页面 403 导致流程中断）。
         if purpose == "read":
             assigned_editor_id = str(manuscript.get("editor_id") or "").strip()
             if assigned_editor_id and assigned_editor_id == uid and "managing_editor" in roles:
-                return
-
-            assigned_ae_id = str(manuscript.get("assistant_editor_id") or "").strip()
-            if assigned_ae_id and assigned_ae_id == uid and "assistant_editor" in roles:
                 return
 
             assigned_owner_id = str(manuscript.get("owner_id") or "").strip()
@@ -256,11 +268,10 @@ class ProductionWorkspaceService:
             except HTTPException:
                 pass
 
-        # 4) Assistant Editor: 仅允许访问“分配给自己”的稿件（读）。
+        # 4) Assistant Editor:
+        #    录用后生产阶段不再由 AE 持续跟进，避免“accepted 后 AE 仍可进入 production”。
         if "assistant_editor" in roles:
-            assigned_ae = str(manuscript.get("assistant_editor_id") or "").strip()
-            if assigned_ae and assigned_ae == uid:
-                return
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -367,6 +378,27 @@ class ProductionWorkspaceService:
         else:
             row["corrections"] = []
         return row
+
+    def _is_response_current_for_cycle(self, *, cycle: dict[str, Any], response: dict[str, Any] | None) -> bool:
+        """
+        判断 response 是否属于“当前可提交的这版清样”。
+
+        关键规则：
+        - awaiting_author 下，若 response 提交时间早于 cycle.updated_at（通常是 PE 二次上传清样时间），
+          视为历史响应，不应阻断作者对新清样再次提交。
+        """
+        if not response:
+            return False
+
+        cycle_status = str(cycle.get("status") or "")
+        if cycle_status != "awaiting_author":
+            return True
+
+        response_ts = _to_utc_datetime(response.get("submitted_at") or response.get("created_at"))
+        cycle_updated_ts = _to_utc_datetime(cycle.get("updated_at"))
+        if response_ts is None or cycle_updated_ts is None:
+            return True
+        return response_ts >= cycle_updated_ts
 
     def _format_cycle(self, row: dict[str, Any], *, include_signed_url: bool) -> dict[str, Any]:
         bucket = str(row.get("galley_bucket") or "").strip()
@@ -1050,8 +1082,11 @@ class ProductionWorkspaceService:
 
         cycle_status = str(cycle.get("status") or "")
         can_act_on_cycle = cycle_status == "awaiting_author"
-        latest = self._get_latest_response(str(cycle.get("id") or ""))
-        read_only = (not can_act_on_cycle) or (latest is not None)
+        cycle_data = self._format_cycle(cycle, include_signed_url=True)
+        latest = cycle_data.get("latest_response")
+        active_latest = latest if self._is_response_current_for_cycle(cycle=cycle, response=latest) else None
+        cycle_data["latest_response"] = active_latest
+        read_only = (not can_act_on_cycle) or (active_latest is not None)
 
         due_raw = cycle.get("proof_due_at")
         due_at: datetime | None = None
@@ -1072,7 +1107,7 @@ class ProductionWorkspaceService:
                 "title": manuscript.get("title") or "Untitled",
                 "status": manuscript.get("status"),
             },
-            "cycle": self._format_cycle(cycle, include_signed_url=True),
+            "cycle": cycle_data,
             "can_submit": can_act_on_cycle and not read_only,
             "is_read_only": read_only,
         }
@@ -1103,7 +1138,8 @@ class ProductionWorkspaceService:
             raise HTTPException(status_code=409, detail="Cycle is not awaiting author response")
 
         existing = self._get_latest_response(str(cycle.get("id") or ""))
-        if existing:
+        existing_is_current = self._is_response_current_for_cycle(cycle=cycle, response=existing)
+        if existing_is_current:
             raise HTTPException(status_code=409, detail="Proofreading response already submitted")
 
         due_raw = cycle.get("proof_due_at")
@@ -1124,22 +1160,47 @@ class ProductionWorkspaceService:
         new_status = "author_confirmed" if decision == "confirm_clean" else "author_corrections_submitted"
 
         submitted_at = now.isoformat()
-        response_payload = {
-            "cycle_id": cycle_id,
-            "manuscript_id": manuscript_id,
-            "author_id": user_id,
-            "decision": decision,
-            "summary": request.summary,
-            "submitted_at": submitted_at,
-            "is_late": bool(due_at and now > due_at),
-            "created_at": submitted_at,
-        }
+        response_reused = False
         try:
-            resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
-            rows = getattr(resp, "data", None) or []
-            if not rows:
-                raise HTTPException(status_code=500, detail="Failed to save proofreading response")
-            response_row = rows[0]
+            if existing and not existing_is_current and str(existing.get("id") or "").strip():
+                response_reused = True
+                response_id = str(existing.get("id") or "").strip()
+                resp = (
+                    self.client.table("production_proofreading_responses")
+                    .update(
+                        {
+                            "author_id": user_id,
+                            "decision": decision,
+                            "summary": request.summary,
+                            "submitted_at": submitted_at,
+                            "is_late": bool(due_at and now > due_at),
+                        }
+                    )
+                    .eq("id", response_id)
+                    .eq("cycle_id", cycle_id)
+                    .eq("manuscript_id", manuscript_id)
+                    .execute()
+                )
+                rows = getattr(resp, "data", None) or []
+                if not rows:
+                    raise HTTPException(status_code=500, detail="Failed to update proofreading response")
+                response_row = rows[0]
+            else:
+                response_payload = {
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "author_id": user_id,
+                    "decision": decision,
+                    "summary": request.summary,
+                    "submitted_at": submitted_at,
+                    "is_late": bool(due_at and now > due_at),
+                    "created_at": submitted_at,
+                }
+                resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+                rows = getattr(resp, "data", None) or []
+                if not rows:
+                    raise HTTPException(status_code=500, detail="Failed to save proofreading response")
+                response_row = rows[0]
         except HTTPException:
             raise
         except Exception as e:
@@ -1150,12 +1211,24 @@ class ProductionWorkspaceService:
                 ) from e
             raise HTTPException(status_code=500, detail=f"Failed to save proofreading response: {e}") from e
 
+        response_id = str(response_row.get("id") or "").strip()
+        try:
+            if response_id:
+                self.client.table("production_correction_items").delete().eq("response_id", response_id).execute()
+        except Exception as e:
+            if _is_table_missing_error(e, "production_correction_items"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="DB not migrated: production_correction_items table missing",
+                ) from e
+            raise HTTPException(status_code=500, detail=f"Failed to reset correction items: {e}") from e
+
         if decision == "submit_corrections":
             items = []
             for idx, item in enumerate(request.corrections):
                 items.append(
                     {
-                        "response_id": response_row.get("id"),
+                        "response_id": response_id,
                         "line_ref": item.line_ref,
                         "original_text": item.original_text,
                         "suggested_text": item.suggested_text,
@@ -1195,6 +1268,7 @@ class ProductionWorkspaceService:
                 "cycle_id": cycle_id,
                 "decision": decision,
                 "response_id": response_row.get("id"),
+                "response_reused": response_reused,
             },
         )
 

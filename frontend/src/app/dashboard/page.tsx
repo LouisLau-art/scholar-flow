@@ -439,7 +439,8 @@ function DashboardPageContent() {
                 title="Managing Editor Workspace"
                 description="Handle intake routing, reviewer assignment coordination, and process oversight."
                 actions={[
-                  { label: 'Intake Queue', href: '/editor/intake', helper: 'Assign Assistant Editor for new submissions.' },
+                  { label: 'ME Workspace', href: '/editor/managing-workspace', helper: 'Track all ME follow-up manuscripts grouped by status.' },
+                  { label: 'Intake Queue', href: '/editor/intake', helper: 'Assign Assistant Editor for newly submitted manuscripts.' },
                   { label: 'Manuscripts Process', href: '/editor/process', helper: 'Track full pipeline status and filter by journal.' },
                   { label: 'Reviewer Library', href: '/editor/reviewers', helper: 'Manage reviewer pool and candidate metadata.' },
                   { label: 'Analytics Dashboard', href: '/editor/analytics', helper: 'Review throughput and SLA indicators.' },

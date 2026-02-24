@@ -198,3 +198,17 @@ def test_submit_proofreading_request_validation():
             decision="confirm_clean",
             corrections=[{"suggested_text": "Fix typo"}],
         )
+
+
+def test_assistant_editor_cannot_read_production_workspace_after_accept() -> None:
+    svc = _svc()
+
+    with pytest.raises(HTTPException) as exc:
+        svc._ensure_editor_access(
+            manuscript={"id": "ms-1", "assistant_editor_id": "ae-1"},
+            user_id="ae-1",
+            roles={"assistant_editor"},
+            purpose="read",
+        )
+
+    assert exc.value.status_code == 403

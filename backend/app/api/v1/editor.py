@@ -262,6 +262,90 @@ async def upload_editor_review_attachment(
     }
 
 
+@router.post("/manuscripts/{id}/files/cover-letter", status_code=201)
+async def upload_editor_cover_letter(
+    id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    """
+    补传/更新 Cover Letter（内部编辑入口）。
+
+    中文注释:
+    - Cover Letter 在 MVP 仍然是可选项；
+    - 当作者初始未上传时，ME/Admin 可在稿件详情页补传。
+    """
+    roles = profile.get("roles") or []
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=roles,
+        allow_admin_bypass=True,
+    )
+
+    filename = (file.filename or "cover_letter").strip()
+    lowered = filename.lower()
+    if not (lowered.endswith(".pdf") or lowered.endswith(".doc") or lowered.endswith(".docx")):
+        raise HTTPException(status_code=400, detail="Only .pdf/.doc/.docx are supported")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(file_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 25MB)")
+
+    uploader_id = str(current_user.get("id") or "").strip() or "editor"
+    safe_name = filename.replace("/", "_")
+    object_path = f"{uploader_id}/cover-letters/{id}/{uuid4()}_{safe_name}"
+    try:
+        _ensure_bucket_exists("manuscripts", public=False)
+        supabase_admin.storage.from_("manuscripts").upload(
+            object_path,
+            file_bytes,
+            {"content-type": file.content_type or "application/octet-stream"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EditorCoverLetter] upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload cover letter")
+
+    try:
+        ins = (
+            supabase_admin.table("manuscript_files")
+            .insert(
+                {
+                    "manuscript_id": id,
+                    "file_type": "cover_letter",
+                    "bucket": "manuscripts",
+                    "path": object_path,
+                    "original_filename": filename,
+                    "content_type": file.content_type,
+                    "uploaded_by": uploader_id,
+                }
+            )
+            .execute()
+        )
+        row = (getattr(ins, "data", None) or [None])[0] or None
+    except Exception as e:
+        if _is_missing_table_error(str(e)):
+            raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
+        print(f"[EditorCoverLetter] insert manuscript_files failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to persist cover letter metadata")
+
+    return {
+        "success": True,
+        "data": {
+            "id": (row or {}).get("id"),
+            "file_type": "cover_letter",
+            "bucket": "manuscripts",
+            "path": object_path,
+            "signed_url": _get_signed_url("manuscripts", object_path),
+        },
+    }
+
+
 @router.patch("/manuscripts/{id}/status")
 async def patch_manuscript_status(
     id: str,

@@ -85,6 +85,8 @@ export default function EditorManuscriptDetailPage() {
       ? '/editor/intake'
       : from === 'workspace'
       ? '/editor/workspace'
+      : from === 'managing-workspace'
+      ? '/editor/managing-workspace'
       : from === 'academic'
       ? '/editor/academic'
       : '/editor/process'
@@ -124,6 +126,14 @@ export default function EditorManuscriptDetailPage() {
   )
   const canAssignAE = useMemo(
     () => normalizedRoles.includes('managing_editor') || normalizedRoles.includes('admin'),
+    [normalizedRoles]
+  )
+  const canOpenProductionWorkspace = useMemo(
+    () =>
+      normalizedRoles.includes('admin') ||
+      normalizedRoles.includes('managing_editor') ||
+      normalizedRoles.includes('editor_in_chief') ||
+      normalizedRoles.includes('production_editor'),
     [normalizedRoles]
   )
   const currentAeId = String(
@@ -643,6 +653,7 @@ export default function EditorManuscriptDetailPage() {
                 coverFiles={fileHubProps.coverFiles}
                 reviewFiles={fileHubProps.reviewFiles}
                 onUploadReviewFile={refreshDetail}
+                onUploadCoverLetter={refreshDetail}
             />
 
             {/* 3. Author Resubmission History */}
@@ -881,26 +892,34 @@ export default function EditorManuscriptDetailPage() {
                     {/* Status Transitions */}
                     {isPostAcceptance ? (
                         <div className="space-y-3">
-                            <Button
-                              className="w-full justify-between"
-                              variant="secondary"
-                              onClick={() => {
-                                router.push(`/editor/production/${encodeURIComponent(id)}`)
-                              }}
-                            >
-                              Open Production Workspace
-                              <ArrowRight className="h-4 w-4" />
-                            </Button>
-                            <ProductionStatusCard
-                                manuscriptId={id}
-                                status={statusLower || 'approved'}
-                                finalPdfPath={ms?.final_pdf_path}
-                                invoice={ms?.invoice}
-                                onStatusChange={(next) => {
-                                    setMs((prev) => (prev ? { ...prev, status: next } : prev))
-                                }}
-                                onReload={load}
-                            />
+                            {canOpenProductionWorkspace ? (
+                              <>
+                                <Button
+                                  className="w-full justify-between"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    router.push(`/editor/production/${encodeURIComponent(id)}`)
+                                  }}
+                                >
+                                  Open Production Workspace
+                                  <ArrowRight className="h-4 w-4" />
+                                </Button>
+                                <ProductionStatusCard
+                                    manuscriptId={id}
+                                    status={statusLower || 'approved'}
+                                    finalPdfPath={ms?.final_pdf_path}
+                                    invoice={ms?.invoice}
+                                    onStatusChange={(next) => {
+                                        setMs((prev) => (prev ? { ...prev, status: next } : prev))
+                                    }}
+                                    onReload={load}
+                                />
+                              </>
+                            ) : (
+                              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                                稿件进入录用后由 Managing Editor / Production Editor 继续处理。
+                              </div>
+                            )}
                         </div>
                     ) : showDirectStatusTransitions ? (
                         <div className="space-y-2">

@@ -91,6 +91,23 @@ export const editorService = {
     return res
   },
 
+  getManagingWorkspace: async (
+    page = 1,
+    pageSize = 20,
+    q?: string,
+    options?: { forceRefresh?: boolean; signal?: AbortSignal; ttlMs?: number }
+  ) => {
+    const res = await EditorApi.getManagingWorkspace(page, pageSize, q, {
+      force: Boolean(options?.forceRefresh),
+      signal: options?.signal,
+      ttlMs: options?.ttlMs,
+    })
+    if (!Array.isArray(res)) {
+      throw new Error(res?.detail || res?.message || 'Failed to fetch managing workspace')
+    }
+    return res
+  },
+
   submitTechnicalCheck: async (id: string, payload?: { decision?: TechnicalDecision; comment?: string }) => {
     const res = await EditorApi.submitTechnicalCheck(id, {
       decision: payload?.decision || 'pass',

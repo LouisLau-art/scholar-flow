@@ -301,3 +301,115 @@ async def test_proofreading_context_keeps_readonly_after_author_submit(
         assert data["can_submit"] is False
     finally:
         _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_author_can_submit_again_after_editor_reuploads_new_galley(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    """
+    回归场景：
+    1) 作者已提交过一次校对；
+    2) PE/ME 再次上传新清样（同一 cycle 回到 awaiting_author）；
+    3) 作者应可再次提交，不应被历史 response 锁死为只读。
+    """
+    editor = make_user(email="proof_editor_reupload_unlock@example.com")
+    author = make_user(email="proof_author_reupload_unlock@example.com")
+    set_admin_emails([editor.email])
+    _require_schema(supabase_admin_client)
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="proofreading",
+        title="Proof Reupload Unlock Manuscript",
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["admin", "managing_editor", "author"],
+    )
+    _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
+
+    try:
+        cycle_id = await _prepare_awaiting_author_cycle(
+            client=client,
+            manuscript_id=manuscript_id,
+            editor_token=editor.token,
+            editor_id=editor.id,
+            author_id=author.id,
+        )
+
+        first_submit = await client.post(
+            f"/api/v1/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading",
+            headers={"Authorization": f"Bearer {author.token}"},
+            json={
+                "decision": "submit_corrections",
+                "summary": "Need one fix.",
+                "corrections": [{"suggested_text": "Fix typo in title"}],
+            },
+        )
+        assert first_submit.status_code == 200, first_submit.text
+
+        new_due = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        reupload = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/galley",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            data={
+                "version_note": "proof v2",
+                "proof_due_at": new_due,
+            },
+            files={"file": ("proof-v2.pdf", b"%PDF-1.4\n%mock-v2", "application/pdf")},
+        )
+        assert reupload.status_code == 200, reupload.text
+
+        ctx = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/proofreading-context",
+            headers={"Authorization": f"Bearer {author.token}"},
+        )
+        assert ctx.status_code == 200, ctx.text
+        data = ctx.json()["data"]
+        assert data["cycle"]["status"] == "awaiting_author"
+        assert data["is_read_only"] is False
+        assert data["can_submit"] is True
+        assert data["cycle"]["latest_response"] is None
+
+        second_submit = await client.post(
+            f"/api/v1/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading",
+            headers={"Authorization": f"Bearer {author.token}"},
+            json={
+                "decision": "confirm_clean",
+                "summary": "All good now.",
+                "corrections": [],
+            },
+        )
+        assert second_submit.status_code == 200, second_submit.text
+
+        responses = (
+            supabase_admin_client.table("production_proofreading_responses")
+            .select("id,decision,summary,submitted_at")
+            .eq("cycle_id", cycle_id)
+            .execute()
+            .data
+            or []
+        )
+        assert len(responses) == 1
+        assert responses[0]["decision"] == "confirm_clean"
+
+        correction_items = (
+            supabase_admin_client.table("production_correction_items")
+            .select("id")
+            .eq("response_id", responses[0]["id"])
+            .execute()
+            .data
+            or []
+        )
+        assert correction_items == []
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])
