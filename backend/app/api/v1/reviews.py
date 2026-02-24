@@ -8,9 +8,8 @@ from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import os
-from urllib.parse import quote
 
 from fastapi import Cookie
 
@@ -28,6 +27,21 @@ from app.api.v1.reviews_heavy_handlers import (
     submit_review_impl,
     submit_review_via_magic_link_impl,
     unassign_reviewer_impl,
+)
+from app.api.v1.reviews_handlers_workspace_magic import (
+    accept_reviewer_invitation_impl,
+    decline_reviewer_invitation_impl,
+    get_review_assignment_pdf_signed_via_magic_link_impl,
+    get_review_assignment_via_magic_link_impl,
+    get_review_attachment_signed_by_token_impl,
+    get_review_attachment_signed_impl,
+    get_review_attachment_signed_via_magic_link_impl,
+    get_review_feedback_for_manuscript_impl,
+    get_review_pdf_signed_by_token_impl,
+    get_reviewer_invite_data_impl,
+    get_reviewer_workspace_data_impl,
+    submit_reviewer_workspace_review_impl,
+    upload_reviewer_workspace_attachment_impl,
 )
 
 router = APIRouter(tags=["Reviews"])
@@ -214,19 +228,12 @@ async def get_reviewer_workspace_data(
     assignment_id: UUID,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    try:
-        data = ReviewerWorkspaceService().get_workspace_data(
-            assignment_id=assignment_id,
-            reviewer_id=payload.reviewer_id,
-        )
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load workspace: {e}")
-    return {"success": True, "data": data.model_dump()}
+    return await get_reviewer_workspace_data_impl(
+        assignment_id=assignment_id,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_workspace_service_cls=ReviewerWorkspaceService,
+    )
 
 
 @router.get("/reviewer/assignments/{assignment_id}/invite")
@@ -234,19 +241,12 @@ async def get_reviewer_invite_data(
     assignment_id: UUID,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    try:
-        data = ReviewerInviteService().get_invite_view(
-            assignment_id=assignment_id,
-            reviewer_id=payload.reviewer_id,
-        )
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load invite view: {e}")
-    return {"success": True, "data": data.model_dump()}
+    return await get_reviewer_invite_data_impl(
+        assignment_id=assignment_id,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_invite_service_cls=ReviewerInviteService,
+    )
 
 
 @router.post("/reviewer/assignments/{assignment_id}/accept")
@@ -255,20 +255,13 @@ async def accept_reviewer_invitation(
     payload: InviteAcceptPayload,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    token_payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    try:
-        data = ReviewerInviteService().accept_invitation(
-            assignment_id=assignment_id,
-            reviewer_id=token_payload.reviewer_id,
-            payload=payload,
-        )
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to accept invitation: {e}")
+    return await accept_reviewer_invitation_impl(
+        assignment_id=assignment_id,
+        body=payload,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_invite_service_cls=ReviewerInviteService,
+    )
 
 
 @router.post("/reviewer/assignments/{assignment_id}/decline")
@@ -277,20 +270,13 @@ async def decline_reviewer_invitation(
     payload: InviteDeclinePayload,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    token_payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    try:
-        data = ReviewerInviteService().decline_invitation(
-            assignment_id=assignment_id,
-            reviewer_id=token_payload.reviewer_id,
-            payload=payload,
-        )
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to decline invitation: {e}")
+    return await decline_reviewer_invitation_impl(
+        assignment_id=assignment_id,
+        body=payload,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_invite_service_cls=ReviewerInviteService,
+    )
 
 
 @router.post("/reviewer/assignments/{assignment_id}/attachments")
@@ -299,24 +285,14 @@ async def upload_reviewer_workspace_attachment(
     file: UploadFile = File(...),
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Attachment cannot be empty")
-    try:
-        path = ReviewerWorkspaceService().upload_attachment(
-            assignment_id=assignment_id,
-            reviewer_id=payload.reviewer_id,
-            filename=file.filename or "attachment",
-            content=raw,
-            content_type=file.content_type,
-        )
-        signed_url = _get_signed_url_for_review_attachments_bucket(path, expires_in=60 * 5)
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {e}")
-    return {"success": True, "data": {"path": path, "url": signed_url}}
+    return await upload_reviewer_workspace_attachment_impl(
+        assignment_id=assignment_id,
+        file=file,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_workspace_service_cls=ReviewerWorkspaceService,
+        get_signed_url_for_review_attachments_bucket_fn=_get_signed_url_for_review_attachments_bucket,
+    )
 
 
 @router.post("/reviewer/assignments/{assignment_id}/submit")
@@ -325,20 +301,13 @@ async def submit_reviewer_workspace_review(
     body: ReviewSubmission,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-    try:
-        result = ReviewerWorkspaceService().submit_review(
-            assignment_id=assignment_id,
-            reviewer_id=payload.reviewer_id,
-            payload=body,
-        )
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to submit review: {e}")
-    return {"success": True, "data": {"status": result.get("status", "completed"), "redirect_to": "/review/thank-you"}}
+    return await submit_reviewer_workspace_review_impl(
+        assignment_id=assignment_id,
+        body=body,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        reviewer_workspace_service_cls=ReviewerWorkspaceService,
+    )
 
 
 # === 1. 分配审稿人 (Editor Task) ===
@@ -436,59 +405,12 @@ async def get_review_assignment_via_magic_link(
     - 严格限制仅可访问 token 指向的 assignment。
     """
 
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-
-    ms_resp = (
-        supabase_admin.table("manuscripts")
-        .select("id,title,abstract,file_path,status")
-        .eq("id", str(payload.manuscript_id))
-        .single()
-        .execute()
+    return await get_review_assignment_via_magic_link_impl(
+        assignment_id=assignment_id,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        supabase_admin_client=supabase_admin,
     )
-    ms = getattr(ms_resp, "data", None) or {}
-
-    latest_revision = None
-    try:
-        rev_resp = (
-            supabase_admin.table("revisions")
-            .select("id, round_number, decision_type, editor_comment, response_letter, status, submitted_at, created_at")
-            .eq("manuscript_id", str(payload.manuscript_id))
-            .order("round_number", desc=True)
-            .limit(1)
-            .execute()
-        )
-        revs = getattr(rev_resp, "data", None) or []
-        latest_revision = revs[0] if revs else None
-    except Exception:
-        latest_revision = None
-
-    # review_reports 用于存储双通道意见与机密附件（可能尚未创建）
-    review_report = None
-    try:
-        rr = (
-            supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, score, comments_for_author, confidential_comments_to_editor, attachment_path")
-            .eq("manuscript_id", str(payload.manuscript_id))
-            .eq("reviewer_id", str(payload.reviewer_id))
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(rr, "data", None) or []
-        review_report = rows[0] if rows else None
-    except Exception:
-        review_report = None
-
-    return {
-        "success": True,
-        "data": {
-            "assignment_id": str(payload.assignment_id),
-            "reviewer_id": str(payload.reviewer_id),
-            "manuscript": ms,
-            "review_report": review_report,
-            "latest_revision": latest_revision,
-        },
-    }
 
 
 @router.post("/reviewer/assignments/{assignment_id}/session")
@@ -518,22 +440,13 @@ async def get_review_assignment_pdf_signed_via_magic_link(
     assignment_id: UUID,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-
-    ms_resp = (
-        supabase_admin.table("manuscripts")
-        .select("id,file_path")
-        .eq("id", str(payload.manuscript_id))
-        .single()
-        .execute()
+    return await get_review_assignment_pdf_signed_via_magic_link_impl(
+        assignment_id=assignment_id,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        supabase_admin_client=supabase_admin,
+        get_signed_url_for_manuscripts_bucket_fn=_get_signed_url_for_manuscripts_bucket,
     )
-    ms = getattr(ms_resp, "data", None) or {}
-    file_path = ms.get("file_path")
-    if not file_path:
-        raise HTTPException(status_code=404, detail="Manuscript PDF not found")
-
-    signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
-    return {"success": True, "data": {"signed_url": signed_url}}
 
 
 @router.get("/reviews/magic/assignments/{assignment_id}/attachment-signed")
@@ -541,29 +454,13 @@ async def get_review_attachment_signed_via_magic_link(
     assignment_id: UUID,
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
 ):
-    payload = await _require_magic_link_scope(assignment_id=assignment_id, magic_token=sf_review_magic)
-
-    try:
-        rr = (
-            supabase_admin.table("review_reports")
-            .select("id, attachment_path")
-            .eq("manuscript_id", str(payload.manuscript_id))
-            .eq("reviewer_id", str(payload.reviewer_id))
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(rr, "data", None) or []
-        row = rows[0] if rows else None
-    except Exception:
-        row = None
-
-    attachment_path = (row or {}).get("attachment_path") if row else None
-    if not attachment_path:
-        return {"success": True, "data": {"signed_url": None}}
-
-    signed_url = _get_signed_url_for_review_attachments_bucket(str(attachment_path))
-    return {"success": True, "data": {"signed_url": signed_url}}
+    return await get_review_attachment_signed_via_magic_link_impl(
+        assignment_id=assignment_id,
+        magic_token=sf_review_magic,
+        require_magic_link_scope_fn=_require_magic_link_scope,
+        supabase_admin_client=supabase_admin,
+        get_signed_url_for_review_attachments_bucket_fn=_get_signed_url_for_review_attachments_bucket,
+    )
 
 
 @router.post("/reviews/magic/assignments/{assignment_id}/submit")
@@ -781,49 +678,11 @@ async def get_review_pdf_signed_by_token(token: str):
     - 前端 iframe 无法携带 Authorization header，因此必须由后端生成 signed URL。
     - token 本身是访问凭证，必须严格校验有效性与过期时间。
     """
-    try:
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, expiry_date")
-            .eq("token", token)
-            .single()
-            .execute()
-        )
-        rr = getattr(rr_resp, "data", None) or {}
-        if not rr:
-            raise HTTPException(status_code=404, detail="Review token not found")
-
-        expiry = rr.get("expiry_date")
-        try:
-            expiry_dt = (
-                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                if isinstance(expiry, str)
-                else expiry
-            )
-        except Exception:
-            expiry_dt = None
-        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="Review token expired")
-
-        ms_resp = (
-            supabase_admin.table("manuscripts")
-            .select("id,file_path")
-            .eq("id", rr["manuscript_id"])
-            .single()
-            .execute()
-        )
-        ms = getattr(ms_resp, "data", None) or {}
-        file_path = ms.get("file_path")
-        if not file_path:
-            raise HTTPException(status_code=404, detail="Manuscript PDF not found")
-
-        signed_url = _get_signed_url_for_manuscripts_bucket(str(file_path))
-        return {"success": True, "data": {"signed_url": signed_url}}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Get review pdf signed url by token failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate PDF preview URL")
+    return await get_review_pdf_signed_by_token_impl(
+        token=token,
+        supabase_admin_client=supabase_admin,
+        get_signed_url_for_manuscripts_bucket_fn=_get_signed_url_for_manuscripts_bucket,
+    )
 
 
 @router.post("/reviews/token/{token}/submit")
@@ -863,59 +722,12 @@ async def get_review_feedback_for_manuscript(
     - Author 只能看到公开字段（content/score）
     - Editor/Admin 可以看到机密字段（confidential_comments_to_editor/attachment_path）
     """
-    try:
-        ms_resp = (
-            supabase_admin.table("manuscripts")
-            .select("id, author_id")
-            .eq("id", str(manuscript_id))
-            .single()
-            .execute()
-        )
-        ms = getattr(ms_resp, "data", None) or {}
-        if not ms:
-            raise HTTPException(status_code=404, detail="Manuscript not found")
-
-        is_author = str(ms.get("author_id")) == str(current_user.get("id"))
-        is_editor = _is_admin_email(current_user.get("email"))
-        if not (is_author or is_editor):
-            raise HTTPException(status_code=403, detail="Forbidden")
-
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, manuscript_id, reviewer_id, status, comments_for_author, content, score, confidential_comments_to_editor, attachment_path")
-            .eq("manuscript_id", str(manuscript_id))
-            .order("created_at", desc=True)
-            .execute()
-        )
-        rows = getattr(rr_resp, "data", None) or []
-
-        if is_author:
-            sanitized = []
-            for r in rows:
-                public_text = r.get("comments_for_author") or r.get("content")
-                r2 = {
-                    "id": r.get("id"),
-                    "manuscript_id": r.get("manuscript_id"),
-                    "reviewer_id": r.get("reviewer_id"),
-                    "status": r.get("status"),
-                    # 兼容：旧页面读取 content
-                    "content": public_text,
-                    "comments_for_author": public_text,
-                    "score": r.get("score"),
-                }
-                sanitized.append(r2)
-            return {"success": True, "data": sanitized}
-
-        # Editor/Admin：返回机密字段，但保证 comments_for_author 有值，避免老数据为空
-        for r in rows:
-            if not r.get("comments_for_author") and r.get("content"):
-                r["comments_for_author"] = r.get("content")
-        return {"success": True, "data": rows}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Fetch review feedback failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch review feedback")
+    return await get_review_feedback_for_manuscript_impl(
+        manuscript_id=manuscript_id,
+        current_user=current_user,
+        supabase_admin_client=supabase_admin,
+        is_admin_email_fn=_is_admin_email,
+    )
 
 
 @router.get("/reviews/token/{token}/attachment-signed")
@@ -923,41 +735,11 @@ async def get_review_attachment_signed_by_token(token: str):
     """
     免登录审稿：返回该 token 对应 review attachment 的 signed URL（如果存在）。
     """
-    try:
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, attachment_path, expiry_date")
-            .eq("token", token)
-            .single()
-            .execute()
-        )
-        rr = getattr(rr_resp, "data", None) or {}
-        if not rr:
-            raise HTTPException(status_code=404, detail="Review token not found")
-
-        expiry = rr.get("expiry_date")
-        try:
-            expiry_dt = (
-                datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                if isinstance(expiry, str)
-                else expiry
-            )
-        except Exception:
-            expiry_dt = None
-        if expiry_dt and expiry_dt < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="Review token expired")
-
-        path = rr.get("attachment_path")
-        if not path:
-            raise HTTPException(status_code=404, detail="No attachment")
-
-        signed_url = _get_signed_url_for_review_attachments_bucket(str(path))
-        return {"success": True, "data": {"signed_url": signed_url}}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Get review attachment signed url by token failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate attachment URL")
+    return await get_review_attachment_signed_by_token_impl(
+        token=token,
+        supabase_admin_client=supabase_admin,
+        get_signed_url_for_review_attachments_bucket_fn=_get_signed_url_for_review_attachments_bucket,
+    )
 
 
 @router.get("/reviews/reports/{review_report_id}/attachment-signed")
@@ -969,31 +751,10 @@ async def get_review_attachment_signed(
     """
     登录态：Reviewer/Editor/Admin 下载机密附件（Author 禁止）。
     """
-    try:
-        rr_resp = (
-            supabase_admin.table("review_reports")
-            .select("id, reviewer_id, attachment_path")
-            .eq("id", str(review_report_id))
-            .single()
-            .execute()
-        )
-        rr = getattr(rr_resp, "data", None) or {}
-        if not rr:
-            raise HTTPException(status_code=404, detail="Review report not found")
-
-        roles = set(profile.get("roles") or [])
-        is_editor = bool(roles.intersection({"managing_editor", "admin"}))
-        if not is_editor and str(rr.get("reviewer_id") or "") != str(current_user.get("id") or ""):
-            raise HTTPException(status_code=403, detail="Forbidden")
-
-        path = rr.get("attachment_path")
-        if not path:
-            raise HTTPException(status_code=404, detail="No attachment")
-
-        signed_url = _get_signed_url_for_review_attachments_bucket(str(path))
-        return {"success": True, "data": {"signed_url": signed_url}}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Get review attachment signed url failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate attachment URL")
+    return await get_review_attachment_signed_impl(
+        review_report_id=review_report_id,
+        current_user=current_user,
+        profile=profile,
+        supabase_admin_client=supabase_admin,
+        get_signed_url_for_review_attachments_bucket_fn=_get_signed_url_for_review_attachments_bucket,
+    )
