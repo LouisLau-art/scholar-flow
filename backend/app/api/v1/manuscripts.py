@@ -694,6 +694,7 @@ async def get_manuscript_reviews(
             "author_corrections_submitted",
             "author_confirmed",
             "in_layout_revision",
+            "approved_for_publish",
         ]
         try:
             layout_bound = (

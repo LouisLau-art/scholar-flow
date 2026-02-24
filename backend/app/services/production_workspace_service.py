@@ -521,8 +521,13 @@ class ProductionWorkspaceService:
         roles = self._roles(profile_roles)
         cycles = self._get_cycles(manuscript_id)
         active = next((c for c in cycles if str(c.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
+        # 中文注释：
+        # - cycle 核准后会进入 approved_for_publish，不再属于 active；
+        # - 但 PE 仍需要可读访问 workspace（查看核准结果/当前清样），否则前端会误显示 unavailable。
+        latest_approved = next((c for c in cycles if str(c.get("status") or "") == "approved_for_publish"), None)
+        display_cycle = active or latest_approved
         self._ensure_editor_access(
-            manuscript=manuscript, user_id=user_id, roles=roles, cycle=active, purpose="read"
+            manuscript=manuscript, user_id=user_id, roles=roles, cycle=display_cycle, purpose="read"
         )
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
@@ -544,7 +549,7 @@ class ProductionWorkspaceService:
                 "assistant_editor_id": manuscript.get("assistant_editor_id"),
                 "pdf_url": self._signed_url("manuscripts", str(manuscript.get("file_path") or "")),
             },
-            "active_cycle": self._format_cycle(active, include_signed_url=True) if active else None,
+            "active_cycle": self._format_cycle(display_cycle, include_signed_url=True) if display_cycle else None,
             "cycle_history": [self._format_cycle(c, include_signed_url=False) for c in cycles],
             "permissions": {
                 "can_create_cycle": can_create,

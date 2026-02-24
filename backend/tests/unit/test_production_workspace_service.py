@@ -212,3 +212,60 @@ def test_assistant_editor_cannot_read_production_workspace_after_accept() -> Non
         )
 
     assert exc.value.status_code == 403
+
+
+def test_production_editor_can_read_workspace_after_cycle_approved_for_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    svc = _svc()
+
+    manuscript_id = "ms-1"
+    pe_id = "pe-1"
+    cycle_id = "cycle-1"
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "proofreading",
+            "author_id": "author-1",
+            "editor_id": "editor-1",
+            "owner_id": "",
+            "assistant_editor_id": None,
+            "file_path": "manuscripts/ms-1/original.pdf",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "_get_cycles",
+        lambda _id: [
+            {
+                "id": cycle_id,
+                "manuscript_id": manuscript_id,
+                "cycle_no": 1,
+                "status": "approved_for_publish",
+                "layout_editor_id": pe_id,
+                "collaborator_editor_ids": [],
+                "proofreader_author_id": "author-1",
+                "galley_bucket": "production-proofs",
+                "galley_path": "production_cycles/ms-1/cycle-1/proof.pdf",
+                "version_note": "v1",
+                "proof_due_at": datetime.now(timezone.utc).isoformat(),
+                "approved_by": "me-1",
+                "approved_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+    )
+
+    ctx = svc.get_workspace_context(
+        manuscript_id=manuscript_id,
+        user_id=pe_id,
+        profile_roles=["production_editor"],
+    )
+
+    assert ctx["active_cycle"] is not None
+    assert ctx["active_cycle"]["id"] == cycle_id
+    assert ctx["active_cycle"]["status"] == "approved_for_publish"
+    assert ctx["permissions"]["can_upload_galley"] is False
+    assert ctx["permissions"]["can_approve"] is False
