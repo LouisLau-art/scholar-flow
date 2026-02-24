@@ -526,19 +526,22 @@ async def test_cross_journal_write_forbidden_for_owner_and_invoice(
 
 
 @pytest.mark.asyncio
-async def test_invoice_confirm_requires_override_permission(
+async def test_invoice_confirm_requires_confirm_paid_permission(
     client: AsyncClient,
     auth_token: str,
     override_profile_role,
 ):
-    override_profile_role(["managing_editor"])
+    # 中文注释：
+    # - assistant_editor 不具备财务确认权限；
+    # - 应在动作级权限检查阶段直接被拒绝（不依赖 journal scope）。
+    override_profile_role(["assistant_editor"])
     response = await client.post(
         "/api/v1/editor/invoices/confirm",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={"manuscript_id": str(uuid4())},
     )
     assert response.status_code == 403
-    assert "invoice:override_apc" in str(response.json().get("detail", ""))
+    assert "invoice:confirm_paid" in str(response.json().get("detail", ""))
 
 
 @pytest.mark.integration

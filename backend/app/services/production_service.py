@@ -239,11 +239,14 @@ class ProductionService:
                 detail=f"Unsupported production revert from status '{current}'.",
             )
         prev = _PREV[current]
+        # 中文注释：
+        # - revert 入口本身已被 _PREV 白名单约束为“单步回退”；
+        # - 通用状态机是前进导向（不含回退边），这里需显式跳过该检查。
         updated = self.editorial.update_status(
             manuscript_id=manuscript_id,
             to_status=prev,
             changed_by=changed_by,
             comment="production revert",
-            allow_skip=allow_skip,
+            allow_skip=True,
         )
         return ProductionResult(previous_status=current, new_status=prev, manuscript=updated)

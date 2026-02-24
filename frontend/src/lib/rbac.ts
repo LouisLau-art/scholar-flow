@@ -24,7 +24,7 @@ export function deriveEditorCapability(context?: EditorRbacContext | null): Edit
     canBindOwner: hasAny(actions, ['manuscript:bind_owner']),
     canManageReviewers: hasAny(actions, ['review:assign', 'review:view_assignments', 'review:unassign']),
     canUpdateInvoiceInfo: hasAny(actions, ['invoice:update_info', 'invoice:override_apc']),
-    canConfirmInvoicePaid: hasAny(actions, ['invoice:override_apc']),
+    canConfirmInvoicePaid: hasAny(actions, ['invoice:update_info', 'invoice:override_apc']),
     canRecordFirstDecision: hasAny(actions, ['decision:record_first']),
     canSubmitFinalDecision: hasAny(actions, ['decision:submit_final']),
   }

@@ -13,6 +13,7 @@ from app.api.v1.editor_common import (
 )
 from app.core.auth_utils import get_current_user
 from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import can_perform_action
 from app.core.roles import require_any_role
 from app.lib.api_client import supabase_admin
 from app.services.editor_service import EditorService, FinanceListFilters
@@ -117,7 +118,15 @@ async def confirm_invoice_paid(
     - 支付渠道/自动对账后续再做；MVP 先提供一个“人工确认到账”入口。
     - Publish 时会做 Payment Gate 检查：amount>0 且 status!=paid -> 禁止发布。
     """
-    _require_action_or_403(action="invoice:override_apc", roles=profile.get("roles") or [])
+    # 中文注释:
+    # - ME 在生产链路中需要执行人工到账确认；
+    # - 因此此处接受 invoice:update_info（ME）或 invoice:override_apc（EIC/Admin）任一动作权限。
+    roles = profile.get("roles") or []
+    if not (
+        can_perform_action(action="invoice:update_info", roles=roles)
+        or can_perform_action(action="invoice:override_apc", roles=roles)
+    ):
+        _require_action_or_403(action="invoice:confirm_paid", roles=roles)
     try:
         manuscript_id = str(payload.manuscript_id or "").strip()
         if not manuscript_id:
@@ -208,4 +217,3 @@ async def confirm_invoice_paid(
     except Exception as e:
         print(f"[Financial] confirm invoice failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to confirm invoice")
-
