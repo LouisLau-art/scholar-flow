@@ -21,9 +21,9 @@ from app.services.editorial_service import EditorialService
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.services.owner_binding_service import validate_internal_owner_id
 from uuid import UUID
-from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate
-from app.services.reviewer_service import ReviewerService, ReviewPolicyService
-from app.services.matchmaking_service import MatchmakingService
+from app.schemas.reviewer import ReviewerCreate, ReviewerUpdate  # noqa: F401 (monkeypatch compat)
+from app.services.reviewer_service import ReviewerService, ReviewPolicyService  # noqa: F401 (monkeypatch compat)
+from app.services.matchmaking_service import MatchmakingService  # noqa: F401 (monkeypatch compat)
 from app.services.editor_service import EditorService, ProcessListFilters, FinanceListFilters
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
@@ -39,6 +39,7 @@ from app.api.v1.editor_production import router as production_router
 from app.api.v1.editor_detail import router as editor_detail_router
 from app.api.v1.editor_precheck import router as editor_precheck_router
 from app.api.v1.editor_finance import router as editor_finance_router
+from app.api.v1.editor_reviewer_library import router as editor_reviewer_library_router
 from app.api.v1.editor_common import (
     AcademicCheckRequest,
     AssignAERequest,
@@ -59,7 +60,7 @@ from app.api.v1.editor_heavy_handlers import (
     get_editor_pipeline_impl,
     publish_manuscript_dev_impl,
     request_revision_impl,
-    search_reviewer_library_impl,
+    search_reviewer_library_impl,  # noqa: F401 (monkeypatch compat)
     submit_final_decision_impl,
 )
 
@@ -607,136 +608,6 @@ async def list_assistant_editors(
         raise HTTPException(status_code=500, detail="Failed to load assistant editors")
 
 
-# ----------------------------
-# Feature 030: Reviewer Library
-# ----------------------------
-
-
-@router.post("/reviewer-library", status_code=201)
-async def add_reviewer_to_library(
-    payload: ReviewerCreate,
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
-    background_tasks: BackgroundTasks = None,
-):
-    """
-    User Story 1:
-    - 将潜在审稿人加入“审稿人库”
-    - 立即创建/关联 auth.users + public.user_profiles
-    - **不发送邮件**
-    """
-    try:
-        data = ReviewerService().add_to_library(payload)
-        # 中文注释:
-        # - Reviewer Library 新增/激活后，异步触发 embedding 索引，降低 AI 推荐数据不足概率。
-        # - 索引失败不阻断主流程（fail-open）。
-        try:
-            reviewer_id = str(data.get("id") or "").strip()
-            roles = [str(r).strip().lower() for r in (data.get("roles") or [])]
-            is_active = bool(data.get("is_reviewer_active", True))
-            if reviewer_id and "reviewer" in roles and is_active and background_tasks is not None:
-                background_tasks.add_task(MatchmakingService().index_reviewer, reviewer_id)
-        except Exception as e:
-            print(f"[ReviewerLibrary] enqueue index failed (ignored): {e}")
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        print(f"[ReviewerLibrary] add failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add reviewer")
-
-
-@router.get("/reviewer-library")
-async def search_reviewer_library(
-    query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
-    limit: int = Query(50, ge=1, le=200),
-    manuscript_id: str | None = Query(None, description="可选：基于稿件上下文返回邀请策略命中信息"),
-    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
-):
-    """
-    User Story 2:
-    - 从审稿人库搜索审稿人（仅返回 active reviewer）
-    """
-    return await search_reviewer_library_impl(
-        query=query,
-        limit=limit,
-        manuscript_id=manuscript_id,
-        profile=profile,
-        supabase_admin_client=supabase_admin,
-        reviewer_service_cls=ReviewerService,
-        review_policy_service_cls=ReviewPolicyService,
-        normalize_roles_fn=normalize_roles,
-    )
-
-
-@router.get("/reviewer-library/{id}")
-async def get_reviewer_library_item(
-    id: str,
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
-):
-    """
-    User Story 3:
-    - 获取审稿人库条目的完整信息
-    """
-    try:
-        data = ReviewerService().get_reviewer(UUID(id))
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        print(f"[ReviewerLibrary] get failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to load reviewer")
-
-
-@router.put("/reviewer-library/{id}")
-async def update_reviewer_library_item(
-    id: str,
-    payload: ReviewerUpdate,
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
-    background_tasks: BackgroundTasks = None,
-):
-    """
-    User Story 3:
-    - 更新审稿人库条目的元数据（title/homepage/interests 等）
-    """
-    try:
-        data = ReviewerService().update_reviewer(UUID(id), payload)
-        # 中文注释:
-        # - reviewer 元数据更新（尤其 research_interests）后，异步重建 embedding。
-        try:
-            reviewer_id = str(data.get("id") or id).strip()
-            roles = [str(r).strip().lower() for r in (data.get("roles") or [])]
-            is_active = bool(data.get("is_reviewer_active", True))
-            if reviewer_id and "reviewer" in roles and is_active and background_tasks is not None:
-                background_tasks.add_task(MatchmakingService().index_reviewer, reviewer_id)
-        except Exception as e:
-            print(f"[ReviewerLibrary] enqueue reindex failed (ignored): {e}")
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        print(f"[ReviewerLibrary] update failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update reviewer")
-
-
-@router.delete("/reviewer-library/{id}")
-async def deactivate_reviewer_library_item(
-    id: str,
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
-):
-    """
-    User Story 1:
-    - 从审稿人库移除（软删除：is_reviewer_active=false）
-    """
-    try:
-        data = ReviewerService().deactivate(UUID(id))
-        return {"success": True, "data": data}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        print(f"[ReviewerLibrary] deactivate failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to remove reviewer")
-
-
 @router.get("/journals")
 async def list_journals(
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
@@ -1085,4 +956,5 @@ router.include_router(internal_collab_router)
 router.include_router(production_router)
 router.include_router(editor_precheck_router)
 router.include_router(editor_finance_router)
+router.include_router(editor_reviewer_library_router)
 router.include_router(editor_detail_router)
