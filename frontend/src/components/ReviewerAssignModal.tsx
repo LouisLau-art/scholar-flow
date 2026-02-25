@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { X, Search, Users, Check, UserPlus } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { toast } from 'sonner'
@@ -96,6 +96,7 @@ export default function ReviewerAssignModal({
   const [ownerSearch, setOwnerSearch] = useState('')
   const [loadingOwner, setLoadingOwner] = useState(false)
   const [savingOwner, setSavingOwner] = useState(false)
+  const reviewerSearchRequestSeq = useRef(0)
   const normalizedViewerRoles = useMemo(
     () =>
       (viewerRoles || [])
@@ -208,19 +209,24 @@ export default function ReviewerAssignModal({
   }
 
   const fetchReviewers = useCallback(async (query: string = '') => {
+    const requestSeq = reviewerSearchRequestSeq.current + 1
+    reviewerSearchRequestSeq.current = requestSeq
     setIsLoading(true)
     try {
       const limit = query.trim() ? 120 : 40
       const payload = await EditorApi.searchReviewerLibrary(query, limit, manuscriptId, {
         roleScopeKey: reviewerSearchScopeKey,
       })
+      if (requestSeq !== reviewerSearchRequestSeq.current) return
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
       setReviewers((payload.data || []) as ReviewerWithPolicy[])
       setPolicyMeta(payload?.policy || {})
     } catch (error) {
+      if (requestSeq !== reviewerSearchRequestSeq.current) return
       console.error('Failed to fetch reviewers:', error)
       toast.error('Failed to load reviewers')
     } finally {
+      if (requestSeq !== reviewerSearchRequestSeq.current) return
       setIsLoading(false)
     }
   }, [manuscriptId, reviewerSearchScopeKey])
