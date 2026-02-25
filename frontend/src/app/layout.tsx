@@ -32,6 +32,23 @@ const metadataBase = (() => {
   }
 })()
 const ogImageUrl = new URL('/og-image.png', metadataBase).toString()
+const twitterCreator = process.env.NEXT_PUBLIC_TWITTER_CREATOR?.trim() || undefined
+
+function resolveVerification(): Metadata['verification'] | undefined {
+  const google = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim()
+  const yandex = process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION?.trim()
+  const bing = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim()
+
+  if (!google && !yandex && !bing) return undefined
+
+  const verification: NonNullable<Metadata['verification']> = {}
+  if (google) verification.google = google
+  if (yandex) verification.yandex = yandex
+  if (bing) verification.other = { bing }
+  return verification
+}
+
+const verification = resolveVerification()
 
 export const metadata: Metadata = {
   metadataBase,
@@ -66,7 +83,7 @@ export const metadata: Metadata = {
     title: 'ScholarFlow | Frontiers-inspired Academic Workflow Platform',
     description: 'AI-powered platform for academic manuscript submission, peer review, and publication.',
     images: [ogImageUrl],
-    creator: '@scholarflow',
+    ...(twitterCreator ? { creator: twitterCreator } : {}),
   },
   
   // Additional SEO metadata
@@ -82,14 +99,7 @@ export const metadata: Metadata = {
     },
   },
   
-  // Verification codes for search engines
-  verification: {
-    google: 'google-site-verification-code',
-    yandex: 'yandex-verification-code',
-    other: {
-      bing: 'bing-verification-code',
-    },
-  },
+  ...(verification ? { verification } : {}),
 }
 
 export default function RootLayout({

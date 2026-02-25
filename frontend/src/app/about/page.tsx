@@ -1,7 +1,5 @@
-'use client'
-
 import SiteHeader from '@/components/layout/SiteHeader'
-import { Globe, ShieldCheck, Zap, Users, MessageSquare } from 'lucide-react'
+import { Globe, ShieldCheck, Zap, Users, MessageSquare, Mail } from 'lucide-react'
 
 export default function AboutPage() {
   return (
@@ -71,5 +69,3 @@ export default function AboutPage() {
     </div>
   )
 }
-
-import { Mail } from 'lucide-react'

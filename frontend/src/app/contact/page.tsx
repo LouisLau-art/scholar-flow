@@ -1,5 +1,3 @@
-'use client'
-
 import Link from 'next/link'
 import { Mail, Phone, MapPin, MessageSquare } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
