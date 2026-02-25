@@ -121,7 +121,15 @@ class EditorServicePrecheckWorkspaceMixin:
             for row in rows
             if normalize_status(str(row.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
         ]
-        precheck_enriched = self._enrich_precheck_rows(precheck_rows) if precheck_rows else []
+        precheck_enriched = (
+            self._enrich_precheck_rows(
+                precheck_rows,
+                include_timeline=False,
+                include_assignee_profiles=False,
+            )
+            if precheck_rows
+            else []
+        )
         precheck_by_id = {
             str(item.get("id") or ""): item
             for item in precheck_enriched
@@ -153,6 +161,12 @@ class EditorServicePrecheckWorkspaceMixin:
                 pre_check_status=normalized_precheck,
             )
             out.append(row)
+
+        out = self._apply_process_visibility_scope(
+            rows=out,
+            viewer_user_id=viewer_user_id,
+            viewer_roles=viewer_roles,
+        )
 
         profile_ids = sorted(
             {
@@ -199,6 +213,12 @@ class EditorServicePrecheckWorkspaceMixin:
                 if ae_id
                 else None
             )
+            if isinstance(row.get("current_assignee"), dict) and ae_id:
+                row["current_assignee"] = {
+                    "id": ae_id,
+                    "full_name": (profile_map.get(ae_id) or {}).get("full_name"),
+                    "email": (profile_map.get(ae_id) or {}).get("email"),
+                }
             journal = row.get("journals")
             if isinstance(journal, list):
                 row["journal"] = journal[0] if journal else None
@@ -218,12 +238,6 @@ class EditorServicePrecheckWorkspaceMixin:
                 or keyword in str(((row.get("assistant_editor") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
             ]
-
-        out = self._apply_process_visibility_scope(
-            rows=out,
-            viewer_user_id=viewer_user_id,
-            viewer_roles=viewer_roles,
-        )
 
         out.sort(
             key=lambda r: (
@@ -333,7 +347,15 @@ class EditorServicePrecheckWorkspaceMixin:
             for row in rows
             if normalize_status(str(row.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
         ]
-        precheck_enriched = self._enrich_precheck_rows(precheck_rows) if precheck_rows else []
+        precheck_enriched = (
+            self._enrich_precheck_rows(
+                precheck_rows,
+                include_timeline=False,
+                include_assignee_profiles=False,
+            )
+            if precheck_rows
+            else []
+        )
         precheck_by_id = {
             str(item.get("id") or ""): item
             for item in precheck_enriched

@@ -77,7 +77,7 @@ def test_managing_workspace_enriches_only_precheck_rows():
         ]
     )
     captured_ids: list[str] = []
-    def _fake_enrich(rows):
+    def _fake_enrich(rows, **_kwargs):
         enriched = []
         for row in rows:
             captured_ids.append(str(row.get("id") or ""))
@@ -113,7 +113,7 @@ def test_ae_workspace_enriches_only_precheck_rows():
         ]
     )
     captured_ids: list[str] = []
-    def _fake_enrich(rows):
+    def _fake_enrich(rows, **_kwargs):
         enriched = []
         for row in rows:
             captured_ids.append(str(row.get("id") or ""))

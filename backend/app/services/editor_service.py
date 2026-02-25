@@ -466,10 +466,16 @@ class EditorService(EditorServicePrecheckMixin):
                 bucket["academic_completed_at"] = created_at
         return index
 
-    def _enrich_precheck_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _enrich_precheck_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        include_timeline: bool = True,
+        include_assignee_profiles: bool = True,
+    ) -> list[dict[str, Any]]:
         out = [self._map_precheck_row(r) for r in rows]
         ids = [str(r.get("id") or "") for r in out if r.get("id")]
-        timeline_index = self._load_precheck_timeline_index(ids)
+        timeline_index = self._load_precheck_timeline_index(ids) if include_timeline else {}
         assignee_ids = sorted(
             {
                 str(r.get("assistant_editor_id") or "")
@@ -478,7 +484,7 @@ class EditorService(EditorServicePrecheckMixin):
             }
         )
         assignee_map: dict[str, dict[str, Any]] = {}
-        if assignee_ids:
+        if assignee_ids and include_assignee_profiles:
             try:
                 resp = (
                     self.client.table("user_profiles")
@@ -495,18 +501,21 @@ class EditorService(EditorServicePrecheckMixin):
 
         for row in out:
             manuscript_id = str(row.get("id") or "")
-            stamp = timeline_index.get(manuscript_id, {})
-            row["assigned_at"] = stamp.get("assigned_at")
-            row["technical_completed_at"] = stamp.get("technical_completed_at")
-            row["academic_completed_at"] = stamp.get("academic_completed_at")
+            stamp = timeline_index.get(manuscript_id, {}) if include_timeline else {}
+            row["assigned_at"] = stamp.get("assigned_at") if include_timeline else None
+            row["technical_completed_at"] = stamp.get("technical_completed_at") if include_timeline else None
+            row["academic_completed_at"] = stamp.get("academic_completed_at") if include_timeline else None
             ae_id = str(row.get("assistant_editor_id") or "")
             if ae_id:
-                prof = assignee_map.get(ae_id) or {}
-                row["current_assignee"] = {
-                    "id": ae_id,
-                    "full_name": prof.get("full_name"),
-                    "email": prof.get("email"),
-                }
+                if include_assignee_profiles:
+                    prof = assignee_map.get(ae_id) or {}
+                    row["current_assignee"] = {
+                        "id": ae_id,
+                        "full_name": prof.get("full_name"),
+                        "email": prof.get("email"),
+                    }
+                else:
+                    row["current_assignee"] = {"id": ae_id}
             else:
                 row["current_assignee"] = None
         return out

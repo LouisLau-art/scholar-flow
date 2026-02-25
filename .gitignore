@@ -67,3 +67,6 @@ htmlcov/
 /稿件处理系统流程解析20260119.pdf
 /详细审稿流程说明_原文.pdf
 !docs/upgrade_plan_v2.html
+
+# Performance triage raw captures (keep only summarized report)
+/specs/001-editor-performance-refactor/artifacts/triage-*/
