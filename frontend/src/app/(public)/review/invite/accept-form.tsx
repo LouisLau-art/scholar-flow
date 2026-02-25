@@ -46,12 +46,12 @@ export function AcceptForm({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">Accept Invitation</h2>
-      <p className="mt-1 text-sm text-slate-600">Pick a due date before entering the review workspace.</p>
-      <Label className="mt-4 block text-sm font-medium text-slate-700">Due date</Label>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h2 className="text-base font-semibold text-foreground">Accept Invitation</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Pick a due date before entering the review workspace.</p>
+      <Label className="mt-4 block text-sm font-medium text-foreground">Due date</Label>
       <DatePicker value={dueDate} minDate={minDueDate} maxDate={maxDueDate} onChange={setDueDate} className="mt-1" />
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         Allowed window: {minDueDate} to {maxDueDate}
       </p>
       {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}

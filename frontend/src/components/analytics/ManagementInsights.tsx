@@ -37,7 +37,7 @@ const STAGE_LABELS: Record<StageDurationItem['stage'], string> = {
 function getSeverityClass(level: SLAAlertItem['severity']) {
   if (level === 'high') return 'bg-rose-100 text-rose-700 border-rose-200'
   if (level === 'medium') return 'bg-amber-100 text-amber-700 border-amber-200'
-  return 'bg-slate-100 text-slate-700 border-slate-200'
+  return 'bg-muted text-muted-foreground border-border'
 }
 
 type Props = {
@@ -80,8 +80,8 @@ export function ManagementInsights(props: Props) {
                     <TableRow key={row.editor_id}>
                       <TableCell className="font-semibold">{idx + 1}</TableCell>
                       <TableCell>
-                        <div className="font-medium text-slate-900">{row.editor_name}</div>
-                        <div className="text-xs text-slate-500">{row.editor_email || '—'}</div>
+                        <div className="font-medium text-foreground">{row.editor_name}</div>
+                        <div className="text-xs text-muted-foreground">{row.editor_email || '—'}</div>
                       </TableCell>
                       <TableCell className="text-right">{row.handled_count}</TableCell>
                       <TableCell className="text-right">
@@ -153,12 +153,12 @@ export function ManagementInsights(props: Props) {
                   <TableRow key={row.manuscript_id}>
                     <TableCell>
                       <Link
-                        className="font-medium text-slate-900 hover:text-primary"
+                        className="font-medium text-foreground hover:text-primary"
                         href={`/editor/manuscript/${row.manuscript_id}`}
                       >
                         {row.title}
                       </Link>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-muted-foreground">
                         {row.journal_title || 'Unknown Journal'}
                         {' · '}
                         {row.editor_name || row.owner_name || 'Unassigned'}

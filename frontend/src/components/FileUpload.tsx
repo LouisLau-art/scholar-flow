@@ -27,8 +27,8 @@ export function FileUpload({
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-semibold text-slate-900">{label}</div>
-      {helperText ? <div className="text-xs text-slate-500">{helperText}</div> : null}
+      <div className="text-sm font-semibold text-foreground">{label}</div>
+      {helperText ? <div className="text-xs text-muted-foreground">{helperText}</div> : null}
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <Button
@@ -43,8 +43,8 @@ export function FileUpload({
           Choose file
         </Button>
 
-        <div className="text-sm text-slate-600 flex items-center gap-2">
-          <FileText className="h-4 w-4 text-slate-400" />
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          <FileText className="h-4 w-4 text-muted-foreground" />
           <span className="break-all">{file?.name || "No file selected"}</span>
         </div>
       </div>
@@ -59,4 +59,3 @@ export function FileUpload({
     </div>
   )
 }
-

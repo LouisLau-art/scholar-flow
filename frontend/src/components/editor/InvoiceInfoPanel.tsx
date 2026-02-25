@@ -26,19 +26,19 @@ export function InvoiceInfoPanel({ info, onEdit }: { info: InvoiceInfoPanelView;
         <Table>
           <TableBody>
             <TableRow>
-              <TableCell className="w-44 text-slate-500">Authors (Billable)</TableCell>
+              <TableCell className="w-44 text-muted-foreground">Authors (Billable)</TableCell>
               <TableCell className="whitespace-pre-wrap">{info.authors || '—'}</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="w-44 text-slate-500">Affiliation</TableCell>
+              <TableCell className="w-44 text-muted-foreground">Affiliation</TableCell>
               <TableCell className="whitespace-pre-wrap">{info.affiliation || '—'}</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="w-44 text-slate-500">APC Amount (USD)</TableCell>
+              <TableCell className="w-44 text-muted-foreground">APC Amount (USD)</TableCell>
               <TableCell>{info.apcAmount || '—'}</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="w-44 text-slate-500">Funding</TableCell>
+              <TableCell className="w-44 text-muted-foreground">Funding</TableCell>
               <TableCell className="whitespace-pre-wrap">{info.fundingInfo || '—'}</TableCell>
             </TableRow>
           </TableBody>
@@ -47,4 +47,3 @@ export function InvoiceInfoPanel({ info, onEdit }: { info: InvoiceInfoPanelView;
     </Card>
   )
 }
-

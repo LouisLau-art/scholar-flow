@@ -88,16 +88,16 @@ export function BindingAssistantEditorDropdown({
 
           <div className="space-y-3">
             <Input placeholder="Search name/email…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <div className="rounded-lg border border-slate-200">
+            <div className="rounded-lg border border-border">
               <div className="max-h-80 overflow-auto">
                 {loading ? (
-                  <div className="p-6 text-sm text-slate-500 flex items-center gap-2">
+                  <div className="p-6 text-sm text-muted-foreground flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                   </div>
                 ) : pinned.length === 0 ? (
-                  <div className="p-6 text-sm text-slate-500">No assistant editors found.</div>
+                  <div className="p-6 text-sm text-muted-foreground">No assistant editors found.</div>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-border/60">
                     {pinned.map((ae) => {
                       const aid = String(ae.id || '')
                       const isCurrent = aid === currentId
@@ -105,8 +105,8 @@ export function BindingAssistantEditorDropdown({
                       return (
                         <li key={aid} className="p-3 flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate font-medium text-slate-900">{ae.full_name || ae.email || aid}</div>
-                            {ae.email ? <div className="truncate text-xs text-slate-500">{ae.email}</div> : null}
+                            <div className="truncate font-medium text-foreground">{ae.full_name || ae.email || aid}</div>
+                            {ae.email ? <div className="truncate text-xs text-muted-foreground">{ae.email}</div> : null}
                           </div>
                           <Button
                             size="sm"
@@ -148,4 +148,3 @@ export function BindingAssistantEditorDropdown({
     </>
   )
 }
-

@@ -77,26 +77,26 @@ export function BindingOwnerDropdown({
           <div className="space-y-3">
             <Input placeholder="Search name/email…" value={q} onChange={(e) => setQ(e.target.value)} />
 
-            <div className="rounded-lg border border-slate-200">
+            <div className="rounded-lg border border-border">
               <div className="max-h-80 overflow-auto">
                 {loading ? (
-                  <div className="p-6 text-sm text-slate-500 flex items-center gap-2">
+                  <div className="p-6 text-sm text-muted-foreground flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                   </div>
                 ) : pinned.length === 0 ? (
-                  <div className="p-6 text-sm text-slate-500">No internal staff found.</div>
+                  <div className="p-6 text-sm text-muted-foreground">No internal staff found.</div>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-border/60">
                     {pinned.map((s) => {
                       const isCurrent = s.id === currentOwnerId
                       const isSaving = savingId === s.id
                       return (
                         <li key={s.id} className="p-3 flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate font-medium text-slate-900">
+                            <div className="truncate font-medium text-foreground">
                               {s.full_name || s.email || s.id}
                             </div>
-                            {s.email ? <div className="truncate text-xs text-slate-500">{s.email}</div> : null}
+                            {s.email ? <div className="truncate text-xs text-muted-foreground">{s.email}</div> : null}
                           </div>
                           <Button
                             size="sm"

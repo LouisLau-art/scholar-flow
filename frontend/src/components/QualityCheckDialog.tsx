@@ -50,7 +50,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
               variant="outline"
               onClick={() => setPassed(true)}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-3 border-2 transition-all ${
-                passed === true ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'
+                passed === true ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'
               }`}
             >
               <Check className="h-5 w-5" /> Pass
@@ -60,7 +60,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
               variant="outline"
               onClick={() => setPassed(false)}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-3 border-2 transition-all ${
-                passed === false ? 'border-red-600 bg-red-50 text-red-700' : 'border-slate-200 text-slate-500'
+                passed === false ? 'border-red-600 bg-red-50 text-red-700' : 'border-border text-muted-foreground'
               }`}
             >
               <X className="h-5 w-5" /> Reject
@@ -69,7 +69,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
 
           {/* KPI 归属人选择 */}
           <div>
-            <label className="block text-sm font-semibold text-slate-900">KPI Owner</label>
+            <label className="block text-sm font-semibold text-foreground">KPI Owner</label>
             <Select value={kpiOwner || '__empty'} onValueChange={(value) => setKpiOwner(value === '__empty' ? '' : value)}>
               <SelectTrigger className="mt-1 w-full">
                 <SelectValue placeholder="Select an editor..." />
@@ -90,7 +90,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
           <Button
             type="button"
             onClick={handleSubmit}
-            className="flex-1 rounded-md bg-slate-900 py-2 text-white hover:bg-slate-800 transition-opacity disabled:opacity-50"
+            className="flex-1 rounded-md bg-primary py-2 text-primary-foreground hover:bg-primary/90 transition-opacity disabled:opacity-50"
             disabled={passed === null || !kpiOwner}
           >
             Submit Review

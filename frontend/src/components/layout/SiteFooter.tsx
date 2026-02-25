@@ -45,28 +45,27 @@ export default function SiteFooter() {
   const links = items === null ? fallback : items.length > 0 ? items : fallback
 
   return (
-    <footer className="border-t border-slate-800 bg-slate-900 text-slate-200">
+    <footer className="border-t border-border/30 bg-foreground text-primary-foreground/80">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="font-serif text-xl font-bold text-white">ScholarFlow</div>
-            <div className="mt-1 text-sm text-slate-400">Modern academic workflow platform.</div>
+            <div className="font-serif text-xl font-bold text-primary-foreground">ScholarFlow</div>
+            <div className="mt-1 text-sm text-primary-foreground/60">Modern academic workflow platform.</div>
           </div>
 
-          <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-slate-300">
+          <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-primary-foreground/80">
             {links.map((link) => (
-              <Link key={link.href} href={link.href} className="hover:text-white">
+              <Link key={link.href} href={link.href} className="hover:text-primary-foreground">
                 {link.label}
               </Link>
             ))}
           </nav>
         </div>
 
-        <div className="mt-10 text-xs text-slate-500">
+        <div className="mt-10 text-xs text-primary-foreground/50">
           © {new Date().getFullYear()} ScholarFlow. All rights reserved.
         </div>
       </div>
     </footer>
   )
 }
-

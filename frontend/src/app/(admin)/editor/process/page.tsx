@@ -15,13 +15,13 @@ export default function ManuscriptsProcessPage() {
       <main className="sf-page-container space-y-6 py-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+            <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
               <Table2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Manuscripts Process</h1>
-              <p className="mt-1 text-slate-500 font-medium">统一表格视图管理稿件生命周期（只读监控）</p>
-              <p className="mt-1 text-xs text-slate-400">点击稿件 ID 进入详情页执行操作。</p>
+              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Manuscripts Process</h1>
+              <p className="mt-1 text-muted-foreground font-medium">统一表格视图管理稿件生命周期（只读监控）</p>
+              <p className="mt-1 text-xs text-muted-foreground">点击稿件 ID 进入详情页执行操作。</p>
             </div>
           </div>
           <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
@@ -32,7 +32,7 @@ export default function ManuscriptsProcessPage() {
 
         <Suspense
           fallback={
-            <div className="rounded-xl border border-slate-200 bg-white p-10 text-sm text-slate-500">
+            <div className="rounded-xl border border-border bg-card p-10 text-sm text-muted-foreground">
               Loading…
             </div>
           }
