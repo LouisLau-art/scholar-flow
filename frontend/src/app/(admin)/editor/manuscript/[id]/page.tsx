@@ -157,6 +157,24 @@ export default function EditorManuscriptDetailPage() {
     })
   }, [])
 
+  const mergeDeferredDetailContext = useCallback((detail: ManuscriptDetail) => {
+    setMs((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        is_deferred_context_loaded: detail.is_deferred_context_loaded ?? prev.is_deferred_context_loaded ?? true,
+        files: detail.files ?? prev.files,
+        signed_files: detail.signed_files ?? prev.signed_files,
+        reviewer_invites: detail.reviewer_invites ?? prev.reviewer_invites,
+        author_response_history: detail.author_response_history ?? prev.author_response_history,
+        latest_author_response_letter: detail.latest_author_response_letter ?? prev.latest_author_response_letter,
+        latest_author_response_submitted_at:
+          detail.latest_author_response_submitted_at ?? prev.latest_author_response_submitted_at,
+        latest_author_response_round: detail.latest_author_response_round ?? prev.latest_author_response_round,
+      }
+    })
+  }, [])
+
   const loadRbacContext = useCallback(async () => {
     const rbacRes = await EditorApi.getRbacContext()
     if (rbacRes?.success && rbacRes?.data) {
@@ -221,22 +239,46 @@ export default function EditorManuscriptDetailPage() {
     [id]
   )
 
+  const loadDeferredDetailContext = useCallback(
+    async (force = false) => {
+      if (!id) return
+      try {
+        const detailRes = await withTimeout(
+          EditorApi.getManuscriptDetail(id, { skipCards: true, includeHeavy: true, force }),
+          DEFERRED_BLOCK_TIMEOUT_MS,
+          'Deferred detail context loading timed out.'
+        )
+        if (!detailRes?.success || !detailRes?.data) {
+          throw new Error(detailRes?.detail || detailRes?.message || 'Failed to load deferred detail context')
+        }
+        mergeDeferredDetailContext(detailRes.data as ManuscriptDetail)
+      } catch (e) {
+        console.warn('[EditorDetail] deferred detail context failed', e)
+      }
+    },
+    [id, mergeDeferredDetailContext]
+  )
+
   const refreshCardsIfVisible = useCallback(() => {
     if (!cardsActivated || !id) return
     void loadCardsContext(true)
   }, [cardsActivated, id, loadCardsContext])
 
-  const refreshDetail = useCallback(async () => {
+  const refreshDetail = useCallback(async (options?: { force?: boolean }) => {
     if (!id) return
+    const force = Boolean(options?.force)
     try {
-      const detailRes = await EditorApi.getManuscriptDetail(id, { skipCards: true })
+      const detailRes = await EditorApi.getManuscriptDetail(id, { skipCards: true, force })
       if (!detailRes?.success) {
         throw new Error(detailRes?.detail || detailRes?.message || 'Manuscript not found')
       }
       const detail = detailRes.data as ManuscriptDetail
       applyDetail(detail)
+      if (!detail?.is_deferred_context_loaded) {
+        void loadDeferredDetailContext(force)
+      }
       if (cardsActivated) {
-        void loadCardsContext(true)
+        void loadCardsContext(force)
       }
       const normalizedStatus = normalizeWorkflowStatus(String(detail?.status || ''))
       if (normalizedStatus === 'pre_check') {
@@ -251,7 +293,7 @@ export default function EditorManuscriptDetailPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to load manuscript')
       setMs(null)
     }
-  }, [applyDetail, cardsActivated, id, loadCardsContext, reviewsActivated])
+  }, [applyDetail, cardsActivated, id, loadCardsContext, loadDeferredDetailContext, reviewsActivated])
 
   async function load() {
     try {
@@ -438,7 +480,7 @@ export default function EditorManuscriptDetailPage() {
       setTransitionDialogOpen(false)
       setPendingTransition(null)
       setTransitionReason('')
-      await refreshDetail()
+      await refreshDetail({ force: true })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Transition failed')
     } finally {
@@ -528,11 +570,11 @@ export default function EditorManuscriptDetailPage() {
             submittedAt={ms.created_at}
             owner={ms.owner}
             canBindOwner={capability.canBindOwner}
-            onOwnerBound={refreshDetail}
+            onOwnerBound={() => void refreshDetail({ force: true })}
             currentAeId={currentAeId}
             currentAeName={currentAeName}
             canAssignAE={canAssignAE}
-            onAeAssigned={refreshDetail}
+            onAeAssigned={() => void refreshDetail({ force: true })}
             canUpdateInvoiceInfo={capability.canUpdateInvoiceInfo}
             invoiceStatus={ms.invoice?.status}
             invoiceAmount={ms.invoice?.amount}
@@ -545,8 +587,8 @@ export default function EditorManuscriptDetailPage() {
             manuscriptFiles={fileHubProps.manuscriptFiles}
             coverFiles={fileHubProps.coverFiles}
             reviewFiles={fileHubProps.reviewFiles}
-            onUploadReviewFile={refreshDetail}
-            onUploadCoverLetter={refreshDetail}
+            onUploadReviewFile={() => void refreshDetail({ force: true })}
+            onUploadCoverLetter={() => void refreshDetail({ force: true })}
           />
 
           <AuthorResubmissionHistoryCard authorResponseHistory={authorResponseHistory} />
@@ -598,11 +640,11 @@ export default function EditorManuscriptDetailPage() {
             nextStatuses={nextStatuses}
             transitioning={transitioning}
             currentAeId={currentAeId}
-            onReviewerChanged={refreshDetail}
+            onReviewerChanged={() => void refreshDetail({ force: true })}
             onOpenDecisionWorkspace={handleOpenDecisionWorkspace}
             onOpenProductionWorkspace={handleOpenProductionWorkspace}
             onProductionStatusChange={handleProductionStatusChange}
-            onReload={refreshDetail}
+            onReload={() => void refreshDetail({ force: true })}
             onOpenTransitionDialog={openTransitionDialog}
             getTransitionActionLabel={getTransitionActionLabel}
           />
@@ -659,7 +701,7 @@ export default function EditorManuscriptDetailPage() {
             if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
             toast.success('Invoice info updated')
             setInvoiceOpen(false)
-            await refreshDetail()
+            await refreshDetail({ force: true })
           } catch (e) {
             toast.error(e instanceof Error ? e.message : 'Save failed')
           } finally {

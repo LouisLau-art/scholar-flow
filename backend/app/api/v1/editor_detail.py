@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from time import perf_counter, time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.api.v1.editor_common import (
     get_signed_url as _get_signed_url,
@@ -15,6 +15,7 @@ from app.core.auth_utils import get_current_user
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import normalize_roles
 from app.core.roles import require_any_role
+from app.core.short_ttl_cache import ShortTTLCache
 from app.lib.api_client import supabase_admin
 from app.models.internal_task import InternalTaskStatus
 from app.models.manuscript import ManuscriptStatus, normalize_status
@@ -31,6 +32,15 @@ EDITOR_SCOPE_COMPAT_ROLES = [
 router = APIRouter(tags=["Editor Command Center"])
 _AUTH_PROFILE_FALLBACK_TTL_SEC = 60 * 5
 _auth_profile_fallback_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_DETAIL_HEAVY_BLOCK_CACHE_TTL_SEC = 12.0
+_detail_heavy_block_cache = ShortTTLCache[dict[str, Any]](max_entries=1024)
+_REVISION_QUERY_VARIANTS: list[tuple[str, str]] = [
+    ("updated_at", "id,response_letter,submitted_at,updated_at,round"),
+    ("created_at", "id,response_letter,submitted_at,created_at,round"),
+    ("created_at", "id,response_letter,created_at"),
+]
+_REVISION_VARIANT_CACHE_TTL_SEC = 60 * 10
+_revision_variant_cache: tuple[float, int] | None = None
 
 
 def _get_cached_auth_profile(uid: str) -> tuple[bool, dict[str, Any] | None]:
@@ -47,6 +57,97 @@ def _get_cached_auth_profile(uid: str) -> tuple[bool, dict[str, Any] | None]:
 
 def _set_cached_auth_profile(uid: str, profile: dict[str, Any] | None) -> None:
     _auth_profile_fallback_cache[uid] = (time() + _AUTH_PROFILE_FALLBACK_TTL_SEC, profile)
+
+
+def _is_force_refresh_request(request: Request) -> bool:
+    token = str(request.headers.get("x-sf-force-refresh") or "").strip().lower()
+    return token in {"1", "true", "yes", "on"}
+
+
+def _editor_detail_data_source_marker() -> str:
+    # 避免测试 monkeypatch supabase_admin 时命中旧缓存。
+    return f"db_client={id(supabase_admin)}"
+
+
+def _is_schema_compat_error(error: Exception) -> bool:
+    lowered = str(error).lower()
+    return "schema cache" in lowered or "column" in lowered or "pgrst" in lowered
+
+
+def _get_cached_revision_variant_index() -> int:
+    cached = _revision_variant_cache
+    if not cached:
+        return 0
+    expires_at, idx = cached
+    if expires_at <= time():
+        return 0
+    if idx < 0 or idx >= len(_REVISION_QUERY_VARIANTS):
+        return 0
+    return int(idx)
+
+
+def _set_cached_revision_variant_index(idx: int) -> None:
+    global _revision_variant_cache
+    safe_idx = int(idx)
+    if safe_idx < 0 or safe_idx >= len(_REVISION_QUERY_VARIANTS):
+        safe_idx = 0
+    _revision_variant_cache = (time() + _REVISION_VARIANT_CACHE_TTL_SEC, safe_idx)
+
+
+def _load_revision_response_snapshot(manuscript_id: str) -> dict[str, Any]:
+    snapshot: dict[str, Any] = {
+        "latest_author_response_letter": None,
+        "latest_author_response_submitted_at": None,
+        "latest_author_response_round": None,
+        "author_response_history": [],
+    }
+    preferred_idx = _get_cached_revision_variant_index()
+    variant_indices = [preferred_idx] + [i for i in range(len(_REVISION_QUERY_VARIANTS)) if i != preferred_idx]
+
+    for idx in variant_indices:
+        order_key, select_clause = _REVISION_QUERY_VARIANTS[idx]
+        try:
+            revision_resp = (
+                supabase_admin.table("revisions")
+                .select(select_clause)
+                .eq("manuscript_id", manuscript_id)
+                .order(order_key, desc=True)
+                .limit(30)
+                .execute()
+            )
+            revision_rows = getattr(revision_resp, "data", None) or []
+            for row in revision_rows:
+                response_letter = str(row.get("response_letter") or "").strip()
+                if not response_letter:
+                    continue
+                submitted_at = row.get("submitted_at") or row.get("updated_at") or row.get("created_at")
+                round_value = row.get("round")
+                try:
+                    round_value = int(round_value) if round_value is not None else None
+                except Exception:
+                    round_value = None
+
+                snapshot["author_response_history"].append(
+                    {
+                        "id": row.get("id"),
+                        "response_letter": response_letter,
+                        "submitted_at": submitted_at,
+                        "round": round_value,
+                    }
+                )
+                if snapshot["latest_author_response_letter"] is None:
+                    snapshot["latest_author_response_letter"] = response_letter
+                    snapshot["latest_author_response_submitted_at"] = submitted_at
+                    snapshot["latest_author_response_round"] = round_value
+            _set_cached_revision_variant_index(idx)
+            break
+        except Exception as e:
+            if _is_schema_compat_error(e):
+                continue
+            print(f"[Revisions] load latest response letter failed (ignored): {e}")
+            break
+
+    return snapshot
 
 
 def _load_manuscript_or_404(manuscript_id: str) -> dict[str, Any]:
@@ -153,8 +254,10 @@ def _authorize_manuscript_detail_access(
 
 @router.get("/manuscripts/{id}")
 async def get_editor_manuscript_detail(
+    request: Request,
     id: str,
     skip_cards: bool = Query(False, description="首屏详情是否跳过统计卡片计算"),
+    include_heavy: bool = Query(False, description="在 skip_cards=true 时是否补齐 files/invites/revisions 等重区块"),
     current_user: dict = Depends(get_current_user),
     profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES + ["owner"])),
 ):
@@ -177,6 +280,12 @@ async def get_editor_manuscript_detail(
     def _mark(name: str, t_start: float) -> None:
         timings[name] = round((perf_counter() - t_start) * 1000, 1)
 
+    force_refresh = _is_force_refresh_request(request)
+    # 轻量详情模式：skip_cards=true 时默认跳过重查询。
+    # include_heavy=true 可用于前端二次补拉（不阻塞首屏）。
+    load_heavy_blocks = (not skip_cards) or bool(include_heavy)
+    ms["is_deferred_context_loaded"] = bool(load_heavy_blocks)
+
     # 票据/支付状态（容错：没有 invoice 也不应 500）
     invoice = None
     t0 = perf_counter()
@@ -194,97 +303,114 @@ async def get_editor_manuscript_detail(
     _mark("invoice", t0)
     ms["invoice"] = invoice
 
-    # Feature 033: 内部文件（cover letter / editor peer review attachments）
+    # 重区块上下文（files/reviewer invites/revisions）：
+    # - 首屏轻量请求默认跳过；
+    # - include_heavy=true 或 skip_cards=false 时加载；
+    # - 用短缓存削峰，并允许 x-sf-force-refresh 强制绕过。
     mf_rows: list[dict[str, Any]] = []
-    t0 = perf_counter()
-    try:
-        mf = (
-            supabase_admin.table("manuscript_files")
-            .select("id,file_type,bucket,path,original_filename,content_type,created_at,uploaded_by")
-            .eq("manuscript_id", id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        mf_rows = getattr(mf, "data", None) or []
-    except Exception as e:
-        # 中文注释: 云端未应用 migration 时不应导致详情页 500
-        if not _is_missing_table_error(str(e)):
-            print(f"[ManuscriptFiles] load manuscript_files failed (ignored): {e}")
-    _mark("manuscript_files", t0)
-
-    # 审稿报告（用于附件 + submitted_at 聚合），尽量复用同一查询结果，避免重复打 DB。
     rr_rows: list[dict[str, Any]] = []
-    t0 = perf_counter()
-    try:
-        rr = (
-            supabase_admin.table("review_reports")
-            .select("id,reviewer_id,attachment_path,created_at,status")
-            .eq("manuscript_id", id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        rr_rows = getattr(rr, "data", None) or []
-    except Exception as e:
-        print(f"[ReviewReports] load failed (ignored): {e}")
-    _mark("review_reports", t0)
-
-    # 作者最近一次修回说明（Response Letter），用于 editor 详情页快速查看。
+    ra_rows: list[dict[str, Any]] = []
     ms["latest_author_response_letter"] = None
     ms["latest_author_response_submitted_at"] = None
     ms["latest_author_response_round"] = None
     ms["author_response_history"] = []
-    # 中文注释:
-    # - 云端历史 schema 可能无 revisions.updated_at，仅有 created_at；
-    # - 这里按“排序列 + select”双重降级，确保 response_letter 可回显。
-    t0 = perf_counter()
-    revision_query_variants = [
-        ("updated_at", "id,response_letter,submitted_at,updated_at,round"),
-        ("created_at", "id,response_letter,submitted_at,created_at,round"),
-        ("created_at", "id,response_letter,created_at"),
-    ]
-    for order_key, select_clause in revision_query_variants:
-        try:
-            revision_resp = (
-                supabase_admin.table("revisions")
-                .select(select_clause)
-                .eq("manuscript_id", id)
-                .order(order_key, desc=True)
-                .limit(30)
-                .execute()
-            )
-            revision_rows = getattr(revision_resp, "data", None) or []
-            for row in revision_rows:
-                response_letter = str(row.get("response_letter") or "").strip()
-                if not response_letter:
-                    continue
-                submitted_at = row.get("submitted_at") or row.get("updated_at") or row.get("created_at")
-                round_value = row.get("round")
-                try:
-                    round_value = int(round_value) if round_value is not None else None
-                except Exception:
-                    round_value = None
-
-                ms["author_response_history"].append(
-                    {
-                        "id": row.get("id"),
-                        "response_letter": response_letter,
-                        "submitted_at": submitted_at,
-                        "round": round_value,
-                    }
+    if load_heavy_blocks:
+        heavy_cache_key = f"mid={id}|{_editor_detail_data_source_marker()}"
+        heavy_ctx: dict[str, Any] | None = None
+        t0 = perf_counter()
+        if not force_refresh:
+            heavy_ctx = _detail_heavy_block_cache.get(heavy_cache_key)
+        if heavy_ctx is not None:
+            _mark("heavy_ctx_cache", t0)
+            mf_rows = list(heavy_ctx.get("manuscript_files") or [])
+            rr_rows = list(heavy_ctx.get("review_reports") or [])
+            ra_rows = list(heavy_ctx.get("review_assignments") or [])
+            ms["latest_author_response_letter"] = heavy_ctx.get("latest_author_response_letter")
+            ms["latest_author_response_submitted_at"] = heavy_ctx.get("latest_author_response_submitted_at")
+            ms["latest_author_response_round"] = heavy_ctx.get("latest_author_response_round")
+            ms["author_response_history"] = list(heavy_ctx.get("author_response_history") or [])
+            timings["manuscript_files"] = 0.0
+            timings["review_reports"] = 0.0
+            timings["revisions"] = 0.0
+            timings["review_assignments"] = 0.0
+        else:
+            _mark("heavy_ctx_cache", t0)
+            # Feature 033: 内部文件（cover letter / editor peer review attachments）
+            t0 = perf_counter()
+            try:
+                mf = (
+                    supabase_admin.table("manuscript_files")
+                    .select("id,file_type,bucket,path,original_filename,content_type,created_at,uploaded_by")
+                    .eq("manuscript_id", id)
+                    .order("created_at", desc=True)
+                    .execute()
                 )
+                mf_rows = getattr(mf, "data", None) or []
+            except Exception as e:
+                # 中文注释: 云端未应用 migration 时不应导致详情页 500
+                if not _is_missing_table_error(str(e)):
+                    print(f"[ManuscriptFiles] load manuscript_files failed (ignored): {e}")
+            _mark("manuscript_files", t0)
 
-                if ms["latest_author_response_letter"] is None:
-                    ms["latest_author_response_letter"] = response_letter
-                    ms["latest_author_response_submitted_at"] = submitted_at
-                    ms["latest_author_response_round"] = round_value
-            break
-        except Exception as e:
-            lowered = str(e).lower()
-            if "schema cache" in lowered or "column" in lowered or "pgrst" in lowered:
-                continue
-            print(f"[Revisions] load latest response letter failed (ignored): {e}")
-            break
-    _mark("revisions", t0)
+            # 审稿报告（用于附件 + submitted_at 聚合），尽量复用同一查询结果，避免重复打 DB。
+            t0 = perf_counter()
+            try:
+                rr = (
+                    supabase_admin.table("review_reports")
+                    .select("id,reviewer_id,attachment_path,created_at,status")
+                    .eq("manuscript_id", id)
+                    .order("created_at", desc=True)
+                    .execute()
+                )
+                rr_rows = getattr(rr, "data", None) or []
+            except Exception as e:
+                print(f"[ReviewReports] load failed (ignored): {e}")
+            _mark("review_reports", t0)
+
+            # 作者最近一次修回说明（Response Letter）
+            t0 = perf_counter()
+            revision_snapshot = _load_revision_response_snapshot(id)
+            ms["latest_author_response_letter"] = revision_snapshot.get("latest_author_response_letter")
+            ms["latest_author_response_submitted_at"] = revision_snapshot.get("latest_author_response_submitted_at")
+            ms["latest_author_response_round"] = revision_snapshot.get("latest_author_response_round")
+            ms["author_response_history"] = list(revision_snapshot.get("author_response_history") or [])
+            _mark("revisions", t0)
+
+            # Reviewer 邀请时间线
+            t0 = perf_counter()
+            try:
+                ra_resp = (
+                    supabase_admin.table("review_assignments")
+                    .select(
+                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,decline_reason,decline_note,created_at"
+                    )
+                    .eq("manuscript_id", id)
+                    .order("created_at", desc=True)
+                    .execute()
+                )
+                ra_rows = getattr(ra_resp, "data", None) or []
+            except Exception as e:
+                print(f"[ReviewerInvites] load failed (ignored): {e}")
+            _mark("review_assignments", t0)
+
+            _detail_heavy_block_cache.set(
+                heavy_cache_key,
+                {
+                    "manuscript_files": mf_rows,
+                    "review_reports": rr_rows,
+                    "review_assignments": ra_rows,
+                    "latest_author_response_letter": ms.get("latest_author_response_letter"),
+                    "latest_author_response_submitted_at": ms.get("latest_author_response_submitted_at"),
+                    "latest_author_response_round": ms.get("latest_author_response_round"),
+                    "author_response_history": ms.get("author_response_history") or [],
+                },
+                ttl_sec=_DETAIL_HEAVY_BLOCK_CACHE_TTL_SEC,
+            )
+    else:
+        timings["manuscript_files"] = 0.0
+        timings["review_reports"] = 0.0
+        timings["revisions"] = 0.0
+        timings["review_assignments"] = 0.0
 
     # 预审时间线
     tl_rows: list[dict[str, Any]] = []
@@ -303,24 +429,6 @@ async def get_editor_manuscript_detail(
         except Exception as e:
             print(f"[PrecheckTimeline] load failed (ignored): {e}")
     _mark("status_logs", t0)
-
-    # Reviewer 邀请时间线
-    ra_rows: list[dict[str, Any]] = []
-    t0 = perf_counter()
-    try:
-        ra_resp = (
-            supabase_admin.table("review_assignments")
-            .select(
-                "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,decline_reason,decline_note,created_at"
-            )
-            .eq("manuscript_id", id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        ra_rows = getattr(ra_resp, "data", None) or []
-    except Exception as e:
-        print(f"[ReviewerInvites] load failed (ignored): {e}")
-    _mark("review_assignments", t0)
 
     # Feature 045: 稿件级任务逾期摘要（详情页右侧摘要使用）
     ms["task_summary"] = {

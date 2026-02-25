@@ -115,7 +115,7 @@ export default function ReviewerAssignModal({
     try {
       // 中文注释：不能使用公开 articles 接口读取 owner（未发表稿件会 404）。
       // 统一走 editor 私有详情接口，确保 Assign Reviewer 弹窗能读到已绑定 owner。
-      const payload = await EditorApi.getManuscriptDetail(manuscriptId)
+      const payload = await EditorApi.getManuscriptDetail(manuscriptId, { skipCards: true })
       const ms = payload?.data || {}
       const raw = ms?.owner_id || ms?.owner?.id || ms?.kpi_owner_id || ''
       setOwnerId(typeof raw === 'string' ? raw : raw ? String(raw) : '')

@@ -116,11 +116,17 @@ type ProcessFetchOptions = CachedGetOptions & {
   signal?: AbortSignal
 }
 
+type ManuscriptDetailGetOptions = CachedGetOptions & {
+  skipCards?: boolean
+  includeHeavy?: boolean
+}
+
 const GET_CACHE_TTL_MS = 8_000
 const REVIEWER_LIBRARY_CACHE_TTL_MS = 20_000
 const AE_WORKSPACE_CACHE_TTL_MS = 15_000
 const MANAGING_WORKSPACE_CACHE_TTL_MS = 15_000
 const PROCESS_CACHE_TTL_MS = 12_000
+const DETAIL_CACHE_TTL_MS = 10_000
 const getJsonCache = new Map<string, { expiresAt: number; data: unknown }>()
 const getJsonInflight = new Map<string, Promise<unknown>>()
 const reviewerSearchCache = new Map<string, { expiresAt: number; data: unknown }>()
@@ -131,10 +137,18 @@ const managingWorkspaceCache = new Map<string, { expiresAt: number; data: unknow
 const managingWorkspaceInflight = new Map<string, Promise<unknown>>()
 const processRowsCache = new Map<string, { expiresAt: number; data: unknown }>()
 const processRowsInflight = new Map<string, Promise<unknown>>()
+const detailCache = new Map<string, { expiresAt: number; data: unknown }>()
+const detailInflight = new Map<string, Promise<unknown>>()
 
 function invalidateProcessRowsCache() {
   processRowsCache.clear()
   processRowsInflight.clear()
+}
+
+function buildDetailCacheKey(manuscriptId: string, options: ManuscriptDetailGetOptions): string {
+  const skipCards = options.skipCards ? '1' : '0'
+  const includeHeavy = options.includeHeavy ? '1' : '0'
+  return `detail|ms=${encodeURIComponent(manuscriptId)}|skipCards=${skipCards}|includeHeavy=${includeHeavy}`
 }
 
 function invalidateGetJsonCache(predicate: (key: string) => boolean) {
@@ -152,8 +166,18 @@ function invalidateManuscriptInternalCache(manuscriptId: string) {
     key.startsWith(`${base}/comments`) ||
     key.startsWith(`${base}/tasks`) ||
     key.startsWith(`${base}/audit-logs`) ||
-    key.startsWith(`${base}/timeline-context`)
+      key.startsWith(`${base}/timeline-context`)
   )
+}
+
+function invalidateManuscriptDetailCache(manuscriptId: string) {
+  const prefix = `detail|ms=${encodeURIComponent(manuscriptId)}|`
+  for (const key of Array.from(detailCache.keys())) {
+    if (key.startsWith(prefix)) detailCache.delete(key)
+  }
+  for (const key of Array.from(detailInflight.keys())) {
+    if (key.startsWith(prefix)) detailInflight.delete(key)
+  }
 }
 
 async function authedGetJsonCached<T = any>(url: string, options: CachedGetOptions = {}): Promise<T> {
@@ -337,7 +361,10 @@ export const EditorApi = {
       body: JSON.stringify(payload),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -348,7 +375,10 @@ export const EditorApi = {
       body: JSON.stringify(payload),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -447,7 +477,10 @@ export const EditorApi = {
       body: JSON.stringify(payload),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -474,7 +507,10 @@ export const EditorApi = {
       body: JSON.stringify(payload),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -525,12 +561,43 @@ export const EditorApi = {
     }
   },
 
-  async getManuscriptDetail(manuscriptId: string, options?: { skipCards?: boolean }) {
+  async getManuscriptDetail(manuscriptId: string, options: ManuscriptDetailGetOptions = {}) {
     const params = new URLSearchParams()
     if (options?.skipCards) params.set('skip_cards', 'true')
+    if (options?.includeHeavy) params.set('include_heavy', 'true')
     const qs = params.toString()
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}${qs ? `?${qs}` : ''}`)
-    return res.json()
+    const url = `/api/v1/editor/manuscripts/${manuscriptId}${qs ? `?${qs}` : ''}`
+    const cacheKey = buildDetailCacheKey(manuscriptId, options)
+    const ttlMs = options.ttlMs ?? DETAIL_CACHE_TTL_MS
+    const force = Boolean(options.force)
+    const now = Date.now()
+    if (!force) {
+      const cached = detailCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) return cached.data
+      const inflight = detailInflight.get(cacheKey)
+      if (inflight) return inflight
+    }
+    const requestPromise = (async () => {
+      const res = await authedFetch(url, {
+        headers: force ? { 'x-sf-force-refresh': '1' } : undefined,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        detailCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    detailInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (detailInflight.get(cacheKey) === requestPromise) {
+        detailInflight.delete(cacheKey)
+      }
+    }
   },
 
   async getManuscriptCardsContext(manuscriptId: string, options?: CachedGetOptions) {
@@ -586,7 +653,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async updateProductionCycleEditors(manuscriptId: string, cycleId: string, payload: ProductionCycleEditorsUpdatePayload) {
@@ -598,7 +667,9 @@ export const EditorApi = {
         body: JSON.stringify(payload),
       }
     )
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async uploadProductionGalley(
@@ -617,7 +688,9 @@ export const EditorApi = {
         body: formData,
       }
     )
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async getProductionGalleySignedUrl(manuscriptId: string, cycleId: string) {
@@ -634,7 +707,9 @@ export const EditorApi = {
         method: 'POST',
       }
     )
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async listMyProductionQueue(limit = 50) {
@@ -651,7 +726,10 @@ export const EditorApi = {
       body: JSON.stringify({ status, comment }),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -660,14 +738,18 @@ export const EditorApi = {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/advance`, {
       method: 'POST',
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async revertProduction(manuscriptId: string) {
     const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/revert`, {
       method: 'POST',
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async confirmInvoicePaid(
@@ -686,7 +768,9 @@ export const EditorApi = {
         source: payload?.source || 'unknown',
       }),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async updateInvoiceInfo(
@@ -698,7 +782,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async bindOwner(manuscriptId: string, ownerId: string) {
@@ -708,7 +794,10 @@ export const EditorApi = {
       body: JSON.stringify({ owner_id: ownerId }),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -720,7 +809,10 @@ export const EditorApi = {
       body: JSON.stringify(payload),
     })
     const json = await res.json()
-    if (res.ok) invalidateProcessRowsCache()
+    if (res.ok) {
+      invalidateProcessRowsCache()
+      invalidateManuscriptDetailCache(manuscriptId)
+    }
     return json
   },
 
@@ -732,7 +824,9 @@ export const EditorApi = {
       method: 'POST',
       body: formData,
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   async uploadCoverLetterFile(manuscriptId: string, file: File) {
@@ -742,7 +836,9 @@ export const EditorApi = {
       method: 'POST',
       body: formData,
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+    return json
   },
 
   // Feature 030: Reviewer Library

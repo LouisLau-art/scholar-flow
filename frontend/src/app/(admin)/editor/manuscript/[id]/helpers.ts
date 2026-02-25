@@ -6,6 +6,7 @@ import { filterFilesByType, type ManuscriptFile } from './utils'
 
 export type ManuscriptDetail = {
   id: string
+  is_deferred_context_loaded?: boolean | null
   title?: string | null
   abstract?: string | null
   status?: string | null
