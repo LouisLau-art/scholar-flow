@@ -5,6 +5,7 @@ import { EditorApi } from '@/services/editorApi';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search } from 'lucide-react';
 
 type InternalStaffOption = { id: string; email?: string | null; full_name?: string | null; roles?: string[] | null };
@@ -144,15 +145,21 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
     : owners;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Assign Assistant Editor</h2>
-        
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assign Assistant Editor</DialogTitle>
+          <DialogDescription>
+            Assign AE and optional owner for this manuscript.
+          </DialogDescription>
+        </DialogHeader>
+
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Search AE</label>
+          <label htmlFor="assign-ae-search" className="block text-sm font-medium text-gray-700 mb-1">Search AE</label>
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
+              id="assign-ae-search"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="输入姓名或邮箱过滤"
@@ -168,10 +175,10 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             disabled={isSubmitting}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder={isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'} />
+              <SelectValue placeholder={isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors… --' : '-- Select --'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__empty">{isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors... --' : '-- Select --'}</SelectItem>
+              <SelectItem value="__empty">{isLoadingAEs && aes.length === 0 ? '-- Loading assistant editors… --' : '-- Select --'}</SelectItem>
               {filteredAes.map(ae => (
                 <SelectItem key={ae.id} value={ae.id}>
                   {ae.full_name || ae.email || ae.id}
@@ -182,7 +189,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
           {!isLoadingAEs && filteredAes.length === 0 ? (
             <div className="mt-2 text-xs text-gray-500">没有匹配的 AE，请调整搜索关键词。</div>
           ) : null}
-          {isLoadingAEs ? <div className="mt-2 text-xs text-gray-500">Loading assistant editors...</div> : null}
+          {isLoadingAEs ? <div className="mt-2 text-xs text-gray-500">Loading assistant editors…</div> : null}
           {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
           <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
             分配后将自动进入 <code>under_review</code>。Owner 可选：不选则默认绑定为当前 ME（仅开发/UAT 提速）。
@@ -190,10 +197,11 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Select Owner (Optional)</label>
+          <label htmlFor="assign-owner-search" className="block text-sm font-medium text-gray-700 mb-1">Select Owner (Optional)</label>
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
+              id="assign-owner-search"
               value={ownerSearchText}
               onChange={(e) => setOwnerSearchText(e.target.value)}
               placeholder="输入姓名或邮箱过滤 Owner"
@@ -207,10 +215,10 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             disabled={isSubmitting || isLoadingOwners}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder={isLoadingOwners && owners.length === 0 ? '-- Loading owners... --' : '-- Optional --'} />
+              <SelectValue placeholder={isLoadingOwners && owners.length === 0 ? '-- Loading owners… --' : '-- Optional --'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__empty">{isLoadingOwners && owners.length === 0 ? '-- Loading owners... --' : '-- Optional --'}</SelectItem>
+              <SelectItem value="__empty">{isLoadingOwners && owners.length === 0 ? '-- Loading owners… --' : '-- Optional --'}</SelectItem>
               {filteredOwners.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name || u.email || u.id}
@@ -232,10 +240,10 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             onClick={handleAssign}
             disabled={!selectedAE || isSubmitting || isLoadingAEs}
           >
-            {isSubmitting ? 'Assigning...' : 'Assign'}
+            {isSubmitting ? 'Assigning…' : 'Assign'}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

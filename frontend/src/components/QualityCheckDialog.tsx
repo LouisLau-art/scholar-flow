@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface QCProps {
@@ -32,10 +33,14 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-2xl ring-1 ring-slate-200">
-        <h2 className="font-serif text-2xl font-bold text-slate-900">Quality Check</h2>
-        <p className="mt-2 text-slate-500 text-sm">Review the manuscript and assign responsibility.</p>
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-w-md p-8">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-2xl">Quality Check</DialogTitle>
+          <DialogDescription>
+            Review the manuscript and assign responsibility.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="mt-8 space-y-6">
           {/* 通过/拒绝按钮 */}
@@ -78,7 +83,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
           </div>
         </div>
 
-        <div className="mt-10 flex gap-3">
+        <DialogFooter className="mt-10 flex gap-3">
           <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
             Cancel
           </Button>
@@ -90,8 +95,8 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
           >
             Submit Review
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

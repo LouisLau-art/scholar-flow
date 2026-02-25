@@ -6,6 +6,7 @@ import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import { authService } from "@/services/auth"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/FileUpload"
 
@@ -144,9 +145,8 @@ function ReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-[720px] rounded-3xl bg-white p-6 sm:p-8 shadow-2xl min-h-[600px] max-h-[92vh] overflow-y-auto">
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="w-full max-w-[720px] min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 [&>button]:hidden">
         <div className="mb-6">
           <h4 className="font-serif text-2xl">Structured Peer Review</h4>
           <p className="text-sm text-slate-500">
@@ -271,8 +271,8 @@ function ReviewModal({
             Submit Decision <Send className="ml-2 h-4 w-4" />
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -414,7 +414,7 @@ export default function ReviewerDashboard() {
                 className="gap-2"
                 disabled={openingAssignmentId === task.id}
               >
-                <Star className="h-4 w-4" /> {openingAssignmentId === task.id ? "Opening..." : "Start Review"}
+                <Star className="h-4 w-4" /> {openingAssignmentId === task.id ? "Opening…" : "Start Review"}
               </Button>
             </div>
             </div>
@@ -422,10 +422,8 @@ export default function ReviewerDashboard() {
         </div>
       )}
 
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={handleClosePreview} />
-          <div className="relative w-full max-w-5xl rounded-3xl bg-white p-6 sm:p-8 shadow-2xl h-[80vh] max-h-[90vh] flex flex-col">
+      <Dialog open={isPreviewOpen} onOpenChange={(open) => (!open ? handleClosePreview() : undefined)}>
+        <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8 flex flex-col [&>button]:hidden">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h4 className="font-serif text-2xl text-slate-900">Full Text Preview</h4>
@@ -443,7 +441,7 @@ export default function ReviewerDashboard() {
             <div className="mt-6 flex-1 min-h-0 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
               {previewLoading ? (
                 <div className="h-full flex items-center justify-center text-slate-500 font-medium">
-                  Loading preview...
+                  Loading preview…
                 </div>
               ) : previewUrl ? (
                 <iframe src={previewUrl} className="w-full h-full border-0" title="PDF Preview" />
@@ -457,9 +455,8 @@ export default function ReviewerDashboard() {
               )}
             </div>
             <p className="mt-4 text-xs text-slate-400">Preview links expire in 5 minutes.</p>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {isModalOpen && selectedTask && (
         <ReviewModal

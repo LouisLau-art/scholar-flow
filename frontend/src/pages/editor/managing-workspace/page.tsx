@@ -311,7 +311,7 @@ export default function ManagingWorkspacePage() {
           {isRefreshing && !loading ? (
             <div className="flex items-center justify-end gap-2 text-xs text-slate-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Syncing latest workspace data...
+              Syncing latest workspace data…
             </div>
           ) : null}
 

@@ -52,7 +52,12 @@ export default function DOITasksPage() {
             >
               Failed Tasks
             </Button>
-            <Button variant="outline" size="icon" onClick={loadTasks}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={loadTasks}
+              aria-label="Refresh DOI tasks"
+            >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>

@@ -320,7 +320,7 @@ export function ReviewerFeedbackSummaryCard({
         ) : reviewsLoading ? (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading reviewer feedback...
+            Loading reviewer feedback…
           </div>
         ) : reviewsError ? (
           <div className="space-y-2">

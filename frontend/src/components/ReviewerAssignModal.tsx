@@ -8,6 +8,7 @@ import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type InvitePolicyHit = {
@@ -526,13 +527,11 @@ export default function ReviewerAssignModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="reviewer-modal">
-        <div
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
-        />
-
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+        <DialogContent
+          className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white p-0 shadow-2xl flex flex-col [&>button]:hidden"
+          data-testid="reviewer-modal"
+        >
           <div className="flex items-center justify-between p-6 border-b border-slate-200">
             <div className="flex items-center gap-3">
               <Users className="h-6 w-6 text-blue-600" />
@@ -890,14 +889,14 @@ export default function ReviewerAssignModal({
               data-testid="reviewer-assign"
             >
                {isSubmitting
-                ? 'Assigning...'
+                ? 'Assigning…'
                 : `Assign ${selectedReviewers.length || ''} Reviewer${selectedReviewers.length === 1 ? '' : 's'}${
                     selectedOverrideReviewers.length ? ` (${selectedOverrideReviewers.length} override)` : ''
                   }`}
             </button>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 自定义确认弹窗：替代浏览器 confirm() */}
       {pendingRemove && (

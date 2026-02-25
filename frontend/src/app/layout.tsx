@@ -7,6 +7,7 @@ import QueryProvider from '@/components/providers/QueryProvider'
 import { ConditionalSiteFooter } from '@/components/layout/ConditionalSiteFooter'
 
 import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'
+import { ThemeProvider } from '@/components/providers/ThemeProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -74,17 +75,24 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ErrorBoundary>
-          <QueryProvider>
-            <EnvironmentProvider>
-              {children}
-            </EnvironmentProvider>
-          </QueryProvider>
-        </ErrorBoundary>
-        <ConditionalSiteFooter />
-        <Toast />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ErrorBoundary>
+            <QueryProvider>
+              <EnvironmentProvider>
+                {children}
+              </EnvironmentProvider>
+            </QueryProvider>
+          </ErrorBoundary>
+          <ConditionalSiteFooter />
+          <Toast />
+        </ThemeProvider>
       </body>
     </html>
   )
