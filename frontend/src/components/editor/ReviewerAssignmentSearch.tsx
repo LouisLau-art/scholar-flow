@@ -1,10 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import ReviewerAssignModal from '@/components/ReviewerAssignModal'
 import { authService } from '@/services/auth'
+
+const ReviewerAssignModal = dynamic(() => import('@/components/ReviewerAssignModal'), {
+  ssr: false,
+})
 
 export function ReviewerAssignmentSearch(props: {
   manuscriptId: string
