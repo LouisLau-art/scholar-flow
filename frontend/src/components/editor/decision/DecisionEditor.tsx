@@ -234,18 +234,18 @@ export function DecisionEditor({
   }
 
   return (
-    <aside className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Decision Letter</h2>
-      <p className="mt-1 text-xs text-slate-500">
+    <aside className="rounded-lg border border-border bg-card p-4">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Decision Letter</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
         Draft content and attachments remain private until <strong>Submit Final Decision</strong>.
       </p>
       {!canSubmitFinal ? (
-        <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        <p className="mt-1 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
           当前账号仅可记录 First Decision 草稿；Final Decision 需由 Editor-in-Chief/Admin 提交。
         </p>
       ) : null}
       {canSubmitFinal && !canSubmitFinalNow ? (
-        <div className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">
+        <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
           <div className="font-semibold">Final submission blocked</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             {decisionSpecificBlockingReasons.map((reason) => (
@@ -257,7 +257,7 @@ export function DecisionEditor({
 
       <div className="mt-4 space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Decision</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Decision</label>
           <Select
             value={decision}
             onValueChange={(value) => setDecision(value as FinalDecision)}
@@ -277,12 +277,12 @@ export function DecisionEditor({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Letter Content (Markdown)</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Letter Content (Markdown)</label>
             <button
               type="button"
               onClick={handleGenerateDraft}
               disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-60"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:opacity-60"
             >
               <WandSparkles className="h-3.5 w-3.5" />
               Generate Letter Draft
@@ -293,28 +293,28 @@ export function DecisionEditor({
             value={content}
             onChange={(event) => setContent(event.target.value)}
             disabled={isReadOnly}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm leading-6"
+            className="w-full rounded-md border border-border px-3 py-2 font-mono text-sm leading-6"
             placeholder="Write decision letter..."
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Attachments</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Attachments</label>
           <input
             type="file"
             disabled={isReadOnly || isUploading || !canEditDraft}
             onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-slate-600"
+            className="block w-full text-xs text-muted-foreground"
           />
           {attachments.length > 0 ? (
-            <ul className="mt-2 space-y-1 text-xs text-slate-600">
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
               {attachments.map((item) => (
                 <li key={item.ref} className="flex items-center justify-between gap-2">
                   <span className="truncate">{item.name}</span>
                   <button
                     type="button"
                     onClick={() => void openAttachment(item.id)}
-                    className="shrink-0 font-semibold text-blue-600 hover:underline"
+                    className="shrink-0 font-semibold text-primary hover:underline"
                   >
                     Open
                   </button>
@@ -322,9 +322,9 @@ export function DecisionEditor({
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-xs text-slate-500">No attachment uploaded.</p>
+            <p className="mt-2 text-xs text-muted-foreground">No attachment uploaded.</p>
           )}
-          {isUploading ? <Loader2 className="mt-2 h-4 w-4 animate-spin text-slate-500" /> : null}
+          {isUploading ? <Loader2 className="mt-2 h-4 w-4 animate-spin text-muted-foreground" /> : null}
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -332,7 +332,7 @@ export function DecisionEditor({
             type="button"
             onClick={() => void submit(false)}
             disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
           >
             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save Draft
@@ -341,7 +341,7 @@ export function DecisionEditor({
             type="button"
             onClick={() => void submit(true)}
             disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmitFinalNow}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
             {isSubmittingFinal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Submit Final Decision

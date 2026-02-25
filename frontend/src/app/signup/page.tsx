@@ -39,28 +39,28 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col justify-center bg-muted/30 py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="flex justify-center mb-6">
-          <div className="bg-blue-600 p-2 rounded-xl text-white">
+          <div className="rounded-xl bg-primary p-2 text-primary-foreground">
             <UserPlus className="h-8 w-8" />
           </div>
         </div>
-        <h2 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">
+        <h2 className="text-3xl font-serif font-bold tracking-tight text-foreground">
           Join ScholarFlow
         </h2>
-        <p className="mt-2 text-sm text-slate-500 font-medium">
+        <p className="mt-2 text-sm font-medium text-muted-foreground">
           Start your journey in open science publishing.
         </p>
       </div>
 
       <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]">
-        <div className="bg-white px-6 py-12 shadow-2xl shadow-slate-200 sm:rounded-3xl sm:px-12 border border-slate-100">
+        <div className="border border-border bg-card px-6 py-12 shadow-2xl sm:rounded-3xl sm:px-12">
           <form className="space-y-6" onSubmit={handleSignup}>
             <div>
-              <label htmlFor="signup-email" className="block text-sm font-bold text-slate-900">University Email</label>
+              <label htmlFor="signup-email" className="block text-sm font-bold text-foreground">University Email</label>
               <div className="mt-2 relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   id="signup-email"
                   type="email"
@@ -68,16 +68,16 @@ export default function SignupPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm transition-all"
+                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
                   placeholder="name@university.edu"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="signup-password" className="block text-sm font-bold text-slate-900">Create Password</label>
+              <label htmlFor="signup-password" className="block text-sm font-bold text-foreground">Create Password</label>
               <div className="mt-2 relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   id="signup-password"
                   type="password"
@@ -85,16 +85,16 @@ export default function SignupPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm transition-all"
+                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
                 />
               </div>
-              <p className="mt-2 text-xs text-slate-400">At least 8 characters with numbers and symbols.</p>
+              <p className="mt-2 text-xs text-muted-foreground">At least 8 characters with numbers and symbols.</p>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full justify-center items-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-sm font-bold leading-6 text-white shadow-lg hover:bg-blue-500 transition-all disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Create Account'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}
@@ -103,15 +103,15 @@ export default function SignupPage() {
 
           <div className="mt-10">
             <div className="relative">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
               <div className="relative flex justify-center text-sm font-medium leading-6">
-                <span className="bg-white px-6 text-slate-400 font-bold uppercase tracking-widest text-[10px]">Already have an account?</span>
+                <span className="bg-card px-6 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Already have an account?</span>
               </div>
             </div>
             <div className="mt-6">
               <Link 
                 href="/login" 
-                className="flex w-full justify-center rounded-xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 hover:bg-slate-100 transition-all"
+                className="flex w-full justify-center rounded-xl bg-muted px-3 py-3 text-sm font-bold text-foreground shadow-sm ring-1 ring-inset ring-border transition-all hover:bg-muted/80"
               >
                 Sign In Instead
               </Link>

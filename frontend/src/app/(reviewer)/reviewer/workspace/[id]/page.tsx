@@ -84,7 +84,7 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
 
   if (!workspace) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10 text-center text-sm text-slate-600">
+      <main className="mx-auto max-w-4xl px-4 py-10 text-center text-sm text-muted-foreground">
         Workspace is unavailable for this assignment.
       </main>
     )
@@ -112,19 +112,19 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <header className="mb-5 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{manuscript.title}</h1>
+          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">{manuscript.title}</h1>
           <Badge variant="outline">Blind Review</Badge>
           <Badge variant="secondary">{String(assignment.status || 'pending')}</Badge>
           {isReadOnly ? <Badge>Submitted</Badge> : null}
         </div>
         {manuscript.abstract ? (
-          <p className="mt-3 text-sm leading-6 text-slate-600">{manuscript.abstract}</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{manuscript.abstract}</p>
         ) : (
-          <p className="mt-3 text-sm text-slate-500">No abstract available.</p>
+          <p className="mt-3 text-sm text-muted-foreground">No abstract available.</p>
         )}
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>Due: {formatDateTime(assignment.due_at)}</span>
           <span>Invited: {formatDateTime(assignment.invited_at)}</span>
           <span>Accepted: {formatDateTime(assignment.accepted_at)}</span>
@@ -168,27 +168,27 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
         <section className="space-y-6 lg:col-span-8">
           <PDFViewer pdfUrl={manuscript.pdf_url} isLoading={false} />
 
-          <Card className="border-slate-200 shadow-sm">
+          <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Communication Timeline</CardTitle>
             </CardHeader>
             <CardContent>
               {timeline.length === 0 ? (
-                <p className="text-sm text-slate-500">No communication records yet.</p>
+                <p className="text-sm text-muted-foreground">No communication records yet.</p>
               ) : (
                 <div className="max-h-[460px] space-y-3 overflow-auto pr-1">
                   {timeline.map((event) => (
-                    <div key={event.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div key={event.id} className="rounded-md border border-border bg-muted/50 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Badge variant={channelBadgeVariant(event.channel)}>{event.channel}</Badge>
-                          <span className="text-xs font-medium text-slate-700">{actorLabel(event.actor)}</span>
+                          <span className="text-xs font-medium text-foreground">{actorLabel(event.actor)}</span>
                         </div>
-                        <span className="text-xs text-slate-500">{formatDateTime(event.timestamp)}</span>
+                        <span className="text-xs text-muted-foreground">{formatDateTime(event.timestamp)}</span>
                       </div>
-                      <div className="mt-2 text-sm font-semibold text-slate-900">{event.title}</div>
+                      <div className="mt-2 text-sm font-semibold text-foreground">{event.title}</div>
                       {event.message ? (
-                        <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                           {event.message}
                         </div>
                       ) : null}
@@ -227,14 +227,14 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
             }}
           />
 
-          <Card className="border-slate-200 shadow-sm">
+          <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Review Scope</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-slate-600">
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>You can view only this assignment and its communication records.</p>
               <p>Author identity and other reviewers’ data are hidden by policy.</p>
-              <div className="pt-2 text-xs text-slate-500">
+              <div className="pt-2 text-xs text-muted-foreground">
                 If you need to revisit the invitation, please use the original email link.
               </div>
             </CardContent>

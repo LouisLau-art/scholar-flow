@@ -75,10 +75,10 @@ export function ManuscriptTable({
   const remainingRows = Math.max(rows.length - visibleRows.length, 0)
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden" data-testid="editor-process-table">
+    <div className="overflow-hidden rounded-xl border border-border bg-card" data-testid="editor-process-table">
       <Table className="table-fixed">
         <TableHeader>
-          <TableRow className="bg-slate-50/50">
+          <TableRow className="bg-muted/50">
             <TableHead className={readOnly ? 'w-[26%]' : 'w-[25%]'}>Manuscript</TableHead>
             <TableHead className={readOnly ? 'w-[35%]' : 'w-[33%]'}>Status</TableHead>
             <TableHead className={readOnly ? 'w-[15%]' : 'w-[14%]'}>Updated</TableHead>
@@ -89,7 +89,7 @@ export function ManuscriptTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={readOnly ? 4 : 5} className="py-10 text-center text-sm text-slate-500">
+              <TableCell colSpan={readOnly ? 4 : 5} className="py-10 text-center text-sm text-muted-foreground">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -107,16 +107,16 @@ export function ManuscriptTable({
               const editorLabel = r.editor?.full_name || r.editor?.email || '—'
               const showAssigneeLine = currentAssignee !== '—' && currentAssignee !== editorLabel
               return (
-                <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                <TableRow key={r.id} className="transition-colors hover:bg-muted/50">
                   <TableCell className="text-xs">
                     <Link
                       href={`/editor/manuscript/${r.id}`}
-                      className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-600 font-medium max-w-full"
+                      className="inline-flex max-w-full items-center gap-2 font-medium text-foreground hover:text-primary"
                     >
                       <span className="block min-w-0 max-w-full truncate font-mono">{r.id}</span>
                       <ArrowRight className="h-3 w-3" />
                     </Link>
-                    <p className="mt-1 truncate text-xs text-slate-500">
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
                       Journal: {r.journals?.title || (r.journals?.slug ? r.journals.slug : '—')}
                     </p>
                   </TableCell>
@@ -126,27 +126,27 @@ export function ManuscriptTable({
                         {getStatusLabel(status)}
                       </Badge>
                       {precheckLabel !== '—' ? (
-                        <p className="text-xs text-slate-500 break-words">
+                        <p className="break-words text-xs text-muted-foreground">
                           Pre-check: {precheckLabel}
                         </p>
                       ) : null}
                       {r.is_overdue ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                           Overdue
                           <span className="text-[0.7rem]">({r.overdue_tasks_count || 0})</span>
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-400">On track</span>
+                        <span className="text-xs text-muted-foreground">On track</span>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-600">{fmt(r.updated_at)}</TableCell>
-                  <TableCell className="text-sm text-slate-700">
+                  <TableCell className="text-sm text-muted-foreground">{fmt(r.updated_at)}</TableCell>
+                  <TableCell className="text-sm text-foreground">
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-xs min-w-0">
-                          <span className="text-slate-500">Owner:</span>{' '}
-                          <span className="font-medium text-slate-700">{ownerLabel}</span>
+                          <span className="text-muted-foreground">Owner:</span>{' '}
+                          <span className="font-medium text-foreground">{ownerLabel}</span>
                         </p>
                         {!readOnly ? (
                           <BindingOwnerDropdown
@@ -159,8 +159,8 @@ export function ManuscriptTable({
                       </div>
                       {showAssigneeLine ? (
                         <p className="truncate text-xs">
-                          <span className="text-slate-500">Assignee:</span>{' '}
-                          <span className="font-medium text-slate-700">{currentAssignee}</span>
+                          <span className="text-muted-foreground">Assignee:</span>{' '}
+                          <span className="font-medium text-foreground">{currentAssignee}</span>
                         </p>
                       ) : null}
                     </div>
@@ -185,7 +185,7 @@ export function ManuscriptTable({
         </TableBody>
       </Table>
       {remainingRows > 0 ? (
-        <div className="flex items-center justify-center border-t border-slate-100 bg-slate-50/40 px-4 py-3">
+        <div className="flex items-center justify-center border-t border-border bg-muted/40 px-4 py-3">
           <Button
             type="button"
             variant="outline"
