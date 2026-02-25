@@ -1,6 +1,71 @@
 @import "tailwindcss";
-@config "../../tailwind.config.mjs";
 @custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --font-serif: var(--font-merriweather), Merriweather, serif;
+  --font-sans: Inter, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  @keyframes sf-enter {
+    from {
+      opacity: var(--sf-enter-opacity, 1);
+      transform: translate3d(var(--sf-enter-translate-x, 0), var(--sf-enter-translate-y, 0), 0)
+        scale3d(var(--sf-enter-scale, 1), var(--sf-enter-scale, 1), 1);
+    }
+  }
+
+  @keyframes sf-exit {
+    to {
+      opacity: var(--sf-exit-opacity, 1);
+      transform: translate3d(var(--sf-exit-translate-x, 0), var(--sf-exit-translate-y, 0), 0)
+        scale3d(var(--sf-exit-scale, 1), var(--sf-exit-scale, 1), 1);
+    }
+  }
+}
 
 @layer base {
   :root {
@@ -55,6 +120,88 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+@utility animate-in {
+  animation-name: sf-enter;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@utility animate-out {
+  animation-name: sf-exit;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-in;
+  animation-fill-mode: both;
+}
+
+@utility fade-in-0 {
+  --sf-enter-opacity: 0;
+}
+
+@utility fade-out-0 {
+  --sf-exit-opacity: 0;
+}
+
+@utility zoom-in-95 {
+  --sf-enter-scale: 0.95;
+}
+
+@utility zoom-out-95 {
+  --sf-exit-scale: 0.95;
+}
+
+@utility slide-in-from-top-1 {
+  --sf-enter-translate-y: -0.25rem;
+}
+
+@utility slide-in-from-top-2 {
+  --sf-enter-translate-y: -0.5rem;
+}
+
+@utility slide-in-from-top-48 {
+  --sf-enter-translate-y: -48%;
+}
+
+@utility slide-in-from-bottom-2 {
+  --sf-enter-translate-y: 0.5rem;
+}
+
+@utility slide-in-from-bottom-4 {
+  --sf-enter-translate-y: 1rem;
+}
+
+@utility slide-in-from-bottom-6 {
+  --sf-enter-translate-y: 1.5rem;
+}
+
+@utility slide-in-from-bottom-8 {
+  --sf-enter-translate-y: 2rem;
+}
+
+@utility slide-in-from-left-2 {
+  --sf-enter-translate-x: -0.5rem;
+}
+
+@utility slide-in-from-left-half {
+  --sf-enter-translate-x: -50%;
+}
+
+@utility slide-in-from-right-2 {
+  --sf-enter-translate-x: 0.5rem;
+}
+
+@utility slide-in-from-right {
+  --sf-enter-translate-x: 100%;
+}
+
+@utility slide-out-to-top-48 {
+  --sf-exit-translate-y: -48%;
+}
+
+@utility slide-out-to-left-half {
+  --sf-exit-translate-x: -50%;
 }
 
 @layer utilities {

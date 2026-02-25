@@ -229,7 +229,19 @@
   - `tailwind.config.ts` -> `tailwind.config.mjs`（移除 TS 类型声明）
   - `components.json` 同步引用 `tailwind.config.mjs`
 
-### Phase 2（下一步）
-1. 将 `tailwind.config.mjs` 的 token/动画逐步迁移到 CSS-first（`@theme` / `@layer`），减少 `@config` 依赖。
-2. 清理 `tailwindcss-animate` 等兼容插件依赖，改为原生 keyframes token。
-3. 完成迁移后移除 `@config`，仅保留 v4 CSS-first 配置。
+### Phase 2（已完成，CSS-first）
+1. token 下沉到 CSS-first：
+  - 将原 `tailwind.config` 的语义颜色、字体、圆角与 accordion 动画迁移到 `globals.css` 的 `@theme`。
+2. 动画插件替换：
+  - 移除 `tailwindcss-animate` 依赖。
+  - 在 `globals.css` 使用 `@utility` + `@keyframes` 提供兼容的 `animate-in/out`、`fade/zoom/slide` 动画原子类。
+3. 兼容层移除：
+  - 删除 `@config "../../tailwind.config.mjs"`。
+  - 删除 `tailwind.config.mjs`，`components.json` 的 `tailwind.config` 置空（v4 CSS-first）。
+4. 验证结果：
+  - `bun run lint`、`bun run test:run`、`bun run build`、`TAILWIND_AUDIT_ENFORCE=1 bun run audit:tailwind-readiness` 全通过。
+
+### Phase 3（下一步）
+1. 清理并标准化遗留 magic width token（当前 `w-[...] = 42`）。
+2. 把现有自定义动画 utility 拆分为更小的语义层，减少组件层直接拼接复杂动画类。
+3. 根据真实页面性能数据评估是否继续做动画降载（减少首屏动画数量/时长）。
