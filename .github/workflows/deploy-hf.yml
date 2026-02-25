@@ -37,11 +37,35 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          set -euo pipefail
+
+          upload_with_retry() {
+            local description="$1"
+            local src_path="$2"
+            local dst_path="$3"
+            local max_attempts=4
+            local attempt=1
+            while [ "$attempt" -le "$max_attempts" ]; do
+              echo "[deploy-hf] ${description} attempt ${attempt}/${max_attempts}"
+              if uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api "${src_path}" "${dst_path}" --repo-type space --token "$HF_TOKEN" --commit-message "${description}: ${{ github.sha }}"; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                local backoff=$(( attempt * 10 ))
+                echo "[deploy-hf] upload failed, retry in ${backoff}s..."
+                sleep "${backoff}"
+              fi
+              attempt=$((attempt + 1))
+            done
+            echo "[deploy-hf] ${description} failed after ${max_attempts} attempts" >&2
+            return 1
+          }
+
           # 上传 backend 目录到 Space 的 backend/ 目录（避免 flatten 导致 Space 内出现重复的 app/ 与 backend/app/）
           # 中文注释:
           # - Dockerfile 依赖 backend/ 路径（COPY backend/requirements.txt 与 COPY backend/ .）
           # - 只同步 backend/，避免把根目录文件“铺平”进 Space
-          uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api backend backend --repo-type space --token "$HF_TOKEN" --commit-message "Sync backend from GitHub: ${{ github.sha }}"
+          upload_with_retry "Sync backend from GitHub" "backend" "backend"
           
           # 单独上传 Dockerfile (因为它在 GitHub 的根目录下)
-          uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api Dockerfile Dockerfile --repo-type space --token "$HF_TOKEN" --commit-message "Sync Dockerfile from GitHub: ${{ github.sha }}"
+          upload_with_retry "Sync Dockerfile from GitHub" "Dockerfile" "Dockerfile"
