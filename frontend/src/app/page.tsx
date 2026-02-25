@@ -1,15 +1,11 @@
-'use client'
-
 import { ArrowRight } from 'lucide-react'
 import { Manrope, Playfair_Display } from 'next/font/google'
 import Link from 'next/link'
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 
 import SiteHeader from '@/components/layout/SiteHeader'
 import { formatDateLocal } from '@/lib/date-display'
 import { cn } from '@/lib/utils'
-import { getLatestArticles } from '@/services/portal'
+import type { PublicArticle } from '@/services/portal'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -123,6 +119,40 @@ interface NewsCardData {
   image: string
 }
 
+const HOME_LATEST_ARTICLES_LIMIT = 7
+const HOME_LATEST_ARTICLES_REVALIDATE_SECONDS = 3600
+
+function getBackendOrigin(): string {
+  const raw =
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://127.0.0.1:8000'
+  return raw.replace(/\/$/, '')
+}
+
+async function getLatestArticlesServer(limit: number): Promise<PublicArticle[]> {
+  try {
+    const origin = getBackendOrigin()
+    const res = await fetch(`${origin}/api/v1/portal/articles/latest?limit=${limit}`, {
+      next: {
+        revalidate: HOME_LATEST_ARTICLES_REVALIDATE_SECONDS,
+        tags: ['portal-latest-articles'],
+      },
+    })
+    if (!res.ok) return []
+
+    const payload = await res.json().catch(() => null)
+    if (Array.isArray(payload)) return payload as PublicArticle[]
+    if (payload?.success && Array.isArray(payload?.data)) return payload.data as PublicArticle[]
+    return []
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Failed to load latest articles on server:', error)
+    }
+    return []
+  }
+}
+
 function OverlayImage({
   src,
   className,
@@ -197,27 +227,19 @@ function NewsCard({
   )
 }
 
-export default function HomePage() {
-  const { data: articles = [], isLoading } = useQuery({
-    queryKey: ['latest-articles'],
-    queryFn: () => getLatestArticles(7),
-  })
-
-  const newsItems = useMemo<NewsCardData[]>(() => {
-    if (articles.length === 0) {
-      return fallbackNews
-    }
-
-    return articles.map((article, index) => ({
-      id: article.id,
-      title: article.title,
-      summary: article.abstract || 'Read the latest peer-reviewed research and editorial highlights.',
-      category: article.authors[0] || 'Latest research',
-      dateLabel: article.published_at ? formatDateLocal(article.published_at) : 'Recently published',
-      href: `/articles/${article.id}`,
-      image: fallbackNews[index % fallbackNews.length].image,
-    }))
-  }, [articles])
+export default async function HomePage() {
+  const articles = await getLatestArticlesServer(HOME_LATEST_ARTICLES_LIMIT)
+  const newsItems: NewsCardData[] = articles.length === 0
+    ? fallbackNews
+    : articles.map((article, index) => ({
+        id: article.id,
+        title: article.title,
+        summary: article.abstract || 'Read the latest peer-reviewed research and editorial highlights.',
+        category: article.authors[0] || 'Latest research',
+        dateLabel: article.published_at ? formatDateLocal(article.published_at) : 'Recently published',
+        href: `/articles/${article.id}`,
+        image: fallbackNews[index % fallbackNews.length].image,
+      }))
 
   const featuredNews = newsItems[0]
   const secondaryNews = newsItems.slice(1)
@@ -318,36 +340,26 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {isLoading ? (
+            {featuredNews ? (
               <div className="grid gap-4 lg:grid-cols-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className={cn('animate-pulse rounded-2xl bg-muted/70', i === 1 ? 'h-[380px] lg:col-span-2' : 'h-[280px]')} />
-                ))}
+                <NewsCard item={featuredNews} featured className="lg:col-span-2" />
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                  {secondaryNews.slice(0, 2).map((item) => (
+                    <NewsCard key={item.id} item={item} />
+                  ))}
+                </div>
               </div>
             ) : (
-              <>
-                {featuredNews ? (
-                  <div className="grid gap-4 lg:grid-cols-3">
-                    <NewsCard item={featuredNews} featured className="lg:col-span-2" />
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                      {secondaryNews.slice(0, 2).map((item) => (
-                        <NewsCard key={item.id} item={item} />
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="rounded-2xl border border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground">
-                    Latest Articles will appear here soon.
-                  </p>
-                )}
-                {secondaryNews.length > 2 && (
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {secondaryNews.slice(2, 8).map((item) => (
-                      <NewsCard key={item.id} item={item} />
-                    ))}
-                  </div>
-                )}
-              </>
+              <p className="rounded-2xl border border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground">
+                Latest Articles will appear here soon.
+              </p>
+            )}
+            {secondaryNews.length > 2 && (
+              <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {secondaryNews.slice(2, 8).map((item) => (
+                  <NewsCard key={item.id} item={item} />
+                ))}
+              </div>
             )}
           </div>
         </section>

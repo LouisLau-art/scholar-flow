@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import AEWorkspacePage from '@/pages/editor/workspace/page'
+import AEWorkspacePage from '@/app/(admin)/editor/workspace/page'
 import { editorService } from '@/services/editorService'
 
 vi.mock('@/services/editorService', () => ({
