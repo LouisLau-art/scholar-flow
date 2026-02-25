@@ -306,3 +306,29 @@ def test_submit_decision_blocks_accept_without_submitted_author_revision(
             ),
         )
     assert exc.value.status_code == 422
+
+
+def test_transition_final_revision_from_decision_done_never_uses_allow_skip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    calls: list[dict[str, object]] = []
+
+    def _update_status(**kwargs):
+        calls.append(kwargs)
+        return {"status": kwargs["to_status"]}
+
+    monkeypatch.setattr(svc, "editorial", SimpleNamespace(update_status=_update_status))
+
+    out = svc._transition_for_final_decision(
+        manuscript_id="ms-1",
+        current_status="decision_done",
+        decision="minor_revision",
+        changed_by="eic-1",
+        transition_payload={"action": "unit_test"},
+    )
+
+    assert out == "minor_revision"
+    assert len(calls) == 1
+    assert calls[0]["allow_skip"] is False
+    assert calls[0]["to_status"] == "minor_revision"

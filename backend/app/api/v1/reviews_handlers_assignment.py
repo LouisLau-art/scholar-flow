@@ -329,28 +329,34 @@ async def establish_reviewer_workspace_session_impl(
     if str(assignment.get("status") or "").lower() == "cancelled":
         raise HTTPException(status_code=403, detail="Invitation revoked")
 
-    try:
-        status_raw = str(assignment.get("status") or "").strip().lower()
-        if status_raw not in {"completed", "declined", "cancelled", "accepted"}:
-            now_iso = datetime.now(timezone.utc).isoformat()
+    status_raw = str(assignment.get("status") or "").strip().lower()
+    if status_raw not in {"completed", "declined", "cancelled", "accepted"}:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        update_candidates = [
+            {
+                "status": "accepted",
+                "accepted_at": now_iso,
+                "opened_at": now_iso,
+            },
+            {"status": "accepted"},
+        ]
+        last_error: Exception | None = None
+        for payload in update_candidates:
             try:
-                supabase_admin_client.table("review_assignments").update(
-                    {
-                        "accepted_at": now_iso,
-                        "opened_at": now_iso,
-                    }
-                ).eq("id", str(assignment_id)).execute()
-            except Exception as e:
-                lowered = str(e).lower()
-                if "accepted_at" in lowered or "opened_at" in lowered or "column" in lowered:
-                    try:
-                        supabase_admin_client.table("review_assignments").update({"status": "accepted"}).eq(
-                            "id", str(assignment_id)
-                        ).execute()
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+                supabase_admin_client.table("review_assignments").update(payload).eq(
+                    "id", str(assignment_id)
+                ).execute()
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if last_error is not None:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to activate reviewer assignment session; please retry.",
+            ) from last_error
 
     try:
         token = create_magic_link_jwt_fn(
@@ -581,4 +587,3 @@ async def get_manuscript_assignments_impl(
     except Exception as e:
         print(f"Fetch assignments failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to load reviewer assignments")
-

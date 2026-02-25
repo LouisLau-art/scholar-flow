@@ -45,8 +45,8 @@ class ManuscriptStatus(str, Enum):
         - under_review -> decision / major_revision / minor_revision
         - major_revision/minor_revision -> resubmitted
         - resubmitted -> under_review / decision / major_revision / minor_revision
-        - decision -> decision_done
-        - decision_done -> approved / rejected
+        - decision -> decision_done / major_revision / minor_revision
+        - decision_done -> approved / rejected / major_revision / minor_revision
         - approved -> layout
         - layout -> english_editing / proofreading
         - english_editing -> proofreading
@@ -65,10 +65,24 @@ class ManuscriptStatus(str, Enum):
             # 章程 039/040: 修回后可送外审 (under_review) 或进入决策 (decision)
             return {cls.UNDER_REVIEW.value, cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}
         if c == cls.DECISION.value:
-            return {cls.DECISION_DONE.value}
+            # 中文注释：
+            # - final decision 可直接给出 major/minor revision；
+            # - 这样可避免上层用 allow_skip 绕过状态机。
+            return {
+                cls.DECISION_DONE.value,
+                cls.MAJOR_REVISION.value,
+                cls.MINOR_REVISION.value,
+            }
         if c == cls.DECISION_DONE.value:
-            # 只有在决策完成后才能 录用 (approved) 或 拒稿 (rejected)
-            return {cls.APPROVED.value, cls.REJECTED.value}
+            # 中文注释：
+            # - decision_done 阶段允许最终收敛为 approved/rejected；
+            # - 也允许回落到 major/minor revision（例如最终信中要求作者继续修回）。
+            return {
+                cls.APPROVED.value,
+                cls.REJECTED.value,
+                cls.MAJOR_REVISION.value,
+                cls.MINOR_REVISION.value,
+            }
         if c == cls.APPROVED.value:
             return {cls.LAYOUT.value}
         if c == cls.LAYOUT.value:

@@ -586,30 +586,14 @@ class DecisionService(DecisionServiceAttachmentMixin):
                 status_code=422,
                 detail="Final revision decision only allowed in under_review/resubmitted/decision/decision_done stage",
             )
-        try:
-            updated = self.editorial.update_status(
-                manuscript_id=manuscript_id,
-                to_status=to_status,
-                changed_by=changed_by,
-                comment=comment,
-                allow_skip=False,
-                payload=audit_payload,
-            )
-        except HTTPException as e:
-            # 仅允许在决策尾段做受控兜底，避免 pre_check/under_review 等阶段被无条件放行。
-            detail = str(getattr(e, "detail", "") or "")
-            if norm not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
-                raise
-            if "Invalid transition" not in detail:
-                raise
-            updated = self.editorial.update_status(
-                manuscript_id=manuscript_id,
-                to_status=to_status,
-                changed_by=changed_by,
-                comment=comment,
-                allow_skip=True,
-                payload=audit_payload,
-            )
+        updated = self.editorial.update_status(
+            manuscript_id=manuscript_id,
+            to_status=to_status,
+            changed_by=changed_by,
+            comment=comment,
+            allow_skip=False,
+            payload=audit_payload,
+        )
         return str(updated.get("status") or to_status)
 
     def _notify_author(self, *, manuscript: dict[str, Any], manuscript_id: str, decision: str) -> None:
