@@ -20,6 +20,7 @@ def _chain():
         "select",
         "eq",
         "ilike",
+        "range",
         "maybe_single",
         "single",
         "update",
