@@ -529,7 +529,7 @@ export default function ReviewerAssignModal({
     <>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
         <DialogContent
-          className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white p-0 shadow-2xl flex flex-col [&>button]:hidden"
+          className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-card p-0 shadow-2xl flex flex-col [&>button]:hidden"
           data-testid="reviewer-modal"
         >
           <DialogHeader className="sr-only">
@@ -538,16 +538,16 @@ export default function ReviewerAssignModal({
               Search reviewer library, review policy hints, and assign reviewers for this manuscript.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between p-6 border-b border-border">
             <div className="flex items-center gap-3">
-              <Users className="h-6 w-6 text-blue-600" />
-              <h2 className="text-xl font-bold text-slate-900">Assign Reviewer</h2>
+              <Users className="h-6 w-6 text-primary" />
+              <h2 className="text-xl font-bold text-foreground">Assign Reviewer</h2>
             </div>
             <button
               type="button"
               aria-label="Close reviewer assignment dialog"
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
+              className="text-muted-foreground hover:text-muted-foreground transition-colors"
             >
               <X className="h-6 w-6" />
             </button>
@@ -555,15 +555,15 @@ export default function ReviewerAssignModal({
 
           <div className="p-6 overflow-y-auto flex-1">
             {/* Feature 023: Owner Binding（KPI 归属人） */}
-            <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="mb-6 rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-slate-900">Internal Owner / Invited By</div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="font-semibold text-foreground">Internal Owner / Invited By</div>
+                  <div className="text-xs text-muted-foreground mt-1">
                     在初审阶段绑定负责人（仅 editor/admin），修改后自动保存并提示。
                   </div>
                 </div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-muted-foreground">
                   {savingOwner ? 'Saving…' : loadingOwner ? 'Loading…' : ''}
                 </div>
               </div>
@@ -578,7 +578,7 @@ export default function ReviewerAssignModal({
                   placeholder="Search internal staff..."
                   value={ownerSearch}
                   onChange={(e) => setOwnerSearch(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/30 text-sm"
                 />
                 <Select
                   value={ownerId || '__unassigned'}
@@ -601,8 +601,8 @@ export default function ReviewerAssignModal({
                 </Select>
               </div>
 
-              <div className="mt-2 text-xs text-slate-600">
-                Current: <span className="font-medium text-slate-900">{currentOwnerLabel}</span>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Current: <span className="font-medium text-foreground">{currentOwnerLabel}</span>
               </div>
               {!ownerId && (
                 <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
@@ -613,18 +613,18 @@ export default function ReviewerAssignModal({
 
             {/* Existing Reviewers */}
             {existingReviewers.length > 0 && (
-              <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">Current Reviewers ({existingReviewers.length})</h3>
+              <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
+                <h3 className="font-semibold text-foreground mb-3">Current Reviewers ({existingReviewers.length})</h3>
                 <div className="space-y-2">
                   {existingReviewers.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between bg-white p-3 rounded border border-slate-200 shadow-sm">
+                    <div key={r.id} className="flex items-center justify-between bg-card p-3 rounded border border-border shadow-sm">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
                           {r.reviewer_name?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <div className="font-medium text-slate-900 text-sm">{r.reviewer_name}</div>
-                          <div className="text-xs text-slate-500">{r.reviewer_email}</div>
+                          <div className="font-medium text-foreground text-sm">{r.reviewer_name}</div>
+                          <div className="text-xs text-muted-foreground">{r.reviewer_email}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -648,14 +648,14 @@ export default function ReviewerAssignModal({
             )}
 
             {/* AI Analysis Section */}
-            <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="mb-6 rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-slate-900">AI Recommendations</div>
+                <div className="font-semibold text-foreground">AI Recommendations</div>
                 <button
                   type="button"
                   onClick={handleAiAnalyze}
                   disabled={aiLoading || !manuscriptId}
-                  className="px-3 py-2 text-sm font-semibold rounded-md bg-slate-900 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
                   data-testid="ai-analyze"
                 >
                   {aiLoading ? 'Analyzing...' : 'AI Analysis'}
@@ -663,14 +663,14 @@ export default function ReviewerAssignModal({
               </div>
 
               {aiLoading && (
-                <div className="mt-3 flex items-center text-sm text-slate-600">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <div className="mt-3 flex items-center text-sm text-muted-foreground">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                   <span className="ml-2">Running local embedding match...</span>
                 </div>
               )}
 
               {!aiLoading && aiMessage && (
-                <div className="mt-3 text-sm text-slate-600" data-testid="ai-message">
+                <div className="mt-3 text-sm text-muted-foreground" data-testid="ai-message">
                   {aiMessage}
                 </div>
               )}
@@ -681,11 +681,11 @@ export default function ReviewerAssignModal({
                     const isSelected = selectedReviewers.includes(rec.reviewer_id)
                     const blocked = isReviewerBlocked(rec.reviewer_id)
                     return (
-                      <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+                      <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-border p-3 hover:bg-muted/40">
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-900 truncate">{rec.name || rec.email}</div>
-                          <div className="text-xs text-slate-500 truncate">{rec.email}</div>
-                          <div className="text-xs text-slate-400 mt-1">
+                          <div className="font-medium text-foreground truncate">{rec.name || rec.email}</div>
+                          <div className="text-xs text-muted-foreground truncate">{rec.email}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
                             Match Score: {(rec.match_score * 100).toFixed(1)}%
                           </div>
                         </div>
@@ -695,10 +695,10 @@ export default function ReviewerAssignModal({
                           disabled={blocked}
                           className={`ml-3 px-3 py-2 text-sm font-semibold rounded-md transition-colors ${
                             blocked
-                              ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                              ? 'bg-muted text-muted-foreground cursor-not-allowed'
                               : isSelected
                                 ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-primary text-white hover:bg-primary/90'
                           }`}
                           data-testid={`ai-invite-${rec.reviewer_id}`}
                         >
@@ -714,7 +714,7 @@ export default function ReviewerAssignModal({
             {/* Manual Search & List */}
             <div className="mb-6 flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <label htmlFor="reviewer-library-search" className="sr-only">
                   Search reviewers by name
                 </label>
@@ -724,14 +724,14 @@ export default function ReviewerAssignModal({
                   placeholder="Search reviewers by name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/30"
                   data-testid="reviewer-search"
                 />
               </div>
               {canAddReviewerToLibrary ? (
                 <button
                   onClick={() => setIsAddDialogOpen(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 px-3 py-2 bg-muted text-foreground rounded-lg hover:bg-muted transition-colors text-sm font-medium"
                 >
                   <UserPlus className="h-4 w-4" />
                   Add to Library
@@ -739,16 +739,16 @@ export default function ReviewerAssignModal({
               ) : null}
             </div>
 
-            <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is blocked by default, conflict-of-interest is hard block, overdue risk is warning-only.
             </div>
 
             {isLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : orderedReviewers.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
+              <div className="text-center py-8 text-muted-foreground">
                 No reviewers found. Add one to the library?
               </div>
             ) : (
@@ -773,25 +773,25 @@ export default function ReviewerAssignModal({
                     disabled={rowDisabled}
                     className={`w-full flex items-center justify-between p-3 rounded-lg transition-all border text-left ${
                       isAssigned
-                        ? 'bg-blue-50 border-blue-200 shadow-sm cursor-not-allowed'
+                        ? 'bg-primary/10 border-primary/30 shadow-sm cursor-not-allowed'
                         : blockedByPolicy
                           ? 'bg-rose-50 border-rose-200 cursor-not-allowed'
                         : isSelected
-                          ? 'bg-blue-50 border-blue-200 shadow-sm'
-                          : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
+                          ? 'bg-primary/10 border-primary/30 shadow-sm'
+                          : 'hover:bg-muted/40 border-transparent hover:border-border'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                        showAsSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                        showAsSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                       }`}>
                         {reviewer.full_name?.charAt(0) || (reviewer.email || '?').charAt(0)}
                       </div>
                       <div>
-                        <div className={`font-medium ${showAsSelected ? 'text-blue-900' : 'text-slate-900'}`}>
+                        <div className={`font-medium ${showAsSelected ? 'text-primary' : 'text-foreground'}`}>
                           {reviewer.full_name || 'Unnamed'}
                         </div>
-                        <div className="text-sm text-slate-500">{reviewer.email}</div>
+                        <div className="text-sm text-muted-foreground">{reviewer.email}</div>
                         {hits.length > 0 && (
                           <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`policy-hits-${reviewer.id}`}>
                             {hits.map((hit, idx) => (
@@ -805,7 +805,7 @@ export default function ReviewerAssignModal({
                           </div>
                         )}
                         {hits.length > 0 && (
-                          <div className="mt-1 text-[11px] text-slate-500">
+                          <div className="mt-1 text-[11px] text-muted-foreground">
                             {hits.map((h) => h.detail).filter(Boolean).join(' ')}
                           </div>
                         )}
@@ -813,7 +813,7 @@ export default function ReviewerAssignModal({
                     </div>
                     <div className="flex items-center gap-2">
                       {isAssigned && (
-                        <span className="text-xs font-semibold bg-slate-200 text-slate-700 px-2 py-1 rounded">
+                        <span className="text-xs font-semibold bg-muted text-foreground px-2 py-1 rounded">
                           Assigned
                         </span>
                       )}
@@ -827,7 +827,7 @@ export default function ReviewerAssignModal({
                           Override
                         </span>
                       )}
-                      {showAsSelected && <Check className="h-5 w-5 text-blue-600" />}
+                      {showAsSelected && <Check className="h-5 w-5 text-primary" />}
                     </div>
                   </button>
                   )
@@ -838,7 +838,7 @@ export default function ReviewerAssignModal({
                       type="button"
                       onClick={() => void fetchReviewers(searchTerm.trim(), { append: true, page: reviewerPage + 1 })}
                       disabled={isLoadingMoreReviewers}
-                      className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-muted/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       data-testid="reviewer-load-more"
                     >
                       {isLoadingMoreReviewers ? 'Loading…' : 'Load more'}
@@ -871,7 +871,7 @@ export default function ReviewerAssignModal({
                           }))
                         }
                         placeholder="Why is cooldown override justified?"
-                        className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        className="w-full rounded-md border border-amber-300 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                         data-testid={`override-reason-${rid}`}
                       />
                     </div>
@@ -881,17 +881,17 @@ export default function ReviewerAssignModal({
             )}
           </div>
 
-          <div className="flex items-center justify-between p-6 border-t border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between p-6 border-t border-border bg-muted/40">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleAssign}
               disabled={selectedReviewers.length === 0 || isSubmitting}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
               data-testid="reviewer-assign"
             >
                {isSubmitting
@@ -908,20 +908,20 @@ export default function ReviewerAssignModal({
       {pendingRemove && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center" data-testid="unassign-confirm">
           <div className="absolute inset-0 bg-black/40" onClick={() => setPendingRemove(null)} />
-          <div className="relative w-full max-w-md rounded-xl bg-white shadow-2xl border border-slate-200 p-6">
-            <div className="text-base font-semibold text-slate-900">Remove reviewer?</div>
-            <div className="mt-2 text-sm text-slate-600">
+          <div className="relative w-full max-w-md rounded-xl bg-card shadow-2xl border border-border p-6">
+            <div className="text-base font-semibold text-foreground">Remove reviewer?</div>
+            <div className="mt-2 text-sm text-muted-foreground">
               This will remove the reviewer from the current manuscript.
             </div>
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="text-sm font-medium text-slate-900">{pendingRemove.reviewer_name || 'Unknown'}</div>
-              <div className="text-xs text-slate-600">{pendingRemove.reviewer_email || ''}</div>
+            <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
+              <div className="text-sm font-medium text-foreground">{pendingRemove.reviewer_name || 'Unknown'}</div>
+              <div className="text-xs text-muted-foreground">{pendingRemove.reviewer_email || ''}</div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingRemove(null)}
-                className="px-4 py-2 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                className="px-4 py-2 text-foreground rounded-lg hover:bg-muted transition-colors"
                 data-testid="unassign-cancel"
               >
                 Cancel
@@ -934,7 +934,7 @@ export default function ReviewerAssignModal({
                   await handleUnassign(id)
                 }}
                 disabled={removingId === String(pendingRemove.id)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
                 data-testid="unassign-confirm-remove"
               >
                 {removingId === String(pendingRemove.id) ? 'Removing...' : 'Remove'}

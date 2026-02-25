@@ -14,11 +14,20 @@
   - 多处 `style={{ fontFamily: ... }}` 改为 `next/font` class。
   - 背景图保留 `backgroundImage`，将 `cover/center` 下沉到 class。
 
+## 已完成的 v3 设计系统化（本次增量）
+- Top 5 高频文件完成语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/app/(admin)/editor/manuscript/[id]/detail-sections.tsx`
+  - `frontend/src/components/EditorPipeline.tsx`
+  - `frontend/src/app/articles/[id]/ArticleClient.tsx`
+  - `frontend/src/components/ReviewerAssignModal.tsx`
+  - `frontend/src/components/layout/SiteHeader.tsx`
+- 以上 5 个文件合计减少硬编码色板引用约 `232` 处。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `1896`
+- `hard palette (bg/text/border)-(slate|blue)-`: `1481`
 
 > 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
 

@@ -90,14 +90,14 @@ export default function SiteHeader() {
   const displayAvatar = profile?.avatar_url
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-900 text-white shadow-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-border/30 bg-foreground text-white shadow-xl">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-between">
           
           {/* Logo */}
           <div className="flex items-center gap-12">
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="bg-blue-600 p-1.5 rounded-lg group-hover:bg-blue-500 transition-colors">
+              <div className="bg-primary p-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
                 <Globe className="h-6 w-6 text-white" />
               </div>
               <span className="font-serif text-2xl font-bold tracking-tight">
@@ -116,7 +116,7 @@ export default function SiteHeader() {
                 >
                   <Link 
                     href={link.href}
-                    className="flex items-center gap-1 text-sm font-semibold text-slate-300 hover:text-white transition-colors py-8"
+                    className="flex items-center gap-1 text-sm font-semibold text-background/70 hover:text-white transition-colors py-8"
                   >
                     {link.name}
                     {link.hasMega && <ChevronDown className="h-4 w-4 opacity-50" />}
@@ -132,55 +132,55 @@ export default function SiteHeader() {
               type="button"
               aria-label="Search"
               onClick={() => setIsSearchOpen(true)}
-              className="hidden sm:block text-slate-400 hover:text-white transition-colors"
+              className="hidden sm:block text-background/60 hover:text-white transition-colors"
             >
               <Search className="h-5 w-5" />
             </button>
-            <div className="h-6 w-px bg-slate-800 hidden sm:block" />
+            <div className="h-6 w-px bg-border/30 hidden sm:block" />
 
             <NotificationBell isAuthenticated={isAuthenticated} />
 
             {isAuthenticated ? (
-              <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-slate-200">
+              <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-background/80">
                 <Link href="/settings" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                  <Avatar className="h-8 w-8 border border-slate-700">
+                  <Avatar className="h-8 w-8 border border-border/40">
                     <AvatarImage src={displayAvatar || undefined} />
-                    <AvatarFallback className="bg-slate-700 text-slate-200 text-xs">
+                    <AvatarFallback className="bg-foreground/80 text-background/80 text-xs">
                       {displayName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="max-w-[160px] truncate text-slate-200">{displayName}</span>
+                  <span className="max-w-[160px] truncate text-background/80">{displayName}</span>
                 </Link>
-                <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">
+                <Link href="/dashboard" className="text-background/60 hover:text-white transition-colors">
                   Dashboard
                 </Link>
-                <Link href="/settings" className="text-slate-400 hover:text-white transition-colors">
+                <Link href="/settings" className="text-background/60 hover:text-white transition-colors">
                   Settings
                 </Link>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="text-background/60 hover:text-white transition-colors"
                 >
                   Sign Out
                 </button>
               </div>
             ) : (
-              <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white">
+              <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-background/70 hover:text-white">
                 <UserIcon className="h-4 w-4" /> Sign In
               </Link>
             )}
             
             <Link 
               href="/submit" 
-              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all"
+              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all"
             >
               Submit
             </Link>
 
             {/* Mobile Menu Toggle */}
             <button 
-              className="lg:hidden text-slate-300"
+              className="lg:hidden text-background/70"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -223,40 +223,40 @@ export default function SiteHeader() {
       {/* Mega Menu */}
       {isMegaMenuOpen && (
         <div 
-          className="absolute left-0 w-full bg-white text-slate-900 shadow-2xl border-b border-slate-200 animate-in fade-in slide-in-from-top-2 duration-200"
+          className="absolute left-0 w-full bg-card text-foreground shadow-2xl border-b border-border animate-in fade-in slide-in-from-top-2 duration-200"
           onMouseEnter={() => setIsMegaMenuOpen(true)}
           onMouseLeave={() => setIsMegaMenuOpen(false)}
         >
           {/* ... (Existing Mega Menu Content) ... */}
           <div className="mx-auto max-w-7xl px-8 py-12 grid grid-cols-4 gap-12">
             <div>
-              <h4 className="font-serif text-lg font-bold mb-4 text-blue-600 border-b border-blue-100 pb-2">Medicine</h4>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="hover:text-blue-600 cursor-pointer">Oncology</li>
-                <li className="hover:text-blue-600 cursor-pointer">Neuroscience</li>
-                <li className="hover:text-blue-600 cursor-pointer">Public Health</li>
+              <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Medicine</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="hover:text-primary cursor-pointer">Oncology</li>
+                <li className="hover:text-primary cursor-pointer">Neuroscience</li>
+                <li className="hover:text-primary cursor-pointer">Public Health</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-serif text-lg font-bold mb-4 text-blue-600 border-b border-blue-100 pb-2">Physical Sciences</h4>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="hover:text-blue-600 cursor-pointer">Physics</li>
-                <li className="hover:text-blue-600 cursor-pointer">Chemistry</li>
-                <li className="hover:text-blue-600 cursor-pointer">Materials</li>
+              <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Physical Sciences</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="hover:text-primary cursor-pointer">Physics</li>
+                <li className="hover:text-primary cursor-pointer">Chemistry</li>
+                <li className="hover:text-primary cursor-pointer">Materials</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-serif text-lg font-bold mb-4 text-blue-600 border-b border-blue-100 pb-2">Social Sciences</h4>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="hover:text-blue-600 cursor-pointer">Psychology</li>
-                <li className="hover:text-blue-600 cursor-pointer">Economics</li>
-                <li className="hover:text-blue-600 cursor-pointer">Education</li>
+              <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Social Sciences</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="hover:text-primary cursor-pointer">Psychology</li>
+                <li className="hover:text-primary cursor-pointer">Economics</li>
+                <li className="hover:text-primary cursor-pointer">Education</li>
               </ul>
             </div>
-            <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
+            <div className="bg-muted/40 p-6 rounded-xl border border-border/60">
               <h4 className="font-bold mb-2">Can&apos;t find your journal?</h4>
-              <p className="text-sm text-slate-500 mb-4">Explore our full portfolio of 200+ high-impact journals.</p>
-              <Link href="#" className="text-sm font-bold text-blue-600 flex items-center gap-1 hover:underline">
+              <p className="text-sm text-muted-foreground mb-4">Explore our full portfolio of 200+ high-impact journals.</p>
+              <Link href="#" className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
                 View all journals →
               </Link>
             </div>
@@ -266,34 +266,34 @@ export default function SiteHeader() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-slate-900 border-t border-slate-800 px-4 py-8 space-y-4 animate-in slide-in-from-right w-full h-screen fixed">
+        <div className="lg:hidden bg-foreground border-t border-border/30 px-4 py-8 space-y-4 animate-in slide-in-from-right w-full h-screen fixed">
           {navLinks.map(link => (
             <Link 
               key={link.name} 
               href={link.href}
-              className="block text-xl font-bold text-slate-200"
+              className="block text-xl font-bold text-background/80"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               {link.name}
             </Link>
           ))}
-          <div className="pt-8 border-t border-slate-800 space-y-4">
+          <div className="pt-8 border-t border-border/30 space-y-4">
             {isAuthenticated ? (
               <>
-                <Link href="/dashboard" className="block text-slate-400">Dashboard</Link>
-                <Link href="/settings" className="block text-slate-400">Settings</Link>
+                <Link href="/dashboard" className="block text-background/60">Dashboard</Link>
+                <Link href="/settings" className="block text-background/60">Settings</Link>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="block text-left text-slate-400"
+                  className="block text-left text-background/60"
                 >
                   Sign Out
                 </button>
               </>
             ) : (
-              <Link href="/login" className="block text-slate-400">Sign In</Link>
+              <Link href="/login" className="block text-background/60">Sign In</Link>
             )}
-            <Link href="/submit" className="block text-blue-400 font-bold text-xl">Submit your manuscript</Link>
+            <Link href="/submit" className="block text-primary font-bold text-xl">Submit your manuscript</Link>
           </div>
         </div>
       )}

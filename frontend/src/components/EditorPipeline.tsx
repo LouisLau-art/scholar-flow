@@ -84,8 +84,8 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-slate-600">Loading pipeline data...</span>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading pipeline data...</span>
       </div>
     )
   }
@@ -93,9 +93,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
   const renderSectionHeader = (title: string, count: number, filter: PipelineStage) => (
     (activeFilter === filter || !activeFilter) && (
       <div className="flex items-center justify-between mb-2 mt-6 first:mt-0">
-        <h4 className="text-md font-semibold text-slate-700 flex items-center gap-2">
+        <h4 className="text-md font-semibold text-foreground flex items-center gap-2">
           {title}
-          <span className="bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">{count}</span>
+          <span className="bg-muted text-muted-foreground py-0.5 px-2 rounded-full text-xs">{count}</span>
         </h4>
       </div>
     )
@@ -212,174 +212,174 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
 
   return (
     <div className="space-y-6" data-testid="editor-pipeline">
-      <h2 className="text-2xl font-bold text-slate-900">Manuscript Pipeline</h2>
+      <h2 className="text-2xl font-bold text-foreground">Manuscript Pipeline</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* 待质检 */}
         <button
           type="button"
           onClick={() => handleFilterClick('pending_quality')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'pending_quality'
-              ? 'border-blue-400 bg-blue-50'
-              : 'border-slate-200 hover:border-blue-200 hover:bg-blue-50/50'
+              ? 'border-primary/50 bg-primary/10'
+              : 'border-border hover:border-primary/40 hover:bg-primary/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Pending Quality</h3>
-            <FileText className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-foreground">Pending Quality</h3>
+            <FileText className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-3xl font-bold text-blue-600 mb-2">
+          <div className="text-3xl font-bold text-primary mb-2">
             {getData('pending_quality').length}
           </div>
-          <div className="text-sm text-slate-500">New submissions</div>
+          <div className="text-sm text-muted-foreground">New submissions</div>
         </button>
 
         {/* Resubmitted */}
         <button
           type="button"
           onClick={() => handleFilterClick('resubmitted')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'resubmitted'
               ? 'border-indigo-400 bg-indigo-50'
-              : 'border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/50'
+              : 'border-border hover:border-indigo-200 hover:bg-indigo-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Resubmitted</h3>
+            <h3 className="text-lg font-semibold text-foreground">Resubmitted</h3>
             <RefreshCw className="h-5 w-5 text-indigo-600" />
           </div>
           <div className="text-3xl font-bold text-indigo-600 mb-2">
             {getData('resubmitted').length}
           </div>
-          <div className="text-sm text-slate-500">Revisions received</div>
+          <div className="text-sm text-muted-foreground">Revisions received</div>
         </button>
 
         {/* 评审中 */}
         <button
           type="button"
           onClick={() => handleFilterClick('under_review')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'under_review'
               ? 'border-amber-400 bg-amber-50'
-              : 'border-slate-200 hover:border-amber-200 hover:bg-amber-50/50'
+              : 'border-border hover:border-amber-200 hover:bg-amber-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Under Review</h3>
+            <h3 className="text-lg font-semibold text-foreground">Under Review</h3>
             <Users className="h-5 w-5 text-amber-600" />
           </div>
           <div className="text-3xl font-bold text-amber-600 mb-2">
             {getData('under_review').length}
           </div>
-          <div className="text-sm text-slate-500">In peer review</div>
+          <div className="text-sm text-muted-foreground">In peer review</div>
         </button>
 
         {/* 待录用 */}
         <button
           type="button"
           onClick={() => handleFilterClick('pending_decision')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'pending_decision'
               ? 'border-purple-400 bg-purple-50'
-              : 'border-slate-200 hover:border-purple-200 hover:bg-purple-50/50'
+              : 'border-border hover:border-purple-200 hover:bg-purple-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Pending Decision</h3>
+            <h3 className="text-lg font-semibold text-foreground">Pending Decision</h3>
             <CheckCircle2 className="h-5 w-5 text-purple-600" />
           </div>
           <div className="text-3xl font-bold text-purple-600 mb-2">
             {getData('pending_decision').length}
           </div>
-          <div className="text-sm text-slate-500">Ready for decision</div>
+          <div className="text-sm text-muted-foreground">Ready for decision</div>
         </button>
 
         {/* Approved (Waiting for Payment / Ready to Publish) */}
         <button
           type="button"
           onClick={() => handleFilterClick('approved')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'approved'
               ? 'border-emerald-400 bg-emerald-50'
-              : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/50'
+              : 'border-border hover:border-emerald-200 hover:bg-emerald-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Approved</h3>
+            <h3 className="text-lg font-semibold text-foreground">Approved</h3>
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
           </div>
           <div className="text-3xl font-bold text-emerald-600 mb-2">
             {getData('approved').length}
           </div>
-          <div className="text-sm text-slate-500">Waiting for payment / publish</div>
+          <div className="text-sm text-muted-foreground">Waiting for payment / publish</div>
         </button>
 
         {/* Revision Requested (Waiting) */}
         <button
           type="button"
           onClick={() => handleFilterClick('revision_requested')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'revision_requested'
-              ? 'border-slate-400 bg-slate-50'
-              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              ? 'border-border bg-muted/40'
+              : 'border-border hover:border-border/80 hover:bg-muted/40'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Waiting for Author</h3>
-            <Clock className="h-5 w-5 text-slate-600" />
+            <h3 className="text-lg font-semibold text-foreground">Waiting for Author</h3>
+            <Clock className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className="text-3xl font-bold text-slate-600 mb-2">
+          <div className="text-3xl font-bold text-muted-foreground mb-2">
             {getData('revision_requested').length}
           </div>
-          <div className="text-sm text-slate-500">Revision requested</div>
+          <div className="text-sm text-muted-foreground">Revision requested</div>
         </button>
 
         {/* 已发布 */}
         <button
           type="button"
           onClick={() => handleFilterClick('published')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'published'
               ? 'border-emerald-400 bg-emerald-50'
-              : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/50'
+              : 'border-border hover:border-emerald-200 hover:bg-emerald-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Published</h3>
+            <h3 className="text-lg font-semibold text-foreground">Published</h3>
             <ArrowRight className="h-5 w-5 text-emerald-600" />
           </div>
           <div className="text-3xl font-bold text-emerald-600 mb-2">
             {getData('published').length}
           </div>
-          <div className="text-sm text-slate-500">Completed</div>
+          <div className="text-sm text-muted-foreground">Completed</div>
         </button>
 
         {/* 已拒稿 */}
         <button
           type="button"
           onClick={() => handleFilterClick('rejected')}
-          className={`text-left bg-white rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'rejected'
               ? 'border-rose-400 bg-rose-50'
-              : 'border-slate-200 hover:border-rose-200 hover:bg-rose-50/50'
+              : 'border-border hover:border-rose-200 hover:bg-rose-50/50'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Rejected</h3>
+            <h3 className="text-lg font-semibold text-foreground">Rejected</h3>
             <FileText className="h-5 w-5 text-rose-600" />
           </div>
           <div className="text-3xl font-bold text-rose-600 mb-2">
             {getData('rejected').length}
           </div>
-          <div className="text-sm text-slate-500">Archived</div>
+          <div className="text-sm text-muted-foreground">Archived</div>
         </button>
       </div>
 
       {/* 详细列表 */}
-      <div ref={listRef} className="bg-white rounded-xl border border-slate-200 p-6" data-testid="editor-pipeline-list">
+      <div ref={listRef} className="bg-card rounded-xl border border-border p-6" data-testid="editor-pipeline-list">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
+          <h3 className="text-lg font-semibold text-foreground">Recent Activity</h3>
           {activeFilter && (
             <Button variant="ghost" size="sm" onClick={clearFilter}>
               Clear Filter
@@ -390,7 +390,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         <div className="space-y-2">
           {/* Empty States */}
           {activeFilter && !hasData(activeFilter) && (
-             <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-500">
+             <div className="rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
                No manuscripts in {activeFilter.replace('_', ' ')}.
              </div>
           )}
@@ -400,21 +400,21 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Pending Quality Check', getData('pending_quality').length, 'pending_quality')}
               {getDisplayItems('pending_quality').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">
                       Submitted: {manuscript.created_at ? new Date(manuscript.created_at).toLocaleDateString() : '—'}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">New</span>
+                    <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-medium rounded-full">New</span>
                     <Button size="sm" onClick={() => onAssign?.(manuscript)}>Assign Reviewers</Button>
                   </div>
                 </div>
               ))}
               {isTruncatedInActiveFilter('pending_quality') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -424,10 +424,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Resubmitted Revisions', getData('resubmitted').length, 'resubmitted')}
               {getDisplayItems('resubmitted').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">
                       Resubmitted: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
                       {manuscript.version && ` (v${manuscript.version})`}
                     </div>
@@ -440,7 +440,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 </div>
               ))}
               {isTruncatedInActiveFilter('resubmitted') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -450,10 +450,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Under Review', getData('under_review').length, 'under_review')}
               {getDisplayItems('under_review').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">Reviewers: {manuscript.review_count || 0}</div>
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">Reviewers: {manuscript.review_count || 0}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-amber-100 text-amber-800 text-sm font-medium rounded-full">In Review</span>
@@ -463,7 +463,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 </div>
               ))}
               {isTruncatedInActiveFilter('under_review') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -473,10 +473,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Pending Decision', getData('pending_decision').length, 'pending_decision')}
               {getDisplayItems('pending_decision').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">Ready for decision</div>
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">Ready for decision</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">Action Req</span>
@@ -485,7 +485,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 </div>
               ))}
               {isTruncatedInActiveFilter('pending_decision') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -506,10 +506,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 const isPaid = !invoiceMissing && (amount <= 0 || invoiceStatus === 'paid')
 
                 return (
-                  <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                  <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                     <div>
-                      <div className="font-medium text-slate-900">{manuscript.title}</div>
-                      <div className="text-sm text-slate-500">
+                      <div className="font-medium text-foreground">{manuscript.title}</div>
+                      <div className="text-sm text-muted-foreground">
                         {invoiceMissing
                           ? 'Invoice missing (accept may not have saved APC)'
                           : waitingPayment
@@ -584,7 +584,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 )
               })}
               {isTruncatedInActiveFilter('approved') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -594,21 +594,21 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Waiting for Author', getData('revision_requested').length, 'revision_requested')}
               {getDisplayItems('revision_requested').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-75">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40 opacity-75">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">
                       Requested: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">Waiting</span>
+                    <span className="px-3 py-1 bg-muted text-muted-foreground text-sm font-medium rounded-full">Waiting</span>
                     <Button size="sm" variant="ghost" disabled>View Details</Button>
                   </div>
                 </div>
               ))}
               {isTruncatedInActiveFilter('revision_requested') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -618,10 +618,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Published', getData('published').length, 'published')}
               {getDisplayItems('published').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">Published</div>
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">Published</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Published</span>
@@ -629,7 +629,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 </div>
               ))}
               {isTruncatedInActiveFilter('published') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}
@@ -639,10 +639,10 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             <>
               {renderSectionHeader('Rejected', getData('rejected').length, 'rejected')}
               {getDisplayItems('rejected').map((manuscript: any) => (
-                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-80">
+                <div key={manuscript.id} className="flex items-center justify-between p-4 border border-border/60 rounded-lg hover:bg-muted/40 opacity-80">
                   <div>
-                    <div className="font-medium text-slate-900">{manuscript.title}</div>
-                    <div className="text-sm text-slate-500">
+                    <div className="font-medium text-foreground">{manuscript.title}</div>
+                    <div className="text-sm text-muted-foreground">
                       Rejected: {manuscript.updated_at ? new Date(manuscript.updated_at).toLocaleDateString() : '—'}
                     </div>
                   </div>
@@ -652,7 +652,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                 </div>
               ))}
               {isTruncatedInActiveFilter('rejected') ? (
-                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+                <div className="text-xs text-muted-foreground">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
               ) : null}
             </>
           )}

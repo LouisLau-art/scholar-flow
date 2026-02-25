@@ -64,22 +64,22 @@ async function fetchPublishedPreviewUrl(articleId: string): Promise<string | nul
 
 function ErrorState({ title, message }: { title: string; message: string }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-4xl w-full px-4 py-16 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-10">
-          <h1 className="font-serif text-3xl font-bold text-slate-900">{title}</h1>
-          <p className="mt-4 text-slate-600">{message}</p>
+        <div className="bg-card rounded-3xl shadow-sm border border-border/60 p-10">
+          <h1 className="font-serif text-3xl font-bold text-foreground">{title}</h1>
+          <p className="mt-4 text-muted-foreground">{message}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               href="/"
-              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 transition-colors"
+              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
             >
               返回首页
             </Link>
             <Link
               href="/dashboard"
-              className="rounded-full border border-slate-200 bg-white px-6 py-2.5 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors"
+              className="rounded-full border border-border bg-card px-6 py-2.5 text-sm font-bold text-foreground hover:bg-muted/40 transition-colors"
             >
               前往 Dashboard
             </Link>
@@ -298,10 +298,10 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
   if (isLoading || waitingIdentityForPrivateArticle) {
     return (
-      <div className="min-h-screen bg-white flex flex-col">
+      <div className="min-h-screen bg-card flex flex-col">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       </div>
     )
@@ -338,36 +338,36 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
     }
 
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-muted/40 flex flex-col">
         <SiteHeader />
         <main className="flex-1 mx-auto max-w-5xl w-full px-4 py-12 sm:px-6 lg:px-8">
-          <section className="bg-white border border-slate-200 shadow-sm rounded-3xl p-8 sm:p-10">
+          <section className="bg-card border border-border shadow-sm rounded-3xl p-8 sm:p-10">
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-700">
               <Lock className="h-3.5 w-3.5" />
               Private Manuscript View
             </div>
-            <h1 className="mt-5 text-3xl font-serif font-bold text-slate-900 leading-tight">
+            <h1 className="mt-5 text-3xl font-serif font-bold text-foreground leading-tight">
               {article.title || 'Untitled Manuscript'}
             </h1>
-            <p className="mt-3 text-slate-600">
+            <p className="mt-3 text-muted-foreground">
               该稿件尚未发表。作者侧仅展示流程进度与最近动态，不展示全文、下载与引用信息。
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Stage</div>
-                <div className="mt-2 text-base font-semibold text-slate-900">{getStatusLabel(article?.status)}</div>
+              <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current Stage</div>
+                <div className="mt-2 text-base font-semibold text-foreground">{getStatusLabel(article?.status)}</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest Activity</div>
-                <div className="mt-2 flex items-center gap-2 text-sm text-slate-900">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
+              <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest Activity</div>
+                <div className="mt-2 flex items-center gap-2 text-sm text-foreground">
+                  <Clock3 className="h-4 w-4 text-muted-foreground" />
                   <span>{latestActivity}</span>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Submission ID</div>
-                <div className="mt-2 truncate font-mono text-sm text-slate-800">{String(article?.id || '')}</div>
+              <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submission ID</div>
+                <div className="mt-2 truncate font-mono text-sm text-foreground">{String(article?.id || '')}</div>
               </div>
             </div>
 
@@ -380,7 +380,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
             ) : null}
 
             <div className="mt-8">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Workflow Progress</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Workflow Progress</h2>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {PRIVATE_PROGRESS_STEPS.map((step) => {
                   const active = !isRejected && step.key === normalizedStatus
@@ -391,8 +391,8 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                       className={[
                         'rounded-xl border px-3 py-2 text-sm font-medium',
                         done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : '',
-                        active ? 'border-blue-200 bg-blue-50 text-blue-800' : '',
-                        !done && !active ? 'border-slate-200 bg-white text-slate-500' : '',
+                        active ? 'border-primary/30 bg-primary/10 text-primary' : '',
+                        !done && !active ? 'border-border bg-card text-muted-foreground' : '',
                       ].join(' ').trim()}
                     >
                       {step.label}
@@ -410,14 +410,14 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/dashboard"
-                className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 transition-colors"
+                className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
               >
                 返回 Dashboard
               </Link>
               {normalizedStatus === 'revision_requested' ? (
                 <Link
                   href={`/submit-revision/${encodeURIComponent(String(article.id))}`}
-                  className="rounded-full border border-slate-200 bg-white px-6 py-2.5 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors"
+                  className="rounded-full border border-border bg-card px-6 py-2.5 text-sm font-bold text-foreground hover:bg-muted/40 transition-colors"
                 >
                   提交修订稿
                 </Link>
@@ -430,7 +430,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
 
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12 lg:grid lg:grid-cols-3 lg:gap-12">
@@ -439,21 +439,21 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         <div className="lg:col-span-2 space-y-12">
           {/* Header Area */}
           <header className="space-y-6">
-            <nav className="flex items-center gap-2 text-sm font-bold text-blue-600 uppercase tracking-widest">
+            <nav className="flex items-center gap-2 text-sm font-bold text-primary uppercase tracking-widest">
               {article.journals?.slug ? (
                 <Link href={`/journals/${article.journals.slug}`} className="hover:underline">
                   {article.journals.title}
                 </Link>
               ) : (
-                <span className="text-slate-400">Unassigned Journal</span>
+                <span className="text-muted-foreground">Unassigned Journal</span>
               )}
-              <span className="text-slate-300">/</span>
-              <span className="text-slate-400">Article</span>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-muted-foreground">Article</span>
             </nav>
-            <h1 className="text-4xl font-serif font-bold text-slate-900 leading-tight">
+            <h1 className="text-4xl font-serif font-bold text-foreground leading-tight">
               {article.title}
             </h1>
-            <div className="flex flex-wrap gap-4 text-slate-600 font-medium">
+            <div className="flex flex-wrap gap-4 text-muted-foreground font-medium">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
                 Published: {article.published_at ? new Date(article.published_at).toLocaleDateString() : 'Pending'}
@@ -464,7 +464,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
               <div>
                 <button
                   onClick={handlePublish}
-                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 transition-colors"
                 >
                   Publish (dev)
                 </button>
@@ -473,9 +473,9 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
           </header>
 
           {/* Abstract Section */}
-          <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2">Abstract</h2>
-            <p className="text-slate-600 leading-relaxed text-lg italic">
+          <section className="bg-card p-8 rounded-3xl border border-border shadow-sm">
+            <h2 className="text-xl font-bold text-foreground mb-4 border-b border-border/60 pb-2">Abstract</h2>
+            <p className="text-muted-foreground leading-relaxed text-lg italic">
               {article.abstract}
             </p>
           </section>
@@ -483,16 +483,16 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
           {/* PDF Preview Area */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Full Text Preview</h2>
+              <h2 className="text-xl font-bold text-foreground">Full Text Preview</h2>
               <button
                 onClick={() => handleDownload(article.id)}
                 disabled={!hasFile}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full text-sm font-bold hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-foreground text-white rounded-full text-sm font-bold hover:bg-foreground/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="h-4 w-4" /> Download PDF
               </button>
             </div>
-            <div className="aspect-[3/4] w-full bg-slate-200 rounded-3xl overflow-hidden border-4 border-white shadow-2xl relative">
+            <div className="aspect-[3/4] w-full bg-muted rounded-3xl overflow-hidden border-4 border-white shadow-2xl relative">
               {previewUrl ? (
                 <iframe
                   src={previewUrl}
@@ -500,10 +500,10 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                   title="PDF Preview"
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/40">
                   <div className="text-center">
-                    <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-400 font-medium">
+                    <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground font-medium">
                       {hasFile ? 'Preview not available. Use Download PDF.' : 'No PDF uploaded for this article.'}
                     </p>
                   </div>
@@ -515,7 +515,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
           {/* Version History (Authorized Only) */}
           {canViewHistory && (
             <section className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-900">Version History</h2>
+              <h2 className="text-xl font-bold text-foreground">Version History</h2>
               <VersionHistory manuscriptId={article.id} />
             </section>
           )}
@@ -524,34 +524,34 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         {/* Sidebar (Right 1 Column) */}
         <aside className="mt-12 lg:mt-0 space-y-8">
           {/* Article Metrics */}
-          <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Metrics</h3>
+          <div className="bg-foreground text-white p-8 rounded-3xl shadow-xl">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-background/70 mb-6">Metrics</h3>
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <div className="text-2xl font-mono font-bold">1.2K</div>
-                <div className="text-xs text-slate-400 font-bold uppercase">Views</div>
+                <div className="text-xs text-background/70 font-bold uppercase">Views</div>
               </div>
               <div>
                 <div className="text-2xl font-mono font-bold">450</div>
-                <div className="text-xs text-slate-400 font-bold uppercase">Downloads</div>
+                <div className="text-xs text-background/70 font-bold uppercase">Downloads</div>
               </div>
             </div>
             <button
               onClick={handleCopyCitation}
-              className="w-full mt-8 py-3 border border-slate-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all"
+              className="w-full mt-8 py-3 border border-background/20 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-foreground/90 transition-all"
             >
               <Quote className="h-4 w-4" /> {citeCopied ? 'Citation Copied' : 'Cite this Article'}
             </button>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 onClick={() => handleDownloadCitation('bib')}
-                className="py-2 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
+                className="py-2 border border-background/20 rounded-xl text-xs font-bold hover:bg-foreground/90 transition-all"
               >
                 BibTeX
               </button>
               <button
                 onClick={() => handleDownloadCitation('ris')}
-                className="py-2 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
+                className="py-2 border border-background/20 rounded-xl text-xs font-bold hover:bg-foreground/90 transition-all"
               >
                 RIS
               </button>
@@ -560,24 +560,24 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
           {/* Quick Links */}
           <div className="space-y-4">
-            <h3 className="font-bold text-slate-900 px-2">Related Resources</h3>
+            <h3 className="font-bold text-foreground px-2">Related Resources</h3>
             <div className="space-y-2">
               {datasetReady ? (
                 <a
                   href={datasetUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full p-4 bg-white rounded-2xl border border-slate-200 transition-all group hover:border-blue-200"
+                  className="block w-full p-4 bg-card rounded-2xl border border-border transition-all group hover:border-primary/30"
                 >
-                  <div className="text-xs font-bold text-blue-600 mb-1">DATASET</div>
-                  <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600 flex items-center justify-between">
+                  <div className="text-xs font-bold text-primary mb-1">DATASET</div>
+                  <div className="text-sm font-bold text-foreground group-hover:text-primary flex items-center justify-between">
                     Open Research Data <ExternalLink className="h-3 w-3" />
                   </div>
                 </a>
               ) : (
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 opacity-60 cursor-not-allowed transition-all group">
-                  <div className="text-xs font-bold text-blue-600 mb-1">DATASET</div>
-                  <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                <div className="p-4 bg-card rounded-2xl border border-border opacity-60 cursor-not-allowed transition-all group">
+                  <div className="text-xs font-bold text-primary mb-1">DATASET</div>
+                  <div className="text-sm font-bold text-foreground flex items-center justify-between">
                     Open Research Data <ExternalLink className="h-3 w-3" />
                   </div>
                 </div>
@@ -587,17 +587,17 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                   href={sourceCodeUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full p-4 bg-white rounded-2xl border border-slate-200 transition-all group hover:border-emerald-200"
+                  className="block w-full p-4 bg-card rounded-2xl border border-border transition-all group hover:border-emerald-200"
                 >
                   <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
-                  <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 flex items-center justify-between">
+                  <div className="text-sm font-bold text-foreground group-hover:text-emerald-600 flex items-center justify-between">
                     Algorithm Implementation <ExternalLink className="h-3 w-3" />
                   </div>
                 </a>
               ) : (
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 opacity-60 cursor-not-allowed transition-all group">
+                <div className="p-4 bg-card rounded-2xl border border-border opacity-60 cursor-not-allowed transition-all group">
                   <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
-                  <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <div className="text-sm font-bold text-foreground flex items-center justify-between">
                     Algorithm Implementation <ExternalLink className="h-3 w-3" />
                   </div>
                 </div>

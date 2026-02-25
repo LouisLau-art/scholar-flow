@@ -32,12 +32,12 @@ export function DetailTopHeader({
   onBackToList,
 }: DetailTopHeaderProps) {
   return (
-    <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header className="bg-card border-b border-border px-6 py-4 sticky top-0 z-10 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div className="flex items-center gap-3 overflow-hidden">
-        <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
+        <span className="bg-primary text-white px-2 py-1 rounded text-xs font-bold whitespace-nowrap">
           {journalTitle?.substring(0, 4).toUpperCase() || 'MS'}
         </span>
-        <h1 className="font-bold text-slate-900 truncate max-w-xl text-lg" title={manuscriptTitle || ''}>
+        <h1 className="font-bold text-foreground truncate max-w-xl text-lg" title={manuscriptTitle || ''}>
           {manuscriptTitle || 'Untitled Manuscript'}
         </h1>
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(status)}`}>
@@ -54,10 +54,10 @@ export function DetailTopHeader({
             回到列表
           </Button>
         </div>
-        <div className="text-xs text-slate-500 flex items-center gap-2 whitespace-nowrap">
+        <div className="text-xs text-muted-foreground flex items-center gap-2 whitespace-nowrap">
           <Calendar className="h-3 w-3" />
           Updated:{' '}
-          <span className="font-mono font-medium text-slate-700">
+          <span className="font-mono font-medium text-foreground">
             {updatedAt ? formatDateTimeLocal(updatedAt) : '-'}
           </span>
         </div>
@@ -105,31 +105,31 @@ export function MetadataStaffCard({
 }: MetadataStaffCardProps) {
   return (
     <Card className="shadow-sm">
-      <CardHeader className="py-4 border-b bg-slate-50/30">
-        <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-slate-700">
+      <CardHeader className="py-4 border-b bg-muted/30">
+        <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-foreground">
           <User className="h-4 w-4" /> Metadata & Staff
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
           <div>
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Authors</div>
-            <div className="font-medium text-slate-900 text-sm">{displayAuthors}</div>
-            <div className="text-xs text-slate-500 mt-1">{affiliation || 'No affiliation'}</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Authors</div>
+            <div className="font-medium text-foreground text-sm">{displayAuthors}</div>
+            <div className="text-xs text-muted-foreground mt-1">{affiliation || 'No affiliation'}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Submitted</div>
-            <div className="font-medium text-slate-900 text-sm">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Submitted</div>
+            <div className="font-medium text-foreground text-sm">
               {submittedAt ? formatDateLocal(submittedAt) : '-'}
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-muted/40 p-4 rounded-lg border border-border/60">
           <div>
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Owner (Sales)</div>
-            <div className="mb-2 min-h-6 text-sm font-medium text-slate-900">
-              {owner ? owner.full_name || owner.email : <span className="italic text-slate-400">Unassigned</span>}
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Owner (Sales)</div>
+            <div className="mb-2 min-h-6 text-sm font-medium text-foreground">
+              {owner ? owner.full_name || owner.email : <span className="italic text-muted-foreground">Unassigned</span>}
             </div>
             <BindingOwnerDropdown
               manuscriptId={manuscriptId}
@@ -140,9 +140,9 @@ export function MetadataStaffCard({
           </div>
 
           <div>
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Assistant Editor</div>
-            <div className="mb-2 min-h-6 text-sm font-medium text-slate-900">
-              {currentAeId ? currentAeName || currentAeId : <span className="italic text-slate-400">Unassigned</span>}
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Assistant Editor</div>
+            <div className="mb-2 min-h-6 text-sm font-medium text-foreground">
+              {currentAeId ? currentAeName || currentAeId : <span className="italic text-muted-foreground">Unassigned</span>}
             </div>
             {canAssignAE ? (
               <BindingAssistantEditorDropdown
@@ -162,13 +162,13 @@ export function MetadataStaffCard({
               <div className="flex items-center gap-2 h-9">
                 {currentAeId ? (
                   <>
-                    <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
+                    <div className="w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-bold">
                       {(currentAeName || 'E').substring(0, 1).toUpperCase()}
                     </div>
                     <span className="text-sm font-medium truncate">{currentAeName || currentAeId}</span>
                   </>
                 ) : (
-                  <span className="text-sm text-slate-400 italic">Unassigned</span>
+                  <span className="text-sm text-muted-foreground italic">Unassigned</span>
                 )}
               </div>
             )}
@@ -176,22 +176,22 @@ export function MetadataStaffCard({
 
           <div
             className={`p-1 rounded -m-1 transition ${
-              canUpdateInvoiceInfo ? 'cursor-pointer hover:bg-slate-100' : 'cursor-not-allowed opacity-70'
+              canUpdateInvoiceInfo ? 'cursor-pointer hover:bg-muted' : 'cursor-not-allowed opacity-70'
             }`}
             onClick={onOpenInvoice}
           >
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
               APC Status <DollarSign className="h-3 w-3" />
             </div>
             <div className="flex items-center gap-2 h-9">
               {invoiceStatus === 'paid' ? (
                 <span className="text-sm font-bold text-green-600 flex items-center gap-1">
-                  PAID <span className="text-xs font-normal text-slate-500">(${invoiceAmount ?? 0})</span>
+                  PAID <span className="text-xs font-normal text-muted-foreground">(${invoiceAmount ?? 0})</span>
                 </span>
               ) : (
                 <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
                   {invoiceStatus ? String(invoiceStatus).toUpperCase() : 'PENDING'}
-                  <span className="text-xs font-normal text-slate-500">(${apcAmount || '0'})</span>
+                  <span className="text-xs font-normal text-muted-foreground">(${apcAmount || '0'})</span>
                 </span>
               )}
             </div>
@@ -211,8 +211,8 @@ export function AuthorResubmissionHistoryCard({
 }: AuthorResubmissionHistoryCardProps) {
   return (
     <Card className="shadow-sm">
-      <CardHeader className="py-4 border-b bg-slate-50/30">
-        <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-700">
+      <CardHeader className="py-4 border-b bg-muted/30">
+        <CardTitle className="text-sm font-bold uppercase tracking-wide text-foreground">
           Author Resubmission History
         </CardTitle>
       </CardHeader>
@@ -220,8 +220,8 @@ export function AuthorResubmissionHistoryCard({
         {authorResponseHistory.length > 0 ? (
           <div className="space-y-3">
             {authorResponseHistory.map((item, idx) => (
-              <div key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+              <div key={item.id} className="rounded-md border border-border bg-muted/40 p-3">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <div>
                     {item.submittedAt
                       ? `Submitted at ${formatDateTimeLocal(item.submittedAt)}`
@@ -230,12 +230,12 @@ export function AuthorResubmissionHistoryCard({
                   </div>
                   {idx === 0 ? <Badge variant="secondary">Latest</Badge> : null}
                 </div>
-                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{item.text}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
+          <div className="text-sm text-muted-foreground">No author resubmission comment yet.</div>
         )}
       </CardContent>
     </Card>
@@ -252,32 +252,32 @@ export function LatestAuthorResubmissionCard({
   historyCount,
 }: LatestAuthorResubmissionCardProps) {
   return (
-    <Card className="shadow-sm border-slate-200">
+    <Card className="shadow-sm border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Latest Author Resubmission Comment</CardTitle>
       </CardHeader>
       <CardContent>
         {latestAuthorResponse ? (
           <div className="space-y-2">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-muted-foreground">
               {latestAuthorResponse.submittedAt
                 ? `Submitted at ${formatDateTimeLocal(latestAuthorResponse.submittedAt)}`
                 : 'Submitted time unavailable'}
               {typeof latestAuthorResponse.round === 'number' ? ` · Round ${latestAuthorResponse.round}` : ''}
               {historyCount > 0 ? ` · Total ${historyCount}` : ''}
             </div>
-            <div className="max-h-44 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
+            <div className="max-h-44 overflow-auto rounded-md border border-border bg-muted/40 px-3 py-2 text-sm leading-6 text-foreground whitespace-pre-wrap">
               {latestAuthorResponse.text}
             </div>
             {historyCount > 1 ? (
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-muted-foreground">
                 Complete timeline is shown in the left card:{' '}
-                <span className="font-medium text-slate-700">Author Resubmission History</span>.
+                <span className="font-medium text-foreground">Author Resubmission History</span>.
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="text-sm text-slate-500">No author resubmission comment yet.</div>
+          <div className="text-sm text-muted-foreground">No author resubmission comment yet.</div>
         )}
       </CardContent>
     </Card>
@@ -304,21 +304,21 @@ export function ReviewerFeedbackSummaryCard({
   onRetry,
 }: ReviewerFeedbackSummaryCardProps) {
   return (
-    <Card ref={reviewCardRef} className="shadow-sm border-slate-200">
+    <Card ref={reviewCardRef} className="shadow-sm border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           Reviewer Feedback Summary
-          {!reviewsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
-          {reviewsActivated && reviewsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+          {!reviewsActivated ? <span className="text-xs font-normal text-muted-foreground">Deferred</span> : null}
+          {reviewsActivated && reviewsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {!canViewReviewerFeedback ? (
-          <div className="text-sm text-slate-500">You do not have permission to view reviewer feedback summary.</div>
+          <div className="text-sm text-muted-foreground">You do not have permission to view reviewer feedback summary.</div>
         ) : !reviewsActivated ? (
-          <div className="text-sm text-slate-500">Reviewer feedback will load when this card enters the viewport.</div>
+          <div className="text-sm text-muted-foreground">Reviewer feedback will load when this card enters the viewport.</div>
         ) : reviewsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading reviewer feedback…
           </div>
@@ -330,15 +330,15 @@ export function ReviewerFeedbackSummaryCard({
             </Button>
           </div>
         ) : reviewReports.length === 0 ? (
-          <div className="text-sm text-slate-500">No reviewer feedback submitted yet.</div>
+          <div className="text-sm text-muted-foreground">No reviewer feedback submitted yet.</div>
         ) : (
           reviewReports.map((report) => {
             const publicComment = String(report.comments_for_author || report.content || '').trim()
             const confidentialComment = String(report.confidential_comments_to_editor || '').trim()
             return (
-              <div key={report.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                  <div className="font-medium text-slate-700">
+              <div key={report.id} className="rounded-md border border-border bg-muted/40 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <div className="font-medium text-foreground">
                     {report.reviewer_name || report.reviewer_email || report.reviewer_id || 'Reviewer'}
                   </div>
                   <div className="flex items-center gap-2">
@@ -346,12 +346,12 @@ export function ReviewerFeedbackSummaryCard({
                     {report.status ? <Badge variant="secondary">{String(report.status)}</Badge> : null}
                   </div>
                 </div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-muted-foreground">
                   {report.created_at ? formatDateTimeLocal(report.created_at) : 'Submitted time unavailable'}
                 </div>
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Comments for Author</div>
-                  <div className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{publicComment || '—'}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Comments for Author</div>
+                  <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">{publicComment || '—'}</div>
                 </div>
                 {confidentialComment ? (
                   <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
@@ -430,8 +430,8 @@ export function EditorialActionsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         {!isPostAcceptance && canAssignReviewersStage && (
-          <div className="pt-2 pb-4 border-b border-slate-100">
-            <div className="text-xs font-semibold text-slate-500 mb-2">ASSIGN REVIEWERS</div>
+          <div className="pt-2 pb-4 border-b border-border/60">
+            <div className="text-xs font-semibold text-muted-foreground mb-2">ASSIGN REVIEWERS</div>
             <ReviewerAssignmentSearch
               manuscriptId={manuscriptId}
               onChanged={onReviewerChanged}
@@ -441,7 +441,7 @@ export function EditorialActionsCard({
           </div>
         )}
         {!isPostAcceptance && !canAssignReviewersStage && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             当前阶段不开放审稿人分配。请先按流程推进到 `under_review / resubmitted`。
           </div>
         )}
@@ -458,7 +458,7 @@ export function EditorialActionsCard({
           </Button>
         )}
         {!isPostAcceptance && !canOpenDecisionWorkspaceStage && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             Decision Workspace 仅在 `under_review / resubmitted / decision / decision_done` 阶段开放。
           </div>
         )}
@@ -481,20 +481,20 @@ export function EditorialActionsCard({
                 />
               </>
             ) : (
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                 稿件进入录用后由 Managing Editor / Production Editor 继续处理。
               </div>
             )}
           </div>
         ) : showDirectStatusTransitions ? (
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-500 mb-2">CHANGE STATUS</div>
+            <div className="text-xs font-semibold text-muted-foreground mb-2">CHANGE STATUS</div>
             {!canManualStatusTransition ? (
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                 当前账号无手动状态流转权限（仅 Managing Editor/Admin 可用）。
               </div>
             ) : nextStatuses.length === 0 ? (
-              <div className="text-sm text-slate-400 italic">No next status available.</div>
+              <div className="text-sm text-muted-foreground italic">No next status available.</div>
             ) : (
               nextStatuses.map((nextStatus) => {
                 const next = String(nextStatus || '').toLowerCase().trim()
@@ -523,7 +523,7 @@ export function EditorialActionsCard({
             )}
           </div>
         ) : (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             当前状态为流程终态，已关闭手动状态流转。
           </div>
         )}
@@ -543,7 +543,7 @@ type NextActionCardProps = {
 
 export function NextActionCard({ nextAction }: NextActionCardProps) {
   return (
-    <Card className="shadow-sm border-slate-200">
+    <Card className="shadow-sm border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center justify-between">
           <span>Next Action</span>
@@ -551,8 +551,8 @@ export function NextActionCard({ nextAction }: NextActionCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="text-sm font-semibold text-slate-900">{nextAction.title}</div>
-        <div className="text-sm text-slate-600">{nextAction.description}</div>
+        <div className="text-sm font-semibold text-foreground">{nextAction.title}</div>
+        <div className="text-sm text-muted-foreground">{nextAction.description}</div>
         {nextAction.blockers.length > 0 && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 space-y-1">
             <div className="text-xs font-semibold text-rose-700 flex items-center gap-1">
@@ -593,8 +593,8 @@ export function TaskSlaSummaryCard({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           Task SLA Summary
-          {!cardsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
-          {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+          {!cardsActivated ? <span className="text-xs font-normal text-muted-foreground">Deferred</span> : null}
+          {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
@@ -608,18 +608,18 @@ export function TaskSlaSummaryCard({
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">Open Tasks</span>
-              <span className="font-medium text-slate-900">{taskSummary?.open_tasks_count ?? 0}</span>
+              <span className="text-muted-foreground">Open Tasks</span>
+              <span className="font-medium text-foreground">{taskSummary?.open_tasks_count ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">Overdue Tasks</span>
-              <span className={`font-medium ${taskSummary?.is_overdue ? 'text-rose-700' : 'text-slate-900'}`}>
+              <span className="text-muted-foreground">Overdue Tasks</span>
+              <span className={`font-medium ${taskSummary?.is_overdue ? 'text-rose-700' : 'text-foreground'}`}>
                 {taskSummary?.overdue_tasks_count ?? 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">Nearest Due</span>
-              <span className="font-medium text-slate-900">
+              <span className="text-muted-foreground">Nearest Due</span>
+              <span className="font-medium text-foreground">
                 {taskSummary?.nearest_due_at ? formatDateTimeLocal(taskSummary.nearest_due_at) : '—'}
               </span>
             </div>
@@ -656,8 +656,8 @@ export function PrecheckRoleQueueCard({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           Pre-check Role Queue
-          {!cardsActivated ? <span className="text-xs font-normal text-slate-500">Deferred</span> : null}
-          {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" /> : null}
+          {!cardsActivated ? <span className="text-xs font-normal text-muted-foreground">Deferred</span> : null}
+          {cardsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -672,53 +672,53 @@ export function PrecheckRoleQueueCard({
           <>
             <div className="space-y-2 text-sm">
               <div>
-                <span className="font-medium text-slate-700">Current Role:</span>{' '}
-                <span className="text-slate-900">{(roleQueue?.current_role || '—').replaceAll('_', ' ')}</span>
+                <span className="font-medium text-foreground">Current Role:</span>{' '}
+                <span className="text-foreground">{(roleQueue?.current_role || '—').replaceAll('_', ' ')}</span>
               </div>
               <div>
-                <span className="font-medium text-slate-700">Current Assignee:</span>{' '}
-                <span className="text-slate-900">{roleQueueAssigneeText}</span>
+                <span className="font-medium text-foreground">Current Assignee:</span>{' '}
+                <span className="text-foreground">{roleQueueAssigneeText}</span>
               </div>
               <div>
-                <span className="font-medium text-slate-700">Assigned At:</span>{' '}
-                <span className="text-slate-900">
+                <span className="font-medium text-foreground">Assigned At:</span>{' '}
+                <span className="text-foreground">
                   {roleQueue?.assigned_at ? formatDateTimeLocal(roleQueue.assigned_at) : '—'}
                 </span>
               </div>
               <div>
-                <span className="font-medium text-slate-700">Technical Completed:</span>{' '}
-                <span className="text-slate-900">
+                <span className="font-medium text-foreground">Technical Completed:</span>{' '}
+                <span className="text-foreground">
                   {roleQueue?.technical_completed_at ? formatDateTimeLocal(roleQueue.technical_completed_at) : '—'}
                 </span>
               </div>
               <div>
-                <span className="font-medium text-slate-700">Academic Completed:</span>{' '}
-                <span className="text-slate-900">
+                <span className="font-medium text-foreground">Academic Completed:</span>{' '}
+                <span className="text-foreground">
                   {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
                 </span>
               </div>
             </div>
-            <div className="mt-3 text-xs text-slate-500">Detailed role actions are merged into the Activity Timeline below.</div>
+            <div className="mt-3 text-xs text-muted-foreground">Detailed role actions are merged into the Activity Timeline below.</div>
           </>
         ) : (
           <div className="space-y-2 text-sm">
-            <div className="font-medium text-slate-900">Pre-check completed</div>
-            <div className="text-slate-700">
-              Last assignee: <span className="font-medium text-slate-900">{roleQueueAssigneeText}</span>
+            <div className="font-medium text-foreground">Pre-check completed</div>
+            <div className="text-foreground">
+              Last assignee: <span className="font-medium text-foreground">{roleQueueAssigneeText}</span>
             </div>
-            <div className="text-slate-700">
+            <div className="text-foreground">
               Technical completed:{' '}
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {roleQueue?.technical_completed_at ? formatDateTimeLocal(roleQueue.technical_completed_at) : '—'}
               </span>
             </div>
-            <div className="text-slate-700">
+            <div className="text-foreground">
               Academic completed:{' '}
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
               </span>
             </div>
-            <div className="pt-1 text-xs text-slate-500">
+            <div className="pt-1 text-xs text-muted-foreground">
               Current manuscript status is <span className="font-medium">{statusLower || '—'}</span>. Full pre-check actions are in Activity Timeline.
             </div>
           </div>
