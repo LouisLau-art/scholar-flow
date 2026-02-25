@@ -853,6 +853,15 @@ class EditorService(EditorServicePrecheckMixin):
         scope_enforcement_enabled: bool | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._list_process_rows_with_fallback(filters=filters)
+        rows = self._apply_process_visibility_scope(
+            rows=rows,
+            viewer_user_id=viewer_user_id,
+            viewer_roles=viewer_roles,
+            scoped_journal_ids=scoped_journal_ids,
+            scope_enforcement_enabled=scope_enforcement_enabled,
+        )
+        if not rows:
+            return rows
 
         profile_ids: set[str] = set()
         for r in rows:
@@ -860,13 +869,15 @@ class EditorService(EditorServicePrecheckMixin):
                 profile_ids.add(str(r["owner_id"]))
             if r.get("editor_id"):
                 profile_ids.add(str(r["editor_id"]))
+            if r.get("assistant_editor_id"):
+                profile_ids.add(str(r["assistant_editor_id"]))
 
         profiles_map: dict[str, dict[str, Any]] = {}
         if profile_ids:
             try:
                 prof = (
                     self.client.table("user_profiles")
-                    .select("id,email,full_name,roles")
+                    .select("id,email,full_name")
                     .in_("id", sorted(profile_ids))
                     .execute()
                 )
@@ -902,7 +913,11 @@ class EditorService(EditorServicePrecheckMixin):
         precheck_rows = [
             r for r in rows if normalize_status(str(r.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
         ]
-        precheck_enriched = self._enrich_precheck_rows(precheck_rows)
+        precheck_enriched = self._enrich_precheck_rows(
+            precheck_rows,
+            include_timeline=False,
+            include_assignee_profiles=False,
+        )
         by_id = {str(r.get("id") or ""): r for r in precheck_enriched}
         for row in rows:
             rid = str(row.get("id") or "")
@@ -914,18 +929,20 @@ class EditorService(EditorServicePrecheckMixin):
                 row["assigned_at"] = enriched.get("assigned_at")
                 row["technical_completed_at"] = enriched.get("technical_completed_at")
                 row["academic_completed_at"] = enriched.get("academic_completed_at")
+                assignee = row.get("current_assignee")
+                if isinstance(assignee, dict):
+                    ae_id = str(assignee.get("id") or row.get("assistant_editor_id") or "")
+                    if ae_id:
+                        profile = profiles_map.get(ae_id) or {}
+                        row["current_assignee"] = {
+                            "id": ae_id,
+                            "full_name": profile.get("full_name"),
+                            "email": profile.get("email"),
+                        }
 
         rows = self._attach_overdue_snapshot(rows)
         if filters.overdue_only:
             rows = [row for row in rows if bool(row.get("is_overdue"))]
-
-        rows = self._apply_process_visibility_scope(
-            rows=rows,
-            viewer_user_id=viewer_user_id,
-            viewer_roles=viewer_roles,
-            scoped_journal_ids=scoped_journal_ids,
-            scope_enforcement_enabled=scope_enforcement_enabled,
-        )
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
