@@ -7,6 +7,7 @@ from app.api.v1.editor_common import (
     is_missing_table_error as _is_missing_table_error,
 )
 from app.core.auth_utils import get_current_user
+from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.roles import require_any_role
 from app.lib.api_client import supabase_admin
 from app.models.internal_task import InternalTaskStatus
@@ -25,6 +26,93 @@ INTERNAL_COLLAB_ALLOWED_ROLES = [
     "production_editor",
     "editor_in_chief",
 ]
+
+
+def _load_manuscript_access_row(manuscript_id: str) -> dict:
+    try:
+        resp = (
+            supabase_admin.table("manuscripts")
+            .select("id,assistant_editor_id,editor_id,owner_id")
+            .eq("id", str(manuscript_id))
+            .single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Manuscript not found") from e
+    row = getattr(resp, "data", None) or {}
+    if not row:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+    return row
+
+
+def _is_production_editor_assigned(*, manuscript_id: str, user_id: str) -> bool:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return False
+    try:
+        query = (
+            supabase_admin.table("production_cycles")
+            .select("layout_editor_id,collaborator_editor_ids,status")
+            .eq("manuscript_id", str(manuscript_id))
+        )
+        if hasattr(query, "in_"):
+            query = query.in_(
+                "status",
+                [
+                    "draft",
+                    "awaiting_author",
+                    "author_corrections_submitted",
+                    "author_confirmed",
+                    "in_layout_revision",
+                ],
+            )
+        resp = query.execute()
+        rows = getattr(resp, "data", None) or []
+    except Exception:
+        return False
+
+    for row in rows:
+        layout_editor_id = str(row.get("layout_editor_id") or "").strip()
+        if layout_editor_id and layout_editor_id == uid:
+            return True
+        collaborators = row.get("collaborator_editor_ids")
+        if isinstance(collaborators, list) and uid in {str(v).strip() for v in collaborators if str(v).strip()}:
+            return True
+    return False
+
+
+def _ensure_internal_collab_access(*, manuscript_id: str, user_id: str, roles: list[str] | None) -> None:
+    role_set = {str(role).strip().lower() for role in (roles or []) if str(role).strip()}
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if "admin" in role_set:
+        return
+
+    # ME/EIC 始终执行 journal-scope 强约束。
+    if role_set.intersection({"managing_editor", "editor_in_chief"}):
+        ensure_manuscript_scope_access(
+            manuscript_id=str(manuscript_id),
+            user_id=uid,
+            roles=list(role_set),
+            allow_admin_bypass=True,
+        )
+        return
+
+    manuscript = _load_manuscript_access_row(str(manuscript_id))
+
+    # AE 仅允许访问自己被分配的稿件。
+    if "assistant_editor" in role_set:
+        assistant_editor_id = str(manuscript.get("assistant_editor_id") or "").strip()
+        if assistant_editor_id and assistant_editor_id == uid:
+            return
+
+    # PE 仅允许访问自己被分配到 production cycle 的稿件。
+    if "production_editor" in role_set and _is_production_editor_assigned(manuscript_id=str(manuscript_id), user_id=uid):
+        return
+
+    raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def _load_audit_logs_with_users(manuscript_id: str) -> list[dict]:
@@ -70,12 +158,18 @@ def _load_audit_logs_with_users(manuscript_id: str) -> list[dict]:
 @router.get("/manuscripts/{id}/comments")
 async def get_internal_comments(
     id: str,
-    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Fetch internal notebook comments (Staff only).
     """
     svc = InternalCollaborationService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         return {"success": True, "data": svc.list_comments(id)}
     except InternalCollaborationSchemaMissingError as e:
@@ -94,12 +188,17 @@ async def create_internal_comment(
     id: str,
     payload: InternalCommentPayload,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Post internal comment.
     """
     svc = InternalCollaborationService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         comment = svc.create_comment(
             manuscript_id=id,
@@ -134,6 +233,11 @@ async def list_internal_tasks(
     profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         rows = svc.list_tasks(
             manuscript_id=id,
@@ -160,6 +264,11 @@ async def create_internal_task(
     profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         task = svc.create_task(
             manuscript_id=id,
@@ -191,6 +300,11 @@ async def patch_internal_task(
     profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         task = svc.update_task(
             manuscript_id=id,
@@ -218,9 +332,15 @@ async def patch_internal_task(
 async def get_internal_task_activity(
     id: str,
     task_id: str,
-    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         rows = svc.list_activity(manuscript_id=id, task_id=task_id)
         return {"success": True, "data": rows}
@@ -238,12 +358,18 @@ async def list_internal_task_activity(
     id: str,
     task_limit: int = Query(50, ge=1, le=200, description="参与聚合的任务数上限"),
     activity_limit: int = Query(500, ge=1, le=1000, description="返回活动条数上限"),
-    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     批量获取稿件任务活动日志（避免前端按任务逐个请求）。
     """
     svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
     try:
         rows = svc.list_manuscript_activity(
             manuscript_id=id,
@@ -273,6 +399,11 @@ async def get_internal_timeline_context(
     """
     collab_svc = InternalCollaborationService()
     task_svc = InternalTaskService()
+    _ensure_internal_collab_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+    )
 
     data = {
         "audit_logs": [],
@@ -325,12 +456,18 @@ async def get_internal_timeline_context(
 @router.get("/manuscripts/{id}/audit-logs")
 async def get_audit_logs(
     id: str,
-    _profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(INTERNAL_COLLAB_ALLOWED_ROLES)),
 ):
     """
     Feature 036: Fetch status transition logs.
     """
     try:
+        _ensure_internal_collab_access(
+            manuscript_id=id,
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+        )
         return {"success": True, "data": _load_audit_logs_with_users(id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch audit logs")

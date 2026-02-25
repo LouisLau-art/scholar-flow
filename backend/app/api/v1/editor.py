@@ -32,7 +32,7 @@ from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest
 from app.models.production_workspace import CreateProductionCycleRequest, UpdateProductionCycleEditorsRequest
 from app.services.production_workspace_service import ProductionWorkspaceService
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from io import BytesIO
 from uuid import uuid4
 from time import perf_counter
@@ -283,7 +283,7 @@ async def upload_editor_review_attachment(
     id: str,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Feature 033: Editor/Admin 上传 Peer Review Files（仅内部可见）。
@@ -292,6 +292,13 @@ async def upload_editor_review_attachment(
     - 文件上传至私有桶 `review-attachments`（Author 不可见）。
     - 元数据写入 `public.manuscript_files`（file_type=review_attachment）。
     """
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
     filename = (file.filename or "review_attachment").strip()
     lowered = filename.lower()
     if not (lowered.endswith(".pdf") or lowered.endswith(".doc") or lowered.endswith(".docx")):
@@ -450,7 +457,15 @@ async def patch_manuscript_status(
     """
     to_status = str(payload.get("status") or "")
     comment = payload.get("comment")
-    allow_skip = "admin" in (profile.get("roles") or [])
+    roles = profile.get("roles") or []
+    allow_skip = "admin" in roles
+
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=roles,
+        allow_admin_bypass=True,
+    )
 
     # Feature 031：Published 必须走显式门禁（Payment/Production Gate）。
     # 中文注释：避免通过通用 patch 接口“绕过门禁”直接把稿件置为 published。
@@ -736,6 +751,7 @@ async def list_journals(
 
 @router.get("/pipeline")
 async def get_editor_pipeline(
+    per_stage_limit: Annotated[int | None, Query(ge=10, le=300, description="每个状态桶返回条数上限")] = None,
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
@@ -746,6 +762,7 @@ async def get_editor_pipeline(
     return await get_editor_pipeline_impl(
         supabase_admin_client=supabase_admin,
         extract_data_fn=_extract_supabase_data,
+        per_stage_limit=per_stage_limit,
     )
 
 

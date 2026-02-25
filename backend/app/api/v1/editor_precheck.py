@@ -365,7 +365,7 @@ async def quick_precheck(
     id: str,
     payload: QuickPrecheckPayload,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     032 / US2: 高频“Pre-check”快操作（无需进入详情页）。
@@ -379,6 +379,13 @@ async def quick_precheck(
 
     if decision == "revision" and not comment:
         raise HTTPException(status_code=422, detail="comment is required for revision")
+
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
 
     svc = EditorialService()
     ms = svc.get_manuscript(id)

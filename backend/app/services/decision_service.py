@@ -576,6 +576,16 @@ class DecisionService(DecisionServiceAttachmentMixin):
             if decision == "major_revision"
             else ManuscriptStatus.MINOR_REVISION.value
         )
+        if norm not in {
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.RESUBMITTED.value,
+            ManuscriptStatus.DECISION.value,
+            ManuscriptStatus.DECISION_DONE.value,
+        }:
+            raise HTTPException(
+                status_code=422,
+                detail="Final revision decision only allowed in under_review/resubmitted/decision/decision_done stage",
+            )
         try:
             updated = self.editorial.update_status(
                 manuscript_id=manuscript_id,
@@ -585,7 +595,13 @@ class DecisionService(DecisionServiceAttachmentMixin):
                 allow_skip=False,
                 payload=audit_payload,
             )
-        except HTTPException:
+        except HTTPException as e:
+            # 仅允许在决策尾段做受控兜底，避免 pre_check/under_review 等阶段被无条件放行。
+            detail = str(getattr(e, "detail", "") or "")
+            if norm not in {ManuscriptStatus.DECISION.value, ManuscriptStatus.DECISION_DONE.value}:
+                raise
+            if "Invalid transition" not in detail:
+                raise
             updated = self.editorial.update_status(
                 manuscript_id=manuscript_id,
                 to_status=to_status,

@@ -16,6 +16,7 @@ async def get_editor_pipeline_impl(
     *,
     supabase_admin_client: Any,
     extract_data_fn,
+    per_stage_limit: int | None = None,
 ) -> dict[str, Any]:
     """
     获取全站稿件流转状态看板数据。
@@ -27,25 +28,34 @@ async def get_editor_pipeline_impl(
     try:
         # 中文注释: 这里使用 service_role 读取，避免启用 RLS 的云端环境导致 editor 看板空数据。
         db = supabase_admin_client
+        default_limit_raw = str(os.getenv("EDITOR_PIPELINE_STAGE_LIMIT", "80") or "80").strip()
+        try:
+            default_limit = int(default_limit_raw)
+        except Exception:
+            default_limit = 80
+        stage_limit = max(10, min(int(per_stage_limit or default_limit), 300))
+
+        def _with_limit(query):
+            if hasattr(query, "limit"):
+                return query.limit(stage_limit)
+            return query
 
         # Pre-check（旧：submitted/pending_quality）
-        pending_quality_resp = (
+        pending_quality_resp = _with_limit(
             db.table("manuscripts")
             .select("*")
             .eq("status", "pre_check")
             .order("created_at", desc=True)
-            .execute()
-        )
+        ).execute()
         pending_quality = extract_data_fn(pending_quality_resp) or []
 
         # 评审中 (under_review)
-        under_review_resp = (
+        under_review_resp = _with_limit(
             db.table("manuscripts")
             .select("*, review_assignments(count)")
             .eq("status", "under_review")
             .order("created_at", desc=True)
-            .execute()
-        )
+        ).execute()
         under_review_data = extract_data_fn(under_review_resp) or []
         # 中文注释: review_assignments(count) 会按“行数”计数，若历史/并发导致重复指派，会把同一 reviewer 计为 2。
         # 这里改为统计 distinct reviewer_id，保证 UI 中 review_count 与“人数”一致。
@@ -85,13 +95,12 @@ async def get_editor_pipeline_impl(
             under_review.append(item)
 
         # 待决策（decision，旧：pending_decision）
-        pending_decision_resp = (
+        pending_decision_resp = _with_limit(
             db.table("manuscripts")
             .select("*, review_assignments(count)")
             .eq("status", "decision")
             .order("created_at", desc=True)
-            .execute()
-        )
+        ).execute()
         pending_decision_data = extract_data_fn(pending_decision_resp) or []
         pending_ids = [str(m.get("id")) for m in pending_decision_data if m.get("id")]
         reviewers_by_ms_pending: dict[str, set[str]] = {}
@@ -138,7 +147,7 @@ async def get_editor_pipeline_impl(
         else:
             # 单元测试 stub client 可能不实现 in_；此时仅返回 approved，避免抛错阻断看板。
             approved_query = approved_query.eq("status", "approved")
-        approved_resp = approved_query.execute()
+        approved_resp = _with_limit(approved_query).execute()
         approved_data = extract_data_fn(approved_resp) or []
         approved = []
         for item in approved_data:
@@ -158,23 +167,21 @@ async def get_editor_pipeline_impl(
             approved.append(item)
 
         # 已发布 (published)
-        published_resp = (
+        published_resp = _with_limit(
             db.table("manuscripts")
             .select("*")
             .eq("status", "published")
             .order("created_at", desc=True)
-            .execute()
-        )
+        ).execute()
         published = extract_data_fn(published_resp) or []
 
         # 待处理修订稿 (resubmitted) - 类似待质检，需 Editor 处理
-        resubmitted_resp = (
+        resubmitted_resp = _with_limit(
             db.table("manuscripts")
             .select("*")
             .eq("status", "resubmitted")
             .order("updated_at", desc=True)
-            .execute()
-        )
+        ).execute()
         resubmitted = extract_data_fn(resubmitted_resp) or []
 
         # 等待作者修订（major/minor revision，旧：revision_requested）- 监控用
@@ -187,27 +194,30 @@ async def get_editor_pipeline_impl(
             )
             if hasattr(rr_query, "in_"):
                 rr_query = rr_query.in_("status", ["major_revision", "minor_revision"])
-                revision_requested = extract_data_fn(rr_query.execute()) or []
+                revision_requested = extract_data_fn(_with_limit(rr_query).execute()) or []
             else:
                 # fallback: 两次 eq 合并（不阻断）
                 maj = extract_data_fn(
-                    db.table("manuscripts").select("*").eq("status", "major_revision").order("updated_at", desc=True).execute()
+                    _with_limit(
+                        db.table("manuscripts").select("*").eq("status", "major_revision").order("updated_at", desc=True)
+                    ).execute()
                 ) or []
                 minor = extract_data_fn(
-                    db.table("manuscripts").select("*").eq("status", "minor_revision").order("updated_at", desc=True).execute()
+                    _with_limit(
+                        db.table("manuscripts").select("*").eq("status", "minor_revision").order("updated_at", desc=True)
+                    ).execute()
                 ) or []
                 revision_requested = (maj or []) + (minor or [])
         except Exception as e:
             print(f"Pipeline revision_requested fallback empty: {e}")
 
         # 已拒稿 (rejected) - 终态归档
-        rejected_resp = (
+        rejected_resp = _with_limit(
             db.table("manuscripts")
             .select("*")
             .eq("status", "rejected")
             .order("updated_at", desc=True)
-            .execute()
-        )
+        ).execute()
         rejected = extract_data_fn(rejected_resp) or []
 
         return {

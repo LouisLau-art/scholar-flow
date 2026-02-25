@@ -44,6 +44,8 @@ export function ReviewerAssignmentSearch(props: {
       const overrideMap = new Map(
         (options?.overrides || []).map((item) => [String(item.reviewerId), String(item.reason || '')])
       )
+      const failures: Array<{ reviewerId: string; detail: string }> = []
+      let successCount = 0
 
       for (const reviewerId of reviewerIds) {
         const overrideReason = overrideMap.get(String(reviewerId))
@@ -66,13 +68,30 @@ export function ReviewerAssignmentSearch(props: {
           } catch {
             detail = raw
           }
-          throw new Error(detail || 'Assign failed')
+          failures.push({ reviewerId: String(reviewerId), detail: detail || 'Assign failed' })
+          continue
         }
+        successCount += 1
       }
 
-      toast.success('Assigned.', { id: toastId })
-      props.onChanged?.()
-      return true
+      if (successCount > 0) {
+        props.onChanged?.()
+      }
+
+      if (failures.length === 0) {
+        toast.success(`Assigned ${successCount} reviewer(s).`, { id: toastId })
+        return true
+      }
+
+      const sample = failures[0]
+      const summary = `Assigned ${successCount}, failed ${failures.length}.`
+      const detailText = `${sample.reviewerId}: ${sample.detail}`
+      if (successCount > 0) {
+        toast.warning(`${summary} ${detailText}`, { id: toastId })
+      } else {
+        toast.error(sample.detail || 'Assign failed', { id: toastId })
+      }
+      return false
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Assign failed', { id: toastId })
       return false

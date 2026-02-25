@@ -32,6 +32,9 @@ type PipelineStage =
   | 'revision_requested'
   | 'rejected'
 
+const SECTION_PREVIEW_LIMIT = 3
+const ACTIVE_FILTER_RENDER_LIMIT = 30
+
 interface EditorPipelineProps {
   onAssign?: (manuscript: Manuscript) => void
   onDecide?: (manuscript: Manuscript) => void
@@ -100,6 +103,13 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
 
   const hasData = (stage: string) => (pipelineData?.[stage] || []).length > 0
   const getData = (stage: string) => (pipelineData?.[stage] || [])
+  const getDisplayItems = (stage: PipelineStage) => {
+    const items = getData(stage)
+    const limit = activeFilter ? ACTIVE_FILTER_RENDER_LIMIT : SECTION_PREVIEW_LIMIT
+    return items.slice(0, limit)
+  }
+  const isTruncatedInActiveFilter = (stage: PipelineStage) =>
+    activeFilter === stage && getData(stage).length > ACTIVE_FILTER_RENDER_LIMIT
 
   const handlePublish = async (manuscriptId: string) => {
     const toastId = toast.loading('Publishing...')
@@ -389,7 +399,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('pending_quality') && (!activeFilter || activeFilter === 'pending_quality') && (
             <>
               {renderSectionHeader('Pending Quality Check', getData('pending_quality').length, 'pending_quality')}
-              {getData('pending_quality').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('pending_quality').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -403,6 +413,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('pending_quality') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -410,7 +423,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('resubmitted') && (!activeFilter || activeFilter === 'resubmitted') && (
             <>
               {renderSectionHeader('Resubmitted Revisions', getData('resubmitted').length, 'resubmitted')}
-              {getData('resubmitted').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('resubmitted').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -426,6 +439,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('resubmitted') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -433,7 +449,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('under_review') && (!activeFilter || activeFilter === 'under_review') && (
             <>
               {renderSectionHeader('Under Review', getData('under_review').length, 'under_review')}
-              {getData('under_review').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('under_review').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -446,6 +462,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('under_review') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -453,7 +472,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('pending_decision') && (!activeFilter || activeFilter === 'pending_decision') && (
             <>
               {renderSectionHeader('Pending Decision', getData('pending_decision').length, 'pending_decision')}
-              {getData('pending_decision').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('pending_decision').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -465,6 +484,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('pending_decision') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -472,7 +494,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('approved') && (!activeFilter || activeFilter === 'approved') && (
             <>
               {renderSectionHeader('Approved (Financial Gate)', getData('approved').length, 'approved')}
-              {getData('approved').slice(0, activeFilter ? undefined : 3).map((manuscript: Manuscript) => {
+              {getDisplayItems('approved').map((manuscript: Manuscript) => {
                 const amountRaw = manuscript.invoice_amount
                 const amountParsed = typeof amountRaw === 'string' ? Number.parseFloat(amountRaw) : Number(amountRaw)
                 const amount = Number.isFinite(amountParsed) ? amountParsed : 0
@@ -561,6 +583,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 )
               })}
+              {isTruncatedInActiveFilter('approved') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -568,7 +593,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('revision_requested') && (!activeFilter || activeFilter === 'revision_requested') && (
             <>
               {renderSectionHeader('Waiting for Author', getData('revision_requested').length, 'revision_requested')}
-              {getData('revision_requested').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('revision_requested').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-75">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -582,6 +607,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('revision_requested') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -589,7 +617,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('published') && (!activeFilter || activeFilter === 'published') && (
             <>
               {renderSectionHeader('Published', getData('published').length, 'published')}
-              {getData('published').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('published').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -600,6 +628,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('published') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
 
@@ -607,7 +638,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
           {hasData('rejected') && (!activeFilter || activeFilter === 'rejected') && (
             <>
               {renderSectionHeader('Rejected', getData('rejected').length, 'rejected')}
-              {getData('rejected').slice(0, activeFilter ? undefined : 3).map((manuscript: any) => (
+              {getDisplayItems('rejected').map((manuscript: any) => (
                 <div key={manuscript.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg hover:bg-slate-50 opacity-80">
                   <div>
                     <div className="font-medium text-slate-900">{manuscript.title}</div>
@@ -620,6 +651,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                   </div>
                 </div>
               ))}
+              {isTruncatedInActiveFilter('rejected') ? (
+                <div className="text-xs text-slate-500">Showing first {ACTIVE_FILTER_RENDER_LIMIT} manuscripts in this stage.</div>
+              ) : null}
             </>
           )}
         </div>

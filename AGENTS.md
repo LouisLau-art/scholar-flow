@@ -268,6 +268,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
+- **编辑端列表限流参数（2026-02-25）**：新增 `EDITOR_PROCESS_QUERY_LIMIT`（默认 `300`，范围 `50-1000`）与 `EDITOR_PIPELINE_STAGE_LIMIT`（默认 `80`，范围 `10-300`）；用于限制 Process/Pipeline 单次查询规模，避免全量扫描导致高延迟。
 - **Invoice PDF 中文字体（2026-02-24）**：HF Docker 镜像需安装 `fonts-noto-cjk`；`backend/app/core/templates/invoice_pdf.html` 字体栈已包含 `PingFang SC` / `Noto Sans CJK SC` 回退。若本地直接生成发票 PDF，也需在系统安装任一 CJK 字体以避免中文方块字。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
@@ -313,6 +314,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-25）
+- **权限与状态机收敛（2026-02-25）**：内部协作接口新增稿件级访问校验（ME/EIC 强制 journal scope，AE 仅限分配稿件，PE 仅限分配 cycle）；`editor` 的手动改状态、review-attachment 上传、quick-precheck 与 production 管理动作补齐 scope 校验；`DecisionService` 的 final `major/minor` 不再无条件 `allow_skip`，仅在受控决策尾段兜底，阻断非法状态放行。
+- **前后端渲染/请求限流（2026-02-25）**：Pipeline 各状态桶新增后端 per-stage limit，Process 查询新增后端硬上限；前端 `ManuscriptTable` 改为渐进加载（Load more），`EditorPipeline` 过滤态增加展示上限，避免大数据量时全量渲染卡顿；Reviewer 批量指派改为“部分成功/失败”汇总提示，减少重复指派回归。
 - **Editor Process 链路降载（2026-02-25）**：`EditorService.list_manuscripts_process` 改为先做 scope 可见性过滤再执行 profile/overdue 聚合；Pre-check enrich 在 Process 列表里默认关闭 timeline 与 assignee profile 二次拉取，仅保留必要字段并复用一次性 profile 映射回填，减少无效扫描与重复查询。
 - **AE/ME Workspace enrich 轻量化（2026-02-25）**：`get_ae_workspace` 与 `get_managing_workspace` 的 pre-check enrich 改为 `include_timeline=False` + `include_assignee_profiles=False`，并在 workspace 层按需补齐展示字段，进一步降低首屏链路成本。
 - **Reviewer 指派弹窗按需加载（2026-02-25）**：`ReviewerAssignmentSearch` 改为动态加载 `ReviewerAssignModal`（`next/dynamic` + `ssr:false`），仅在用户点击 `Manage Reviewers` 时下载大组件，减少详情页首包体积。

@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
@@ -35,6 +37,9 @@ function fmt(ts?: string) {
   return format(d, 'yyyy-MM-dd HH:mm')
 }
 
+const INITIAL_VISIBLE_ROWS = 50
+const VISIBLE_ROWS_STEP = 50
+
 export function ManuscriptTable({
   rows,
   onAssign,
@@ -60,6 +65,15 @@ export function ManuscriptTable({
   readOnly?: boolean
   emptyText?: string
 }) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ROWS)
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_ROWS)
+  }, [rows.length])
+
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount])
+  const remainingRows = Math.max(rows.length - visibleRows.length, 0)
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden" data-testid="editor-process-table">
       <Table className="table-fixed">
@@ -80,7 +94,7 @@ export function ManuscriptTable({
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((r) => {
+            visibleRows.map((r) => {
               const status = r.status || ''
               const stage = (r.pre_check_status || '').toLowerCase()
               const isPrecheck = status.toLowerCase() === 'pre_check'
@@ -170,6 +184,18 @@ export function ManuscriptTable({
           )}
         </TableBody>
       </Table>
+      {remainingRows > 0 ? (
+        <div className="flex items-center justify-center border-t border-slate-100 bg-slate-50/40 px-4 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setVisibleCount((prev) => prev + VISIBLE_ROWS_STEP)}
+          >
+            Load more ({remainingRows} remaining)
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

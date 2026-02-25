@@ -95,14 +95,14 @@ class ReviewerWorkspaceService:
         中文注释:
         - UAT/外部 reviewer 场景下，流程应尽量“点开就能开始 review”，避免被卡在 accept 页；
         - 云端 schema 可能缺 invited_at/opened_at/accepted_at 等字段，更新失败时做多档降级；
-        - 即便降级更新失败，也尽量在内存里标记为 accepted 让 workspace 可用，
-          避免 reviewer 端因表字段漂移/轻微写入失败被 403 阻断。
+        - 若两档写入都失败，必须显式报错，避免出现“内存态 accepted、数据库仍 invited”的不一致。
         """
         state = _derive_invite_state(assignment)
         if state != "invited":
             return assignment
 
         now_iso = _utc_now_iso()
+        first_error: Exception | None = None
         # 1) 最完整写入：pending + accepted_at + opened_at
         try:
             self.client.table("review_assignments").update(
@@ -112,17 +112,20 @@ class ReviewerWorkspaceService:
             assignment["accepted_at"] = now_iso
             assignment["opened_at"] = assignment.get("opened_at") or now_iso
             return assignment
-        except Exception:
-            pass
+        except Exception as e:
+            first_error = e
 
         # 2) 降级：仅写 status=accepted（兼容缺失时间戳列的环境）
         try:
             self.client.table("review_assignments").update({"status": "accepted"}).eq(
                 "id", str(assignment_id)
             ).execute()
-        except Exception:
-            # 3) 最后兜底：允许继续（token scope 已保证 assignment/reviewer 绑定）
-            pass
+        except Exception as e:
+            print(
+                "[ReviewerWorkspace] failed to persist invitation acceptance "
+                f"(assignment_id={assignment_id}): first={first_error!r}, fallback={e!r}"
+            )
+            raise RuntimeError("Failed to persist invitation acceptance") from e
 
         assignment["status"] = "accepted"
         assignment["accepted_at"] = assignment.get("accepted_at") or now_iso

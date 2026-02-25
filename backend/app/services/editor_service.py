@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from io import StringIO
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -96,6 +97,18 @@ def _is_schema_drift_error(error_text: str) -> bool:
         or ("schema cache" in lowered and "pgrst" in lowered)
         or "pgrst204" in lowered
     )
+
+
+def _resolve_process_query_limit() -> int:
+    """
+    Process 列表后端硬上限，避免一次请求全量扫描。
+    """
+    raw = str(os.getenv("EDITOR_PROCESS_QUERY_LIMIT", "300") or "300").strip()
+    try:
+        parsed = int(raw)
+    except Exception:
+        parsed = 300
+    return max(50, min(parsed, 1000))
 
 
 def apply_process_filters(query: Any, filters: ProcessListFilters) -> Any:
@@ -216,7 +229,10 @@ class EditorService(EditorServicePrecheckMixin):
             .order("updated_at", desc=True)
             .order("created_at", desc=True)
         )
-        return apply_process_filters(q, filters)
+        q = apply_process_filters(q, filters)
+        if hasattr(q, "limit"):
+            q = q.limit(_resolve_process_query_limit())
+        return q
 
     def _list_process_rows_with_fallback(self, *, filters: ProcessListFilters) -> list[dict[str, Any]]:
         """
