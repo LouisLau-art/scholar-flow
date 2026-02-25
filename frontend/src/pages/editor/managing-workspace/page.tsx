@@ -245,12 +245,12 @@ export default function ManagingWorkspacePage() {
         <main className="sf-page-container space-y-6 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+              <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
                 <BriefcaseBusiness className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-serif font-bold tracking-tight text-slate-900">Managing Editor Workspace</h1>
-                <p className="mt-1 font-medium text-slate-500">
+                <h1 className="text-3xl font-serif font-bold tracking-tight text-foreground">Managing Editor Workspace</h1>
+                <p className="mt-1 font-medium text-muted-foreground">
                   展示需要 ME 跟进的全部在办稿件，并按状态分组。
                 </p>
               </div>
@@ -273,7 +273,7 @@ export default function ManagingWorkspacePage() {
           </div>
 
           <form
-            className="rounded-xl border border-slate-200 bg-white p-4"
+            className="rounded-xl border border-border bg-card p-4"
             onSubmit={(e) => {
               e.preventDefault()
               const nextQuery = searchInput.trim()
@@ -283,7 +283,7 @@ export default function ManagingWorkspacePage() {
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
@@ -309,31 +309,31 @@ export default function ManagingWorkspacePage() {
           </form>
 
           {isRefreshing && !loading ? (
-            <div className="flex items-center justify-end gap-2 text-xs text-slate-500">
+            <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Syncing latest workspace data…
             </div>
           ) : null}
 
           {loading ? (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">Loading…</div>
+            <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">Loading…</div>
           ) : groupedSections.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+            <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
               No manuscripts in current scope.
             </div>
           ) : (
             groupedSections.map((section) => (
-              <section key={section.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+              <section key={section.key} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <div className="border-b border-border bg-muted/50 px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base font-semibold text-slate-900">{section.meta.label}</h2>
+                    <h2 className="text-base font-semibold text-foreground">{section.meta.label}</h2>
                     <Badge variant="secondary">{section.items.length}</Badge>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">{section.meta.description}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{section.meta.description}</p>
                 </div>
 
                 <Table>
-                  <TableHeader className="bg-slate-50/40">
+                  <TableHeader className="bg-muted/40">
                     <TableRow>
                       <TableHead className="min-w-[380px]">Title</TableHead>
                       <TableHead className="min-w-[170px]">Status</TableHead>
@@ -348,12 +348,12 @@ export default function ManagingWorkspacePage() {
                     {section.items.map((m) => {
                       const detailHref = `/editor/manuscript/${encodeURIComponent(m.id)}?from=managing-workspace`
                       return (
-                        <TableRow key={m.id} className="hover:bg-slate-50/70">
+                        <TableRow key={m.id} className="hover:bg-muted/50">
                           <TableCell>
-                            <Link href={detailHref} className="text-sm font-semibold text-slate-900 hover:text-primary hover:underline">
+                            <Link href={detailHref} className="text-sm font-semibold text-foreground hover:text-primary hover:underline">
                               {m.title || 'Untitled Manuscript'}
                             </Link>
-                            <div className="mt-1 text-xs font-mono text-slate-500">{m.id}</div>
+                            <div className="mt-1 text-xs font-mono text-muted-foreground">{m.id}</div>
                           </TableCell>
 
                           <TableCell>
@@ -363,12 +363,12 @@ export default function ManagingWorkspacePage() {
                             </div>
                           </TableCell>
 
-                          <TableCell className="text-sm text-slate-700">{fmt(m.updated_at || m.created_at)}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{m.owner?.full_name || m.owner?.email || '—'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">
+                          <TableCell className="text-sm text-foreground">{fmt(m.updated_at || m.created_at)}</TableCell>
+                          <TableCell className="text-sm text-foreground">{m.owner?.full_name || m.owner?.email || '—'}</TableCell>
+                          <TableCell className="text-sm text-foreground">
                             {m.assistant_editor?.full_name || m.assistant_editor?.email || '—'}
                           </TableCell>
-                          <TableCell className="text-sm text-slate-700">{m.journal?.title || '—'}</TableCell>
+                          <TableCell className="text-sm text-foreground">{m.journal?.title || '—'}</TableCell>
 
                           <TableCell>
                             <Link href={detailHref} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }))}>

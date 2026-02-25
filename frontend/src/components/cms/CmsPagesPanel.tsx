@@ -103,7 +103,7 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">
+      <div className="rounded-xl border border-border bg-card p-6 text-muted-foreground">
         Loading CMS pages…
       </div>
     )
@@ -117,7 +117,7 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Create</div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Create</div>
             <input
               value={newTitle}
               onChange={(e) => {
@@ -126,44 +126,44 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
                 if (!newSlug) setNewSlug(slugify(v))
               }}
               placeholder="Title"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm"
             />
             <input
               value={newSlug}
               onChange={(e) => setNewSlug(slugify(e.target.value))}
               placeholder="Slug (e.g., about)"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono"
             />
             <Button type="button" onClick={handleCreate} disabled={isSaving}>
               Create Draft
             </Button>
           </div>
 
-          <div className="h-px bg-slate-100" />
+          <div className="h-px bg-muted/40" />
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Existing</div>
-            <div className="max-h-[420px] overflow-auto rounded-lg border border-slate-100">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Existing</div>
+            <div className="max-h-[420px] overflow-auto rounded-lg border border-border/60">
               {pages.length === 0 ? (
-                <div className="p-4 text-sm text-slate-500">No pages yet.</div>
+                <div className="p-4 text-sm text-muted-foreground">No pages yet.</div>
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-border/60">
                   {pages.map((page) => (
                     <li key={page.slug}>
                       <button
                         type="button"
                         onClick={() => setSelectedSlug(page.slug)}
-                        className={`w-full px-4 py-3 text-left text-sm hover:bg-slate-50 ${
-                          selectedSlug === page.slug ? 'bg-slate-50' : 'bg-white'
+                        className={`w-full px-4 py-3 text-left text-sm hover:bg-muted/40 ${
+                          selectedSlug === page.slug ? 'bg-muted/40' : 'bg-card'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-900">{page.title}</span>
+                          <span className="font-semibold text-foreground">{page.title}</span>
                           <span className={`text-xs font-mono ${page.is_published ? 'text-emerald-600' : 'text-amber-600'}`}>
                             {page.is_published ? 'published' : 'draft'}
                           </span>
                         </div>
-                        <div className="text-xs font-mono text-slate-500 mt-1">{page.slug}</div>
+                        <div className="text-xs font-mono text-muted-foreground mt-1">{page.slug}</div>
                       </button>
                     </li>
                   ))}
@@ -180,22 +180,22 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
         </CardHeader>
         <CardContent className="space-y-4">
           {!selectedPage ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+            <div className="rounded-xl border border-border bg-muted/40 p-6 text-muted-foreground">
               Select a page to edit.
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Title</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Title</label>
                   <input
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm"
                   />
                 </div>
                 <div className="md:col-span-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Published</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Published</label>
                   <div className="mt-2 flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -203,15 +203,15 @@ export default function CmsPagesPanel({ onPagesLoaded }: Props) {
                       onChange={(e) => setEditPublished(e.target.checked)}
                       className="h-4 w-4"
                     />
-                    <span className="text-sm text-slate-700">
+                    <span className="text-sm text-foreground">
                       {editPublished ? 'Visible to public' : 'Draft'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="text-xs font-mono text-slate-500">
-                Public URL: <span className="text-slate-900">/journal/{selectedPage.slug}</span>
+              <div className="text-xs font-mono text-muted-foreground">
+                Public URL: <span className="text-foreground">/journal/{selectedPage.slug}</span>
               </div>
 
               <TiptapEditor

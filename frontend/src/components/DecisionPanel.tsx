@@ -430,10 +430,10 @@ export default function DecisionPanel({
         {/* Manuscript Preview + Version/Revision Details */}
         {manuscriptId && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-slate-500" />
+                  <FileText className="h-4 w-4 text-muted-foreground" />
                   <h4 className="text-sm font-medium text-foreground">Latest Manuscript PDF</h4>
                 </div>
                 <Button
@@ -455,20 +455,20 @@ export default function DecisionPanel({
                 </div>
               ) : null}
 
-              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 overflow-hidden min-h-[640px] h-[calc(100dvh-360px)]">
+              <div className="mt-3 rounded-md border border-border bg-muted/40 overflow-hidden min-h-[640px] h-[calc(100dvh-360px)]">
                 {pdfLoading ? (
-                  <div className="h-full flex items-center justify-center text-slate-500 font-medium">
+                  <div className="h-full flex items-center justify-center text-muted-foreground font-medium">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading preview…
                   </div>
                 ) : pdfUrl ? (
                   <iframe src={pdfUrl} className="w-full h-full border-0" title="PDF Preview" />
                 ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 font-medium">
+                  <div className="h-full flex items-center justify-center text-muted-foreground font-medium">
                     No PDF available for preview.
                   </div>
                 )}
               </div>
-              <p className="mt-2 text-xs text-slate-400">Preview links expire in 10 minutes.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Preview links expire in 10 minutes.</p>
             </div>
 
             <div>
@@ -479,11 +479,11 @@ export default function DecisionPanel({
         )}
 
         {/* Review Summary (must show before decision) */}
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-sm font-medium text-foreground">Review Summary</h4>
             {reviewsLoading ? (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Loading…
               </div>
             ) : null}
@@ -494,7 +494,7 @@ export default function DecisionPanel({
               Failed to load reviews: {reviewsError}
             </div>
           ) : reviewsLoaded && reviews.length === 0 ? (
-            <div className="mt-3 text-sm text-slate-600">
+            <div className="mt-3 text-sm text-muted-foreground">
               No reviews found for this manuscript yet.
             </div>
           ) : reviewsLoaded && completedCount === 0 ? (
@@ -514,26 +514,26 @@ export default function DecisionPanel({
                 return (
                   <div
                     key={r.id || `${r.reviewer_id}-${idx}`}
-                    className="rounded-lg bg-slate-50 border border-slate-200 p-3"
+                    className="rounded-lg bg-muted/40 border border-border p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="text-sm font-semibold text-slate-900">{displayName}</div>
-                      <div className="text-xs text-slate-600">
-                        Score: <span className="font-semibold text-slate-900">{scoreLabel}</span>
+                      <div className="text-sm font-semibold text-foreground">{displayName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Score: <span className="font-semibold text-foreground">{scoreLabel}</span>
                       </div>
                     </div>
                     <div className="mt-2">
-                      <div className="text-xs font-semibold text-slate-700">
+                      <div className="text-xs font-semibold text-foreground">
                         Confidential Comments to the Editor
                       </div>
-                      <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                      <div className="mt-1 whitespace-pre-wrap text-sm text-foreground">
                         {confidential.trim() ? confidential : completed ? '(none)' : '(not submitted yet)'}
                       </div>
                     </div>
 
                     {hasAttachment ? (
-                      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
-                        <div className="text-xs font-semibold text-slate-700">Annotated PDF</div>
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2">
+                        <div className="text-xs font-semibold text-foreground">Annotated PDF</div>
                         <Button
                           variant="outline"
                           size="sm"
@@ -582,8 +582,8 @@ export default function DecisionPanel({
               disabled={isSubmitting}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                 decisionStage === 'first'
-                  ? 'border-blue-500 bg-blue-50 text-blue-800'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-card text-foreground hover:bg-muted/40'
               }`}
             >
               <div className="font-semibold">First Decision Suggestion</div>
@@ -596,7 +596,7 @@ export default function DecisionPanel({
               className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                 decisionStage === 'final'
                   ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  : 'border-border bg-card text-foreground hover:bg-muted/40'
               }`}
             >
               <div className="font-semibold">Final Decision Submit</div>
@@ -646,8 +646,8 @@ export default function DecisionPanel({
                   </div>
 
                   {decision === 'accept' && (
-                    <div className="mt-2 rounded-lg bg-white/60 p-3 border border-emerald-100">
-                      <Label htmlFor="apc-amount" className="text-xs font-semibold text-slate-700">
+                    <div className="mt-2 rounded-lg bg-card/60 p-3 border border-emerald-100">
+                      <Label htmlFor="apc-amount" className="text-xs font-semibold text-foreground">
                         Confirm APC Amount (USD)
                       </Label>
                       <Input
