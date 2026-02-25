@@ -2,7 +2,7 @@ import { ApiClient } from '@/lib/api-client'
 import { FileText } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 export default async function AdminManuscriptsPage() {
   /**
