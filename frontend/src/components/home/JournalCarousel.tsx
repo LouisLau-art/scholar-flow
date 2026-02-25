@@ -22,10 +22,20 @@ export default function JournalCarousel() {
             <p className="mt-2 text-slate-500 font-medium text-lg">Explore high-impact research across diverse domains.</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={scrollPrev} className="p-3 rounded-full bg-white shadow-md hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all">
+            <button
+              type="button"
+              aria-label="Previous journals"
+              onClick={scrollPrev}
+              className="p-3 rounded-full bg-white shadow-md hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all"
+            >
               <ChevronLeft className="h-6 w-6" />
             </button>
-            <button onClick={scrollNext} className="p-3 rounded-full bg-white shadow-md hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all">
+            <button
+              type="button"
+              aria-label="Next journals"
+              onClick={scrollNext}
+              className="p-3 rounded-full bg-white shadow-md hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all"
+            >
               <ChevronRight className="h-6 w-6" />
             </button>
           </div>

@@ -57,11 +57,13 @@ export default function LoginPage() {
         <div className="bg-white px-6 py-12 shadow-2xl shadow-slate-200 sm:rounded-3xl sm:px-12 border border-slate-100">
           <form className="space-y-6" onSubmit={handleLogin}>
             <div>
-              <label className="block text-sm font-bold leading-6 text-slate-900">Email address</label>
+              <label htmlFor="login-email" className="block text-sm font-bold leading-6 text-slate-900">Email address</label>
               <div className="mt-2 relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 <input
+                  id="login-email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -73,11 +75,13 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-bold leading-6 text-slate-900">Password</label>
+              <label htmlFor="login-password" className="block text-sm font-bold leading-6 text-slate-900">Password</label>
               <div className="mt-2 relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 <input
+                  id="login-password"
                   type="password"
+                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

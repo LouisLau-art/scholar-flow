@@ -494,6 +494,8 @@ export default function ReviewerAssignModal({
               <h2 className="text-xl font-bold text-slate-900">Assign Reviewer</h2>
             </div>
             <button
+              type="button"
+              aria-label="Close reviewer assignment dialog"
               onClick={onClose}
               className="text-slate-400 hover:text-slate-600 transition-colors"
             >
@@ -517,7 +519,11 @@ export default function ReviewerAssignModal({
               </div>
 
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label htmlFor="reviewer-owner-search" className="sr-only">
+                  Search internal staff
+                </label>
                 <input
+                  id="reviewer-owner-search"
                   type="text"
                   placeholder="Search internal staff..."
                   value={ownerSearch}
@@ -659,7 +665,11 @@ export default function ReviewerAssignModal({
             <div className="mb-6 flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <label htmlFor="reviewer-library-search" className="sr-only">
+                  Search reviewers by name
+                </label>
                 <input
+                  id="reviewer-library-search"
                   type="text"
                   placeholder="Search reviewers by name..."
                   value={searchTerm}
@@ -699,22 +709,26 @@ export default function ReviewerAssignModal({
                   const isSelected = selectedReviewers.includes(reviewer.id)
                   const showAsSelected = isAssigned || isSelected
                   const blockedByPolicy = !isAssigned && isReviewerBlocked(reviewer.id)
+                  const rowDisabled = isAssigned || blockedByPolicy
                   const canOverride = !isAssigned && reviewerNeedsOverride(reviewer.id) && canCurrentUserOverrideCooldown
                   const hits = (policy.hits || []).filter(Boolean)
                   
                   return (
-                  <div
+                  <button
                     key={reviewer.id}
+                    type="button"
                     data-testid={`reviewer-row-${reviewer.id}`}
-                    onClick={() => !isAssigned && toggleReviewer(reviewer.id)}
-                    className={`flex items-center justify-between p-3 rounded-lg transition-all border ${
+                    aria-pressed={isSelected}
+                    onClick={() => toggleReviewer(reviewer.id)}
+                    disabled={rowDisabled}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-all border text-left ${
                       isAssigned
                         ? 'bg-blue-50 border-blue-200 shadow-sm cursor-not-allowed'
                         : blockedByPolicy
                           ? 'bg-rose-50 border-rose-200 cursor-not-allowed'
                         : isSelected
-                          ? 'bg-blue-50 border-blue-200 shadow-sm cursor-pointer'
-                          : 'hover:bg-slate-50 border-transparent hover:border-slate-200 cursor-pointer'
+                          ? 'bg-blue-50 border-blue-200 shadow-sm'
+                          : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -765,7 +779,7 @@ export default function ReviewerAssignModal({
                       )}
                       {showAsSelected && <Check className="h-5 w-5 text-blue-600" />}
                     </div>
-                  </div>
+                  </button>
                   )
                 })}
               </div>
