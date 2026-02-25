@@ -146,21 +146,21 @@ function ReviewModal({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="w-full max-w-[720px] min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 [&>button]:hidden">
+      <DialogContent className="w-full max-w-[720px] min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl sm:p-8 [&>button]:hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>Structured Peer Review</DialogTitle>
           <DialogDescription>Submit structured review scores and comments for the selected manuscript.</DialogDescription>
         </DialogHeader>
         <div className="mb-6">
           <h4 className="font-serif text-2xl">Structured Peer Review</h4>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Submit your professional assessment for &quot;{task.manuscripts?.title}&quot;
           </p>
         </div>
 
         {/* 复审上下文：大修/小修的编辑请求与作者回应（含图片） */}
         {revisionLoading ? (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="mb-6 rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
             正在加载修回上下文…
           </div>
         ) : latestRevision?.editor_comment || latestRevision?.response_letter ? (
@@ -170,18 +170,18 @@ function ReviewModal({
                 <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
                   Editor Request{latestRevision?.decision_type ? ` (${String(latestRevision.decision_type)})` : ''}
                 </div>
-                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800">
+                <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">
                   {latestRevision.editor_comment}
                 </div>
               </div>
             ) : null}
             {latestRevision?.response_letter ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+              <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   Author Response
                 </div>
                 <div
-                  className="mt-2 prose prose-sm max-w-none text-slate-700 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
+                  className="mt-2 prose prose-sm max-w-none text-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
                   dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
                 />
               </div>
@@ -192,8 +192,8 @@ function ReviewModal({
         <div className="py-2 space-y-6 sm:space-y-8">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <Label className="font-semibold text-slate-700">Novelty & Originality</Label>
-              <span className="text-blue-600 font-mono font-bold text-xl">{reviewData.novelty}/5</span>
+              <Label className="font-semibold text-foreground">Novelty & Originality</Label>
+              <span className="text-primary font-mono font-bold text-xl">{reviewData.novelty}/5</span>
             </div>
             <input
               type="range"
@@ -201,14 +201,14 @@ function ReviewModal({
               max="5"
               value={reviewData.novelty}
               onChange={(e) => setReviewData({ ...reviewData, novelty: parseInt(e.target.value) })}
-              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
             />
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <Label className="font-semibold text-slate-700">Technical Rigor</Label>
-              <span className="text-blue-600 font-mono font-bold text-xl">{reviewData.rigor}/5</span>
+              <Label className="font-semibold text-foreground">Technical Rigor</Label>
+              <span className="text-primary font-mono font-bold text-xl">{reviewData.rigor}/5</span>
             </div>
             <input
               type="range"
@@ -216,14 +216,14 @@ function ReviewModal({
               max="5"
               value={reviewData.rigor}
               onChange={(e) => setReviewData({ ...reviewData, rigor: parseInt(e.target.value) })}
-              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
             />
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <Label className="font-semibold text-slate-700">Language Quality</Label>
-              <span className="text-blue-600 font-mono font-bold text-xl">{reviewData.language}/5</span>
+              <Label className="font-semibold text-foreground">Language Quality</Label>
+              <span className="text-primary font-mono font-bold text-xl">{reviewData.language}/5</span>
             </div>
             <input
               type="range"
@@ -231,15 +231,15 @@ function ReviewModal({
               max="5"
               value={reviewData.language}
               onChange={(e) => setReviewData({ ...reviewData, language: parseInt(e.target.value) })}
-              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
             />
           </div>
 
           <div className="space-y-3">
-            <Label className="font-semibold text-slate-700">Comments for the Authors</Label>
+            <Label className="font-semibold text-foreground">Comments for the Authors</Label>
             <textarea
               placeholder="Provide detailed feedback for the authors..."
-              className="min-h-[140px] sm:min-h-[160px] w-full rounded-2xl border border-slate-200 p-3 focus:ring-2 focus:ring-blue-500"
+              className="min-h-[140px] sm:min-h-[160px] w-full rounded-2xl border border-border p-3 focus:ring-2 focus:ring-primary"
               value={reviewData.commentsForAuthor}
               onChange={(e) => setReviewData({ ...reviewData, commentsForAuthor: e.target.value })}
             />
@@ -247,12 +247,12 @@ function ReviewModal({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <Label className="font-semibold text-slate-700">Confidential Comments to the Editor</Label>
+              <Label className="font-semibold text-foreground">Confidential Comments to the Editor</Label>
               <span className="text-xs font-semibold text-red-600">Authors will NOT see this</span>
             </div>
             <textarea
               placeholder="Optional notes for editor only..."
-              className="min-h-[110px] w-full rounded-2xl border border-slate-200 p-3 focus:ring-2 focus:ring-blue-500"
+              className="min-h-[110px] w-full rounded-2xl border border-border p-3 focus:ring-2 focus:ring-primary"
               value={reviewData.confidentialCommentsToEditor}
               onChange={(e) => setReviewData({ ...reviewData, confidentialCommentsToEditor: e.target.value })}
             />
@@ -387,21 +387,21 @@ export default function ReviewerDashboard() {
       {/* ... 之前的 Header 代码 ... */}
       
       {tasks.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
+        <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground">
           No review tasks assigned to your account yet. Ask the editor to assign you as a reviewer.
         </div>
       ) : (
         <div className="grid gap-4">
           {tasks.map((task) => (
-            <div key={task.id} className="rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow">
+            <div key={task.id} className="rounded-2xl border border-border bg-card hover:shadow-md transition-shadow">
             <div className="flex flex-row items-start justify-between space-y-0 p-6">
               <div className="space-y-1">
                 <h3 className="text-xl font-serif font-semibold">{task.manuscripts?.title}</h3>
-                <p className="line-clamp-2 italic text-sm text-slate-500">{task.manuscripts?.abstract}</p>
+                <p className="line-clamp-2 italic text-sm text-muted-foreground">{task.manuscripts?.abstract}</p>
               </div>
-              <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">PENDING REVIEW</span>
+              <span className="bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">PENDING REVIEW</span>
             </div>
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-50 p-6">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border/60 p-6">
               <Button
                 onClick={() => handleOpenPreview(task)}
                 variant="outline"
@@ -427,15 +427,15 @@ export default function ReviewerDashboard() {
       )}
 
       <Dialog open={isPreviewOpen} onOpenChange={(open) => (!open ? handleClosePreview() : undefined)}>
-        <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8 flex flex-col [&>button]:hidden">
+        <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-card p-6 shadow-2xl sm:p-8 flex flex-col [&>button]:hidden">
             <DialogHeader className="sr-only">
               <DialogTitle>Full Text Preview</DialogTitle>
               <DialogDescription>Preview manuscript PDF in an embedded viewer.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h4 className="font-serif text-2xl text-slate-900">Full Text Preview</h4>
-                <p className="text-sm text-slate-500">{previewTitle || "Manuscript preview"}</p>
+                <h4 className="font-serif text-2xl text-foreground">Full Text Preview</h4>
+                <p className="text-sm text-muted-foreground">{previewTitle || "Manuscript preview"}</p>
               </div>
               <Button
                 onClick={handleClosePreview}
@@ -446,9 +446,9 @@ export default function ReviewerDashboard() {
               </Button>
             </div>
 
-            <div className="mt-6 flex-1 min-h-0 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
+            <div className="mt-6 flex-1 min-h-0 rounded-2xl bg-muted border border-border overflow-hidden">
               {previewLoading ? (
-                <div className="h-full flex items-center justify-center text-slate-500 font-medium">
+                <div className="h-full flex items-center justify-center text-muted-foreground font-medium">
                   Loading preview…
                 </div>
               ) : previewUrl ? (
@@ -456,13 +456,13 @@ export default function ReviewerDashboard() {
               ) : (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
-                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">No PDF available for preview.</p>
+                    <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground font-medium">No PDF available for preview.</p>
                   </div>
                 </div>
               )}
             </div>
-            <p className="mt-4 text-xs text-slate-400">Preview links expire in 5 minutes.</p>
+            <p className="mt-4 text-xs text-muted-foreground">Preview links expire in 5 minutes.</p>
         </DialogContent>
       </Dialog>
 

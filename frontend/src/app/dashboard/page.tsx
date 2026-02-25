@@ -100,21 +100,21 @@ function RoleWorkspacePanel({
   return (
     <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h2 className="text-2xl font-serif font-bold text-slate-900">{title}</h2>
-        <p className="mt-1 text-slate-500">{description}</p>
+        <h2 className="text-2xl font-serif font-bold text-foreground">{title}</h2>
+        <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {actions.map((item) => (
           <Link
             key={`${title}-${item.href}`}
             href={item.href}
-            className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+            className="group rounded-2xl border border-border bg-card p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md"
           >
             <div className="flex items-center justify-between">
-              <p className="text-base font-semibold text-slate-900">{item.label}</p>
-              <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-blue-600" />
+              <p className="text-base font-semibold text-foreground">{item.label}</p>
+              <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
             </div>
-            <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{item.helper}</p>
           </Link>
         ))}
       </div>
@@ -184,10 +184,10 @@ function DashboardPageContent() {
   }, [])
 
   const statCards = [
-    { label: 'Total Submissions', value: stats?.total_submissions, icon: FileText, color: 'text-blue-600' },
+    { label: 'Total Submissions', value: stats?.total_submissions, icon: FileText, color: 'text-primary' },
     { label: 'Published', value: stats?.published, icon: CheckCircle, color: 'text-emerald-600' },
     { label: 'Under Review', value: stats?.under_review, icon: Clock, color: 'text-amber-600' },
-    { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-slate-600' },
+    { label: 'Waiting for Author', value: stats?.revision_requested ?? stats?.revision_required, icon: AlertCircle, color: 'text-muted-foreground' },
   ]
 
   const normalizedRoles = useMemo(() => normalizeRoleTokens(roles || []), [roles])
@@ -250,49 +250,49 @@ function DashboardPageContent() {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             <div>
-              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Dashboard</h1>
-              <p className="mt-1 text-slate-500 font-medium">Manage your roles and track academic progress.</p>
-              <p className="mt-2 text-xs font-mono text-slate-400">roles: {roleLabel}</p>
+              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Dashboard</h1>
+              <p className="mt-1 text-muted-foreground font-medium">Manage your roles and track academic progress.</p>
+              <p className="mt-2 text-xs font-mono text-muted-foreground">roles: {roleLabel}</p>
             </div>
 
             {rolesLoading ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-400">
+              <div className="rounded-2xl border border-border bg-card px-6 py-2 text-sm font-semibold text-muted-foreground">
                 Loading roles...
               </div>
             ) : (
-              <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-1 h-auto">
+              <TabsList className="bg-card p-1 rounded-2xl shadow-sm border border-border flex flex-wrap gap-1 h-auto">
                 {canSeeAuthor && (
-                  <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="author" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <LayoutDashboard className="h-4 w-4" /> Author
                   </TabsTrigger>
                 )}
                 {canSeeReviewer && (
-                  <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="reviewer" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Users className="h-4 w-4" /> Reviewer
                   </TabsTrigger>
                 )}
                 {canSeeManagingEditor && (
-                  <TabsTrigger value="managing_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="managing_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Shield className="h-4 w-4" /> Managing Editor
                   </TabsTrigger>
                 )}
                 {canSeeAssistantEditor && (
-                  <TabsTrigger value="assistant_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="assistant_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Shield className="h-4 w-4" /> Assistant Editor
                   </TabsTrigger>
                 )}
                 {canSeeProductionEditor && (
-                  <TabsTrigger value="production_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="production_editor" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Shield className="h-4 w-4" /> Production Editor
                   </TabsTrigger>
                 )}
                 {canSeeEditorInChief && (
-                  <TabsTrigger value="editor_in_chief" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="editor_in_chief" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Shield className="h-4 w-4" /> Editor-in-Chief
                   </TabsTrigger>
                 )}
                 {canSeeAdmin && (
-                  <TabsTrigger value="admin" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  <TabsTrigger value="admin" className="flex items-center gap-2 rounded-xl px-6 data-[state=active]:bg-foreground data-[state=active]:text-primary-foreground">
                     <Shield className="h-4 w-4" /> Admin
                   </TabsTrigger>
                 )}
@@ -311,15 +311,15 @@ function DashboardPageContent() {
           {canSeeAuthor && (
             <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {isLoading ? (
-                <div className="flex justify-center py-20"><Loader2 className="h-12 w-12 animate-spin text-blue-600" /></div>
+                <div className="flex justify-center py-20"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
               ) : (
                 <div className="space-y-12">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {statCards.map((card) => (
-                      <div key={card.label} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
+                      <div key={card.label} className="bg-card p-8 rounded-3xl shadow-sm border border-border/60 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{card.label}</p>
-                          <p className="text-3xl font-mono font-bold text-slate-900">{card.value || 0}</p>
+                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">{card.label}</p>
+                          <p className="text-3xl font-mono font-bold text-foreground">{card.value || 0}</p>
                         </div>
                         <card.icon className={`h-10 w-10 ${card.color} opacity-20`} />
                       </div>
@@ -328,16 +328,16 @@ function DashboardPageContent() {
 
                   <section>
                     <div className="flex justify-between items-center mb-6">
-                      <h2 className="text-xl font-bold text-slate-900">My Submissions</h2>
-                      <Link href="/submit" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
+                      <h2 className="text-xl font-bold text-foreground">My Submissions</h2>
+                      <Link href="/submit" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
                         <Plus className="h-4 w-4" /> New Submission
                       </Link>
                     </div>
-                    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="bg-card rounded-3xl shadow-sm border border-border/60 overflow-hidden">
                       {submissions.length === 0 ? (
-                        <div className="p-8 text-slate-500 text-sm">No submissions yet.</div>
+                        <div className="p-8 text-muted-foreground text-sm">No submissions yet.</div>
                       ) : (
-                        <div className="divide-y divide-slate-100">
+                        <div className="divide-y divide-border/60">
                           {submissions.map((item) => {
                             const itemStatus = String(item?.status || '').toLowerCase()
                             const detailHref =
@@ -345,12 +345,12 @@ function DashboardPageContent() {
                                 ? `/articles/${item.id}`
                                 : `/dashboard/author/manuscripts/${item.id}`
                             return (
-                            <div key={item.id} className="p-6 flex items-center justify-between hover:bg-slate-50 group transition-all">
+                            <div key={item.id} className="p-6 flex items-center justify-between hover:bg-muted/40 group transition-all">
                               <div className="flex items-center gap-4">
-                                <div className="bg-blue-50 p-3 rounded-2xl"><FileText className="h-6 w-6 text-blue-600" /></div>
+                                <div className="bg-primary/10 p-3 rounded-2xl"><FileText className="h-6 w-6 text-primary" /></div>
                                 <div>
-                                  <p className="font-bold text-slate-900">{item.title}</p>
-                                  <p className="text-sm text-slate-500 font-medium">
+                                  <p className="font-bold text-foreground">{item.title}</p>
+                                  <p className="text-sm text-muted-foreground font-medium">
                                     Status: {item.status || 'pre_check'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}
                                   </p>
                                 </div>
@@ -411,7 +411,7 @@ function DashboardPageContent() {
                                     Download Invoice
                                   </Button>
                                 )}
-                                <Link href={detailHref} className="text-slate-300 group-hover:text-blue-600 transition-all">
+                                <Link href={detailHref} className="text-muted-foreground group-hover:text-primary transition-all">
                                   <ArrowRight className="h-5 w-5" />
                                 </Link>
                               </div>
@@ -503,8 +503,8 @@ export default function DashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+        <div className="min-h-screen bg-muted/40 flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       }
     >

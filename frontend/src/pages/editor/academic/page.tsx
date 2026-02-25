@@ -86,12 +86,12 @@ export default function EICAcademicQueuePage() {
         <main className="sf-page-container space-y-6 py-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+            <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
               <GraduationCap className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Editor-in-Chief Workspace</h1>
-              <p className="mt-1 text-slate-500 font-medium">Editor-in-Chief workspace for optional academic pre-check and final decision handoff.</p>
+              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Editor-in-Chief Workspace</h1>
+              <p className="mt-1 text-muted-foreground font-medium">Editor-in-Chief workspace for optional academic pre-check and final decision handoff.</p>
             </div>
           </div>
 
@@ -101,45 +101,45 @@ export default function EICAcademicQueuePage() {
           </Link>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           {scopeHint ? (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">{scopeHint}</div>
           ) : null}
           {error ? (
             <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error}</div>
           ) : null}
-          <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">Academic Review Queue (Optional)</h2>
-            <p className="mt-1 text-xs text-slate-500">仅展示 AE 主动送到 academic 的稿件；可继续送外审或转入决策阶段。</p>
+          <div className="border-b border-border bg-muted/40 px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Academic Review Queue (Optional)</h2>
+            <p className="mt-1 text-xs text-muted-foreground">仅展示 AE 主动送到 academic 的稿件；可继续送外审或转入决策阶段。</p>
           </div>
           <table className="w-full table-fixed">
-            <thead className="bg-slate-50/70">
+            <thead className="bg-muted/40">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
-                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Journal</th>
-                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</th>
-                <th className="w-32 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
+                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Journal</th>
+                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
+                <th className="w-32 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
                 </tr>
               ) : academicManuscripts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {scopeHint ? 'No manuscript in your assigned journal scope.' : 'No manuscripts awaiting academic check.'}
                   </td>
                 </tr>
               ) : (
                 academicManuscripts.map((m) => (
-                  <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="px-4 py-3 text-sm text-slate-900">{m.title}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{m.pre_check_status}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
+                  <tr key={m.id} className="border-t border-border/60 hover:bg-muted/60">
+                    <td className="px-4 py-3 text-sm text-foreground">{m.title}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">{m.journal?.title || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{m.pre_check_status}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openDecisionModal(m.id)}
@@ -155,42 +155,42 @@ export default function EICAcademicQueuePage() {
           </table>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">Final Decision Queue</h2>
-            <p className="mt-1 text-xs text-slate-500">终审稿件（decision/decision_done）+ 已有 first decision 草稿的稿件，可直接进入 Decision Workspace。</p>
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border bg-muted/40 px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Final Decision Queue</h2>
+            <p className="mt-1 text-xs text-muted-foreground">终审稿件（decision/decision_done）+ 已有 first decision 草稿的稿件，可直接进入 Decision Workspace。</p>
           </div>
           <table className="w-full table-fixed">
-            <thead className="bg-slate-50/70">
+            <thead className="bg-muted/40">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
-                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Latest First Draft</th>
-                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</th>
-                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
+                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest First Draft</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
+                <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
                 </tr>
               ) : finalDecisionManuscripts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {scopeHint ? 'No final-decision manuscript in your assigned journal scope.' : 'No manuscripts awaiting final decision.'}
                   </td>
                 </tr>
               ) : (
                 finalDecisionManuscripts.map((m) => (
-                  <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="px-4 py-3 text-sm text-slate-900">{m.title}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{m.status || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
+                  <tr key={m.id} className="border-t border-border/60 hover:bg-muted/60">
+                    <td className="px-4 py-3 text-sm text-foreground">{m.title}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{m.status || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
                       {m.latest_first_decision_draft?.decision ? (
                         <div>
-                          <div className="font-medium text-slate-800">{m.latest_first_decision_draft.decision}</div>
-                          <div className="text-xs text-slate-500">
+                          <div className="font-medium text-foreground">{m.latest_first_decision_draft.decision}</div>
+                          <div className="text-xs text-muted-foreground">
                             {m.latest_first_decision_draft.updated_at
                               ? new Date(m.latest_first_decision_draft.updated_at).toLocaleString()
                               : '—'}
@@ -200,7 +200,7 @@ export default function EICAcademicQueuePage() {
                         'No draft'
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/editor/decision/${encodeURIComponent(m.id)}`}

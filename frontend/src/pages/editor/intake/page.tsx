@@ -45,7 +45,7 @@ function renderIntakeStatus(status?: string) {
   }
   if (normalized === 'awaiting_resubmit') {
     return (
-      <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+      <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
         等待作者修回
       </Badge>
     )
@@ -59,7 +59,7 @@ function renderIntakeStatus(status?: string) {
 function renderPriority(row: Manuscript) {
   if (row.waiting_resubmit) {
     return (
-      <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+      <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
         等待作者
       </Badge>
     )
@@ -174,12 +174,12 @@ export default function MEIntakePage() {
         <main className="sf-page-container space-y-6 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+              <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
                 <Inbox className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Managing Editor Intake Queue</h1>
-                <p className="mt-1 text-slate-500 font-medium">
+                <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Managing Editor Intake Queue</h1>
+                <p className="mt-1 text-muted-foreground font-medium">
                   ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿会以灰态保留，直至作者修回。
                 </p>
               </div>
@@ -191,7 +191,7 @@ export default function MEIntakePage() {
             </Link>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
               <div className="flex gap-2">
                 <Input
@@ -225,67 +225,67 @@ export default function MEIntakePage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-[1200px] w-full table-auto">
-              <thead className="bg-slate-50/70">
+              <thead className="bg-muted/40">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
-                  <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Journal</th>
-                  <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Author</th>
-                  <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</th>
-                  <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</th>
-                  <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Stage</th>
-                  <th className="w-[300px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
+                  <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Journal</th>
+                  <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Author</th>
+                  <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted</th>
+                  <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority</th>
+                  <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage</th>
+                  <th className="w-[300px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">Loading...</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
                   </tr>
                 ) : manuscripts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">No manuscripts in intake.</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">No manuscripts in intake.</td>
                   </tr>
                 ) : (
                   manuscripts.map((m) => (
                     <tr
                       key={m.id}
                       className={cn(
-                        'border-t border-slate-100',
-                        m.waiting_resubmit ? 'bg-slate-50/70 text-slate-500' : 'hover:bg-slate-50/60'
+                        'border-t border-border/60',
+                        m.waiting_resubmit ? 'bg-muted/40 text-muted-foreground' : 'hover:bg-muted/60'
                       )}
                     >
-                      <td className="px-4 py-3 text-sm text-slate-900">
+                      <td className="px-4 py-3 text-sm text-foreground">
                         <Link
                           href={`/editor/manuscript/${m.id}?from=intake`}
                           className={cn(
                             'line-clamp-2 font-medium',
                             m.waiting_resubmit
-                              ? 'text-slate-500 hover:text-slate-700'
-                              : 'text-slate-900 hover:text-primary hover:underline'
+                              ? 'text-muted-foreground hover:text-foreground'
+                              : 'text-foreground hover:text-primary hover:underline'
                           )}
                         >
                           {m.title}
                         </Link>
-                        <div className="mt-1 font-mono text-[11px] text-slate-500">{m.id}</div>
+                        <div className="mt-1 font-mono text-[11px] text-muted-foreground">{m.id}</div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{m.journal?.title || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
+                      <td className="px-4 py-3 text-sm text-foreground">{m.journal?.title || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-foreground">
                         {m.author?.full_name || m.author?.email || m.owner?.full_name || m.owner?.email || '-'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatDate(m.created_at)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{renderPriority(m)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{renderIntakeStatus(m.pre_check_status)}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(m.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{renderPriority(m)}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{renderIntakeStatus(m.pre_check_status)}</td>
                       <td className="px-4 py-3">
                         {m.intake_actionable === false || m.waiting_resubmit ? (
                           <div className="space-y-1">
-                            <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+                            <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
                               等待作者修回（不可操作）
                             </Badge>
                             {m.waiting_resubmit_reason ? (
-                              <div className="max-w-[280px] truncate text-xs text-slate-500" title={m.waiting_resubmit_reason}>
+                              <div className="max-w-[280px] truncate text-xs text-muted-foreground" title={m.waiting_resubmit_reason}>
                                 退回原因：{m.waiting_resubmit_reason}
                               </div>
                             ) : null}
@@ -329,12 +329,12 @@ export default function MEIntakePage() {
               </DialogHeader>
 
               <div className="space-y-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-xs text-slate-500">Manuscript</div>
-                  <div className="mt-1 text-sm font-medium text-slate-900">{returnTarget?.title || '-'}</div>
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <div className="text-xs text-muted-foreground">Manuscript</div>
+                  <div className="mt-1 text-sm font-medium text-foreground">{returnTarget?.title || '-'}</div>
                 </div>
                 <div>
-                  <div className="mb-2 text-sm font-medium text-slate-700">
+                  <div className="mb-2 text-sm font-medium text-foreground">
                     退回理由 <span className="text-red-600">*</span>
                   </div>
                   <Textarea
@@ -347,7 +347,7 @@ export default function MEIntakePage() {
                   {returnError ? <div className="mt-2 text-xs text-red-600">{returnError}</div> : null}
                 </div>
                 <div>
-                  <div className="mb-2 text-sm font-medium text-slate-700">
+                  <div className="mb-2 text-sm font-medium text-foreground">
                     二次确认 <span className="text-red-600">*</span>
                   </div>
                   <Input
