@@ -22,16 +22,15 @@ export function InvoiceInfoSection(props: { info: InvoiceInfoView; onEdit: () =>
         </Button>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <div className="text-slate-500">Authors</div>
-        <div className="text-slate-900 whitespace-pre-wrap">{props.info.authors || '—'}</div>
-        <div className="text-slate-500 pt-2">Affiliation</div>
-        <div className="text-slate-900 whitespace-pre-wrap">{props.info.affiliation || '—'}</div>
-        <div className="text-slate-500 pt-2">APC Amount (USD)</div>
-        <div className="text-slate-900">{props.info.apcAmount || '—'}</div>
-        <div className="text-slate-500 pt-2">Funding Info</div>
-        <div className="text-slate-900 whitespace-pre-wrap">{props.info.fundingInfo || '—'}</div>
+        <div className="text-muted-foreground">Authors</div>
+        <div className="text-foreground whitespace-pre-wrap">{props.info.authors || '—'}</div>
+        <div className="text-muted-foreground pt-2">Affiliation</div>
+        <div className="text-foreground whitespace-pre-wrap">{props.info.affiliation || '—'}</div>
+        <div className="text-muted-foreground pt-2">APC Amount (USD)</div>
+        <div className="text-foreground">{props.info.apcAmount || '—'}</div>
+        <div className="text-muted-foreground pt-2">Funding Info</div>
+        <div className="text-foreground whitespace-pre-wrap">{props.info.fundingInfo || '—'}</div>
       </CardContent>
     </Card>
   )
 }
-

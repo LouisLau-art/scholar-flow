@@ -533,9 +533,9 @@ export default function EditorManuscriptDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-muted/40">
         <SiteHeader />
-        <div className="mx-auto max-w-7xl px-4 py-16 flex items-center justify-center text-slate-500 gap-2">
+        <div className="mx-auto max-w-7xl px-4 py-16 flex items-center justify-center text-muted-foreground gap-2">
           <Loader2 className="h-5 w-5 animate-spin" /> Loading…
         </div>
       </div>
@@ -544,10 +544,10 @@ export default function EditorManuscriptDetailPage() {
 
   if (!ms) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-muted/40">
         <SiteHeader />
         <div className="mx-auto max-w-7xl px-4 py-16 space-y-4">
-          <div className="text-slate-600">Manuscript not found.</div>
+          <div className="text-muted-foreground">Manuscript not found.</div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4" />
@@ -563,7 +563,7 @@ export default function EditorManuscriptDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-muted/40 pb-20">
       <SiteHeader />
       <DetailTopHeader
         journalTitle={ms.journals?.title}
@@ -737,7 +737,7 @@ export default function EditorManuscriptDetailPage() {
 
           {requiresTransitionReason ? (
             <div className="space-y-2">
-              <div className="text-sm font-medium text-slate-700">Reason</div>
+              <div className="text-sm font-medium text-foreground">Reason</div>
               <Textarea
                 placeholder={`Enter reason for ${pendingTransition ? getStatusLabel(pendingTransition) : 'this transition'}...`}
                 value={transitionReason}

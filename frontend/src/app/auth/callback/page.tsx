@@ -76,10 +76,10 @@ function AuthCallbackContent() {
   }, [router, searchParams])
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8 text-center max-w-md w-full">
-        <div className="font-serif text-2xl font-bold text-slate-900">Signing you in…</div>
-        <p className="mt-2 text-sm text-slate-500">正在完成登录回调与会话建立，请稍候。</p>
+    <div className="min-h-screen bg-muted/40 flex items-center justify-center p-6">
+      <div className="rounded-2xl bg-card border border-border shadow-sm p-8 text-center max-w-md w-full">
+        <div className="font-serif text-2xl font-bold text-foreground">Signing you in…</div>
+        <p className="mt-2 text-sm text-muted-foreground">正在完成登录回调与会话建立，请稍候。</p>
       </div>
     </div>
   )
@@ -89,10 +89,10 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8 text-center max-w-md w-full">
-            <div className="font-serif text-2xl font-bold text-slate-900">Signing you in…</div>
-            <p className="mt-2 text-sm text-slate-500">正在加载登录回调页面…</p>
+        <div className="min-h-screen bg-muted/40 flex items-center justify-center p-6">
+          <div className="rounded-2xl bg-card border border-border shadow-sm p-8 text-center max-w-md w-full">
+            <div className="font-serif text-2xl font-bold text-foreground">Signing you in…</div>
+            <p className="mt-2 text-sm text-muted-foreground">正在加载登录回调页面…</p>
           </div>
         </div>
       }

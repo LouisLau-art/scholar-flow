@@ -20,18 +20,18 @@ export type FileSection = {
 export function FileSectionGroup({ title, sections }: { title: string; sections: FileSection[] }) {
   return (
     <Card>
-      <CardHeader className="pb-3 border-b border-slate-100">
+      <CardHeader className="pb-3 border-b border-border/60">
         <CardTitle className="text-lg flex items-center gap-2">
-          <FileText className="h-5 w-5 text-slate-500" />
+          <FileText className="h-5 w-5 text-muted-foreground" />
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-5">
         {sections.map((section) => (
           <div key={section.title} className="space-y-2">
-            <div className="text-sm font-semibold text-slate-800">{section.title}</div>
+            <div className="text-sm font-semibold text-foreground">{section.title}</div>
             {section.items.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-white p-3 text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-border bg-card p-3 text-sm text-muted-foreground">
                 {section.emptyText || 'Not uploaded.'}
               </div>
             ) : (
@@ -39,11 +39,11 @@ export function FileSectionGroup({ title, sections }: { title: string; sections:
                 {section.items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm text-slate-900 truncate">{item.label}</div>
-                      {item.meta ? <div className="text-xs text-slate-500 truncate">{item.meta}</div> : null}
+                      <div className="text-sm text-foreground truncate">{item.label}</div>
+                      {item.meta ? <div className="text-xs text-muted-foreground truncate">{item.meta}</div> : null}
                     </div>
                     <Button
                       size="sm"
@@ -68,4 +68,3 @@ export function FileSectionGroup({ title, sections }: { title: string; sections:
     </Card>
   )
 }
-

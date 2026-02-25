@@ -65,15 +65,15 @@ export default function DecisionWorkspacePage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+      <main className="flex min-h-screen items-center justify-center bg-muted/40">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </main>
     )
   }
 
   if (!context) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-sm text-slate-600">
+      <main className="flex min-h-screen items-center justify-center bg-muted/40 px-6 text-sm text-muted-foreground">
         Decision workspace is unavailable for this manuscript.
       </main>
     )
@@ -85,7 +85,7 @@ export default function DecisionWorkspacePage() {
       manuscriptTitle={context.manuscript.title || 'Untitled Manuscript'}
       manuscriptStatus={context.manuscript.status}
       left={
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {context.manuscript.pdf_url ? (
             <iframe
               title="Decision Workspace PDF Preview"
@@ -93,7 +93,7 @@ export default function DecisionWorkspacePage() {
               className="h-[calc(100vh-140px)] min-h-[520px] w-full"
             />
           ) : (
-            <div className="flex h-[calc(100vh-140px)] min-h-[520px] items-center justify-center text-sm text-slate-500">
+            <div className="flex h-[calc(100vh-140px)] min-h-[520px] items-center justify-center text-sm text-muted-foreground">
               PDF preview is unavailable.
             </div>
           )}
@@ -102,7 +102,7 @@ export default function DecisionWorkspacePage() {
       middle={<ReviewReportComparison reports={context.reports || []} />}
       right={
         <div className="space-y-3">
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
             <strong>First Decision</strong> 仅保存建议草稿；<strong>Final Decision</strong> 才会触发状态流转与作者通知。
           </div>
           <DecisionEditor

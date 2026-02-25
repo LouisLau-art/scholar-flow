@@ -42,8 +42,8 @@ function apcLabel(invoice?: { status?: string | null; amount?: number | string |
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm text-slate-900 break-words">{value}</div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm text-foreground break-words">{value}</div>
     </div>
   )
 }
@@ -54,16 +54,16 @@ export function ManuscriptHeader({ ms }: { ms: ManuscriptHeaderData }) {
   const funding = (ms.invoice_metadata?.funding_info || '').trim()
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-slate-900 tracking-tight truncate">
+            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-foreground tracking-tight truncate">
               {ms.title || 'Untitled Manuscript'}
             </h1>
             <Badge className={`border ${getStatusBadgeClass(status)}`}>{getStatusLabel(status)}</Badge>
           </div>
-          <div className="mt-1 font-mono text-xs text-slate-400">{ms.id}</div>
+          <div className="mt-1 font-mono text-xs text-muted-foreground">{ms.id}</div>
         </div>
 
         <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>

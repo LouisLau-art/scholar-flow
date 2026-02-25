@@ -28,17 +28,17 @@ export default function RecommendationList() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-        <Mail className="h-5 w-5 text-blue-600" /> AI Recommendations
+      <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+        <Mail className="h-5 w-5 text-primary" /> AI Recommendations
       </h3>
 
-      <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+      <div className="divide-y divide-border/60 rounded-lg border border-border bg-card">
         {recommendations.length > 0 ? (
           recommendations.map((rec) => (
-            <div key={rec.reviewer_id} className="flex items-center justify-between p-4 hover:bg-slate-50">
+            <div key={rec.reviewer_id} className="flex items-center justify-between p-4 hover:bg-muted/40">
               <div>
-                <p className="font-medium text-slate-900">{rec.email}</p>
-                <p className="text-xs text-slate-500">Match Score: {(rec.score * 100).toFixed(1)}%</p>
+                <p className="font-medium text-foreground">{rec.email}</p>
+                <p className="text-xs text-muted-foreground">Match Score: {(rec.score * 100).toFixed(1)}%</p>
               </div>
               
               <button 
@@ -47,7 +47,7 @@ export default function RecommendationList() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
                   invitedIds.includes(rec.reviewer_id) 
                     ? 'bg-green-50 text-green-700' 
-                    : 'bg-slate-900 text-white hover:bg-blue-700'
+                    : 'bg-foreground text-primary-foreground hover:bg-primary/90'
                 }`}
               >
                 {invitedIds.includes(rec.reviewer_id) ? (
@@ -59,7 +59,7 @@ export default function RecommendationList() {
             </div>
           ))
         ) : (
-          <div className="p-8 text-center text-slate-400">
+          <div className="p-8 text-center text-muted-foreground">
             <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
             <p>No highly matching reviewers found. Try manual search.</p>
           </div>

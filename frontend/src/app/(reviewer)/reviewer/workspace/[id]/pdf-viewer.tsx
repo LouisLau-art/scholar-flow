@@ -12,9 +12,9 @@ interface PDFViewerProps {
 export function PDFViewer({ pdfUrl, isLoading }: PDFViewerProps) {
   if (isLoading) {
     return (
-      <Card className="border-slate-200 shadow-sm">
+      <Card className="border-border shadow-sm">
         <CardContent className="flex min-h-[520px] items-center justify-center">
-          <Loader2 className="h-7 w-7 animate-spin text-slate-500" />
+          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     )
@@ -22,8 +22,8 @@ export function PDFViewer({ pdfUrl, isLoading }: PDFViewerProps) {
 
   if (!pdfUrl) {
     return (
-      <Card className="border-slate-200 shadow-sm">
-        <CardContent className="flex min-h-[520px] items-center justify-center text-sm text-slate-500">
+      <Card className="border-border shadow-sm">
+        <CardContent className="flex min-h-[520px] items-center justify-center text-sm text-muted-foreground">
           PDF preview is unavailable.
         </CardContent>
       </Card>
@@ -31,8 +31,8 @@ export function PDFViewer({ pdfUrl, isLoading }: PDFViewerProps) {
   }
 
   return (
-    <Card className="overflow-hidden border-slate-200 shadow-sm">
-      <CardHeader className="border-b border-slate-200 bg-slate-50 py-3">
+    <Card className="overflow-hidden border-border shadow-sm">
+      <CardHeader className="border-b border-border bg-muted/40 py-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">Manuscript Preview</CardTitle>
           <a

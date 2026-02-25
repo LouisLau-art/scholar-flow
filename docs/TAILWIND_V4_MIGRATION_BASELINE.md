@@ -127,11 +127,30 @@
   - `frontend/src/app/submit-revision/[id]/page.tsx`
 - 第十二批 10 个文件合计减少硬编码色板引用约 `114` 处。
 
+## 已完成的 v3 设计系统化（第十三批增量，激进批）
+- 第十三批一次性完成 15 个高频文件语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/components/editor/InvoiceInfoSection.tsx`
+  - `frontend/src/components/RecommendationList.tsx`
+  - `frontend/src/app/auth/callback/page.tsx`
+  - `frontend/src/app/admin/users/page.tsx`
+  - `frontend/src/components/editor/FileSectionGroup.tsx`
+  - `frontend/src/components/editor/FileSectionCard.tsx`
+  - `frontend/src/components/editor/decision/DecisionWorkspaceLayout.tsx`
+  - `frontend/src/app/not-found.tsx`
+  - `frontend/src/app/(reviewer)/reviewer/workspace/[id]/pdf-viewer.tsx`
+  - `frontend/src/app/(public)/review/invite/decline-form.tsx`
+  - `frontend/src/app/(admin)/editor/manuscript/[id]/page.tsx`
+  - `frontend/src/app/(admin)/editor/decision/[id]/page.tsx`
+  - `frontend/src/components/portal/ArticleList.tsx`
+  - `frontend/src/components/notifications/NotificationBell.tsx`
+  - `frontend/src/components/editor/ManuscriptHeader.tsx`
+- 第十三批 15 个文件合计减少硬编码色板引用约 `108` 处。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `246`
+- `hard palette (bg/text/border)-(slate|blue)-`: `138`
 
 > 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
 

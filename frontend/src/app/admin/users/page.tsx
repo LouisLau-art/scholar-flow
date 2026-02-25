@@ -164,16 +164,16 @@ export default function UserManagementPage() {
   if (verifyingRole) {
     content = (
       <div className="flex flex-1 w-full items-center justify-center flex-col gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-        <p className="text-slate-500 font-medium">Verifying access privileges...</p>
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Verifying access privileges...</p>
       </div>
     )
   } else if (!isAdmin) {
     content = (
       <div className="flex flex-1 w-full items-center justify-center flex-col gap-4">
         <ShieldAlert className="h-12 w-12 text-red-500" />
-        <h1 className="text-xl font-bold text-slate-900">Access Denied</h1>
-        <p className="text-slate-500">Redirecting you to dashboard...</p>
+        <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
+        <p className="text-muted-foreground">Redirecting you to dashboard...</p>
       </div>
     )
   } else {
@@ -182,8 +182,8 @@ export default function UserManagementPage() {
       <div className="w-full">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Manage user accounts, roles, and permissions.
             </p>
           </div>
@@ -192,7 +192,7 @@ export default function UserManagementPage() {
           </Button>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+        <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
           <UserFilters
             search={search}
             role={role}
@@ -236,7 +236,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-10 sm:px-6 lg:px-8">
         {content}

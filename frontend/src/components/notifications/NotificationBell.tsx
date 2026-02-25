@@ -109,21 +109,21 @@ export function NotificationBell({ isAuthenticated }: Props) {
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="relative text-slate-400 hover:text-white transition-colors"
+        className="relative text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Notifications"
       >
         <BellIcon className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-slate-900" />
+          <span className="absolute -top-1 -right-1 inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-foreground" />
         )}
       </button>
 
       {isOpen && (
         <div className="absolute right-0 mt-3 w-[360px] z-50">
           {isLoading ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-sm font-semibold text-slate-900">Loading…</div>
-              <div className="mt-1 text-xs text-slate-600">Fetching your latest notifications.</div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm font-semibold text-foreground">Loading…</div>
+              <div className="mt-1 text-xs text-muted-foreground">Fetching your latest notifications.</div>
             </div>
           ) : (
             <NotificationList
