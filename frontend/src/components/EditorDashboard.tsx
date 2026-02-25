@@ -92,11 +92,11 @@ export default function EditorDashboard() {
   }
 
   return (
-    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-6">
+    <div className="w-full rounded-2xl border border-border bg-muted/40 p-6">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-serif font-bold text-slate-900">Editor Command Center</h1>
-            <p className="text-slate-600 mt-2">
+            <h1 className="text-3xl font-serif font-bold text-foreground">Editor Command Center</h1>
+            <p className="text-muted-foreground mt-2">
               Manage manuscript pipeline, assign reviewers, and make final decisions
             </p>
           </div>
@@ -135,16 +135,16 @@ export default function EditorDashboard() {
           </TabsContent>
 
           <TabsContent value="reviewers" className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Reviewer Management</h2>
-              <p className="text-slate-600 mb-6">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="text-xl font-bold text-foreground mb-4">Reviewer Management</h2>
+              <p className="text-muted-foreground mb-6">
                 Browse and manage your pool of expert reviewers. Click on a reviewer to view details or assign them to manuscripts.
               </p>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 mb-6">
+              <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground mb-6">
                 {selectedManuscriptId ? (
-                  <>Selected manuscript: <span className="font-semibold text-slate-900">{selectedManuscriptTitle}</span></>
+                  <>Selected manuscript: <span className="font-semibold text-foreground">{selectedManuscriptTitle}</span></>
                 ) : (
-                  <>No manuscript selected. Go to the <span className="font-semibold text-slate-900">Manuscripts Process</span> tab and click “Assign”.</>
+                  <>No manuscript selected. Go to the <span className="font-semibold text-foreground">Manuscripts Process</span> tab and click “Assign”.</>
                 )}
               </div>
               <Button
@@ -169,8 +169,8 @@ export default function EditorDashboard() {
                 }}
               />
             ) : (
-              <div className="bg-white rounded-xl border border-slate-200 p-8 text-slate-600">
-                No manuscript selected. Go to the <span className="font-semibold text-slate-900">Manuscripts Process</span> tab and click “Decide”.
+              <div className="bg-card rounded-xl border border-border p-8 text-muted-foreground">
+                No manuscript selected. Go to the <span className="font-semibold text-foreground">Manuscripts Process</span> tab and click “Decide”.
               </div>
             )}
           </TabsContent>

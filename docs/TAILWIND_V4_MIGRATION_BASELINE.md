@@ -95,11 +95,20 @@
   - `frontend/src/app/admin/manuscripts/page.tsx`
 - 第九批 5 个文件合计减少硬编码色板引用约 `81` 处。
 
+## 已完成的 v3 设计系统化（第十批增量）
+- 第十批高频文件完成语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/app/admin/eic-approval/page.tsx`
+  - `frontend/src/components/home/HeroSection.tsx`
+  - `frontend/src/components/editor/production/ProductionActionPanel.tsx`
+  - `frontend/src/components/EditorDashboard.tsx`
+  - `frontend/src/app/finance/page.tsx`
+- 第十批 5 个文件合计减少硬编码色板引用约 `73` 处。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `494`
+- `hard palette (bg/text/border)-(slate|blue)-`: `421`
 
 > 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
 

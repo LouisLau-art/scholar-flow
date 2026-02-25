@@ -58,18 +58,18 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
 
   return (
     <section className="space-y-3">
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Action Panel</h2>
-        <p className="mt-1 text-xs text-slate-500">发布前核准与最新作者反馈摘要。</p>
+      <div className="rounded-lg border border-border bg-card p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">Action Panel</h2>
+        <p className="mt-1 text-xs text-muted-foreground">发布前核准与最新作者反馈摘要。</p>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-        <div className="text-sm text-slate-900 font-semibold">Current Action State</div>
-        <p className="text-xs text-slate-600">{statusHint(activeCycle?.status)}</p>
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="text-sm text-foreground font-semibold">Current Action State</div>
+        <p className="text-xs text-muted-foreground">{statusHint(activeCycle?.status)}</p>
 
         {latest ? (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 space-y-1">
-            <p className="font-semibold uppercase tracking-wide text-slate-600">Latest Proofreading</p>
+          <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-foreground space-y-1">
+            <p className="font-semibold uppercase tracking-wide text-muted-foreground">Latest Proofreading</p>
             <p>Decision: {latest.decision}</p>
             <p>Submitted: {latest.submitted_at ? new Date(latest.submitted_at).toLocaleString() : '--'}</p>
             {latest.summary ? <p>Summary: {latest.summary}</p> : null}
@@ -79,8 +79,8 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
                 {correctionItems.length > 0 ? (
                   <div className="mt-2 space-y-2">
                     {correctionItems.map((item, idx) => (
-                      <div key={`${item.id || idx}`} className="rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-700">
-                        <p className="font-semibold text-slate-600">Item #{idx + 1}</p>
+                      <div key={`${item.id || idx}`} className="rounded border border-border bg-card p-2 text-[11px] text-foreground">
+                        <p className="font-semibold text-muted-foreground">Item #{idx + 1}</p>
                         {item.line_ref ? <p>Line Ref: {item.line_ref}</p> : null}
                         {item.original_text ? <p>Original: {item.original_text}</p> : null}
                         <p>Suggested: {item.suggested_text}</p>
@@ -93,7 +93,7 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
             ) : null}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">暂无作者反馈。</p>
+          <p className="text-xs text-muted-foreground">暂无作者反馈。</p>
         )}
 
         <button

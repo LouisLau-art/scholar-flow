@@ -159,7 +159,7 @@ export default function FinanceDashboard() {
 
   if (forbidden && internalReady) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-muted/40">
         <SiteHeader />
         <div className="mx-auto max-w-5xl p-8">
           <Card>
@@ -177,10 +177,10 @@ export default function FinanceDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-muted/40">
       <SiteHeader />
       <div className="mx-auto max-w-5xl p-8">
-        <header className="mb-10 border-b border-slate-200 pb-6">
+        <header className="mb-10 border-b border-border pb-6">
           <div className="flex items-center justify-between gap-4">
             <button
               type="button"
@@ -207,19 +207,19 @@ export default function FinanceDashboard() {
           </div>
 
           <div className="mt-6">
-            <h1 className="flex items-center gap-3 font-serif text-3xl font-bold text-slate-900">
-              <DollarSign className="h-8 w-8 text-blue-600" />
+            <h1 className="flex items-center gap-3 font-serif text-3xl font-bold text-foreground">
+              <DollarSign className="h-8 w-8 text-primary" />
               Finance
             </h1>
-            <p className="mt-2 text-slate-600">
+            <p className="mt-2 text-muted-foreground">
               Internal invoices workspace backed by real Supabase invoices data.
             </p>
           </div>
         </header>
 
-        <Card className="overflow-hidden border-slate-200">
-          <CardHeader className="border-b border-slate-100">
-            <CardTitle className="text-slate-900">Invoices</CardTitle>
+        <Card className="overflow-hidden border-border">
+          <CardHeader className="border-b border-border/60">
+            <CardTitle className="text-foreground">Invoices</CardTitle>
             <CardDescription>Filter by status and export the current reconciliation snapshot.</CardDescription>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Select value={status} onValueChange={(value) => setStatus(value as FinanceStatusFilter)}>
@@ -238,7 +238,7 @@ export default function FinanceDashboard() {
                 placeholder="Search invoice number or manuscript title"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-9 w-full rounded-md border border-slate-300 px-3 text-sm sm:max-w-sm"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-sm"
               />
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" onClick={() => void loadInvoices()} disabled={loading}>
@@ -252,11 +252,11 @@ export default function FinanceDashboard() {
               </div>
             </div>
             {meta && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Total: {meta.total} • Snapshot: {meta.snapshot_at ? new Date(meta.snapshot_at).toLocaleString() : '—'}
               </p>
             )}
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-destructive">{error}</p>}
           </CardHeader>
           <CardContent className="p-0">
             <FinanceInvoicesTable
