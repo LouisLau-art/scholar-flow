@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
 from app.api.v1.editor_common import (
     AcademicCheckRequest,
@@ -13,7 +13,9 @@ from app.api.v1.editor_common import (
 )
 from app.core.auth_utils import get_current_user
 from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import normalize_roles
 from app.core.roles import require_any_role
+from app.core.short_ttl_cache import ShortTTLCache
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import normalize_status
 from app.services.editor_service import EditorService
@@ -21,6 +23,15 @@ from app.services.editorial_service import EditorialService
 from app.services.notification_service import NotificationService
 
 router = APIRouter(tags=["Editor Command Center"])
+_AE_WORKSPACE_CACHE_TTL_SEC = 8.0
+_ME_WORKSPACE_CACHE_TTL_SEC = 8.0
+_ae_workspace_cache = ShortTTLCache[list[dict]](max_entries=1024)
+_me_workspace_cache = ShortTTLCache[list[dict]](max_entries=1024)
+
+
+def _is_force_refresh_request(request: Request) -> bool:
+    token = str(request.headers.get("x-sf-force-refresh") or "").strip().lower()
+    return token in {"1", "true", "yes", "on"}
 
 
 # --- Feature 038: Pre-check Role Workflow Endpoints ---
@@ -164,6 +175,7 @@ async def submit_intake_revision(
 
 @router.get("/workspace")
 async def get_ae_workspace(
+    request: Request,
     page: int = 1,
     page_size: int = 20,
     current_user: dict = Depends(get_current_user),
@@ -179,7 +191,15 @@ async def get_ae_workspace(
     - decision
     """
     try:
-        return EditorService().get_ae_workspace(current_user["id"], page, page_size)
+        user_id = str(current_user.get("id") or "")
+        cache_key = f"uid={user_id}|page={max(page, 1)}|size={max(page_size, 1)}"
+        if not _is_force_refresh_request(request):
+            cached = _ae_workspace_cache.get(cache_key)
+            if cached is not None:
+                return cached
+        rows = EditorService().get_ae_workspace(current_user["id"], page, page_size)
+        _ae_workspace_cache.set(cache_key, rows, ttl_sec=_AE_WORKSPACE_CACHE_TTL_SEC)
+        return rows
     except HTTPException:
         raise
     except Exception as e:
@@ -189,6 +209,7 @@ async def get_ae_workspace(
 
 @router.get("/managing-workspace")
 async def get_managing_workspace(
+    request: Request,
     page: int = 1,
     page_size: int = 20,
     q: str | None = Query(None, max_length=100),
@@ -200,13 +221,27 @@ async def get_managing_workspace(
     - 按状态分桶返回 ME 需要跟进的非终态稿件。
     """
     try:
-        return EditorService().get_managing_workspace(
+        viewer_user_id = str(current_user.get("id") or "")
+        viewer_roles = profile.get("roles") or []
+        role_key = ",".join(sorted(normalize_roles(viewer_roles)))
+        cache_key = (
+            f"uid={viewer_user_id}|roles={role_key}|page={max(page, 1)}|size={max(page_size, 1)}"
+            f"|q={str(q or '').strip().lower()}"
+        )
+        if not _is_force_refresh_request(request):
+            cached = _me_workspace_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+        rows = EditorService().get_managing_workspace(
             viewer_user_id=str(current_user.get("id") or ""),
             viewer_roles=profile.get("roles") or [],
             page=page,
             page_size=page_size,
             q=q,
         )
+        _me_workspace_cache.set(cache_key, rows, ttl_sec=_ME_WORKSPACE_CACHE_TTL_SEC)
+        return rows
     except HTTPException:
         raise
     except Exception as e:

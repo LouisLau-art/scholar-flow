@@ -372,6 +372,7 @@ export const EditorApi = {
     const requestPromise = (async () => {
       const res = await authedFetch(`/api/v1/editor/workspace?${params.toString()}`, {
         signal: options?.signal,
+        headers: force ? { 'x-sf-force-refresh': '1' } : undefined,
       })
       const json = await res.json().catch(() => [])
       if (res.ok && Array.isArray(json)) {
@@ -418,6 +419,7 @@ export const EditorApi = {
     const requestPromise = (async () => {
       const res = await authedFetch(`/api/v1/editor/managing-workspace?${params.toString()}`, {
         signal: options?.signal,
+        headers: force ? { 'x-sf-force-refresh': '1' } : undefined,
       })
       const json = await res.json().catch(() => [])
       if (res.ok && Array.isArray(json)) {
@@ -502,6 +504,7 @@ export const EditorApi = {
     const requestPromise = (async () => {
       const res = await authedFetch(`/api/v1/editor/manuscripts/process${qs ? `?${qs}` : ''}`, {
         signal: options?.signal,
+        headers: force ? { 'x-sf-force-refresh': '1' } : undefined,
       })
       const json = await res.json().catch(() => ({}))
       if (res.ok && (json as { success?: boolean })?.success !== false) {
