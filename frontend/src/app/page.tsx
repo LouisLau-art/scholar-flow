@@ -1,6 +1,5 @@
 'use client'
 
-import { format } from 'date-fns'
 import { ArrowRight } from 'lucide-react'
 import { Manrope, Playfair_Display } from 'next/font/google'
 import Link from 'next/link'
@@ -8,6 +7,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import SiteHeader from '@/components/layout/SiteHeader'
+import { formatDateLocal } from '@/lib/date-display'
 import { cn } from '@/lib/utils'
 import { getLatestArticles } from '@/services/portal'
 
@@ -190,7 +190,7 @@ export default function HomePage() {
       title: article.title,
       summary: article.abstract || 'Read the latest peer-reviewed research and editorial highlights.',
       category: article.authors[0] || 'Latest research',
-      dateLabel: article.published_at ? format(new Date(article.published_at), 'yyyy-MM-dd') : 'Recently published',
+      dateLabel: article.published_at ? formatDateLocal(article.published_at) : 'Recently published',
       href: `/articles/${article.id}`,
       image: fallbackNews[index % fallbackNews.length].image,
     }))

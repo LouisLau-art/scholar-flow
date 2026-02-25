@@ -210,7 +210,8 @@ export default function ReviewerAssignModal({
   const fetchReviewers = useCallback(async (query: string = '') => {
     setIsLoading(true)
     try {
-      const payload = await EditorApi.searchReviewerLibrary(query, 120, manuscriptId, {
+      const limit = query.trim() ? 120 : 40
+      const payload = await EditorApi.searchReviewerLibrary(query, limit, manuscriptId, {
         roleScopeKey: reviewerSearchScopeKey,
       })
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')

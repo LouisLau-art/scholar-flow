@@ -1,4 +1,3 @@
-import { format } from 'date-fns'
 import { AlertTriangle, ArrowRight, Calendar, DollarSign, Loader2, User } from 'lucide-react'
 import type { RefObject } from 'react'
 
@@ -9,6 +8,7 @@ import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignment
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatDateLocal, formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 
 import type { AuthorResponseHistoryItem, ManuscriptDetail } from './helpers'
@@ -58,7 +58,7 @@ export function DetailTopHeader({
           <Calendar className="h-3 w-3" />
           Updated:{' '}
           <span className="font-mono font-medium text-slate-700">
-            {updatedAt ? format(new Date(updatedAt), 'yyyy-MM-dd HH:mm') : '-'}
+            {updatedAt ? formatDateTimeLocal(updatedAt) : '-'}
           </span>
         </div>
       </div>
@@ -120,7 +120,7 @@ export function MetadataStaffCard({
           <div className="text-right">
             <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Submitted</div>
             <div className="font-medium text-slate-900 text-sm">
-              {submittedAt ? format(new Date(submittedAt), 'yyyy-MM-dd') : '-'}
+              {submittedAt ? formatDateLocal(submittedAt) : '-'}
             </div>
           </div>
         </div>
@@ -224,7 +224,7 @@ export function AuthorResubmissionHistoryCard({
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                   <div>
                     {item.submittedAt
-                      ? `Submitted at ${format(new Date(item.submittedAt), 'yyyy-MM-dd HH:mm')}`
+                      ? `Submitted at ${formatDateTimeLocal(item.submittedAt)}`
                       : 'Submitted time unavailable'}
                     {typeof item.round === 'number' ? ` · Round ${item.round}` : ''}
                   </div>
@@ -261,7 +261,7 @@ export function LatestAuthorResubmissionCard({
           <div className="space-y-2">
             <div className="text-xs text-slate-500">
               {latestAuthorResponse.submittedAt
-                ? `Submitted at ${format(new Date(latestAuthorResponse.submittedAt), 'yyyy-MM-dd HH:mm')}`
+                ? `Submitted at ${formatDateTimeLocal(latestAuthorResponse.submittedAt)}`
                 : 'Submitted time unavailable'}
               {typeof latestAuthorResponse.round === 'number' ? ` · Round ${latestAuthorResponse.round}` : ''}
               {historyCount > 0 ? ` · Total ${historyCount}` : ''}
@@ -347,9 +347,7 @@ export function ReviewerFeedbackSummaryCard({
                   </div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {report.created_at
-                    ? format(new Date(report.created_at), 'yyyy-MM-dd HH:mm')
-                    : 'Submitted time unavailable'}
+                  {report.created_at ? formatDateTimeLocal(report.created_at) : 'Submitted time unavailable'}
                 </div>
                 <div className="space-y-1">
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Comments for Author</div>
@@ -622,7 +620,7 @@ export function TaskSlaSummaryCard({
             <div className="flex items-center justify-between">
               <span className="text-slate-600">Nearest Due</span>
               <span className="font-medium text-slate-900">
-                {taskSummary?.nearest_due_at ? format(new Date(taskSummary.nearest_due_at), 'yyyy-MM-dd HH:mm') : '—'}
+                {taskSummary?.nearest_due_at ? formatDateTimeLocal(taskSummary.nearest_due_at) : '—'}
               </span>
             </div>
           </>
@@ -684,23 +682,19 @@ export function PrecheckRoleQueueCard({
               <div>
                 <span className="font-medium text-slate-700">Assigned At:</span>{' '}
                 <span className="text-slate-900">
-                  {roleQueue?.assigned_at ? format(new Date(roleQueue.assigned_at), 'yyyy-MM-dd HH:mm') : '—'}
+                  {roleQueue?.assigned_at ? formatDateTimeLocal(roleQueue.assigned_at) : '—'}
                 </span>
               </div>
               <div>
                 <span className="font-medium text-slate-700">Technical Completed:</span>{' '}
                 <span className="text-slate-900">
-                  {roleQueue?.technical_completed_at
-                    ? format(new Date(roleQueue.technical_completed_at), 'yyyy-MM-dd HH:mm')
-                    : '—'}
+                  {roleQueue?.technical_completed_at ? formatDateTimeLocal(roleQueue.technical_completed_at) : '—'}
                 </span>
               </div>
               <div>
                 <span className="font-medium text-slate-700">Academic Completed:</span>{' '}
                 <span className="text-slate-900">
-                  {roleQueue?.academic_completed_at
-                    ? format(new Date(roleQueue.academic_completed_at), 'yyyy-MM-dd HH:mm')
-                    : '—'}
+                  {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
                 </span>
               </div>
             </div>
@@ -715,13 +709,13 @@ export function PrecheckRoleQueueCard({
             <div className="text-slate-700">
               Technical completed:{' '}
               <span className="font-medium text-slate-900">
-                {roleQueue?.technical_completed_at ? format(new Date(roleQueue.technical_completed_at), 'yyyy-MM-dd HH:mm') : '—'}
+                {roleQueue?.technical_completed_at ? formatDateTimeLocal(roleQueue.technical_completed_at) : '—'}
               </span>
             </div>
             <div className="text-slate-700">
               Academic completed:{' '}
               <span className="font-medium text-slate-900">
-                {roleQueue?.academic_completed_at ? format(new Date(roleQueue.academic_completed_at), 'yyyy-MM-dd HH:mm') : '—'}
+                {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
               </span>
             </div>
             <div className="pt-1 text-xs text-slate-500">
