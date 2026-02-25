@@ -91,7 +91,7 @@ export function ProductionStatusCard({
       const res = await EditorApi.confirmInvoicePaid(manuscriptId)
       if (!res?.success) throw new Error(res?.detail || res?.message || 'Confirm payment failed')
       toast.success('Payment confirmed.', { id: toastId })
-      await onReload?.()
+      void onReload?.()
     } catch (e: any) {
       toast.error(e instanceof Error ? e.message : 'Confirm payment failed', { id: toastId })
     }
@@ -114,7 +114,7 @@ export function ProductionStatusCard({
       setOptimistic(null)
       onStatusChange?.(newStatus)
       toast.success(`Moved to ${getStatusLabel(newStatus)}`)
-      await onReload?.()
+      void onReload?.()
     } catch (e: any) {
       setOptimistic(null)
       onStatusChange?.(previous)
@@ -151,7 +151,7 @@ export function ProductionStatusCard({
       setOptimistic(null)
       onStatusChange?.(newStatus)
       toast.success(`Reverted to ${getStatusLabel(newStatus)}`)
-      await onReload?.()
+      void onReload?.()
     } catch (e: any) {
       setOptimistic(null)
       onStatusChange?.(previous)
@@ -205,8 +205,8 @@ export function ProductionStatusCard({
             <ProductionUploadDialog
               manuscriptId={manuscriptId}
               disabled={pending != null}
-              onUploaded={async () => {
-                await onReload?.()
+              onUploaded={() => {
+                void onReload?.()
               }}
             />
           </div>
