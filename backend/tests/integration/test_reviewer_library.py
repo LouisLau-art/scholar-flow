@@ -46,6 +46,9 @@ async def test_reviewer_library_add_and_search(client, override_profile, monkeyp
     body2 = res2.json()
     assert body2["success"] is True
     assert isinstance(body2["data"], list)
+    assert body2["pagination"]["page"] == 1
+    assert body2["pagination"]["page_size"] == 50
+    assert body2["pagination"]["returned"] == len(body2["data"])
 
 
 @pytest.mark.asyncio
@@ -123,3 +126,34 @@ async def test_reviewer_library_returns_invite_policy_when_manuscript_context_pr
     assert body["policy"]["cooldown_days"] == 30
     assert body["data"][0]["invite_policy"]["cooldown_active"] is True
     assert body["data"][1]["invite_policy"]["overdue_risk"] is True
+    assert body["pagination"]["page"] == 1
+    assert body["pagination"]["page_size"] == 20
+
+
+@pytest.mark.asyncio
+async def test_reviewer_library_supports_page_and_page_size(client, override_profile, monkeypatch: pytest.MonkeyPatch):
+    override_profile({"id": str(uuid4()), "email": "editor@example.com", "roles": ["managing_editor"]})
+
+    class _StubSvc:
+        def search_page(self, query: str = "", page: int = 1, page_size: int = 50):
+            assert query == "nlp"
+            assert page == 2
+            assert page_size == 10
+            return {
+                "items": [{"id": "r-10", "email": "r10@example.com", "full_name": "R10", "roles": ["reviewer"]}],
+                "page": page,
+                "page_size": page_size,
+                "returned": 1,
+                "has_more": True,
+            }
+
+    monkeypatch.setattr("app.api.v1.editor.ReviewerService", lambda: _StubSvc())
+
+    res = await client.get("/api/v1/editor/reviewer-library?query=nlp&page=2&page_size=10")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert body["pagination"]["page"] == 2
+    assert body["pagination"]["page_size"] == 10
+    assert body["pagination"]["has_more"] is True
+    assert len(body["data"]) == 1

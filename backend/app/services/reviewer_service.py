@@ -383,39 +383,59 @@ class ReviewerService:
             raise ValueError("Reviewer not found")
         return rows[0]
 
-    def search(self, query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
+    def search_page(self, query: str = "", page: int = 1, page_size: int = 50) -> Dict[str, Any]:
         q = (query or "").strip()
+        safe_page = max(1, int(page or 1))
+        safe_page_size = max(1, min(200, int(page_size or 50)))
+        offset = (safe_page - 1) * safe_page_size
+        # 中文注释：多取 1 条用于推断 has_more，避免额外 count(*) 查询。
+        fetch_size = safe_page_size + 1
+
         base = (
             supabase_admin.table("user_profiles")
             .select("id,email,full_name,title,affiliation,homepage_url,research_interests,roles,is_reviewer_active,created_at,updated_at")
             .contains("roles", ["reviewer"])
             .eq("is_reviewer_active", True)
-            .limit(limit)
         )
+
+        def _slice(query_obj):
+            resp = query_obj.order("updated_at", desc=True).range(offset, offset + fetch_size - 1).execute()
+            return getattr(resp, "data", None) or []
 
         if not q:
-            resp = base.order("updated_at", desc=True).execute()
-            return getattr(resp, "data", None) or []
+            rows = _slice(base)
+        else:
+            # Prefer generated column for fast search; fallback if remote schema not updated
+            try:
+                rows = _slice(base.ilike("reviewer_search_text", f"%{q}%"))
+            except Exception as e:
+                if not _is_missing_column_error(e):
+                    raise
+                # Fallback: OR across basic fields (may be slower without dedicated indexes)
+                ors = ",".join(
+                    [
+                        f"full_name.ilike.%{q}%",
+                        f"email.ilike.%{q}%",
+                        f"affiliation.ilike.%{q}%",
+                        f"homepage_url.ilike.%{q}%",
+                    ]
+                )
+                rows = _slice(base.or_(ors))
 
-        # Prefer generated column for fast search; fallback if remote schema not updated
-        try:
-            resp = base.ilike("reviewer_search_text", f"%{q}%").order("updated_at", desc=True).execute()
-            return getattr(resp, "data", None) or []
-        except Exception as e:
-            if not _is_missing_column_error(e):
-                raise
+        has_more = len(rows) > safe_page_size
+        items = rows[:safe_page_size]
+        return {
+            "items": items,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "returned": len(items),
+            "has_more": has_more,
+        }
 
-        # Fallback: OR across basic fields (may be slower without dedicated indexes)
-        ors = ",".join(
-            [
-                f"full_name.ilike.%{q}%",
-                f"email.ilike.%{q}%",
-                f"affiliation.ilike.%{q}%",
-                f"homepage_url.ilike.%{q}%",
-            ]
-        )
-        resp = base.or_(ors).order("updated_at", desc=True).execute()
-        return getattr(resp, "data", None) or []
+    def search(self, query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
+        # 向后兼容旧调用：保持返回 list。
+        page = self.search_page(query=query, page=1, page_size=limit)
+        return list(page.get("items") or [])
 
 
 class ReviewerInviteService:

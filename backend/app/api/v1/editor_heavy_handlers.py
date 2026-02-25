@@ -443,7 +443,8 @@ async def get_available_reviewers_impl(
 async def search_reviewer_library_impl(
     *,
     query: str,
-    limit: int,
+    page: int,
+    page_size: int,
     manuscript_id: str | None,
     profile: dict[str, Any],
     supabase_admin_client: Any,
@@ -453,7 +454,27 @@ async def search_reviewer_library_impl(
 ) -> dict[str, Any]:
     """Reviewer Library 搜索（搬运原逻辑并保留依赖注入）。"""
     try:
-        rows = reviewer_service_cls().search(query=query, limit=limit)
+        reviewer_service = reviewer_service_cls()
+        rows: list[dict[str, Any]]
+        pagination: dict[str, Any]
+        if hasattr(reviewer_service, "search_page"):
+            page_result = reviewer_service.search_page(query=query, page=page, page_size=page_size)
+            rows = list(page_result.get("items") or [])
+            pagination = {
+                "page": int(page_result.get("page") or page),
+                "page_size": int(page_result.get("page_size") or page_size),
+                "returned": len(rows),
+                "has_more": bool(page_result.get("has_more")),
+            }
+        else:
+            # 兼容旧测试 stub（仅实现 search(query, limit)）。
+            rows = reviewer_service.search(query=query, limit=page_size)
+            pagination = {
+                "page": int(page),
+                "page_size": int(page_size),
+                "returned": len(rows),
+                "has_more": len(rows) >= int(page_size),
+            }
         meta: dict[str, Any] = {}
         normalized_roles = set(normalize_roles_fn(profile.get("roles") or []))
         if "assistant_editor" in normalized_roles and "managing_editor" not in normalized_roles and not manuscript_id:
@@ -498,7 +519,7 @@ async def search_reviewer_library_impl(
                 "cooldown_days": policy_service.cooldown_days(),
                 "override_roles": policy_service.cooldown_override_roles(),
             }
-        return {"success": True, "data": rows, "policy": meta}
+        return {"success": True, "data": rows, "policy": meta, "pagination": pagination}
     except HTTPException:
         raise
     except Exception as e:

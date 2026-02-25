@@ -68,6 +68,8 @@ async def add_reviewer_to_library(
 @router.get("/reviewer-library")
 async def search_reviewer_library(
     query: str = Query("", description="按姓名/邮箱/单位/研究方向模糊检索（可选）"),
+    page: int = Query(1, ge=1, description="分页页码（从 1 开始）"),
+    page_size: int | None = Query(None, ge=1, le=200, description="每页条数（推荐使用 page_size）"),
     limit: int = Query(50, ge=1, le=200),
     manuscript_id: str | None = Query(None, description="可选：基于稿件上下文返回邀请策略命中信息"),
     profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
@@ -82,9 +84,12 @@ async def search_reviewer_library(
     normalize_roles_fn = _compat_symbol("normalize_roles", normalize_roles)
     search_impl = _compat_symbol("search_reviewer_library_impl", search_reviewer_library_impl)
 
+    effective_page_size = int(page_size or limit)
+
     return await search_impl(
         query=query,
-        limit=limit,
+        page=page,
+        page_size=effective_page_size,
         manuscript_id=manuscript_id,
         profile=profile,
         supabase_admin_client=db_client,

@@ -49,6 +49,9 @@ type StaffProfile = {
   roles?: string[]
 }
 
+const REVIEWER_PAGE_SIZE_DEFAULT = 20
+const REVIEWER_PAGE_SIZE_SEARCH = 40
+
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
@@ -71,7 +74,10 @@ export default function ReviewerAssignModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMoreReviewers, setIsLoadingMoreReviewers] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [reviewerPage, setReviewerPage] = useState(1)
+  const [hasMoreReviewers, setHasMoreReviewers] = useState(false)
   const [policyMeta, setPolicyMeta] = useState<{ cooldown_days?: number; override_roles?: string[] }>({})
   const [myRoles, setMyRoles] = useState<string[]>([])
   const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({})
@@ -208,18 +214,42 @@ export default function ReviewerAssignModal({
     }
   }
 
-  const fetchReviewers = useCallback(async (query: string = '') => {
+  const fetchReviewers = useCallback(async (query: string = '', options?: { append?: boolean; page?: number }) => {
     const requestSeq = reviewerSearchRequestSeq.current + 1
     reviewerSearchRequestSeq.current = requestSeq
-    setIsLoading(true)
+    const trimmedQuery = query.trim()
+    const nextPage = Math.max(1, Number(options?.page || 1))
+    const append = Boolean(options?.append && nextPage > 1)
+    const pageSize = trimmedQuery ? REVIEWER_PAGE_SIZE_SEARCH : REVIEWER_PAGE_SIZE_DEFAULT
+    if (append) {
+      setIsLoadingMoreReviewers(true)
+    } else {
+      setIsLoading(true)
+    }
     try {
-      const limit = query.trim() ? 120 : 40
-      const payload = await EditorApi.searchReviewerLibrary(query, limit, manuscriptId, {
+      const payload = await EditorApi.searchReviewerLibrary(trimmedQuery, pageSize, manuscriptId, {
         roleScopeKey: reviewerSearchScopeKey,
+        page: nextPage,
       })
       if (requestSeq !== reviewerSearchRequestSeq.current) return
       if (!payload?.success) throw new Error(payload?.detail || payload?.message || 'Failed to load reviewer library')
-      setReviewers((payload.data || []) as ReviewerWithPolicy[])
+      const incoming = (payload.data || []) as ReviewerWithPolicy[]
+      if (append) {
+        setReviewers((prev) => {
+          const merged = new Map(prev.map((item) => [String(item.id), item]))
+          for (const item of incoming) merged.set(String(item.id), item)
+          return Array.from(merged.values())
+        })
+      } else {
+        setReviewers(incoming)
+      }
+      const pagination = payload?.pagination || {}
+      const hasMore =
+        typeof pagination?.has_more === 'boolean'
+          ? Boolean(pagination.has_more)
+          : incoming.length >= pageSize
+      setReviewerPage(nextPage)
+      setHasMoreReviewers(hasMore)
       setPolicyMeta(payload?.policy || {})
     } catch (error) {
       if (requestSeq !== reviewerSearchRequestSeq.current) return
@@ -227,7 +257,11 @@ export default function ReviewerAssignModal({
       toast.error('Failed to load reviewers')
     } finally {
       if (requestSeq !== reviewerSearchRequestSeq.current) return
-      setIsLoading(false)
+      if (append) {
+        setIsLoadingMoreReviewers(false)
+      } else {
+        setIsLoading(false)
+      }
     }
   }, [manuscriptId, reviewerSearchScopeKey])
 
@@ -246,6 +280,10 @@ export default function ReviewerAssignModal({
     setPendingRemove(null)
     setOwnerSearch('')
     setPolicyMeta({})
+    setReviewers([])
+    setReviewerPage(1)
+    setHasMoreReviewers(false)
+    setIsLoadingMoreReviewers(false)
     fetchExistingReviewers()
     fetchOwner()
     fetchInternalStaff()
@@ -255,7 +293,7 @@ export default function ReviewerAssignModal({
   useEffect(() => {
     if (!isOpen) return
     const timer = window.setTimeout(() => {
-      void fetchReviewers(searchTerm.trim())
+      void fetchReviewers(searchTerm.trim(), { page: 1 })
     }, 250)
     return () => window.clearTimeout(timer)
   }, [isOpen, manuscriptId, searchTerm, fetchReviewers])
@@ -789,6 +827,19 @@ export default function ReviewerAssignModal({
                   </button>
                   )
                 })}
+                {hasMoreReviewers && (
+                  <div className="pt-2 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => void fetchReviewers(searchTerm.trim(), { append: true, page: reviewerPage + 1 })}
+                      disabled={isLoadingMoreReviewers}
+                      className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      data-testid="reviewer-load-more"
+                    >
+                      {isLoadingMoreReviewers ? 'Loading…' : 'Load more'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -892,7 +943,7 @@ export default function ReviewerAssignModal({
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         mode="create"
-        onSaved={() => fetchReviewers(searchTerm.trim())}
+        onSaved={() => void fetchReviewers(searchTerm.trim(), { page: 1 })}
       />
     </>
   )

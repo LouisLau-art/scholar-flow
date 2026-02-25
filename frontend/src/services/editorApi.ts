@@ -106,6 +106,7 @@ type ReviewerLibrarySearchOptions = {
   force?: boolean
   disableCache?: boolean
   roleScopeKey?: string
+  page?: number
 }
 
 type WorkspaceFetchOptions = CachedGetOptions & {
@@ -231,12 +232,13 @@ function buildReviewerSearchCacheKey(params: {
   manuscriptId?: string
   query?: string
   limit: number
+  page: number
   roleScopeKey?: string
 }) {
   const manuscriptKey = encodeURIComponent(String(params.manuscriptId || '__none__').trim())
   const queryKey = encodeURIComponent(normalizeReviewerQuery(params.query))
   const scopeKey = encodeURIComponent(normalizeRoleScopeKey(params.roleScopeKey))
-  return `reviewer-search|ms=${manuscriptKey}|scope=${scopeKey}|limit=${params.limit}|q=${queryKey}`
+  return `reviewer-search|ms=${manuscriptKey}|scope=${scopeKey}|limit=${params.limit}|page=${params.page}|q=${queryKey}`
 }
 
 function invalidateReviewerSearchCacheByPredicate(predicate: (key: string) => boolean) {
@@ -863,6 +865,7 @@ export const EditorApi = {
     manuscriptId?: string,
     options: ReviewerLibrarySearchOptions = {}
   ) {
+    const page = Math.max(1, Number.isFinite(Number(options.page)) ? Number(options.page) : 1)
     const ttlMs = options.ttlMs ?? REVIEWER_LIBRARY_CACHE_TTL_MS
     const force = Boolean(options.force)
     const useCache = !options.disableCache
@@ -870,6 +873,7 @@ export const EditorApi = {
       manuscriptId,
       query,
       limit,
+      page,
       roleScopeKey: options.roleScopeKey,
     })
 
@@ -887,6 +891,7 @@ export const EditorApi = {
     const params = new URLSearchParams()
     if (query) params.set('query', query)
     params.set('limit', String(limit))
+    params.set('page', String(page))
     if (manuscriptId) params.set('manuscript_id', manuscriptId)
     const requestPromise = (async () => {
       const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
