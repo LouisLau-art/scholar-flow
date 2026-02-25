@@ -269,8 +269,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **编辑端列表限流参数（2026-02-25）**：新增 `EDITOR_PROCESS_QUERY_LIMIT`（默认 `300`，范围 `50-1000`）与 `EDITOR_PIPELINE_STAGE_LIMIT`（默认 `80`，范围 `10-300`）；用于限制 Process/Pipeline 单次查询规模，避免全量扫描导致高延迟。
-- **Tailwind 设计系统化基线（2026-02-25）**：前端基线文档统一维护在 `docs/TAILWIND_V4_MIGRATION_BASELINE.md`；审计命令为 `cd frontend && bun run audit:tailwind-readiness`。当前基线：`w-[96vw]=0`、`hex=0`、`inline style=0`、`hard palette=0`（第 16 批收尾后四项核心计数已全清零，且已接入 frontend-ci gate 防回退）。
+- **Tailwind 设计系统化基线（2026-02-25）**：前端基线文档统一维护在 `docs/TAILWIND_V4_MIGRATION_BASELINE.md`；审计命令为 `cd frontend && bun run audit:tailwind-readiness`。当前基线：`w-[96vw]=0`、`hex=0`、`inline style=0`、`hard palette=0`、`magic width=0`（第 16 批收尾 + 宽度标准化后五项核心计数已全清零，且已接入 frontend-ci gate 防回退）。
 - **Tailwind v4 迁移 Phase 2（2026-02-25）**：前端已完成 CSS-first 迁移：`globals.css` 内新增 `@theme` 承载语义 token（颜色/字体/圆角/accordion 动画），并用 `@utility` 实现 `animate-in/out + fade/zoom/slide` 动画兼容层；已删除 `@config` 与 `tailwind.config.mjs`，`components.json` 的 `tailwind.config` 置空。
+- **Tailwind v4 迁移 Phase 3（2026-02-25）**：已完成动画语义层收敛（`sf-motion-*`）并替换高频组件（`dialog/popover/select/dashboard/home/header/version`）中的长动画拼接 class；下一步为基于真实数据做动画降载与 motion budget 门禁。
 - **Invoice PDF 中文字体（2026-02-24）**：HF Docker 镜像需安装 `fonts-noto-cjk`；`backend/app/core/templates/invoice_pdf.html` 字体栈已包含 `PingFang SC` / `Noto Sans CJK SC` 回退。若本地直接生成发票 PDF，也需在系统安装任一 CJK 字体以避免中文方块字。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。

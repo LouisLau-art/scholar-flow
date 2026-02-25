@@ -22,21 +22,21 @@ export default function HeroSection() {
       
       {/* 装饰性渐变 */}
       <div className="absolute top-0 right-0 -translate-y-12 translate-x-12 blur-3xl opacity-30">
-        <div className="aspect-[1000/600] w-[60rem] bg-gradient-to-r from-primary/80 to-primary rounded-full" />
+        <div className="aspect-[1000/600] sf-w-60rem bg-gradient-to-r from-primary/80 to-primary rounded-full" />
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-        <h1 className="font-serif text-5xl font-bold tracking-tight text-primary-foreground sm:text-7xl mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <h1 className="font-serif text-5xl font-bold tracking-tight text-primary-foreground sm:text-7xl mb-8 sf-motion-enter-up">
           Publish Your Research <br />
           <span className="text-primary">Open to the World</span>
         </h1>
-        <p className="mx-auto max-w-2xl text-lg leading-8 text-primary-foreground/70 mb-12 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
+        <p className="mx-auto max-w-2xl text-lg leading-8 text-primary-foreground/70 mb-12 sf-motion-enter-up-soft delay-150">
           Accelerating scientific discovery through AI-powered peer review and global open access. 
           The next generation platform for scholars and publishers.
         </p>
 
         {/* Search Box ( discovery Core) */}
-        <div className="mx-auto max-w-3xl animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
+        <div className="mx-auto max-w-3xl sf-motion-enter-up-strong delay-300">
           <div className="bg-card rounded-2xl shadow-2xl p-2 sm:p-3 overflow-hidden">
             {/* Mode Switcher */}
             <div className="flex gap-4 px-4 py-2 border-b border-border/60 mb-2">

@@ -312,7 +312,7 @@ export function ProcessFilterBar({
             </button>
 
             {statusDropdownOpen ? (
-              <div className="absolute z-40 mt-2 w-full min-w-[230px] rounded-md border border-border bg-card shadow-lg">
+              <div className="absolute z-40 mt-2 w-full sf-min-w-230 rounded-md border border-border bg-card shadow-lg">
                 <div className="max-h-56 overflow-auto p-2">
                   {STATUS_OPTIONS.map((s) => (
                     <label key={s.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-foreground hover:bg-muted/50">

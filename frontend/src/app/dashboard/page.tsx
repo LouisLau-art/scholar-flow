@@ -98,7 +98,7 @@ function RoleWorkspacePanel({
   actions: Array<{ label: string; href: string; helper: string }>
 }) {
   return (
-    <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <section className="space-y-6 sf-motion-enter-up">
       <div>
         <h2 className="text-2xl font-serif font-bold text-foreground">{title}</h2>
         <p className="mt-1 text-muted-foreground">{description}</p>
@@ -301,7 +301,7 @@ function DashboardPageContent() {
           </div>
 
           {!rolesLoading && !hasAnyTab && (
-            <TabsContent value={activeTab} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <TabsContent value={activeTab} className="sf-motion-enter-up">
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
                 当前账号未分配可访问的 Dashboard 角色，请联系管理员在 User Management 中补齐角色。
               </div>
@@ -309,7 +309,7 @@ function DashboardPageContent() {
           )}
 
           {canSeeAuthor && (
-            <TabsContent value="author" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <TabsContent value="author" className="space-y-12 sf-motion-enter-up">
               {isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
               ) : (
@@ -428,7 +428,7 @@ function DashboardPageContent() {
           )}
 
           {canSeeReviewer && (
-            <TabsContent value="reviewer" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <TabsContent value="reviewer" className="sf-motion-enter-up">
               <ReviewerDashboard />
             </TabsContent>
           )}
@@ -489,7 +489,7 @@ function DashboardPageContent() {
           )}
 
           {canSeeAdmin && (
-            <TabsContent value="admin" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <TabsContent value="admin" className="sf-motion-enter-up">
               <AdminDashboard />
             </TabsContent>
           )}

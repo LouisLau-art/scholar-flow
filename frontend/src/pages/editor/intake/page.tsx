@@ -227,7 +227,7 @@ export default function MEIntakePage() {
 
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="min-w-[1200px] w-full table-auto">
+              <table className="sf-min-w-1200 w-full table-auto">
               <thead className="bg-muted/40">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
@@ -236,7 +236,7 @@ export default function MEIntakePage() {
                   <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted</th>
                   <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority</th>
                   <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stage</th>
-                  <th className="w-[300px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
+                  <th className="sf-w-300 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,7 +285,7 @@ export default function MEIntakePage() {
                               等待作者修回（不可操作）
                             </Badge>
                             {m.waiting_resubmit_reason ? (
-                              <div className="max-w-[280px] truncate text-xs text-muted-foreground" title={m.waiting_resubmit_reason}>
+                              <div className="sf-max-w-280 truncate text-xs text-muted-foreground" title={m.waiting_resubmit_reason}>
                                 退回原因：{m.waiting_resubmit_reason}
                               </div>
                             ) : null}

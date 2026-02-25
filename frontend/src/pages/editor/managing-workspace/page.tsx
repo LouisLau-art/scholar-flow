@@ -335,13 +335,13 @@ export default function ManagingWorkspacePage() {
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
-                      <TableHead className="min-w-[380px]">Title</TableHead>
-                      <TableHead className="min-w-[170px]">Status</TableHead>
-                      <TableHead className="min-w-[170px]">Updated</TableHead>
-                      <TableHead className="min-w-[180px]">Owner</TableHead>
-                      <TableHead className="min-w-[180px]">Assistant Editor</TableHead>
-                      <TableHead className="min-w-[160px]">Journal</TableHead>
-                      <TableHead className="min-w-[160px]">Actions</TableHead>
+                      <TableHead className="min-w-96">Title</TableHead>
+                      <TableHead className="min-w-44">Status</TableHead>
+                      <TableHead className="min-w-44">Updated</TableHead>
+                      <TableHead className="min-w-44">Owner</TableHead>
+                      <TableHead className="min-w-44">Assistant Editor</TableHead>
+                      <TableHead className="min-w-40">Journal</TableHead>
+                      <TableHead className="min-w-40">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

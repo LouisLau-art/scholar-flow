@@ -69,7 +69,7 @@ export function ReviewerLibraryList() {
     <div className="rounded-xl border border-border bg-card shadow-sm">
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <div className="relative w-full sm:w-[360px]">
+          <div className="relative w-full sm:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={query}
@@ -87,7 +87,7 @@ export function ReviewerLibraryList() {
       </div>
 
       <div className="overflow-x-auto border-t border-border">
-        <table className="min-w-[900px] w-full text-sm">
+        <table className="sf-min-w-900 w-full text-sm">
           <thead className="bg-muted/60 text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-semibold">Reviewer</th>

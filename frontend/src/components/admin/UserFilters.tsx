@@ -28,7 +28,7 @@ export function UserFilters({ search, role, onSearchChange, onRoleChange }: User
       
       <div className="w-full sm:w-auto">
         <Select value={role || '__all'} onValueChange={(value) => onRoleChange(value === '__all' ? '' : value)}>
-          <SelectTrigger className="w-full sm:w-[160px]">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
           <SelectContent>

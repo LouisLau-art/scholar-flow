@@ -204,6 +204,137 @@
   --sf-exit-translate-x: -50%;
 }
 
+@utility sf-motion-dialog-overlay {
+  &[data-state="open"] {
+    animation-name: sf-enter;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: both;
+    --sf-enter-opacity: 0;
+  }
+
+  &[data-state="closed"] {
+    animation-name: sf-exit;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-in;
+    animation-fill-mode: both;
+    --sf-exit-opacity: 0;
+  }
+}
+
+@utility sf-motion-surface {
+  &[data-state="open"] {
+    animation-name: sf-enter;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: both;
+    --sf-enter-opacity: 0;
+    --sf-enter-scale: 0.95;
+  }
+
+  &[data-state="closed"] {
+    animation-name: sf-exit;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-in;
+    animation-fill-mode: both;
+    --sf-exit-opacity: 0;
+    --sf-exit-scale: 0.95;
+  }
+
+  &[data-side="bottom"] {
+    --sf-enter-translate-y: -0.5rem;
+  }
+
+  &[data-side="left"] {
+    --sf-enter-translate-x: 0.5rem;
+  }
+
+  &[data-side="right"] {
+    --sf-enter-translate-x: -0.5rem;
+  }
+
+  &[data-side="top"] {
+    --sf-enter-translate-y: 0.5rem;
+  }
+}
+
+@utility sf-motion-dialog-panel {
+  &[data-state="open"] {
+    animation-name: sf-enter;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: both;
+    --sf-enter-opacity: 0;
+    --sf-enter-scale: 0.95;
+    --sf-enter-translate-x: -50%;
+    --sf-enter-translate-y: -48%;
+  }
+
+  &[data-state="closed"] {
+    animation-name: sf-exit;
+    animation-duration: 0.2s;
+    animation-timing-function: ease-in;
+    animation-fill-mode: both;
+    --sf-exit-opacity: 0;
+    --sf-exit-scale: 0.95;
+    --sf-exit-translate-x: -50%;
+    --sf-exit-translate-y: -48%;
+  }
+}
+
+@utility sf-motion-enter-up {
+  animation-name: sf-enter;
+  animation-duration: 0.45s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-opacity: 0;
+  --sf-enter-translate-y: 1rem;
+}
+
+@utility sf-motion-enter-up-soft {
+  animation-name: sf-enter;
+  animation-duration: 0.55s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-opacity: 0;
+  --sf-enter-translate-y: 1.5rem;
+}
+
+@utility sf-motion-enter-up-strong {
+  animation-name: sf-enter;
+  animation-duration: 0.6s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-opacity: 0;
+  --sf-enter-translate-y: 2rem;
+}
+
+@utility sf-motion-enter-top-soft {
+  animation-name: sf-enter;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-opacity: 0;
+  --sf-enter-translate-y: -0.25rem;
+}
+
+@utility sf-motion-enter-top-fast {
+  animation-name: sf-enter;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-opacity: 0;
+  --sf-enter-translate-y: -0.5rem;
+}
+
+@utility sf-motion-enter-right {
+  animation-name: sf-enter;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+  --sf-enter-translate-x: 100%;
+}
+
 @layer utilities {
   .sf-page-shell {
     @apply min-h-screen bg-background;
@@ -211,6 +342,54 @@
 
   .sf-page-container {
     @apply mx-auto w-full max-w-screen-2xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .sf-w-150 {
+    width: 9.375rem;
+  }
+
+  .sf-w-300 {
+    width: 18.75rem;
+  }
+
+  .sf-w-360 {
+    width: 22.5rem;
+  }
+
+  .sf-w-60rem {
+    width: 60rem;
+  }
+
+  .sf-min-w-230 {
+    min-width: 14.375rem;
+  }
+
+  .sf-min-w-420 {
+    min-width: 26.25rem;
+  }
+
+  .sf-min-w-900 {
+    min-width: 56.25rem;
+  }
+
+  .sf-min-w-1200 {
+    min-width: 75rem;
+  }
+
+  .sf-max-w-280 {
+    max-width: 17.5rem;
+  }
+
+  .sf-max-w-720 {
+    max-width: 45rem;
+  }
+
+  .sf-max-w-1600 {
+    max-width: 100rem;
+  }
+
+  .sf-max-w-1700 {
+    max-width: 106.25rem;
   }
 
   .bg-grid-neutral {

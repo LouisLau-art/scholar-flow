@@ -74,7 +74,7 @@ export default function ProductionUploadDialog({ manuscriptId, manuscriptTitle, 
           Upload Final PDF
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Production Upload</DialogTitle>
           <DialogDescription>

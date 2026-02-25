@@ -146,7 +146,7 @@ function ReviewModal({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="w-full max-w-[720px] min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl sm:p-8 [&>button]:hidden">
+      <DialogContent className="w-full sf-max-w-720 min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl sm:p-8 [&>button]:hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>Structured Peer Review</DialogTitle>
           <DialogDescription>Submit structured review scores and comments for the selected manuscript.</DialogDescription>

@@ -54,7 +54,7 @@ export default function SignupPage() {
         </p>
       </div>
 
-      <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]">
+      <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-lg">
         <div className="border border-border bg-card px-6 py-12 shadow-2xl sm:rounded-3xl sm:px-12">
           <form className="space-y-6" onSubmit={handleSignup}>
             <div>

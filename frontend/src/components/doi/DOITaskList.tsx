@@ -37,7 +37,7 @@ export function DOITaskList({ tasks, onRefresh }: DOITaskListProps) {
               <td className="p-4 text-muted-foreground">
                 {new Date(task.run_at).toLocaleString()}
               </td>
-              <td className="p-4 max-w-[200px] truncate text-destructive font-medium" title={task.last_error}>
+              <td className="p-4 max-w-52 truncate text-destructive font-medium" title={task.last_error}>
                 {task.last_error || '-'}
               </td>
             </tr>

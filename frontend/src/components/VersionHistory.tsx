@@ -144,7 +144,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                     </button>
                     
                     {isExpanded && (
-                      <div className="mt-3 space-y-4 text-sm animate-in fade-in slide-in-from-top-1">
+                      <div className="mt-3 space-y-4 text-sm sf-motion-enter-top-soft">
                         <div className="bg-muted/60 p-3 rounded-lg border border-border">
                           <p className="font-semibold text-foreground mb-1 text-xs uppercase tracking-wide">Editor Request ({revision.decision_type})</p>
                           <div className="prose prose-sm max-w-none text-foreground">

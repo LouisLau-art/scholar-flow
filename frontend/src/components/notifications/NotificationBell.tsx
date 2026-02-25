@@ -119,7 +119,7 @@ export function NotificationBell({ isAuthenticated }: Props) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-[360px] z-50">
+        <div className="absolute right-0 mt-3 sf-w-360 z-50">
           {isLoading ? (
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="text-sm font-semibold text-foreground">Loading…</div>

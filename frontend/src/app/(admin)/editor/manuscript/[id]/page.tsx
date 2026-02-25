@@ -574,7 +574,7 @@ export default function EditorManuscriptDetailPage() {
         onBackToList={() => router.push(fallbackPath)}
       />
 
-      <main className="mx-auto max-w-[1600px] px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="mx-auto sf-max-w-1600 px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 space-y-6">
           <MetadataStaffCard
             manuscriptId={id}

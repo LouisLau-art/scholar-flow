@@ -295,12 +295,12 @@ export default function AEWorkspacePage() {
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
-                      <TableHead className="min-w-[420px]">Title</TableHead>
-                      <TableHead className="min-w-[160px]">Status</TableHead>
-                      <TableHead className="min-w-[170px]">Updated</TableHead>
-                      <TableHead className="min-w-[180px]">Owner</TableHead>
-                      <TableHead className="min-w-[160px]">Journal</TableHead>
-                      <TableHead className="min-w-[260px]">Actions</TableHead>
+                      <TableHead className="sf-min-w-420">Title</TableHead>
+                      <TableHead className="min-w-40">Status</TableHead>
+                      <TableHead className="min-w-44">Updated</TableHead>
+                      <TableHead className="min-w-44">Owner</TableHead>
+                      <TableHead className="min-w-40">Journal</TableHead>
+                      <TableHead className="min-w-64">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

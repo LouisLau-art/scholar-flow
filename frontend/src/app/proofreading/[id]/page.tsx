@@ -106,7 +106,7 @@ export default function ProofreadingPage() {
   return (
     <main className="min-h-screen bg-muted/40">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
+        <div className="mx-auto flex sf-max-w-1600 items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Author Proofreading</p>
             <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{context.manuscript.title || 'Untitled Manuscript'}</h1>
@@ -122,7 +122,7 @@ export default function ProofreadingPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-4 px-4 py-4 md:grid-cols-12 sm:px-6">
+      <div className="mx-auto grid sf-max-w-1600 grid-cols-1 gap-4 px-4 py-4 md:grid-cols-12 sm:px-6">
         <section className="md:col-span-7">
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             {pdfUrl ? (

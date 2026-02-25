@@ -309,7 +309,7 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
                         onValueChange={(value) => handleUpdateStatus(task, value as InternalTaskStatus)}
                         disabled={updatingTaskId === task.id || !canEdit}
                       >
-                        <SelectTrigger aria-label={`Task ${task.title} status`} className="h-9 w-[160px]">
+                        <SelectTrigger aria-label={`Task ${task.title} status`} className="h-9 w-40">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

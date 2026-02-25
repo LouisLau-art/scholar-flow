@@ -149,7 +149,7 @@ export default function SiteHeader() {
                       {displayName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="max-w-[160px] truncate text-background/80">{displayName}</span>
+                  <span className="max-w-40 truncate text-background/80">{displayName}</span>
                 </Link>
                 <Link href="/dashboard" className="text-background/60 hover:text-white transition-colors">
                   Dashboard
@@ -223,7 +223,7 @@ export default function SiteHeader() {
       {/* Mega Menu */}
       {isMegaMenuOpen && (
         <div 
-          className="absolute left-0 w-full bg-card text-foreground shadow-2xl border-b border-border animate-in fade-in slide-in-from-top-2 duration-200"
+          className="absolute left-0 w-full bg-card text-foreground shadow-2xl border-b border-border sf-motion-enter-top-fast"
           onMouseEnter={() => setIsMegaMenuOpen(true)}
           onMouseLeave={() => setIsMegaMenuOpen(false)}
         >
@@ -266,7 +266,7 @@ export default function SiteHeader() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-foreground border-t border-border/30 px-4 py-8 space-y-4 animate-in slide-in-from-right w-full h-screen fixed">
+        <div className="lg:hidden bg-foreground border-t border-border/30 px-4 py-8 space-y-4 sf-motion-enter-right w-full h-screen fixed">
           {navLinks.map(link => (
             <Link 
               key={link.name} 

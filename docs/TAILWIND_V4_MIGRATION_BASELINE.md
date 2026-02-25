@@ -201,8 +201,9 @@
 - `hex colors (#xxxxxx)`: `0`
 - `inline style={{...}}`: `0`
 - `hard palette (bg/text/border)-(slate|blue)-`: `0`
+- `magic width tokens (w-[...])`: `0`
 
-> 说明：四项核心计数已全部清零，后续以 CI 门禁防止回退。
+> 说明：五项核心计数已全部清零，后续以 CI 门禁防止回退。
 
 ## 审计脚本
 - 新增：`frontend/scripts/tailwind-readiness-audit.sh`
@@ -241,7 +242,11 @@
 4. 验证结果：
   - `bun run lint`、`bun run test:run`、`bun run build`、`TAILWIND_AUDIT_ENFORCE=1 bun run audit:tailwind-readiness` 全通过。
 
-### Phase 3（下一步）
-1. 清理并标准化遗留 magic width token（当前 `w-[...] = 42`）。
-2. 把现有自定义动画 utility 拆分为更小的语义层，减少组件层直接拼接复杂动画类。
-3. 根据真实页面性能数据评估是否继续做动画降载（减少首屏动画数量/时长）。
+### Phase 3（进行中）
+1. 清理并标准化遗留 magic width token（`w-[...]` 从 `42 -> 0`，已完成）。
+2. 动画 utility 语义分层（已完成）：
+  - `globals.css` 新增 `sf-motion-dialog-overlay/surface/dialog-panel` 与 `sf-motion-enter-*` 语义类。
+  - `dialog/popover/select` 与 `dashboard/home/header/version` 的长动画 class 已替换为语义类。
+3. 下一步：
+  - 基于真实页面性能数据评估动画降载（优先 `dashboard` / 首页 Hero / 导航）。
+  - 设定 motion budget（首屏动画数量与总时长阈值）并接入前端回归检查。

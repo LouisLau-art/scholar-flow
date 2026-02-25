@@ -223,7 +223,7 @@ export default function FinanceDashboard() {
             <CardDescription>Filter by status and export the current reconciliation snapshot.</CardDescription>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Select value={status} onValueChange={(value) => setStatus(value as FinanceStatusFilter)}>
-                <SelectTrigger aria-label="Finance status filter" className="h-9 w-[150px]">
+                <SelectTrigger aria-label="Finance status filter" className="h-9 sf-w-150">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

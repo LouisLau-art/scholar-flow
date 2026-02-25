@@ -198,7 +198,7 @@ export function ProductionStatusCard({
           <div className="rounded-lg border border-border bg-card p-3 space-y-2">
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Final PDF</span>
-              <span className="font-mono text-[11px] text-foreground truncate max-w-[180px]" title={finalPdfPath || ''}>
+              <span className="font-mono text-[11px] text-foreground truncate max-w-44" title={finalPdfPath || ''}>
                 {finalPdfPath ? 'Uploaded' : 'Missing'}
               </span>
             </div>

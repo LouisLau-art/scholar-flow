@@ -76,10 +76,10 @@ export function FeedbackTable() {
                     {item.severity}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[400px] truncate">
+                <TableCell className="max-w-sm truncate">
                   {item.description}
                 </TableCell>
-                <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                <TableCell className="max-w-52 truncate text-xs text-muted-foreground">
                   {item.url}
                 </TableCell>
                 <TableCell>
