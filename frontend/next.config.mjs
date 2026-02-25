@@ -9,6 +9,15 @@ const nextConfig = {
   experimental: {
     instrumentationHook: true,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+    ],
+    formats: ['image/avif', 'image/webp'],
+  },
   async rewrites() {
     const backendOriginRaw =
       process.env.BACKEND_ORIGIN ||

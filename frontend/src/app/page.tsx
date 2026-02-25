@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 import { Manrope, Playfair_Display } from 'next/font/google'
+import Image from 'next/image'
 import Link from 'next/link'
 
 import SiteHeader from '@/components/layout/SiteHeader'
@@ -157,22 +158,25 @@ function OverlayImage({
   src,
   className,
   overlayClassName,
+  sizes = '100vw',
   eager = false,
 }: {
   src: string
   className?: string
   overlayClassName: string
+  sizes?: string
   eager?: boolean
 }) {
   return (
     <div className={cn('relative overflow-hidden bg-muted', className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src={src}
         alt=""
         aria-hidden="true"
-        loading={eager ? 'eager' : 'lazy'}
-        className="h-full w-full object-cover"
+        fill
+        sizes={sizes}
+        priority={eager}
+        className="object-cover"
       />
       <div className={cn('pointer-events-none absolute inset-0', overlayClassName)} />
     </div>
