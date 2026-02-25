@@ -204,16 +204,16 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
 
   return (
     <section className="space-y-3">
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Production Workspace</h2>
-        <p className="mt-1 text-xs text-slate-500">创建轮次、上传清样并跟踪作者校对状态。</p>
+      <div className="rounded-lg border border-border bg-card p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Production Workspace</h2>
+        <p className="mt-1 text-xs text-muted-foreground">创建轮次、上传清样并跟踪作者校对状态。</p>
       </div>
 
       {!activeCycle ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900">Create Production Cycle</h3>
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Create Production Cycle</h3>
           <div>
-            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Layout Editor</Label>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Layout Editor</Label>
             <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select editor" />
@@ -227,12 +227,12 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
               </SelectContent>
             </Select>
             {productionStaff.length === 0 ? (
-              <p className="mt-1 text-xs text-amber-700">未找到 production_editor 账号，请先在 Admin User Management 里分配 Production Editor 角色。</p>
+              <p className="mt-1 text-xs text-destructive">未找到 production_editor 账号，请先在 Admin User Management 里分配 Production Editor 角色。</p>
             ) : null}
           </div>
 
           <div>
-            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Collaborators (Optional)</Label>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Collaborators (Optional)</Label>
             {collaboratorIds.length ? (
               <div className="flex flex-wrap gap-2 pb-2">
                 {collaboratorIds.map((cid) => (
@@ -240,7 +240,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
                     {staffNameById.get(cid) || cid}
                     <button
                       type="button"
-                      className="ml-1 inline-flex items-center text-slate-500 hover:text-slate-700"
+                      className="ml-1 inline-flex items-center text-muted-foreground hover:text-foreground"
                       onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
                       aria-label="Remove collaborator"
                     >
@@ -280,7 +280,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
           </div>
 
           <div>
-            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Proof Due At</Label>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proof Due At</Label>
             <DateTimePicker value={proofDueAt} onChange={setProofDueAt} />
           </div>
 
@@ -294,20 +294,20 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             Create Cycle
           </Button>
           {!context.permissions?.can_create_cycle ? (
-            <p className="text-xs text-amber-700">当前状态或活跃轮次限制，暂不可创建新轮次。</p>
+            <p className="text-xs text-destructive">当前状态或活跃轮次限制，暂不可创建新轮次。</p>
           ) : null}
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900">Active Cycle #{activeCycle.cycle_no}</h3>
-          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Active Cycle #{activeCycle.cycle_no}</h3>
+          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <p>Status: <span className="font-semibold">{activeCycle.status}</span></p>
             <p>Due: <span className="font-semibold">{formatDate(activeCycle.proof_due_at)}</span></p>
           </div>
 
           {context.permissions?.can_manage_editors ? (
-            <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Editors</p>
+            <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Editors</p>
               <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Select layout editor" />
@@ -328,7 +328,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
                       {staffNameById.get(cid) || cid}
                       <button
                         type="button"
-                        className="ml-1 inline-flex items-center text-slate-500 hover:text-slate-700"
+                        className="ml-1 inline-flex items-center text-muted-foreground hover:text-foreground"
                         onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
                         aria-label="Remove collaborator"
                       >
@@ -384,13 +384,13 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             Open Current Galley
           </Button>
 
-          <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Upload / Replace Galley</p>
+          <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upload / Replace Galley</p>
             <Input
               type="file"
               accept="application/pdf,.pdf"
               onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-              className="w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-slate-800"
+              className="w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
             />
             <Textarea
               value={versionNote}

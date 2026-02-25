@@ -202,21 +202,21 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
   return (
     <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between gap-4 border-b py-4">
-        <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-700">Internal Tasks</CardTitle>
+        <CardTitle className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Internal Tasks</CardTitle>
         <Button variant="outline" size="sm" className="gap-2" onClick={loadTasks} disabled={loading}>
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
           Refresh
         </Button>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="rounded-lg border border-border bg-muted/50 p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
-              <Label className="text-xs text-slate-600">Task Title</Label>
+              <Label className="text-xs text-muted-foreground">Task Title</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Clarify reviewer conflict-of-interest" />
             </div>
             <div>
-              <Label className="text-xs text-slate-600">Assignee</Label>
+              <Label className="text-xs text-muted-foreground">Assignee</Label>
               <Select value={assigneeUserId} onValueChange={setAssigneeUserId}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select assignee" />
@@ -231,11 +231,11 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-slate-600">Due At</Label>
+              <Label className="text-xs text-muted-foreground">Due At</Label>
               <DateTimePicker value={dueAt} onChange={setDueAt} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs text-slate-600">Priority</Label>
+              <Label className="text-xs text-muted-foreground">Priority</Label>
               <Select value={priority} onValueChange={(value) => setPriority(value as InternalTaskPriority)}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -250,7 +250,7 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
               </Select>
             </div>
             <div className="md:col-span-2">
-              <Label className="text-xs text-slate-600">Description (optional)</Label>
+              <Label className="text-xs text-muted-foreground">Description (optional)</Label>
               <Textarea
                 rows={2}
                 value={description}
@@ -268,11 +268,11 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
         </div>
 
         {loading && tasks.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading tasks...
           </div>
         ) : orderedTasks.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-300 py-8 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
             No internal tasks yet.
           </div>
         ) : (
@@ -281,26 +281,26 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
               const canEdit = task.can_edit !== false
               const activity = activityByTask[task.id] || []
               return (
-                <div key={task.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div key={task.id} className="rounded-lg border border-border bg-card p-3">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900">{task.title}</p>
+                        <p className="truncate text-sm font-semibold text-foreground">{task.title}</p>
                         <TaskStatusBadge status={task.status} />
                         {task.is_overdue ? (
-                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                          <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                             Overdue
                           </span>
                         ) : null}
                       </div>
-                      {task.description ? <p className="mt-1 text-sm text-slate-600">{task.description}</p> : null}
-                      <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-500 md:grid-cols-3">
+                      {task.description ? <p className="mt-1 text-sm text-muted-foreground">{task.description}</p> : null}
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-muted-foreground md:grid-cols-3">
                         <span>Assignee: {task.assignee?.full_name || task.assignee?.email || task.assignee_user_id}</span>
                         <span>Due: {formatTime(task.due_at)}</span>
                         <span>Updated: {formatTime(task.updated_at)}</span>
                       </div>
                       {!canEdit ? (
-                        <p className="mt-2 text-xs text-amber-700">Only the assignee or internal editor can update this task.</p>
+                        <p className="mt-2 text-xs text-destructive">Only the assignee or internal editor can update this task.</p>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2">
@@ -327,18 +327,18 @@ export function InternalTasksPanel({ manuscriptId, onChanged }: InternalTasksPan
                   </div>
 
                   {expandedTaskId === task.id ? (
-                    <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+                    <div className="mt-3 rounded-md border border-border/60 bg-muted/50 p-3">
                       {loadingActivityTaskId === task.id ? (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-muted-foreground">
                           <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Loading activity...
                         </div>
                       ) : activity.length === 0 ? (
-                        <p className="text-xs text-slate-500">No activity yet.</p>
+                        <p className="text-xs text-muted-foreground">No activity yet.</p>
                       ) : (
                         <div className="space-y-2">
                           {activity.map((log) => (
-                            <div key={log.id} className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600">
-                              <div className="font-medium text-slate-800">{log.action.replaceAll('_', ' ')}</div>
+                            <div key={log.id} className="rounded border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground">
+                              <div className="font-medium text-foreground">{log.action.replaceAll('_', ' ')}</div>
                               <div>
                                 By {log.actor?.full_name || log.actor?.email || log.actor_user_id} at {formatTime(log.created_at)}
                               </div>
