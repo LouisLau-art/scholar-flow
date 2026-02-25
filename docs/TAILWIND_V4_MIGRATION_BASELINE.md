@@ -77,11 +77,20 @@
   - `frontend/src/components/editor/ManuscriptTable.tsx`
 - 第七批 5 个文件合计减少硬编码色板引用约 `87` 处。
 
+## 已完成的 v3 设计系统化（第八批增量）
+- 第八批高频文件完成语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/app/login/page.tsx`
+  - `frontend/src/components/editor/production/ProductionTimeline.tsx`
+  - `frontend/src/components/editor/ProcessFilterBar.tsx`
+  - `frontend/src/app/dashboard/author/manuscripts/[id]/page.tsx`
+  - `frontend/src/components/editor/ManuscriptDetailsHeader.tsx`
+- 第八批 5 个文件合计减少硬编码色板引用约 `89` 处。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `664`
+- `hard palette (bg/text/border)-(slate|blue)-`: `575`
 
 > 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
 
