@@ -210,10 +210,11 @@
 - 运行：`cd frontend && bun run audit:tailwind-readiness`
 - 输出：
   - 核心计数（魔法值、hex、inline style、硬编码色板）
+  - motion 计数（`semantic motion`、`legacy motion`、`long duration`、`delay`）
   - Top 文件分布（便于分批治理）
 - 门禁模式：
   - 通过 `TAILWIND_AUDIT_ENFORCE=1` 启用阈值校验（默认阈值均为 `0`，可用 `TAILWIND_MAX_*` 覆盖）
-  - 已接入 `frontend-ci`，默认阻断 `w-[96vw] / hex / inline style / hard palette` 回退
+  - 已接入 `frontend-ci`，默认阻断 `w-[96vw] / hex / inline style / hard palette / legacy motion / long duration` 回退
 
 ## v4 迁移进度（2026-02-25）
 ### Phase 1（已完成，兼容模式）
@@ -247,6 +248,8 @@
 2. 动画 utility 语义分层（已完成）：
   - `globals.css` 新增 `sf-motion-dialog-overlay/surface/dialog-panel` 与 `sf-motion-enter-*` 语义类。
   - `dialog/popover/select` 与 `dashboard/home/header/version` 的长动画 class 已替换为语义类。
-3. 下一步：
-  - 基于真实页面性能数据评估动画降载（优先 `dashboard` / 首页 Hero / 导航）。
-  - 设定 motion budget（首屏动画数量与总时长阈值）并接入前端回归检查。
+3. motion budget 门禁（已完成）：
+  - 审计脚本新增 `legacy motion` 与 `long duration` 统计与阈值检查（`TAILWIND_MAX_LEGACY_MOTION`、`TAILWIND_MAX_LONG_DURATION`）。
+  - `frontend-ci` 已启用 `TAILWIND_MAX_LEGACY_MOTION=0`、`TAILWIND_MAX_LONG_DURATION=0`。
+4. 下一步：
+  - 基于真实页面性能数据评估动画进一步降载（优先 `dashboard` / 首页 Hero / 导航 delay）。

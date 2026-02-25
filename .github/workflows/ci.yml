@@ -85,6 +85,8 @@ jobs:
         TAILWIND_MAX_HEX: "0"
         TAILWIND_MAX_INLINE_STYLE: "0"
         TAILWIND_MAX_HARD_PALETTE: "0"
+        TAILWIND_MAX_LEGACY_MOTION: "0"
+        TAILWIND_MAX_LONG_DURATION: "0"
       run: bun run audit:tailwind-readiness
 
     - name: Run Unit Tests (Vitest)
