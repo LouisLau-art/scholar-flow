@@ -312,7 +312,13 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Playwright WebServer 复用（重要）**：`frontend/playwright.config.ts` 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
-## 近期关键修复快照（2026-02-09）
+## 近期关键修复快照（2026-02-25）
+- **Editor Process 链路降载（2026-02-25）**：`EditorService.list_manuscripts_process` 改为先做 scope 可见性过滤再执行 profile/overdue 聚合；Pre-check enrich 在 Process 列表里默认关闭 timeline 与 assignee profile 二次拉取，仅保留必要字段并复用一次性 profile 映射回填，减少无效扫描与重复查询。
+- **AE/ME Workspace enrich 轻量化（2026-02-25）**：`get_ae_workspace` 与 `get_managing_workspace` 的 pre-check enrich 改为 `include_timeline=False` + `include_assignee_profiles=False`，并在 workspace 层按需补齐展示字段，进一步降低首屏链路成本。
+- **Reviewer 指派弹窗按需加载（2026-02-25）**：`ReviewerAssignmentSearch` 改为动态加载 `ReviewerAssignModal`（`next/dynamic` + `ssr:false`），仅在用户点击 `Manage Reviewers` 时下载大组件，减少详情页首包体积。
+- **Reviewer Feedback 权限短路（2026-02-25）**：稿件详情页新增 `canViewReviewerFeedback` 前置判定；无权限角色（如 `production_editor`）不再发起 `/api/v1/manuscripts/{id}/reviews` 请求，改为只读提示，消除 403 + retry 噪音。
+- **审稿汇总请求短缓存（2026-02-25）**：`EditorApi.getManuscriptReviews` 接入短 TTL 缓存与 inflight dedupe，减少详情页与决策页重复拉取同一稿件审稿汇总。
+- **ReviewerAssignModal 内部人员缓存复用（2026-02-25）**：弹窗内部人员列表统一走 `EditorApi.listInternalStaff(..., { ttlMs })`，避免每次打开弹窗重复请求 `/api/v1/editor/internal-staff`。
 - **Invoice PDF 中文字体修复（2026-02-24）**：Docker 镜像新增 `fonts-noto-cjk`，发票模板字体链路补齐 `PingFang SC`/`Noto Sans CJK SC`，修复作者下载 invoice 时中文显示为方块的问题。
 - **ME Workspace + Cover Letter 补传 + Production 权限收敛（2026-02-24）**：新增 `GET /api/v1/editor/managing-workspace` 与前端页面 `/editor/managing-workspace`（按状态分组展示 ME 跟进稿件）；编辑详情页 File Hub 新增 cover letter 补传入口（`POST /api/v1/editor/manuscripts/{id}/files/cover-letter`）；production workspace 权限收敛为 `admin/managing_editor/editor_in_chief/production_editor`，`assistant_editor` 不再可读访问录用后 production 流程。
 - **Editor 详情页与时间线性能优化（2026-02-24）**：新增聚合接口 `GET /api/v1/editor/manuscripts/{id}/timeline-context`，将时间线组件从多请求收敛为单请求；`editor_detail` 新增 Auth profile fallback 的 5 分钟 TTL 缓存，避免 profile 缺失时每次详情页都串行调用最多 20 次 Auth Admin API。
