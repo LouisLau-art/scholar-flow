@@ -251,8 +251,8 @@ export default function JournalManagementPage() {
   const content = (() => {
     if (verifyingRole) {
       return (
-        <div className="flex min-h-[50vh] items-center justify-center gap-3 text-slate-500">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+        <div className="flex min-h-[50vh] items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
           Verifying admin access...
         </div>
       )
@@ -260,9 +260,9 @@ export default function JournalManagementPage() {
 
     if (!isAdmin) {
       return (
-        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-slate-600">
-          <ShieldAlert className="h-10 w-10 text-red-500" />
-          <p className="text-lg font-semibold text-slate-900">Access Denied</p>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-muted-foreground">
+          <ShieldAlert className="h-10 w-10 text-destructive" />
+          <p className="text-lg font-semibold text-foreground">Access Denied</p>
           <p>Redirecting to dashboard...</p>
         </div>
       )
@@ -272,11 +272,11 @@ export default function JournalManagementPage() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Journal Management</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-2xl font-bold text-foreground">Journal Management</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Manage journal catalog used by submission workflow and editorial scope.
             </p>
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="secondary">Total: {journals.length}</Badge>
               <Badge variant="outline">Active: {activeCount}</Badge>
             </div>
@@ -300,7 +300,7 @@ export default function JournalManagementPage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white">
+        <div className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -316,7 +316,7 @@ export default function JournalManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                     <div className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Loading journals...
@@ -325,7 +325,7 @@ export default function JournalManagementPage() {
                 </TableRow>
               ) : journals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                     No journals found. Create one to enable journal-bound submissions.
                   </TableCell>
                 </TableRow>
@@ -334,8 +334,8 @@ export default function JournalManagementPage() {
                   const isActive = journal.is_active !== false
                   return (
                     <TableRow key={journal.id}>
-                      <TableCell className="font-medium text-slate-900">{journal.title}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-600">{journal.slug}</TableCell>
+                      <TableCell className="font-medium text-foreground">{journal.title}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{journal.slug}</TableCell>
                       <TableCell>{journal.issn || '—'}</TableCell>
                       <TableCell>{journal.impact_factor ?? '—'}</TableCell>
                       <TableCell>
@@ -343,7 +343,7 @@ export default function JournalManagementPage() {
                           {isActive ? 'Active' : 'Inactive'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500">
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatDate(journal.updated_at || journal.created_at)}
                       </TableCell>
                       <TableCell className="text-right">
@@ -392,13 +392,13 @@ export default function JournalManagementPage() {
   })()
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-muted/30">
       <SiteHeader />
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-4">
           <Link
             href="/dashboard?tab=admin"
-            className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             Back to Admin Dashboard
           </Link>
@@ -482,10 +482,10 @@ export default function JournalManagementPage() {
                 placeholder="https://..."
               />
             </div>
-            <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
               <div>
-                <p className="text-sm font-medium text-slate-900">Active</p>
-                <p className="text-xs text-slate-500">Inactive journals won&apos;t show in submission list.</p>
+                <p className="text-sm font-medium text-foreground">Active</p>
+                <p className="text-xs text-muted-foreground">Inactive journals won&apos;t show in submission list.</p>
               </div>
               <Button
                 type="button"
