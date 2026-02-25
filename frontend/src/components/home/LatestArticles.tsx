@@ -29,22 +29,22 @@ export default function LatestArticles() {
   }, [])
 
   return (
-    <section className="py-20 border-t border-slate-100 bg-slate-50">
+    <section className="py-20 border-t border-border/60 bg-muted/40">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-10">
-          <h2 className="text-3xl font-serif font-bold text-slate-900">Latest Articles</h2>
-          <Link href="/search?q=&mode=articles" className="text-sm font-bold text-blue-600 hover:underline">
+          <h2 className="text-3xl font-serif font-bold text-foreground">Latest Articles</h2>
+          <Link href="/search?q=&mode=articles" className="text-sm font-bold text-primary hover:underline">
             View all
           </Link>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-500">
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
             <span className="ml-2">Loading…</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-500">
+          <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground">
             No published articles yet.
           </div>
         ) : (
@@ -53,16 +53,16 @@ export default function LatestArticles() {
               <Link
                 key={a.id}
                 href={`/articles/${a.id}`}
-                className="group block rounded-3xl border border-slate-200 bg-white p-6 hover:border-blue-500 hover:shadow-xl transition-all"
+                className="group block rounded-3xl border border-border bg-card p-6 hover:border-primary/60 hover:shadow-xl transition-all"
               >
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                   {a.published_at ? new Date(a.published_at).toLocaleDateString() : "Published"}
                 </div>
-                <div className="mt-3 text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+                <div className="mt-3 text-lg font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">
                   {a.title || "Untitled"}
                 </div>
-                <div className="mt-3 text-sm text-slate-600 line-clamp-3">{a.abstract || ""}</div>
-                <div className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-blue-600">
+                <div className="mt-3 text-sm text-muted-foreground line-clamp-3">{a.abstract || ""}</div>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-primary">
                   Read <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </div>
               </Link>
@@ -73,4 +73,3 @@ export default function LatestArticles() {
     </section>
   )
 }
-

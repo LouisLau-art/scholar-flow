@@ -350,7 +350,7 @@ export function AuditLogTimeline({
   }, [events])
 
   const dotClass = (eventCategory: TimelineEvent['category']) => {
-    if (eventCategory === 'status') return 'bg-blue-500'
+    if (eventCategory === 'status') return 'bg-primary'
     if (eventCategory === 'author') return 'bg-violet-500'
     if (eventCategory === 'reviewer') return 'bg-emerald-500'
     if (eventCategory === 'task') return 'bg-cyan-500'
@@ -360,7 +360,7 @@ export function AuditLogTimeline({
   return (
     <Card ref={rootRef} className="shadow-sm">
       <CardHeader className="py-4 border-b">
-        <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-slate-700">
+        <CardTitle className="text-sm font-bold uppercase tracking-wide flex items-center gap-2 text-foreground">
           <Activity className="h-4 w-4" />
           Activity Timeline
         </CardTitle>
@@ -387,9 +387,9 @@ export function AuditLogTimeline({
           </Button>
         </div>
 
-        <div className="relative pl-4 border-l-2 border-slate-100 space-y-6 max-h-[520px] overflow-auto pr-1">
-          {!activated ? <div className="text-xs text-slate-400">Timeline will load when visible.</div> : null}
-          {loading ? <div className="text-xs text-slate-400">Loading timeline...</div> : null}
+        <div className="relative pl-4 border-l-2 border-border/60 space-y-6 max-h-[520px] overflow-auto pr-1">
+          {!activated ? <div className="text-xs text-muted-foreground">Timeline will load when visible.</div> : null}
+          {loading ? <div className="text-xs text-muted-foreground">Loading timeline...</div> : null}
           {!loading && loadError ? (
             <div className="space-y-2">
               <div className="text-xs text-rose-600">{loadError}</div>
@@ -400,9 +400,9 @@ export function AuditLogTimeline({
           ) : null}
           {!loading && filteredEvents.map((event, idx) => (
             <div key={event.id} className={`relative ${idx > 0 ? 'opacity-90' : ''}`}>
-              <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-white ${dotClass(event.category)}`}></div>
+              <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-background ${dotClass(event.category)}`}></div>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="text-sm font-medium text-slate-900">{event.title}</div>
+                <div className="text-sm font-medium text-foreground">{event.title}</div>
                 <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
                   {event.category}
                 </Badge>
@@ -412,18 +412,18 @@ export function AuditLogTimeline({
                   </Badge>
                 ) : null}
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="text-xs text-muted-foreground mt-0.5">
                 {format(new Date(event.createdAt), 'yyyy-MM-dd HH:mm')}
                 {event.actor ? ` by ${event.actor}` : ''}
               </div>
               {event.content ? (
-                <div className="text-xs text-slate-700 mt-1 bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap">
+                <div className="text-xs text-foreground mt-1 bg-muted/50 p-2 rounded border border-border/60 whitespace-pre-wrap">
                   {event.content}
                 </div>
               ) : null}
             </div>
           ))}
-          {!loading && !loadError && filteredEvents.length === 0 ? <div className="text-xs text-slate-400">No timeline events.</div> : null}
+          {!loading && !loadError && filteredEvents.length === 0 ? <div className="text-xs text-muted-foreground">No timeline events.</div> : null}
         </div>
       </CardContent>
     </Card>

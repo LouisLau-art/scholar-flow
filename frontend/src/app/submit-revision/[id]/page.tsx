@@ -154,7 +154,7 @@ export default function SubmitRevisionPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-muted/40 flex flex-col">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -164,16 +164,16 @@ export default function SubmitRevisionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-muted/40 flex flex-col font-sans">
       <SiteHeader />
       
       <main className="flex-1 mx-auto max-w-4xl w-full px-4 py-8">
         <div className="mb-6">
-          <Link href="/dashboard" className="text-sm text-slate-500 hover:text-slate-900 flex items-center gap-1 mb-4">
+          <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4">
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-slate-900">Submit Revision</h1>
-          <p className="text-slate-600 mt-2">
+          <h1 className="text-3xl font-bold text-foreground">Submit Revision</h1>
+          <p className="text-muted-foreground mt-2">
              For manuscript: <span className="font-semibold">{manuscript?.title}</span>
           </p>
         </div>
@@ -207,7 +207,7 @@ export default function SubmitRevisionPage() {
                {/* File Upload */}
                <div className="space-y-3">
                  <Label className="text-base">Revised Manuscript (PDF)</Label>
-                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center hover:bg-slate-50 transition-colors">
+                 <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:bg-muted/50 transition-colors">
                    <input 
                      type="file" 
                      accept="application/pdf"
@@ -220,14 +220,14 @@ export default function SubmitRevisionPage() {
                        <div className="flex flex-col items-center gap-2 text-emerald-600">
                          <CheckCircle2 className="h-10 w-10" />
                          <span className="font-semibold text-lg">{file.name}</span>
-                         <span className="text-sm text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                         <span className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                          <Button variant="outline" size="sm" className="mt-2" onClick={(e) => {
                            e.preventDefault()
                            setFile(null)
                          }}>Remove</Button>
                        </div>
                      ) : (
-                       <div className="flex flex-col items-center gap-2 text-slate-500">
+                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                          <Upload className="h-10 w-10" />
                          <span className="font-semibold text-lg">Click to upload PDF</span>
                          <span className="text-sm">or drag and drop</span>
@@ -240,7 +240,7 @@ export default function SubmitRevisionPage() {
                {/* Response Letter */}
                <div className="space-y-3">
                  <Label className="text-base">Response Letter</Label>
-	                 <p className="text-sm text-slate-500">
+	                 <p className="text-sm text-muted-foreground">
 	                   Please describe the changes you have made and address the editor&apos;s comments point-by-point.
 	                 </p>
                <TiptapEditor 

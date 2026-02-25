@@ -96,27 +96,27 @@ export function QuickPrecheckModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-            <div className="text-xs text-slate-500">Manuscript</div>
-            <div className="mt-1 font-mono text-[11px] text-slate-800 break-all">{manuscriptId}</div>
-            {manuscriptTitle ? <div className="mt-1 text-sm font-medium text-slate-900">{manuscriptTitle}</div> : null}
+          <div className="rounded-lg border border-border bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">Manuscript</div>
+            <div className="mt-1 font-mono text-[11px] text-foreground break-all">{manuscriptId}</div>
+            {manuscriptTitle ? <div className="mt-1 text-sm font-medium text-foreground">{manuscriptTitle}</div> : null}
           </div>
 
           <div className="space-y-2">
             <Label className="text-sm">Decision</Label>
             <RadioGroup value={decision} onValueChange={(v) => setDecision(v as QuickPrecheckDecision)} className="grid gap-2">
-              <div className="flex items-start gap-2 rounded-md border border-slate-200 p-3">
+              <div className="flex items-start gap-2 rounded-md border border-border p-3">
                 <RadioGroupItem value="approve" id="qp-approve" className="mt-1" />
                 <label htmlFor="qp-approve" className="flex-1 cursor-pointer">
                   <div className="font-medium">Approve (Send to review)</div>
-                  <div className="text-xs text-slate-500">Moves status to Under Review</div>
+                  <div className="text-xs text-muted-foreground">Moves status to Under Review</div>
                 </label>
               </div>
-              <div className="flex items-start gap-2 rounded-md border border-slate-200 p-3">
+              <div className="flex items-start gap-2 rounded-md border border-border p-3">
                 <RadioGroupItem value="revision" id="qp-revision" className="mt-1" />
                 <label htmlFor="qp-revision" className="flex-1 cursor-pointer">
                   <div className="font-medium">Request Revision</div>
-                  <div className="text-xs text-slate-500">Moves status to Minor Revision</div>
+                  <div className="text-xs text-muted-foreground">Moves status to Minor Revision</div>
                 </label>
               </div>
             </RadioGroup>
@@ -124,7 +124,7 @@ export function QuickPrecheckModal({
 
           <div className="space-y-2">
             <Label className="text-sm">
-              Comment {needsComment ? <span className="text-red-600">*</span> : <span className="text-slate-400">(optional)</span>}
+              Comment {needsComment ? <span className="text-red-600">*</span> : <span className="text-muted-foreground">(optional)</span>}
             </Label>
             <Textarea
               placeholder={needsComment ? 'Required for revision…' : 'Optional note…'}

@@ -92,28 +92,28 @@ export default function CmsMenuPanel({ pages }: Props) {
   const renderList = (location: 'header' | 'footer', items: MenuItemState[], setItems: (v: MenuItemState[]) => void) => (
     <div className="space-y-3">
       {items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        <div className="rounded-xl border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
           No items yet. Add one below.
         </div>
       ) : (
         <div className="space-y-3">
           {items.map((item, idx) => (
-            <div key={`${location}-${idx}`} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div key={`${location}-${idx}`} className="rounded-xl border border-border bg-card p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                 <div className="md:col-span-4">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Label</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Label</label>
                   <input
                     value={item.label}
                     onChange={(e) => {
                       const v = e.target.value
                       setItems(items.map((x, i) => (i === idx ? { ...x, label: v } : x)))
                     }}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   />
                 </div>
 
                 <div className="md:col-span-3">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Type</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Type</label>
                   <Select
                     value={item.type}
                     onValueChange={(value) => {
@@ -134,7 +134,7 @@ export default function CmsMenuPanel({ pages }: Props) {
                 <div className="md:col-span-5">
                   {item.type === 'page' ? (
                     <>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Page</label>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Page</label>
                       <Select
                         value={item.pageSlug || '__empty'}
                         onValueChange={(value) => {
@@ -154,13 +154,13 @@ export default function CmsMenuPanel({ pages }: Props) {
                           ))}
                         </SelectContent>
                       </Select>
-                      <div className="mt-1 text-xs font-mono text-slate-500">
+                      <div className="mt-1 text-xs font-mono text-muted-foreground">
                         URL: {item.pageSlug ? `/journal/${item.pageSlug}` : '—'}
                       </div>
                     </>
                   ) : (
                     <>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">URL</label>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">URL</label>
                       <input
                         value={item.url || ''}
                         onChange={(e) => {
@@ -168,7 +168,7 @@ export default function CmsMenuPanel({ pages }: Props) {
                           setItems(items.map((x, i) => (i === idx ? { ...x, url } : x)))
                         }}
                         placeholder="https://example.com or /submit"
-                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono"
+                        className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono"
                       />
                     </>
                   )}
@@ -216,7 +216,7 @@ export default function CmsMenuPanel({ pages }: Props) {
   return (
     <div className="space-y-6">
       {isLoading ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">
+        <div className="rounded-xl border border-border bg-card p-6 text-muted-foreground">
           Loading menus…
         </div>
       ) : (

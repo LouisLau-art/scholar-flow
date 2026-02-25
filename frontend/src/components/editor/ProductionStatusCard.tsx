@@ -170,14 +170,14 @@ export function ProductionStatusCard({
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-slate-500">Current Stage</span>
-          <span className="text-slate-900" data-testid="production-stage">
+          <span className="text-muted-foreground">Current Stage</span>
+          <span className="text-foreground" data-testid="production-stage">
             {getStatusLabel(effectiveStatus)}
           </span>
         </div>
 
         {gateHint ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1">
+          <div className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground space-y-1">
             <div className="flex items-center justify-between">
               <span>Payment</span>
               <span className={gateHint.paymentOk ? 'text-emerald-700' : 'text-amber-700'}>
@@ -190,15 +190,15 @@ export function ProductionStatusCard({
                 {gateHint.hasFinal ? 'Uploaded' : 'Missing'}
               </span>
             </div>
-            <div className="text-slate-500">Note: Production Gate may be disabled in MVP.</div>
+            <div className="text-muted-foreground">Note: Production Gate may be disabled in MVP.</div>
           </div>
         ) : null}
 
         {shouldShowUpload ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+          <div className="rounded-lg border border-border bg-card p-3 space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-slate-500">Final PDF</span>
-              <span className="font-mono text-[11px] text-slate-700 truncate max-w-[180px]" title={finalPdfPath || ''}>
+              <span className="text-muted-foreground">Final PDF</span>
+              <span className="font-mono text-[11px] text-foreground truncate max-w-[180px]" title={finalPdfPath || ''}>
                 {finalPdfPath ? 'Uploaded' : 'Missing'}
               </span>
             </div>
@@ -213,9 +213,9 @@ export function ProductionStatusCard({
         ) : null}
 
         {shouldShowMarkPaid ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+          <div className="rounded-lg border border-border bg-card p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">Payment</span>
+              <span className="text-muted-foreground">Payment</span>
               <span className="text-amber-700 font-medium">Pending</span>
             </div>
             <Button type="button" variant="outline" className="w-full" onClick={markPaid} disabled={pending != null}>
@@ -231,7 +231,7 @@ export function ProductionStatusCard({
               {pending === 'advance' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </Button>
           ) : (
-            <div className="text-sm text-slate-500">No next actions available.</div>
+            <div className="text-sm text-muted-foreground">No next actions available.</div>
           )}
 
           {showRevert ? (
