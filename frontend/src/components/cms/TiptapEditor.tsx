@@ -29,7 +29,7 @@ export default function TiptapEditor({ value, onChange, onUploadImage }: Props) 
     editorProps: {
       attributes: {
         class:
-          'min-h-[240px] rounded-xl border border-slate-200 bg-white p-4 text-slate-900 focus:outline-none prose max-w-none',
+          'min-h-[240px] rounded-xl border border-border bg-background p-4 text-foreground focus:outline-none prose max-w-none',
       },
     },
   })
@@ -118,4 +118,3 @@ export default function TiptapEditor({ value, onChange, onUploadImage }: Props) 
     </div>
   )
 }
-

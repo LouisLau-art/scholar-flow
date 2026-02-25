@@ -27,7 +27,7 @@ export default function PDFViewer({ filePath }: PDFViewerProps) {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-400">
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin mb-4" />
         <p>Generating secure preview...</p>
       </div>
@@ -35,7 +35,7 @@ export default function PDFViewer({ filePath }: PDFViewerProps) {
   }
 
   return (
-    <div className="w-full h-full overflow-hidden rounded-md border border-slate-200">
+    <div className="w-full h-full overflow-hidden rounded-md border border-border">
       {/* 嵌入原生 PDF 查看器 */}
       <iframe
         src={`${signedUrl}#toolbar=0`}

@@ -14,12 +14,12 @@ export default function ReviewerLibraryPage() {
       <main className="sf-page-container space-y-6 py-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+            <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
               <Users className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Reviewer Library</h1>
-              <p className="mt-1 text-slate-500 font-medium">
+              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Reviewer Library</h1>
+              <p className="mt-1 text-muted-foreground font-medium">
                 Build your reviewer pool without sending invitations.
               </p>
             </div>

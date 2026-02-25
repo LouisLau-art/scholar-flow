@@ -176,13 +176,33 @@
   - `frontend/src/components/settings/AvatarUpload.tsx`
 - 第十五批 10 个文件合计减少硬编码色板引用约 `38` 处。
 
+## 已完成的 v3 设计系统化（第十六批增量，清零批）
+- 第十六批一次性完成 16 个剩余命中文件语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/app/(admin)/admin/feedback/page.tsx`
+  - `frontend/src/app/(admin)/editor/reviewers/page.tsx`
+  - `frontend/src/app/admin/sentry-test/page.tsx`
+  - `frontend/src/app/globals.css`
+  - `frontend/src/components/AcademicCheckModal.tsx`
+  - `frontend/src/components/AssignAEModal.tsx`
+  - `frontend/src/components/ErrorMessage.tsx`
+  - `frontend/src/components/PDFViewer.tsx`
+  - `frontend/src/components/PlagiarismActions.tsx`
+  - `frontend/src/components/admin/UserFilters.tsx`
+  - `frontend/src/components/cms/TiptapEditor.tsx`
+  - `frontend/src/components/editor/ManuscriptsProcessPanel.tsx`
+  - `frontend/src/components/editor/TaskStatusBadge.tsx`
+  - `frontend/src/components/home/HeroSection.tsx`
+  - `frontend/src/components/notifications/NotificationItem.tsx`
+  - `frontend/src/components/ui/avatar.tsx`
+- 第十六批 16 个文件合计减少硬编码色板引用约 `32` 处，并将 `hard palette` 清零。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `32`
+- `hard palette (bg/text/border)-(slate|blue)-`: `0`
 
-> 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
+> 说明：`hard palette` 已清零；后续重点转向 `hex colors` 与 `inline style` 的收敛。
 
 ## 审计脚本
 - 新增：`frontend/scripts/tailwind-readiness-audit.sh`

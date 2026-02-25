@@ -61,7 +61,7 @@ export default function SentryTestPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-3xl w-full space-y-4 px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-semibold">Sentry 测试页</h1>

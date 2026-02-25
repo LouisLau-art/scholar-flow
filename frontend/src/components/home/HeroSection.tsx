@@ -18,7 +18,7 @@ export default function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-foreground py-24 sm:py-32 lg:pb-40">
       {/* 背景纹理 (Dot Pattern) */}
-      <div className="absolute inset-0 opacity-10 bg-grid-slate pointer-events-none" />
+      <div className="absolute inset-0 opacity-10 bg-grid-neutral pointer-events-none" />
       
       {/* 装饰性渐变 */}
       <div className="absolute top-0 right-0 -translate-y-12 translate-x-12 blur-3xl opacity-30">

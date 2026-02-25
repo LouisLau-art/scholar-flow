@@ -181,14 +181,14 @@ export function ManuscriptsProcessPanel({
         </div>
       ) : null}
       {isRefreshing && !loading ? (
-        <div className="flex items-center justify-end gap-1 text-xs text-slate-500">
+        <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Syncing latest data...
         </div>
       ) : null}
 
       {loading && rows.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-sm text-slate-500 flex items-center justify-center gap-2">
+        <div className="rounded-xl border border-border bg-card p-10 text-sm text-muted-foreground flex items-center justify-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : (

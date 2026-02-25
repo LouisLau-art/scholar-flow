@@ -43,7 +43,7 @@ export default function PlagiarismActions({ manuscriptId, status }: Props) {
           type="button"
           size="sm"
           onClick={handleDownload}
-          className="flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Download className="h-3.5 w-3.5" /> Report
         </Button>
@@ -64,7 +64,7 @@ export default function PlagiarismActions({ manuscriptId, status }: Props) {
       )}
 
       {(status === 'pending' || status === 'running') && (
-        <span className="flex items-center gap-2 text-xs font-medium text-slate-400">
+        <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Checking...
         </span>
       )}

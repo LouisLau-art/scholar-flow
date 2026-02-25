@@ -50,7 +50,7 @@ export function NotificationItem({ notification, onMarkRead }: Props) {
         </div>
         <div className="flex items-center gap-2 pt-0.5">
           {!notification.is_read && <span className="inline-flex h-2 w-2 rounded-full bg-primary" />}
-          <ChevronRight className="h-4 w-4 text-slate-400" />
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </div>
       </div>
       {createdText ? <div className="mt-1 text-[11px] text-muted-foreground">{createdText}</div> : null}

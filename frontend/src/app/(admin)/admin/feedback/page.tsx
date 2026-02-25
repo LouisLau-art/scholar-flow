@@ -17,7 +17,7 @@ export default function AdminFeedbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6">
