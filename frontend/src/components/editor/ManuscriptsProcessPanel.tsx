@@ -56,6 +56,7 @@ export function ManuscriptsProcessPanel({
   const requestIdRef = useRef(0)
   const rowsRef = useRef<ProcessRow[]>([])
   const rbacRequestIdRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     rowsRef.current = rows
@@ -71,7 +72,7 @@ export function ManuscriptsProcessPanel({
 
   async function load(
     nextFilters: ManuscriptsProcessFilters,
-    options?: { preferCache?: boolean; silent?: boolean; suppressErrorToast?: boolean }
+    options?: { preferCache?: boolean; silent?: boolean; suppressErrorToast?: boolean; forceRefresh?: boolean }
   ) {
     const key = JSON.stringify(nextFilters)
     const now = Date.now()
@@ -88,8 +89,14 @@ export function ManuscriptsProcessPanel({
     else setIsRefreshing(true)
 
     const currentRequestId = ++requestIdRef.current
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      const res = await EditorApi.getManuscriptsProcess(nextFilters)
+      const res = await EditorApi.getManuscriptsProcess(nextFilters, {
+        force: Boolean(options?.forceRefresh),
+        signal: controller.signal,
+      })
       if (currentRequestId !== requestIdRef.current) return
       if (!res?.success) {
         throw new Error(res?.detail || res?.message || 'Failed to load manuscripts')
@@ -98,7 +105,7 @@ export function ManuscriptsProcessPanel({
       processRowsCache.set(key, { rows: nextRows, cachedAt: Date.now() })
       setRows(nextRows)
     } catch (e) {
-      if (currentRequestId !== requestIdRef.current) return
+      if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return
       if (!options?.suppressErrorToast) {
         toast.error(e instanceof Error ? e.message : 'Failed to load manuscripts')
       }
@@ -114,6 +121,12 @@ export function ManuscriptsProcessPanel({
     load(filters, { preferCache: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, filtersKey])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -184,7 +197,7 @@ export function ManuscriptsProcessPanel({
           emptyText={emptyText}
           onAssign={readOnlyView ? undefined : onAssign}
           onDecide={readOnlyView ? undefined : onDecide}
-          onOwnerBound={() => load(filters, { silent: true })}
+          onOwnerBound={() => load(filters, { silent: true, forceRefresh: true })}
           canBindOwner={!readOnlyView && capability.canBindOwner}
           canAssign={!readOnlyView && capability.canViewProcess}
           canDecide={!readOnlyView && (capability.canRecordFirstDecision || capability.canSubmitFinalDecision)}
@@ -196,7 +209,7 @@ export function ManuscriptsProcessPanel({
               : (u) => {
                   applyRowUpdate(u)
                   // 轻量“后台同步”：避免本地状态与服务端过滤/排序偏离
-                  load(filters, { silent: true, suppressErrorToast: true })
+                  load(filters, { silent: true, suppressErrorToast: true, forceRefresh: true })
                 }
           }
         />

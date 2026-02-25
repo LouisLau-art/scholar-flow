@@ -41,6 +41,18 @@ scripts/perf/capture-editor-baseline.sh \
   --requests 18
 ```
 
+如需自动采样 API TTFB（自动计算 p50/p95）：
+
+```bash
+scripts/perf/capture-editor-baseline.sh \
+  --output specs/001-editor-performance-refactor/artifacts/baseline-before-detail-api.json \
+  --scenario editor_detail \
+  --requests 1 \
+  --auto-url "https://<your-backend>/api/v1/editor/manuscripts/<manuscript-id>?skip_cards=true" \
+  --token "<bearer-token>" \
+  --samples 12
+```
+
 ### 3.2 Process / Workspace
 
 1. 打开 `/editor/process`，执行一次关键筛选与搜索。
@@ -52,6 +64,17 @@ scripts/perf/capture-editor-baseline.sh \
 1. 进入详情页并打开审稿分配弹窗。
 2. 用同一关键词做“首次搜索 + 20 秒内重复搜索”对比。
 3. 记录首次与重复查询耗时比例。
+
+### 3.4 一键采样 detail/process/workspace（API TTFB）
+
+```bash
+scripts/perf/capture-editor-api-baselines.sh \
+  --base-url "https://<your-backend>" \
+  --token "<bearer-token>" \
+  --manuscript-id "<manuscript-id>" \
+  --samples 12 \
+  --prefix baseline-before-api
+```
 
 ## 4. 功能回归（分层）
 

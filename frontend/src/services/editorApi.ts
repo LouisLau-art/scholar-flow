@@ -112,10 +112,15 @@ type WorkspaceFetchOptions = CachedGetOptions & {
   signal?: AbortSignal
 }
 
+type ProcessFetchOptions = CachedGetOptions & {
+  signal?: AbortSignal
+}
+
 const GET_CACHE_TTL_MS = 8_000
 const REVIEWER_LIBRARY_CACHE_TTL_MS = 20_000
 const AE_WORKSPACE_CACHE_TTL_MS = 15_000
 const MANAGING_WORKSPACE_CACHE_TTL_MS = 15_000
+const PROCESS_CACHE_TTL_MS = 12_000
 const getJsonCache = new Map<string, { expiresAt: number; data: unknown }>()
 const getJsonInflight = new Map<string, Promise<unknown>>()
 const reviewerSearchCache = new Map<string, { expiresAt: number; data: unknown }>()
@@ -124,6 +129,13 @@ const aeWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
 const aeWorkspaceInflight = new Map<string, Promise<unknown>>()
 const managingWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
 const managingWorkspaceInflight = new Map<string, Promise<unknown>>()
+const processRowsCache = new Map<string, { expiresAt: number; data: unknown }>()
+const processRowsInflight = new Map<string, Promise<unknown>>()
+
+function invalidateProcessRowsCache() {
+  processRowsCache.clear()
+  processRowsInflight.clear()
+}
 
 function invalidateGetJsonCache(predicate: (key: string) => boolean) {
   for (const key of Array.from(getJsonCache.keys())) {
@@ -217,6 +229,22 @@ function buildWorkspaceCacheKey(kind: 'ae' | 'managing', page: number, pageSize:
   return `workspace|kind=${kind}|page=${page}|pageSize=${pageSize}|q=${query}`
 }
 
+function buildProcessCacheKey(filters: ManuscriptsProcessFilters): string {
+  const normalizedStatuses = (filters.statuses || [])
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+  return [
+    `q=${encodeURIComponent(String(filters.q || '').trim().toLowerCase())}`,
+    `journal=${encodeURIComponent(String(filters.journalId || '').trim())}`,
+    `manuscript=${encodeURIComponent(String(filters.manuscriptId || '').trim())}`,
+    `owner=${encodeURIComponent(String(filters.ownerId || '').trim())}`,
+    `editor=${encodeURIComponent(String(filters.editorId || '').trim())}`,
+    `overdue=${filters.overdueOnly ? '1' : '0'}`,
+    `statuses=${encodeURIComponent(normalizedStatuses.join(','))}`,
+  ].join('|')
+}
+
 function getFilenameFromContentDisposition(contentDisposition: string | null) {
   if (!contentDisposition) return 'finance_invoices.csv'
   const m = /filename="?([^"]+)"?/i.exec(contentDisposition)
@@ -308,7 +336,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   async submitIntakeRevision(manuscriptId: string, payload: SubmitIntakeRevisionPayload) {
@@ -317,7 +347,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   async getAEWorkspace(page = 1, pageSize = 20, options?: WorkspaceFetchOptions) {
@@ -412,7 +444,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   async getAcademicQueue(page = 1, pageSize = 20) {
@@ -437,10 +471,25 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
-  async getManuscriptsProcess(filters: ManuscriptsProcessFilters) {
+  async getManuscriptsProcess(filters: ManuscriptsProcessFilters, options?: ProcessFetchOptions) {
+    const force = Boolean(options?.force)
+    const ttlMs = options?.ttlMs ?? PROCESS_CACHE_TTL_MS
+    const cacheKey = buildProcessCacheKey(filters)
+    const now = Date.now()
+    if (!force) {
+      const cached = processRowsCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.data
+      }
+      const inflight = processRowsInflight.get(cacheKey)
+      if (inflight) return inflight
+    }
+
     const params = new URLSearchParams()
     if (filters.q) params.set('q', filters.q)
     if (filters.journalId) params.set('journal_id', filters.journalId)
@@ -450,8 +499,27 @@ export const EditorApi = {
     if (filters.overdueOnly) params.set('overdue_only', 'true')
     for (const s of filters.statuses || []) params.append('status', s)
     const qs = params.toString()
-    const res = await authedFetch(`/api/v1/editor/manuscripts/process${qs ? `?${qs}` : ''}`)
-    return res.json()
+    const requestPromise = (async () => {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/process${qs ? `?${qs}` : ''}`, {
+        signal: options?.signal,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && (json as { success?: boolean })?.success !== false) {
+        processRowsCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    processRowsInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (processRowsInflight.get(cacheKey) === requestPromise) {
+        processRowsInflight.delete(cacheKey)
+      }
+    }
   },
 
   async getManuscriptDetail(manuscriptId: string, options?: { skipCards?: boolean }) {
@@ -579,7 +647,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, comment }),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   // Feature 031: Post-Acceptance Workflow
@@ -634,7 +704,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner_id: ownerId }),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   // Feature 032: Quick Actions
@@ -644,7 +716,9 @@ export const EditorApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    return res.json()
+    const json = await res.json()
+    if (res.ok) invalidateProcessRowsCache()
+    return json
   },
 
   // Feature 033: Editor uploads peer review files (internal)
@@ -766,6 +840,10 @@ export const EditorApi = {
   invalidateManagingWorkspaceCache() {
     managingWorkspaceCache.clear()
     managingWorkspaceInflight.clear()
+  },
+
+  invalidateManuscriptsProcessCache() {
+    invalidateProcessRowsCache()
   },
 
   async updateReviewerLibraryItem(reviewerId: string, payload: Record<string, any>) {

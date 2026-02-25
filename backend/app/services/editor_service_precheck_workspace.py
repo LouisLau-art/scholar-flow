@@ -116,9 +116,30 @@ class EditorServicePrecheckWorkspaceMixin:
             if "schema cache" in lowered or "could not find" in lowered:
                 raise last_error
 
-        raw_enriched = self._enrich_precheck_rows(rows)
+        precheck_rows = [
+            row
+            for row in rows
+            if normalize_status(str(row.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+        ]
+        precheck_enriched = self._enrich_precheck_rows(precheck_rows) if precheck_rows else []
+        precheck_by_id = {
+            str(item.get("id") or ""): item
+            for item in precheck_enriched
+            if str(item.get("id") or "").strip()
+        }
         out: list[dict[str, Any]] = []
-        for row in raw_enriched:
+        for base_row in rows:
+            row = dict(base_row)
+            row_id = str(row.get("id") or "").strip()
+            precheck_override = precheck_by_id.get(row_id)
+            if precheck_override:
+                row["pre_check_status"] = precheck_override.get("pre_check_status")
+                row["current_role"] = precheck_override.get("current_role")
+                row["current_assignee"] = precheck_override.get("current_assignee")
+                row["assigned_at"] = precheck_override.get("assigned_at")
+                row["technical_completed_at"] = precheck_override.get("technical_completed_at")
+                row["academic_completed_at"] = precheck_override.get("academic_completed_at")
+
             normalized_status = normalize_status(str(row.get("status") or ""))
             if not normalized_status:
                 continue
@@ -307,9 +328,30 @@ class EditorServicePrecheckWorkspaceMixin:
             )
             rows = rows[:page_size]
 
-        raw_enriched = self._enrich_precheck_rows(rows)
+        precheck_rows = [
+            row
+            for row in rows
+            if normalize_status(str(row.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+        ]
+        precheck_enriched = self._enrich_precheck_rows(precheck_rows) if precheck_rows else []
+        precheck_by_id = {
+            str(item.get("id") or ""): item
+            for item in precheck_enriched
+            if str(item.get("id") or "").strip()
+        }
         out: list[dict[str, Any]] = []
-        for row in raw_enriched:
+        for base_row in rows:
+            row = dict(base_row)
+            row_id = str(row.get("id") or "").strip()
+            precheck_override = precheck_by_id.get(row_id)
+            if precheck_override:
+                row["pre_check_status"] = precheck_override.get("pre_check_status")
+                row["current_role"] = precheck_override.get("current_role")
+                row["current_assignee"] = precheck_override.get("current_assignee")
+                row["assigned_at"] = precheck_override.get("assigned_at")
+                row["technical_completed_at"] = precheck_override.get("technical_completed_at")
+                row["academic_completed_at"] = precheck_override.get("academic_completed_at")
+
             normalized_status = normalize_status(str(row.get("status") or ""))
             normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))
             if normalized_status:
