@@ -604,9 +604,8 @@ export const EditorApi = {
     return authedGetJsonCached(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/cards-context`, options)
   },
 
-  async getManuscriptReviews(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/reviews`)
-    return res.json()
+  async getManuscriptReviews(manuscriptId: string, options?: CachedGetOptions) {
+    return authedGetJsonCached(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/reviews`, options)
   },
 
   async getDecisionContext(manuscriptId: string) {
