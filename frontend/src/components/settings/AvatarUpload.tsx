@@ -53,9 +53,9 @@ export function AvatarUpload({ userId, currentAvatarUrl, onUploadSuccess, userNa
 
   return (
     <div className="flex items-center gap-6">
-      <Avatar className="h-24 w-24 border-2 border-slate-100">
+      <Avatar className="h-24 w-24 border-2 border-border/60">
         <AvatarImage src={currentAvatarUrl || undefined} />
-        <AvatarFallback className="text-xl bg-slate-100 text-slate-400">
+        <AvatarFallback className="text-xl bg-muted text-muted-foreground">
           {userName?.charAt(0).toUpperCase() || <ImageIcon className="h-8 w-8" />}
         </AvatarFallback>
       </Avatar>

@@ -31,13 +31,13 @@ export default function DOITasksPage() {
   }, [loadTasks])
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">DOI Tasks</h1>
-            <p className="text-slate-500">Monitor and manage DOI registration tasks</p>
+            <h1 className="text-2xl font-bold text-foreground">DOI Tasks</h1>
+            <p className="text-muted-foreground">Monitor and manage DOI registration tasks</p>
           </div>
           <div className="flex gap-2">
             <Button 

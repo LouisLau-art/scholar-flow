@@ -83,7 +83,7 @@ export function DateTimePicker({
         </div>
         <div className="grid grid-cols-2 gap-2 p-3">
           <div className="space-y-1">
-            <div className="text-xs font-medium text-slate-600">小时</div>
+            <div className="text-xs font-medium text-muted-foreground">小时</div>
             <Select value={currentHour} onValueChange={(hour) => updateTime(hour, currentMinute)}>
               <SelectTrigger className="h-9">
                 <SelectValue />
@@ -98,7 +98,7 @@ export function DateTimePicker({
             </Select>
           </div>
           <div className="space-y-1">
-            <div className="text-xs font-medium text-slate-600">分钟</div>
+            <div className="text-xs font-medium text-muted-foreground">分钟</div>
             <Select value={currentMinute} onValueChange={(minute) => updateTime(currentHour, minute)}>
               <SelectTrigger className="h-9">
                 <SelectValue />

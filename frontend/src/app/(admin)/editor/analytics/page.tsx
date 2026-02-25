@@ -93,12 +93,12 @@ function AnalyticsDashboardContent() {
       {/* 页面标题 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+          <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
             <BarChart3 className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Analytics</h1>
-            <p className="mt-1 text-slate-500 font-medium">期刊运营核心指标概览</p>
+            <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Analytics</h1>
+            <p className="mt-1 text-muted-foreground font-medium">期刊运营核心指标概览</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -209,7 +209,7 @@ function AnalyticsDashboardContent() {
 
 export default function AnalyticsDashboardPage() {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-muted/40 flex flex-col font-sans">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-10 sm:px-6 lg:px-8">
         <QueryProvider>

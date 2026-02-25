@@ -11,9 +11,9 @@ export default function CmsManagementPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="text-xl font-bold text-slate-900">Website Management</h2>
-        <p className="mt-2 text-slate-600 text-sm">
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-xl font-bold text-foreground">Website Management</h2>
+        <p className="mt-2 text-muted-foreground text-sm">
           Create pages, publish content, and manage global navigation menus.
         </p>
       </div>
@@ -34,4 +34,3 @@ export default function CmsManagementPanel() {
     </div>
   )
 }
-

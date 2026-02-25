@@ -162,11 +162,25 @@
   - `frontend/src/components/FileUpload.tsx`
 - 第十四批 12 个文件合计减少硬编码色板引用约 `68` 处。
 
+## 已完成的 v3 设计系统化（第十五批增量，清尾批）
+- 第十五批一次性完成 10 个剩余高频文件语义 token 化（`(bg|text|border)-(slate|blue)-` 全部清零）：
+  - `frontend/src/components/ErrorBoundary.tsx`
+  - `frontend/src/app/journal/[slug]/page.tsx`
+  - `frontend/src/app/(reviewer)/layout.tsx`
+  - `frontend/src/components/portal/SiteFooter.tsx`
+  - `frontend/src/components/portal/HomeBanner.tsx`
+  - `frontend/src/components/cms/CmsManagementPanel.tsx`
+  - `frontend/src/app/(admin)/editor/doi-tasks/page.tsx`
+  - `frontend/src/app/(admin)/editor/analytics/page.tsx`
+  - `frontend/src/components/ui/date-time-picker.tsx`
+  - `frontend/src/components/settings/AvatarUpload.tsx`
+- 第十五批 10 个文件合计减少硬编码色板引用约 `38` 处。
+
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
 - `hex colors (#xxxxxx)`: `5`
 - `inline style={{...}}`: `4`
-- `hard palette (bg/text/border)-(slate|blue)-`: `70`
+- `hard palette (bg/text/border)-(slate|blue)-`: `32`
 
 > 说明：`hard palette` 仍高，后续按页面域逐步替换为语义 token（`bg-background`/`text-foreground`/`border-border` 等）。
 
