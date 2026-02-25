@@ -17,16 +17,30 @@ function SearchContent() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
+    const controller = new AbortController()
+    const q = (query || '').trim()
+    if (!q) {
+      setIsLoading(false)
+      setResults([])
+      setFallback([])
+      return () => controller.abort()
+    }
+
     async function doSearch() {
       setIsLoading(true)
       setResults([])
       setFallback([])
       try {
-        const q = (query || '').trim()
-        if (!q) return
         const currentMode = mode || 'articles'
+        const searchParams = new URLSearchParams({
+          q,
+          mode: currentMode,
+        })
         const res = await fetch(
-          `/api/v1/manuscripts/search?q=${encodeURIComponent(q)}&mode=${currentMode}`,
+          `/api/v1/manuscripts/search?${searchParams.toString()}`,
+          {
+            signal: controller.signal,
+          }
         )
         const data = await res.json()
         if (data.success) setResults(data.results || [])
@@ -49,6 +63,7 @@ function SearchContent() {
             if (token) {
               const mine = await fetch('/api/v1/manuscripts/mine', {
                 headers: { Authorization: `Bearer ${token}` },
+                signal: controller.signal,
               }).then((r) => r.json())
 
               if (mine?.success && Array.isArray(mine.data)) {
@@ -66,19 +81,18 @@ function SearchContent() {
           }
         }
       } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') return
         console.error('Search failed:', err)
       } finally {
         setIsLoading(false)
       }
     }
-    const q = (query || '').trim()
-    if (!q) {
-      setIsLoading(false)
-      setResults([])
-      setFallback([])
-      return
-    }
+
     doSearch()
+
+    return () => {
+      controller.abort()
+    }
   }, [query, mode])
 
   const currentMode = mode || 'articles'
