@@ -10,8 +10,31 @@ import { EnvironmentProvider } from '@/components/providers/EnvironmentProvider'
 import { ThemeProvider } from '@/components/providers/ThemeProvider'
 
 const inter = Inter({ subsets: ['latin'] })
+const DEFAULT_SITE_URL = 'http://localhost:3000'
+
+function resolveSiteUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    DEFAULT_SITE_URL
+  const normalized = raw.trim().replace(/\/$/, '')
+  if (!normalized) return DEFAULT_SITE_URL
+  return /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`
+}
+
+const siteUrl = resolveSiteUrl()
+const metadataBase = (() => {
+  try {
+    return new URL(siteUrl)
+  } catch {
+    return new URL(DEFAULT_SITE_URL)
+  }
+})()
+const ogImageUrl = new URL('/og-image.png', metadataBase).toString()
 
 export const metadata: Metadata = {
+  metadataBase,
   title: {
     default: 'ScholarFlow | Frontiers-inspired Academic Workflow Platform',
     template: '%s | ScholarFlow'
@@ -22,13 +45,13 @@ export const metadata: Metadata = {
   // Open Graph metadata for social sharing
   openGraph: {
     type: 'website',
-    url: 'https://scholarflow.example.com',
+    url: siteUrl,
     title: 'ScholarFlow | Frontiers-inspired Academic Workflow Platform',
     description: 'AI-powered platform for academic manuscript submission, peer review, and publication.',
     siteName: 'ScholarFlow',
     images: [
       {
-        url: 'https://scholarflow.example.com/og-image.png',
+        url: ogImageUrl,
         width: 1200,
         height: 630,
         alt: 'ScholarFlow Academic Workflow Platform',
@@ -42,7 +65,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'ScholarFlow | Frontiers-inspired Academic Workflow Platform',
     description: 'AI-powered platform for academic manuscript submission, peer review, and publication.',
-    images: ['https://scholarflow.example.com/og-image.png'],
+    images: [ogImageUrl],
     creator: '@scholarflow',
   },
   
