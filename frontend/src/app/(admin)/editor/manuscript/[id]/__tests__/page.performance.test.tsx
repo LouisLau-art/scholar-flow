@@ -80,6 +80,7 @@ function detailPayload() {
       journals: { title: 'J-Test' },
       invoice_metadata: {},
       invoice: { status: 'unpaid', amount: 0 },
+      is_deferred_context_loaded: false,
       files: [],
       reviewer_invites: [],
       role_queue: {
@@ -142,7 +143,15 @@ describe('Editor detail performance flow', () => {
 
     await screen.findByText('Performance Manuscript')
 
-    expect(EditorApi.getManuscriptDetail).toHaveBeenCalledWith('test-id', { skipCards: true })
+    expect(EditorApi.getManuscriptDetail).toHaveBeenNthCalledWith(1, 'test-id', {
+      skipCards: true,
+      force: false,
+    })
+    expect(EditorApi.getManuscriptDetail).toHaveBeenNthCalledWith(2, 'test-id', {
+      skipCards: true,
+      includeHeavy: true,
+      force: false,
+    })
     await waitFor(() => {
       expect(EditorApi.getManuscriptCardsContext).toHaveBeenCalledWith('test-id', { force: false })
     })
