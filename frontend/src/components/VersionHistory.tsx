@@ -70,7 +70,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
     }
   }
 
-  if (loading) return <div className="py-4 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+  if (loading) return <div className="py-4 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (!data || (!data.versions?.length && !data.revisions?.length)) return null
 
   // Combine versions and revisions for chronological display?
@@ -91,34 +91,34 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
   }
 
   return (
-    <Card className="border-slate-200 shadow-sm">
-      <CardHeader className="pb-3 border-b border-slate-100">
+    <Card className="border-border shadow-sm">
+      <CardHeader className="pb-3 border-b border-border/60">
         <CardTitle className="text-lg flex items-center gap-2">
-          <History className="h-5 w-5 text-slate-500" />
+          <History className="h-5 w-5 text-muted-foreground" />
           Version History
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-border/60">
           {versions.map((version: any) => {
             const revision = getRevisionForVersion(version.version_number)
             const isInitial = version.version_number === 1
             const isExpanded = expandedRevision === version.id
 
             return (
-              <div key={version.id} className="p-4 hover:bg-slate-50 transition-colors">
+              <div key={version.id} className="p-4 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
                     <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      isInitial ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
+                      isInitial ? 'bg-primary/15 text-primary' : 'bg-muted text-foreground'
                     }`}>
                       v{version.version_number}
                     </div>
                     <div>
-                      <p className="font-medium text-slate-900">
+                      <p className="font-medium text-foreground">
                         {isInitial ? 'Initial Submission' : `Revision (Round ${version.version_number - 1})`}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         {new Date(version.created_at).toLocaleDateString()} at {new Date(version.created_at).toLocaleTimeString()}
                       </p>
                     </div>
@@ -137,7 +137,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                   <div className="mt-3 pl-11">
                     <button 
                       onClick={() => setExpandedRevision(isExpanded ? null : version.id)}
-                      className="text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1"
                     >
                       {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                       {isExpanded ? 'Hide' : 'Show'} Revision Details (Editor Request & Author Response)
@@ -145,18 +145,18 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                     
                     {isExpanded && (
                       <div className="mt-3 space-y-4 text-sm animate-in fade-in slide-in-from-top-1">
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
-                          <p className="font-semibold text-amber-800 mb-1 text-xs uppercase tracking-wide">Editor Request ({revision.decision_type})</p>
-                          <div className="prose prose-sm max-w-none text-slate-700">
+                        <div className="bg-muted/60 p-3 rounded-lg border border-border">
+                          <p className="font-semibold text-foreground mb-1 text-xs uppercase tracking-wide">Editor Request ({revision.decision_type})</p>
+                          <div className="prose prose-sm max-w-none text-foreground">
                             {revision.editor_comment}
                           </div>
                         </div>
                         
                         {revision.response_letter && (
-                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                            <p className="font-semibold text-slate-700 mb-1 text-xs uppercase tracking-wide">Author Response</p>
+                          <div className="bg-muted/50 p-3 rounded-lg border border-border">
+                            <p className="font-semibold text-foreground mb-1 text-xs uppercase tracking-wide">Author Response</p>
                             <div 
-                              className="prose prose-sm max-w-none text-slate-600 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
+                              className="prose prose-sm max-w-none text-muted-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
                               dangerouslySetInnerHTML={{ __html: revision.response_letter }} 
                             />
                           </div>

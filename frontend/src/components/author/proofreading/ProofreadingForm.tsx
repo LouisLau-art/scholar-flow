@@ -119,16 +119,16 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+    <section className="space-y-4 rounded-lg border border-border bg-card p-4">
       <div>
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Proofreading Response</h2>
-        <p className="mt-1 text-xs text-slate-500">请选择“确认无误”或“提交修正清单”。</p>
+        <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">Proofreading Response</h2>
+        <p className="mt-1 text-xs text-muted-foreground">请选择“确认无误”或“提交修正清单”。</p>
         {latest?.submitted_at ? (
-          <p className="mt-2 text-xs text-slate-500">已提交于 {new Date(latest.submitted_at).toLocaleString()}</p>
+          <p className="mt-2 text-xs text-muted-foreground">已提交于 {new Date(latest.submitted_at).toLocaleString()}</p>
         ) : null}
       </div>
 
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="rounded-md border border-border bg-muted/50 p-3">
         <RadioGroup
           value={decision}
           onValueChange={(value) => setDecision(value as ProofreadingDecision)}
@@ -137,13 +137,13 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="confirm_clean" id="proof-confirm-clean" />
-            <Label htmlFor="proof-confirm-clean" className="text-sm text-slate-700">
+            <Label htmlFor="proof-confirm-clean" className="text-sm text-foreground">
               确认无误（Confirm clean proof）
             </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="submit_corrections" id="proof-submit-corrections" />
-            <Label htmlFor="proof-submit-corrections" className="text-sm text-slate-700">
+            <Label htmlFor="proof-submit-corrections" className="text-sm text-foreground">
               提交修正清单（Submit correction list）
             </Label>
           </div>
@@ -151,7 +151,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
       </div>
 
       <div>
-        <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Summary (Optional)
         </Label>
         <Textarea
@@ -165,23 +165,23 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
       {decision === 'submit_corrections' ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Correction Items</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Correction Items</p>
             <Button
               type="button"
               onClick={addItem}
               disabled={isReadOnly}
               variant="ghost"
               size="sm"
-              className="gap-1 text-blue-600 hover:text-blue-600"
+              className="gap-1 text-primary hover:text-primary"
             >
               <Plus className="h-3.5 w-3.5" /> Add Item
             </Button>
           </div>
 
           {items.map((item, idx) => (
-            <div key={idx} className="space-y-2 rounded-md border border-slate-200 p-3">
+            <div key={idx} className="space-y-2 rounded-md border border-border p-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-700">Item #{idx + 1}</p>
+                <p className="text-xs font-semibold text-foreground">Item #{idx + 1}</p>
                 <Button
                   type="button"
                   onClick={() => removeItem(idx)}

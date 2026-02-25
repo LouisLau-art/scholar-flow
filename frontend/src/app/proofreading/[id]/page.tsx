@@ -75,22 +75,22 @@ export default function ProofreadingPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+      <main className="flex min-h-screen items-center justify-center bg-muted/40">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </main>
     )
   }
 
   if (!context) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
+      <main className="flex min-h-screen items-center justify-center bg-muted/40 px-6">
         <Card className="w-full max-w-xl">
           <CardHeader>
             <CardTitle className="text-base">作者校对</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>{noTaskMessage || '当前没有可操作的校对任务。'}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               如果你刚提交完校对反馈：说明本轮校对已结束或已进入编辑处理阶段，请返回 Dashboard 查看最新状态。
             </p>
             <Link href="/dashboard" className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}>
@@ -104,17 +104,17 @@ export default function ProofreadingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+    <main className="min-h-screen bg-muted/40">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Author Proofreading</p>
-            <h1 className="truncate text-lg font-semibold text-slate-900 sm:text-xl">{context.manuscript.title || 'Untitled Manuscript'}</h1>
-            <p className="text-xs text-slate-500">Cycle #{context.cycle.cycle_no} · Status: {status}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Author Proofreading</p>
+            <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{context.manuscript.title || 'Untitled Manuscript'}</h1>
+            <p className="text-xs text-muted-foreground">Cycle #{context.cycle.cycle_no} · Status: {status}</p>
           </div>
           <Link
             href="/dashboard"
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <ArrowLeft className="h-4 w-4" />
             返回 Dashboard
@@ -124,11 +124,11 @@ export default function ProofreadingPage() {
 
       <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-4 px-4 py-4 md:grid-cols-12 sm:px-6">
         <section className="md:col-span-7">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
             {pdfUrl ? (
               <iframe title="Proofreading Galley" src={pdfUrl} className="h-[calc(100vh-140px)] min-h-[560px] w-full" />
             ) : (
-              <div className="flex h-[calc(100vh-140px)] min-h-[560px] items-center justify-center text-sm text-slate-500">
+              <div className="flex h-[calc(100vh-140px)] min-h-[560px] items-center justify-center text-sm text-muted-foreground">
                 Galley preview is unavailable.
               </div>
             )}
