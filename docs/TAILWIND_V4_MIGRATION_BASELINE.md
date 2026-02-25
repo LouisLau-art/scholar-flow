@@ -214,11 +214,22 @@
   - 通过 `TAILWIND_AUDIT_ENFORCE=1` 启用阈值校验（默认阈值均为 `0`，可用 `TAILWIND_MAX_*` 覆盖）
   - 已接入 `frontend-ci`，默认阻断 `w-[96vw] / hex / inline style / hard palette` 回退
 
-## v4 迁移策略（独立阶段）
-1. 先做 v3 token 渗透（按页面域拆批次，不跨域混改）。
-2. 为每批变更保留可比对基线（脚本 + CI build）。
-3. 单独开 v4 迁移批次：
-   - CSS-first 配置落地（`@theme`）
-   - 清理/替换 v3 旧配置
-   - 全量回归与性能对比
-4. v4 上线后保留 1 个迭代窗口观察回归，再移除兼容层。
+## v4 迁移进度（2026-02-25）
+### Phase 1（已完成，兼容模式）
+- 依赖升级：
+  - `tailwindcss` -> `^4.2.0`
+  - 新增 `@tailwindcss/postcss` -> `^4.2.0`
+- 构建链升级：
+  - `postcss.config.mjs` 改为 `@tailwindcss/postcss` 插件
+- 样式入口升级：
+  - `src/app/globals.css` 改为 `@import "tailwindcss"`
+  - 使用 `@config "../../tailwind.config.mjs"` 保留 v3 配置兼容
+  - 新增 `@custom-variant dark (&:where(.dark, .dark *))`
+- 配置文件升级：
+  - `tailwind.config.ts` -> `tailwind.config.mjs`（移除 TS 类型声明）
+  - `components.json` 同步引用 `tailwind.config.mjs`
+
+### Phase 2（下一步）
+1. 将 `tailwind.config.mjs` 的 token/动画逐步迁移到 CSS-first（`@theme` / `@layer`），减少 `@config` 依赖。
+2. 清理 `tailwindcss-animate` 等兼容插件依赖，改为原生 keyframes token。
+3. 完成迁移后移除 `@config`，仅保留 v4 CSS-first 配置。

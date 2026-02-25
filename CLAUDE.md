@@ -270,6 +270,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **编辑端列表限流参数（2026-02-25）**：新增 `EDITOR_PROCESS_QUERY_LIMIT`（默认 `300`，范围 `50-1000`）与 `EDITOR_PIPELINE_STAGE_LIMIT`（默认 `80`，范围 `10-300`）；用于限制 Process/Pipeline 单次查询规模，避免全量扫描导致高延迟。
 - **Tailwind 设计系统化基线（2026-02-25）**：前端基线文档统一维护在 `docs/TAILWIND_V4_MIGRATION_BASELINE.md`；审计命令为 `cd frontend && bun run audit:tailwind-readiness`。当前基线：`w-[96vw]=0`、`hex=0`、`inline style=0`、`hard palette=0`（第 16 批收尾后四项核心计数已全清零，且已接入 frontend-ci gate 防回退）。
+- **Tailwind v4 迁移 Phase 1（2026-02-25）**：前端已切换到 v4 兼容构建链：`tailwindcss@^4.2` + `@tailwindcss/postcss@^4.2`，`globals.css` 使用 `@import "tailwindcss"`，并通过 `@config "../../tailwind.config.mjs"` 保持旧 token 配置兼容；`tailwind.config.ts` 已迁移为 `tailwind.config.mjs`。
 - **Invoice PDF 中文字体（2026-02-24）**：HF Docker 镜像需安装 `fonts-noto-cjk`；`backend/app/core/templates/invoice_pdf.html` 字体栈已包含 `PingFang SC` / `Noto Sans CJK SC` 回退。若本地直接生成发票 PDF，也需在系统安装任一 CJK 字体以避免中文方块字。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
@@ -315,6 +316,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-25）
+- **Tailwind v4 Phase 1 落地（2026-02-25）**：完成 v4 依赖与构建链升级（`@tailwindcss/postcss`），样式入口切换为 `@import "tailwindcss"` + `@config` 兼容模式；`lint`、`vitest`、`build`、`tailwind audit(enforce)` 均通过，确保在不破坏现有 UI 的前提下进入 v4 迁移阶段。
 - **前端样式 token 化推进（2026-02-25）**：完成第 5/6/7/8/9/10/11/12/13/14/15/16 批高频页面改造（workspace/production/admin/reviewer/auth/decision 链路），统一替换 `slate|blue` 硬编码为语义 token；`hard palette` 从 `973` 降至 `0`，并保持 `w-[96vw]=0`。
 - **前端 token 化回归（2026-02-25）**：第 12/13/14/15 批提交 `6f56630`、`0804a9a`、`53ea5ba`、`1325373` 已合入 `main`；第 16 批收尾后 `bun run lint` 与 `bun run audit:tailwind-readiness` 通过，当前 `w-[96vw]/hex/inline/hard palette` 全部为 `0`，并在 `.github/workflows/ci.yml` 新增 Tailwind Readiness Gate（阈值默认 `0`）。
 - **权限与状态机收敛（2026-02-25）**：内部协作接口新增稿件级访问校验（ME/EIC 强制 journal scope，AE 仅限分配稿件，PE 仅限分配 cycle）；`editor` 的手动改状态、review-attachment 上传、quick-precheck 与 production 管理动作补齐 scope 校验；`DecisionService` 的 final `major/minor` 不再无条件 `allow_skip`，仅在受控决策尾段兜底，阻断非法状态放行。
