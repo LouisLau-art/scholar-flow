@@ -211,3 +211,110 @@ async def test_production_editor_can_only_read_reviews_for_assigned_active_cycle
         safe_delete_by_id(supabase_admin_client, "user_profiles", admin_user.id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", assigned_pe.id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", other_pe.id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_production_editor_can_read_reviews_for_assigned_historical_cycle(
+    client: AsyncClient,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    _require_schema(supabase_admin_client)
+
+    author = make_user(email=f"author_hist_{uuid4().hex[:8]}@example.com")
+    reviewer = make_user(email=f"reviewer_hist_{uuid4().hex[:8]}@example.com")
+    admin_user = make_user(email=f"admin_hist_{uuid4().hex[:8]}@example.com")
+    assigned_pe = make_user(email=f"assigned_hist_pe_{uuid4().hex[:8]}@example.com")
+    other_pe = make_user(email=f"other_hist_pe_{uuid4().hex[:8]}@example.com")
+    set_admin_emails([admin_user.email])
+
+    manuscript_id = str(uuid4())
+    review_report_id = str(uuid4())
+    token = "tok_" + uuid4().hex
+    expiry = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+    cycle_id: str | None = None
+
+    for identity, name, roles in (
+        (author, "Author", ["author"]),
+        (reviewer, "Reviewer", ["author"]),
+        (admin_user, "Admin", ["admin", "managing_editor", "author"]),
+        (assigned_pe, "Assigned PE", ["production_editor"]),
+        (other_pe, "Other PE", ["production_editor"]),
+    ):
+        supabase_admin_client.table("user_profiles").upsert(
+            {
+                "id": identity.id,
+                "email": identity.email,
+                "full_name": name,
+                "roles": roles,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="id",
+        ).execute()
+
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="approved",
+        title="PE Historical Cycle Access Manuscript",
+    )
+
+    supabase_admin_client.table("review_reports").insert(
+        {
+            "id": review_report_id,
+            "manuscript_id": manuscript_id,
+            "reviewer_id": reviewer.id,
+            "token": token,
+            "expiry_date": expiry,
+            "status": "completed",
+            "content": "Historical cycle public feedback",
+            "comments_for_author": "Historical cycle public feedback",
+            "confidential_comments_to_editor": "Historical cycle confidential feedback",
+            "attachment_path": "review_attachments/historical_cycle.pdf",
+            "score": 5,
+        }
+    ).execute()
+
+    due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    create_cycle_res = await client.post(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles",
+        headers={"Authorization": f"Bearer {admin_user.token}"},
+        json={
+            "layout_editor_id": assigned_pe.id,
+            "proofreader_author_id": author.id,
+            "proof_due_at": due,
+        },
+    )
+    assert create_cycle_res.status_code == 201, create_cycle_res.text
+    cycle_id = create_cycle_res.json()["data"]["cycle"]["id"]
+
+    # 覆盖已核准历史轮次场景（非 active status）：生产编辑仍应可查看审稿摘要。
+    supabase_admin_client.table("production_cycles").update({"status": "approved_for_publish"}).eq("id", cycle_id).execute()
+
+    try:
+        assigned_res = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/reviews",
+            headers={"Authorization": f"Bearer {assigned_pe.token}"},
+        )
+        assert assigned_res.status_code == 200, assigned_res.text
+        assigned_body = assigned_res.json()
+        assert assigned_body["success"] is True
+        assert assigned_body["data"], "Expected at least one review report"
+
+        other_res = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/reviews",
+            headers={"Authorization": f"Bearer {other_pe.token}"},
+        )
+        assert other_res.status_code == 403, other_res.text
+    finally:
+        if cycle_id:
+            safe_delete_by_id(supabase_admin_client, "production_cycles", cycle_id)
+        safe_delete_by_id(supabase_admin_client, "review_reports", review_report_id)
+        safe_delete_by_id(supabase_admin_client, "manuscripts", manuscript_id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", author.id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", reviewer.id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", admin_user.id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", assigned_pe.id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", other_pe.id)

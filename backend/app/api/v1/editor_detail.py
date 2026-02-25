@@ -182,7 +182,7 @@ def _authorize_manuscript_detail_access(
     # - admin: always allow
     # - assistant_editor: allow if assigned to this manuscript (even if user also has managing_editor role but missing scope)
     # - managing_editor/editor_in_chief: enforce journal_role_scopes
-    # - production_editor: allow if assigned to an active production cycle (layout_editor_id matches)
+    # - production_editor: allow if assigned to any production cycle (including historical rounds)
     viewer_user_id = str(current_user.get("id") or "").strip()
     viewer_roles = sorted(normalize_roles(profile.get("roles") or []))
     viewer_role_set = set(viewer_roles)
@@ -210,19 +210,11 @@ def _authorize_manuscript_detail_access(
 
     if (not allowed) and ("production_editor" in viewer_role_set):
         try:
-            active_statuses = [
-                "draft",
-                "awaiting_author",
-                "author_corrections_submitted",
-                "author_confirmed",
-                "in_layout_revision",
-            ]
             pc = (
                 supabase_admin.table("production_cycles")
                 .select("id")
                 .eq("manuscript_id", manuscript_id)
                 .eq("layout_editor_id", viewer_user_id)
-                .in_("status", active_statuses)
                 .limit(1)
                 .execute()
             )
@@ -236,7 +228,6 @@ def _authorize_manuscript_detail_access(
                         .select("id")
                         .eq("manuscript_id", manuscript_id)
                         .contains("collaborator_editor_ids", [viewer_user_id])
-                        .in_("status", active_statuses)
                         .limit(1)
                         .execute()
                     )

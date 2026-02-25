@@ -26,7 +26,7 @@ async def get_manuscript_reviews(
     - Author 只能看到公开字段（comments_for_author/content/score）
     - Internal（admin / managing_editor / editor_in_chief / assistant_editor / production_editor）可读取内部视图
     - assistant_editor 仅可读取自己被分配稿件
-    - production_editor 仅可读取自己分配到的活跃 production cycle 稿件
+    - production_editor 仅可读取自己被分配过 production cycle 的稿件（含历史轮次）
     """
     user_id = str(current_user.get("id"))
     roles = {str(role).strip().lower() for role in ((profile or {}).get("roles") or []) if str(role).strip()}
@@ -59,21 +59,12 @@ async def get_manuscript_reviews(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     def _is_assigned_production_editor() -> bool:
-        active_statuses = [
-            "draft",
-            "awaiting_author",
-            "author_corrections_submitted",
-            "author_confirmed",
-            "in_layout_revision",
-            "approved_for_publish",
-        ]
         try:
             layout_bound = (
                 supabase_admin.table("production_cycles")
                 .select("id")
                 .eq("manuscript_id", str(manuscript_id))
                 .eq("layout_editor_id", user_id)
-                .in_("status", active_statuses)
                 .limit(1)
                 .execute()
             )
@@ -88,7 +79,6 @@ async def get_manuscript_reviews(
                 .select("id")
                 .eq("manuscript_id", str(manuscript_id))
                 .contains("collaborator_editor_ids", [user_id])
-                .in_("status", active_statuses)
                 .limit(1)
                 .execute()
             )
@@ -100,7 +90,7 @@ async def get_manuscript_reviews(
     # 中文注释:
     # - admin / managing_editor / editor_in_chief 为全局内部可见；
     # - assistant_editor 仅看分配稿件；
-    # - production_editor 仅看分配到活跃 production cycle 的稿件；
+    # - production_editor 仅看自己被分配过 production cycle 的稿件（含历史轮次）；
     # - owner 仅看 owner_id 归属稿件。
     has_privileged_internal_role = bool(roles.intersection({"admin", "managing_editor", "editor_in_chief"}))
     if not is_author and not has_privileged_internal_role:
