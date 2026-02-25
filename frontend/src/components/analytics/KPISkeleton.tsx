@@ -59,16 +59,21 @@ export function FinanceKPISkeleton() {
  * 图表骨架
  */
 export function ChartSkeleton({ height = 300 }: { height?: number }) {
+  const heightClass =
+    {
+      250: 'h-[250px]',
+      260: 'h-[260px]',
+      300: 'h-[300px]',
+      350: 'h-[350px]',
+    }[height] ?? 'h-[300px]'
+
   return (
     <Card>
       <CardHeader>
         <div className="h-5 w-32 bg-muted animate-pulse rounded" />
       </CardHeader>
       <CardContent>
-        <div
-          className="w-full bg-muted animate-pulse rounded"
-          style={{ height: `${height}px` }}
-        />
+        <div className={`w-full bg-muted animate-pulse rounded ${heightClass}`} />
       </CardContent>
     </Card>
   )

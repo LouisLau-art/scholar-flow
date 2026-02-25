@@ -123,6 +123,32 @@ interface NewsCardData {
   image: string
 }
 
+function OverlayImage({
+  src,
+  className,
+  overlayClassName,
+  eager = false,
+}: {
+  src: string
+  className?: string
+  overlayClassName: string
+  eager?: boolean
+}) {
+  return (
+    <div className={cn('relative overflow-hidden bg-muted', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        loading={eager ? 'eager' : 'lazy'}
+        className="h-full w-full object-cover"
+      />
+      <div className={cn('pointer-events-none absolute inset-0', overlayClassName)} />
+    </div>
+  )
+}
+
 function NewsCard({
   item,
   featured = false,
@@ -140,11 +166,10 @@ function NewsCard({
         className
       )}
     >
-      <div
-        className={cn('bg-muted bg-cover bg-center', featured ? 'h-64 sm:h-72' : 'h-44')}
-        style={{
-          backgroundImage: `linear-gradient(180deg, rgba(2, 6, 23, 0.12), rgba(2, 6, 23, 0.55)), url(${item.image})`,
-        }}
+      <OverlayImage
+        src={item.image}
+        className={cn(featured ? 'h-64 sm:h-72' : 'h-44')}
+        overlayClassName="bg-gradient-to-b from-foreground/15 to-foreground/60"
       />
       <div className={cn('p-4', featured && 'p-6')}>
         <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{item.category}</p>
@@ -203,12 +228,11 @@ export default function HomePage() {
 
       <main className="flex-1">
         <section className="relative overflow-hidden bg-foreground text-white">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{
-              backgroundImage:
-                'linear-gradient(90deg, rgba(8, 30, 48, 0.82), rgba(12, 61, 98, 0.35)), url(https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2200&q=80)',
-            }}
+          <OverlayImage
+            src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2200&q=80"
+            className="absolute inset-0"
+            overlayClassName="bg-gradient-to-r from-foreground/85 to-primary/35"
+            eager
           />
           <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6 sm:pt-28 lg:px-8">
             <div className="max-w-2xl">
@@ -260,11 +284,10 @@ export default function HomePage() {
                     href={card.href}
                     className="group rounded-2xl border border-border bg-card p-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                   >
-                    <div
-                      className="h-24 rounded-xl bg-cover bg-center"
-                      style={{
-                        backgroundImage: `linear-gradient(180deg, rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.35)), url(${card.image})`,
-                      }}
+                    <OverlayImage
+                      src={card.image}
+                      className="h-24 rounded-xl"
+                      overlayClassName="bg-gradient-to-b from-foreground/10 to-foreground/35"
                     />
                     <p className="mt-4 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{card.badge}</p>
                     <h3 className="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-primary">{card.title}</h3>

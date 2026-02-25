@@ -198,11 +198,11 @@
 
 ## 当前基线（代码扫描）
 - `w-[96vw]`: `0`
-- `hex colors (#xxxxxx)`: `5`
-- `inline style={{...}}`: `4`
+- `hex colors (#xxxxxx)`: `0`
+- `inline style={{...}}`: `0`
 - `hard palette (bg/text/border)-(slate|blue)-`: `0`
 
-> 说明：`hard palette` 已清零；后续重点转向 `hex colors` 与 `inline style` 的收敛。
+> 说明：四项核心计数已全部清零，后续以 CI 门禁防止回退。
 
 ## 审计脚本
 - 新增：`frontend/scripts/tailwind-readiness-audit.sh`
@@ -210,6 +210,9 @@
 - 输出：
   - 核心计数（魔法值、hex、inline style、硬编码色板）
   - Top 文件分布（便于分批治理）
+- 门禁模式：
+  - 通过 `TAILWIND_AUDIT_ENFORCE=1` 启用阈值校验（默认阈值均为 `0`，可用 `TAILWIND_MAX_*` 覆盖）
+  - 已接入 `frontend-ci`，默认阻断 `w-[96vw] / hex / inline style / hard palette` 回退
 
 ## v4 迁移策略（独立阶段）
 1. 先做 v3 token 渗透（按页面域拆批次，不跨域混改）。

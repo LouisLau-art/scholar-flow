@@ -78,6 +78,15 @@ jobs:
     - name: Lint
       run: bun run lint
 
+    - name: Tailwind Readiness Gate
+      env:
+        TAILWIND_AUDIT_ENFORCE: "1"
+        TAILWIND_MAX_W96: "0"
+        TAILWIND_MAX_HEX: "0"
+        TAILWIND_MAX_INLINE_STYLE: "0"
+        TAILWIND_MAX_HARD_PALETTE: "0"
+      run: bun run audit:tailwind-readiness
+
     - name: Run Unit Tests (Vitest)
       run: bun run test:run
 

@@ -41,7 +41,7 @@ function AuthCallbackContent() {
           })
           if (error) throw error
         } else if (typeof window !== 'undefined' && window.location.hash) {
-          // 2) Implicit flow fallback: #access_token=...&refresh_token=...
+          // 2) Implicit flow fallback: fragment access_token=...&refresh_token=...
           const h = parseHashParams(window.location.hash)
           if (h.access_token && h.refresh_token) {
             const { error } = await supabase.auth.setSession({

@@ -44,3 +44,35 @@ echo "Top files: inline style usage"
   | uniq -c \
   | sort -nr \
   | head -n 10
+
+if [[ "${TAILWIND_AUDIT_ENFORCE:-0}" == "1" ]]; then
+  max_w96="${TAILWIND_MAX_W96:-0}"
+  max_hex="${TAILWIND_MAX_HEX:-0}"
+  max_inline="${TAILWIND_MAX_INLINE_STYLE:-0}"
+  max_hard_palette="${TAILWIND_MAX_HARD_PALETTE:-0}"
+
+  violations=()
+
+  if (( count_w96 > max_w96 )); then
+    violations+=("w-[96vw] expected <= ${max_w96}, got ${count_w96}")
+  fi
+  if (( count_hex > max_hex )); then
+    violations+=("hex colors expected <= ${max_hex}, got ${count_hex}")
+  fi
+  if (( count_inline_style > max_inline )); then
+    violations+=("inline style expected <= ${max_inline}, got ${count_inline_style}")
+  fi
+  if (( count_hard_palette > max_hard_palette )); then
+    violations+=("hard palette expected <= ${max_hard_palette}, got ${count_hard_palette}")
+  fi
+
+  if ((${#violations[@]} > 0)); then
+    echo
+    echo "Tailwind readiness gate failed:"
+    printf -- '- %s\n' "${violations[@]}"
+    exit 1
+  fi
+
+  echo
+  echo "Tailwind readiness gate passed."
+fi

@@ -4,12 +4,12 @@ export async function GET() {
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2563eb"/>
-      <stop offset="1" stop-color="#0f172a"/>
+      <stop offset="0" stop-color="rgb(37, 99, 235)"/>
+      <stop offset="1" stop-color="rgb(15, 23, 42)"/>
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#g)"/>
-  <text x="32" y="40" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI" font-size="26" font-weight="700" fill="#ffffff">SF</text>
+  <text x="32" y="40" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI" font-size="26" font-weight="700" fill="white">SF</text>
 </svg>`
 
   return new Response(svg, {
@@ -19,4 +19,3 @@ export async function GET() {
     },
   })
 }
-
