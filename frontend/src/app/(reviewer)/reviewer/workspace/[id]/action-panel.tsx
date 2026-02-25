@@ -208,7 +208,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
   })
 
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardHeader>
         <CardTitle className="text-lg">Review Comment</CardTitle>
       </CardHeader>
@@ -221,7 +221,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
 
         <form className="space-y-5" onSubmit={(event) => void onSubmit(event)}>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900" htmlFor="comments_for_author">
+            <label className="text-sm font-semibold text-foreground" htmlFor="comments_for_author">
               Comment to Authors
             </label>
             <Textarea
@@ -234,14 +234,14 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
             {errors.comments_for_author ? (
               <p className="text-xs font-semibold text-rose-600">{errors.comments_for_author.message}</p>
             ) : (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 This section is visible to authors and editors.
               </p>
             )}
           </div>
 
           <div className="space-y-2">
-            <label className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900" htmlFor="confidential_comments_to_editor">
+            <label className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground" htmlFor="confidential_comments_to_editor">
               <ShieldAlert className="h-4 w-4 text-amber-600" />
               Private note to Editor (optional)
             </label>
@@ -255,7 +255,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Attachment (optional)</label>
+            <label className="text-sm font-semibold text-foreground">Attachment (optional)</label>
             <div className="flex items-center gap-2">
               <Input
                 type="file"
@@ -263,14 +263,14 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
                 disabled={isReadOnly || isUploading}
                 onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
               />
-              {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-slate-500" /> : null}
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
             </div>
             {attachments.length > 0 ? (
-              <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+              <div className="space-y-2 rounded-md border border-border bg-muted/50 p-2.5">
                 {attachments.map((item) => (
                   <div key={item.path} className="flex items-center justify-between gap-2 text-xs">
-                    <div className="inline-flex items-center gap-1.5 text-slate-700">
-                      <FileText className="h-3.5 w-3.5 text-slate-500" />
+                    <div className="inline-flex items-center gap-1.5 text-foreground">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                       <span>{item.filename || extractFilename(item.path)}</span>
                     </div>
                     {item.signed_url ? (
@@ -278,7 +278,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
                         href={item.signed_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-500"
+                        className="inline-flex items-center gap-1 text-primary hover:text-primary/80"
                       >
                         <Download className="h-3.5 w-3.5" />
                         Download
@@ -290,7 +290,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-500">No attachment uploaded.</p>
+              <p className="text-xs text-muted-foreground">No attachment uploaded.</p>
             )}
           </div>
 

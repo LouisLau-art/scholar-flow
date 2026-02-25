@@ -69,32 +69,32 @@ export default function EditorProductionWorkspacePage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+      <main className="flex min-h-screen items-center justify-center bg-muted/40">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </main>
     )
   }
 
   if (!context) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-sm text-slate-600">
+      <main className="flex min-h-screen items-center justify-center bg-muted/40 px-6 text-sm text-muted-foreground">
         Production workspace is unavailable for this manuscript.
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+    <main className="min-h-screen bg-muted/40">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-[1700px] items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Production Pipeline Workspace</p>
-            <h1 className="truncate text-lg font-semibold text-slate-900 sm:text-xl">{context.manuscript.title || 'Untitled Manuscript'}</h1>
-            <p className="text-xs text-slate-500">Current status: {context.manuscript.status || '--'}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production Pipeline Workspace</p>
+            <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{context.manuscript.title || 'Untitled Manuscript'}</h1>
+            <p className="text-xs text-muted-foreground">Current status: {context.manuscript.status || '--'}</p>
           </div>
           <Link
             href={`/editor/manuscript/${encodeURIComponent(manuscriptId)}`}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <ArrowLeft className="h-4 w-4" />
             返回稿件详情
@@ -104,7 +104,7 @@ export default function EditorProductionWorkspacePage() {
 
       <div className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 md:grid-cols-12 sm:px-6">
         <section className="md:col-span-5 lg:col-span-5">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
             {previewUrl ? (
               <iframe
                 title="Production Workspace PDF Preview"
@@ -112,7 +112,7 @@ export default function EditorProductionWorkspacePage() {
                 className="h-[calc(100vh-140px)] min-h-[520px] w-full"
               />
             ) : (
-              <div className="flex h-[calc(100vh-140px)] min-h-[520px] items-center justify-center text-sm text-slate-500">
+              <div className="flex h-[calc(100vh-140px)] min-h-[520px] items-center justify-center text-sm text-muted-foreground">
                 PDF preview is unavailable.
               </div>
             )}

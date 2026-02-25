@@ -86,12 +86,12 @@ export default function ProductionQueuePage() {
         <main className="sf-page-container space-y-6 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
+              <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
                 <Workflow className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Production Queue</h1>
-                <p className="mt-1 text-slate-500 font-medium">
+                <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Production Queue</h1>
+                <p className="mt-1 text-muted-foreground font-medium">
                   仅展示分配给你（layout_editor_id 或协作者）的活跃生产轮次：清样上传、作者校对与发布前核准。
                 </p>
               </div>
@@ -112,8 +112,8 @@ export default function ProductionQueuePage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="grid grid-cols-12 gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="grid grid-cols-12 gap-4 border-b border-border/60 bg-muted/40 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <div className="col-span-5">Title</div>
               <div className="col-span-2">Journal</div>
               <div className="col-span-2">Cycle</div>
@@ -122,27 +122,27 @@ export default function ProductionQueuePage() {
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-slate-500">
+              <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading...
               </div>
             ) : sorted.length === 0 ? (
-              <div className="px-5 py-10 text-sm text-slate-500">暂无分配到你的生产轮次。</div>
+              <div className="px-5 py-10 text-sm text-muted-foreground">暂无分配到你的生产轮次。</div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-border/60">
                 {sorted.map((item) => (
                   <div key={`${item.manuscript.id}-${item.cycle.id}`} className="grid grid-cols-12 gap-4 px-5 py-4">
                     <div className="col-span-5 min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{item.manuscript.title}</p>
-                      <p className="mt-1 text-xs text-slate-500 font-mono truncate">{item.manuscript.id}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{item.manuscript.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground font-mono truncate">{item.manuscript.id}</p>
                     </div>
-                    <div className="col-span-2 text-sm text-slate-700">
+                    <div className="col-span-2 text-sm text-foreground">
                       {item.manuscript.journal?.title || '—'}
                     </div>
                     <div className="col-span-2 space-y-1">
                       {statusBadge(item.cycle.status)}
-                      <p className="text-xs text-slate-500">#{item.cycle.cycle_no ?? '—'}</p>
+                      <p className="text-xs text-muted-foreground">#{item.cycle.cycle_no ?? '—'}</p>
                     </div>
-                    <div className="col-span-2 text-sm text-slate-700">
+                    <div className="col-span-2 text-sm text-foreground">
                       {formatDate(item.cycle.updated_at)}
                     </div>
                     <div className="col-span-1 flex justify-end">
