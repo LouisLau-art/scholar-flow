@@ -243,10 +243,10 @@ function DashboardPageContent() {
   ])
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="sf-page-shell flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 mx-auto w-[96vw] max-w-screen-2xl px-4 py-12 sm:px-6 lg:px-8">
+      <main className="sf-page-container flex-1 py-12">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             <div>
