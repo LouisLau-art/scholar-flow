@@ -1,17 +1,26 @@
 'use client'
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { FileText, CheckCircle, Clock, AlertCircle, Plus, ArrowRight, Loader2, Users, LayoutDashboard, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import ReviewerDashboard from "@/components/ReviewerDashboard"
-import AdminDashboard from "@/components/AdminDashboard"
 import { authService } from '@/services/auth'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+
+const ReviewerDashboard = dynamic(() => import('@/components/ReviewerDashboard'), {
+  ssr: false,
+  loading: () => <div className="py-10 text-sm text-muted-foreground">Loading reviewer workspace…</div>,
+})
+
+const AdminDashboard = dynamic(() => import('@/components/AdminDashboard'), {
+  ssr: false,
+  loading: () => <div className="py-10 text-sm text-muted-foreground">Loading admin workspace…</div>,
+})
 
 type DashboardTab =
   | 'author'
@@ -137,50 +146,65 @@ function DashboardPageContent() {
   })
 
   useEffect(() => {
-    async function fetchStats() {
+    const controller = new AbortController()
+
+    async function fetchDashboardData() {
       try {
         const token = await authService.getAccessToken()
-        const res = await fetch('/api/v1/stats/author', {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
-        const result = await res.json()
-        if (result.success) setStats(result.data)
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+
+        const [statsResponse, submissionsResponse, profileResponse] = await Promise.all([
+          fetch('/api/v1/stats/author', {
+            headers,
+            signal: controller.signal,
+          }),
+          fetch('/api/v1/manuscripts/mine', {
+            headers,
+            signal: controller.signal,
+          }),
+          token
+            ? fetch('/api/v1/user/profile', {
+                headers,
+                signal: controller.signal,
+              })
+            : Promise.resolve(null),
+        ])
+
+        if (statsResponse.ok) {
+          const payload = await statsResponse.json().catch(() => null)
+          if (payload?.success) {
+            setStats(payload.data)
+          }
+        }
+
+        if (submissionsResponse.ok) {
+          const payload = await submissionsResponse.json().catch(() => null)
+          if (payload?.success) {
+            setSubmissions(payload.data || [])
+          }
+        }
+
+        if (profileResponse?.ok) {
+          const payload = await profileResponse.json().catch(() => null)
+          if (payload?.success) {
+            setRoles(payload.data?.roles || [])
+          }
+        }
       } catch (err) {
-        console.error('Failed to load dashboard:', err)
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.error('Failed to load dashboard data:', err)
+        }
       } finally {
         setIsLoading(false)
-      }
-    }
-    async function fetchSubmissions() {
-      try {
-        const token = await authService.getAccessToken()
-        const res = await fetch('/api/v1/manuscripts/mine', {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
-        const result = await res.json()
-        if (result.success) setSubmissions(result.data || [])
-      } catch (err) {
-        console.error('Failed to load submissions:', err)
-      }
-    }
-    async function fetchProfile() {
-      try {
-        const token = await authService.getAccessToken()
-        if (!token) return
-        const res = await fetch('/api/v1/user/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const result = await res.json()
-        if (result.success) setRoles(result.data?.roles || [])
-      } catch (err) {
-        console.error('Failed to load profile:', err)
-      } finally {
         setRolesLoading(false)
       }
     }
-    fetchStats()
-    fetchSubmissions()
-    fetchProfile()
+
+    fetchDashboardData()
+
+    return () => {
+      controller.abort()
+    }
   }, [])
 
   const statCards = [
