@@ -6,7 +6,7 @@ import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
 import { authService } from "@/services/auth"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/FileUpload"
 
@@ -147,6 +147,10 @@ function ReviewModal({
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="w-full max-w-[720px] min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 [&>button]:hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Structured Peer Review</DialogTitle>
+          <DialogDescription>Submit structured review scores and comments for the selected manuscript.</DialogDescription>
+        </DialogHeader>
         <div className="mb-6">
           <h4 className="font-serif text-2xl">Structured Peer Review</h4>
           <p className="text-sm text-slate-500">
@@ -424,6 +428,10 @@ export default function ReviewerDashboard() {
 
       <Dialog open={isPreviewOpen} onOpenChange={(open) => (!open ? handleClosePreview() : undefined)}>
         <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8 flex flex-col [&>button]:hidden">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Full Text Preview</DialogTitle>
+              <DialogDescription>Preview manuscript PDF in an embedded viewer.</DialogDescription>
+            </DialogHeader>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h4 className="font-serif text-2xl text-slate-900">Full Text Preview</h4>

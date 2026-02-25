@@ -77,7 +77,7 @@ describe('InviteReviewerDialog', () => {
 
   it('calls onClose when close icon is clicked', () => {
     render(<InviteReviewerDialog {...defaultProps} />);
-    fireEvent.click(screen.getByText('✕'));
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
     expect(defaultProps.onClose).toHaveBeenCalled();
   });
 });

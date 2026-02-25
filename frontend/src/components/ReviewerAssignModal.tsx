@@ -8,7 +8,7 @@ import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type InvitePolicyHit = {
@@ -532,6 +532,12 @@ export default function ReviewerAssignModal({
           className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white p-0 shadow-2xl flex flex-col [&>button]:hidden"
           data-testid="reviewer-modal"
         >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Assign Reviewer</DialogTitle>
+            <DialogDescription>
+              Search reviewer library, review policy hints, and assign reviewers for this manuscript.
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-between p-6 border-b border-slate-200">
             <div className="flex items-center gap-3">
               <Users className="h-6 w-6 text-blue-600" />
