@@ -1,8 +1,8 @@
 import { ApiClient } from '@/lib/api-client'
-import { FileText, CheckCircle, XCircle } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import SiteHeader from '@/components/layout/SiteHeader'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 export default async function AdminManuscriptsPage() {
   /**

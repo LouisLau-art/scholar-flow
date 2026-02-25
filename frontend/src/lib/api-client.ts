@@ -16,10 +16,10 @@ export const ApiClient = {
   async getManuscripts() {
     const { data, error } = await supabase
       .from('manuscripts')
-      .select('*')
+      .select('id,title,abstract,status,created_at')
       .order('created_at', { ascending: false })
     if (error) throw error
-    return data as Manuscript[]
+    return data as Pick<Manuscript, 'id' | 'title' | 'abstract' | 'status' | 'created_at'>[]
   },
 
   async uploadManuscript(file: File, authorId: string) {

@@ -129,7 +129,7 @@ export default function SubmissionForm() {
       setIsLoadingJournals(true)
       setJournalLoadError(null)
       try {
-        const response = await fetch('/api/v1/public/journals', { cache: 'no-store' })
+        const response = await fetch('/api/v1/public/journals')
         const payload = await response.json().catch(() => null)
         if (!response.ok || !payload?.success) {
           throw new Error(payload?.detail || payload?.message || 'Failed to load journals')

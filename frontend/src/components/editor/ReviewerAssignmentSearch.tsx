@@ -44,22 +44,22 @@ export function ReviewerAssignmentSearch(props: {
       const overrideMap = new Map(
         (options?.overrides || []).map((item) => [String(item.reviewerId), String(item.reason || '')])
       )
-      const failures: Array<{ reviewerId: string; detail: string }> = []
-      let successCount = 0
+      const settled = await Promise.all(
+        reviewerIds.map(async (reviewerId) => {
+          const overrideReason = overrideMap.get(String(reviewerId))
+          const res = await fetch('/api/v1/reviews/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              manuscript_id: manuscriptId,
+              reviewer_id: reviewerId,
+              override_cooldown: Boolean(overrideReason),
+              override_reason: overrideReason || undefined,
+            }),
+          })
 
-      for (const reviewerId of reviewerIds) {
-        const overrideReason = overrideMap.get(String(reviewerId))
-        const res = await fetch('/api/v1/reviews/assign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            manuscript_id: manuscriptId,
-            reviewer_id: reviewerId,
-            override_cooldown: Boolean(overrideReason),
-            override_reason: overrideReason || undefined,
-          }),
-        })
-        if (!res.ok) {
+          if (res.ok) return { reviewerId: String(reviewerId), ok: true as const, detail: '' }
+
           const raw = await res.text().catch(() => '')
           let detail = raw
           try {
@@ -68,11 +68,16 @@ export function ReviewerAssignmentSearch(props: {
           } catch {
             detail = raw
           }
-          failures.push({ reviewerId: String(reviewerId), detail: detail || 'Assign failed' })
-          continue
-        }
-        successCount += 1
-      }
+          return {
+            reviewerId: String(reviewerId),
+            ok: false as const,
+            detail: detail || 'Assign failed',
+          }
+        })
+      )
+
+      const failures = settled.filter((item) => !item.ok)
+      const successCount = settled.length - failures.length
 
       if (successCount > 0) {
         props.onChanged?.()

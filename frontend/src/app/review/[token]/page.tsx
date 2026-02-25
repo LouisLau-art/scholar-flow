@@ -146,9 +146,10 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
       setPdfLoading(true)
       setAttachmentUrl(null)
       try {
-        const [taskRes, pdfRes] = await Promise.all([
+        const [taskRes, pdfRes, attRes] = await Promise.all([
           fetch(`/api/v1/reviews/token/${params.token}`),
           fetch(`/api/v1/reviews/token/${params.token}/pdf-signed`),
+          fetch(`/api/v1/reviews/token/${params.token}/attachment-signed`),
         ])
 
         const json = await taskRes.json().catch(() => null)
@@ -168,23 +169,17 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
         }
 
         // 已提交且有附件时：允许 reviewer 通过 token 下载自己上传的机密附件（可选）
-        try {
-          setAttachmentLoading(true)
-          const attRes = await fetch(`/api/v1/reviews/token/${params.token}/attachment-signed`)
-          const attJson = await attRes.json().catch(() => null)
-          if (attRes.ok && attJson?.success && attJson?.data?.signed_url) {
-            setAttachmentUrl(String(attJson.data.signed_url))
-          }
-        } catch {
-          // ignore
-        } finally {
-          setAttachmentLoading(false)
+        setAttachmentLoading(true)
+        const attJson = await attRes.json().catch(() => null)
+        if (attRes.ok && attJson?.success && attJson?.data?.signed_url) {
+          setAttachmentUrl(String(attJson.data.signed_url))
         }
       } catch (e) {
         toast.error('Failed to load review task.')
       } finally {
         setIsLoading(false)
         setPdfLoading(false)
+        setAttachmentLoading(false)
       }
     }
     loadData()

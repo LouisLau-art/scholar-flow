@@ -85,7 +85,6 @@ export function ProcessFilterBar({
   )
   const canFilterByEditor = canFilterByJournal
 
-  const qDebounceTimer = useRef<number | null>(null)
   const mountedRef = useRef(false)
   const statusDropdownRef = useRef<HTMLDivElement | null>(null)
 
@@ -219,18 +218,16 @@ export function ProcessFilterBar({
     router.push(qs ? `${pathname}?${qs}` : pathname)
   }
 
-  // T012: 文本搜索 debounce（仅自动同步 q，避免未点击 Search 时触发其他过滤器落地）
-  useEffect(() => {
-    if (qDebounceTimer.current) window.clearTimeout(qDebounceTimer.current)
-    qDebounceTimer.current = window.setTimeout(() => {
-      if ((q || '').trim() === applied.q) return
-      updateUrl({ q })
-    }, 350)
-    return () => {
-      if (qDebounceTimer.current) window.clearTimeout(qDebounceTimer.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q])
+  function applyFilters() {
+    setStatusDropdownOpen(false)
+    updateUrl({
+      q,
+      journalId: canFilterByJournal ? journalId || null : null,
+      editorId: canFilterByEditor ? editorId || null : null,
+      statuses: statuses.length ? statuses : null,
+      overdueOnly,
+    })
+  }
 
   const selectedStatusesText = useMemo(() => {
     if (statuses.length === 0) return 'All statuses'
@@ -252,7 +249,15 @@ export function ProcessFilterBar({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
         <div className="md:col-span-4">
           <Label className="text-xs text-muted-foreground">Search (Title / UUID)</Label>
-          <Input className="mt-1" placeholder="Energy, 9286... (UUID) ..." value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input
+            className="mt-1"
+            placeholder="Energy, 9286... (UUID) ..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyFilters()
+            }}
+          />
         </div>
 
         {canFilterByJournal ? (
@@ -358,16 +363,7 @@ export function ProcessFilterBar({
             Overdue only
           </label>
           <Button
-            onClick={() => {
-              setStatusDropdownOpen(false)
-              updateUrl({
-                q,
-                journalId: canFilterByJournal ? journalId || null : null,
-                editorId: canFilterByEditor ? editorId || null : null,
-                statuses: statuses.length ? statuses : null,
-                overdueOnly,
-              })
-            }}
+            onClick={applyFilters}
             className="gap-2"
             disabled={loadingJournals || loadingStaff}
           >

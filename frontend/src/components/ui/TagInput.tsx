@@ -30,7 +30,7 @@ export function TagInput({
       e.preventDefault()
       addTag()
     } else if (e.key === "Backspace" && !inputValue && tags.length > 0) {
-      removeTag(tags.length - 1)
+      removeTag(tags[tags.length - 1])
     }
   }
 
@@ -54,22 +54,22 @@ export function TagInput({
     setInputValue("")
   }
 
-  const removeTag = (index: number) => {
-    setTags(tags.filter((_, i) => i !== index))
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter((tag) => tag !== tagToRemove))
   }
 
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap gap-2">
-        {tags.map((tag, index) => (
+        {tags.map((tag) => (
           <span
-            key={index}
+            key={tag}
             className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-sm font-medium text-secondary-foreground"
           >
             {tag}
             <button
               type="button"
-              onClick={() => removeTag(index)}
+              onClick={() => removeTag(tag)}
               className="text-muted-foreground hover:text-foreground"
             >
               <X className="h-3 w-3" />

@@ -34,11 +34,11 @@ export function BindingAssistantEditorDropdown({
   useEffect(() => {
     if (!open) return
     let alive = true
-
-    async function load() {
+    const delayMs = q.trim() ? 300 : 0
+    const timer = window.setTimeout(async () => {
       try {
         setLoading(true)
-        const res = await EditorApi.listAssistantEditors(q)
+        const res = await EditorApi.listAssistantEditors(q.trim())
         if (!alive) return
         if (!res?.success) {
           throw new Error(res?.detail || res?.message || 'Failed to load assistant editors')
@@ -50,13 +50,11 @@ export function BindingAssistantEditorDropdown({
       } finally {
         if (alive) setLoading(false)
       }
-    }
+    }, delayMs)
 
-    load()
-    const timer = setTimeout(load, 350)
     return () => {
       alive = false
-      clearTimeout(timer)
+      window.clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q])

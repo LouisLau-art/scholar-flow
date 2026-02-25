@@ -1,11 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import TiptapEditor from '@/components/cms/TiptapEditor'
 import { createCmsPage, listCmsPages, updateCmsPage, uploadCmsImage, type CmsPage } from '@/services/cms'
+
+const TiptapEditor = dynamic(() => import('@/components/cms/TiptapEditor'), {
+  ssr: false,
+})
 
 function slugify(input: string): string {
   return input

@@ -3,15 +3,20 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Search, Menu, X, ChevronDown, User as UserIcon, Globe } from 'lucide-react'
 import { authService } from '@/services/auth'
-import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { getCmsMenu } from '@/services/cms'
 import { useProfile } from '@/hooks/useProfile'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+
+const NotificationBell = dynamic(
+  () => import('@/components/notifications/NotificationBell').then((mod) => mod.NotificationBell),
+  { ssr: false }
+)
 
 export default function SiteHeader() {
   const router = useRouter()
@@ -138,7 +143,7 @@ export default function SiteHeader() {
             </button>
             <div className="h-6 w-px bg-border/30 hidden sm:block" />
 
-            <NotificationBell isAuthenticated={isAuthenticated} />
+            {isAuthenticated ? <NotificationBell isAuthenticated={isAuthenticated} /> : null}
 
             {isAuthenticated ? (
               <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-background/80">

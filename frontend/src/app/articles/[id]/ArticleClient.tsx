@@ -228,16 +228,18 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
 
   async function handleDownload(idForDownload: string) {
     try {
-      const res = await fetch(`/api/v1/stats/download/${idForDownload}`, {
+      const statsPromise = fetch(`/api/v1/stats/download/${idForDownload}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+      }).then((res) => {
+        if (!res.ok) {
+          console.error('Failed to record download')
+        }
+      }).catch((error) => {
+        console.error('Failed to record download', error)
       })
-
-      if (!res.ok) {
-        console.error('Failed to record download')
-      }
 
       const pdfRes = await fetch(`/api/v1/manuscripts/articles/${encodeURIComponent(String(idForDownload))}/pdf-signed`)
       const pdfJson = await pdfRes.json().catch(() => null)
@@ -247,6 +249,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         return
       }
       window.open(String(signedUrl), '_blank')
+      void statsPromise
     } catch (error) {
       console.error('Download error:', error)
     }

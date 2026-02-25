@@ -2,16 +2,20 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { authService } from '@/services/auth'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import TiptapEditor from '@/components/cms/TiptapEditor'
 import { Loader2, Upload, FileText, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { compressImage } from '@/lib/image-utils'
+
+const TiptapEditor = dynamic(() => import('@/components/cms/TiptapEditor'), {
+  ssr: false,
+})
 
 export default function SubmitRevisionPage() {
   const params = useParams()

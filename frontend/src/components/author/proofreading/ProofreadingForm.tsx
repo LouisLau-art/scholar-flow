@@ -18,6 +18,10 @@ type Props = {
   onSubmitted: () => Promise<void>
 }
 
+type DraftCorrectionItem = ProductionCorrectionItem & {
+  _localId: string
+}
+
 const EMPTY_ITEM: ProductionCorrectionItem = {
   line_ref: '',
   original_text: '',
@@ -25,10 +29,25 @@ const EMPTY_ITEM: ProductionCorrectionItem = {
   reason: '',
 }
 
+function createLocalId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function toDraftItem(input?: Partial<ProductionCorrectionItem>): DraftCorrectionItem {
+  return {
+    ...EMPTY_ITEM,
+    ...input,
+    _localId: createLocalId(),
+  }
+}
+
 export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) {
   const [decision, setDecision] = useState<ProofreadingDecision>('confirm_clean')
   const [summary, setSummary] = useState('')
-  const [items, setItems] = useState<ProductionCorrectionItem[]>([{ ...EMPTY_ITEM }])
+  const [items, setItems] = useState<DraftCorrectionItem[]>([toDraftItem()])
   const [submitting, setSubmitting] = useState(false)
 
   const isReadOnly = !context.can_submit || context.is_read_only
@@ -42,7 +61,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
     if (!latest?.id) {
       setDecision('confirm_clean')
       setSummary('')
-      setItems([{ ...EMPTY_ITEM }])
+      setItems([toDraftItem()])
       return
     }
 
@@ -58,9 +77,9 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
         reason: row.reason || '',
         sort_order: row.sort_order,
       }))
-      setItems(normalized.length > 0 ? normalized : [{ ...EMPTY_ITEM }])
+      setItems(normalized.length > 0 ? normalized.map((row) => toDraftItem(row)) : [toDraftItem()])
     } else {
-      setItems([{ ...EMPTY_ITEM }])
+      setItems([toDraftItem()])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context?.cycle?.id, latest?.id])
@@ -74,7 +93,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
   }
 
   const addItem = () => {
-    setItems((prev) => [...prev, { ...EMPTY_ITEM }])
+    setItems((prev) => [...prev, toDraftItem()])
   }
 
   const removeItem = (idx: number) => {
@@ -179,7 +198,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
           </div>
 
           {items.map((item, idx) => (
-            <div key={idx} className="space-y-2 rounded-md border border-border p-3">
+            <div key={item._localId} className="space-y-2 rounded-md border border-border p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground">Item #{idx + 1}</p>
                 <Button

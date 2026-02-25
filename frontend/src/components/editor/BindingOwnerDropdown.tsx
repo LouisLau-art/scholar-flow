@@ -30,21 +30,21 @@ export function BindingOwnerDropdown({
   useEffect(() => {
     if (!open) return
     let alive = true
-    async function load() {
+    const delayMs = q.trim() ? 300 : 0
+    const timer = window.setTimeout(async () => {
       try {
         setLoading(true)
-        const res = await EditorApi.listInternalStaff(q)
+        const res = await EditorApi.listInternalStaff(q.trim())
         if (!alive) return
         if (res?.success) setStaff(res.data || [])
       } finally {
         if (alive) setLoading(false)
       }
-    }
-    load()
-    const t = setTimeout(load, 350)
+    }, delayMs)
+
     return () => {
       alive = false
-      clearTimeout(t)
+      window.clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q])
