@@ -265,6 +265,8 @@ async def get_manuscripts_process(
             ),
             viewer_user_id=viewer_user_id,
             viewer_roles=viewer_roles,
+            scoped_journal_ids=set(_allowed_journal_ids),
+            scope_enforcement_enabled=bool(_enforcement_enabled),
         )
         response = {"success": True, "data": rows}
         _process_rows_cache.set(cache_key, response, ttl_sec=_PROCESS_ROWS_CACHE_TTL_SEC)

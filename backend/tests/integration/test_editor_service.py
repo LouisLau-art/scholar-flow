@@ -263,7 +263,15 @@ async def test_process_overdue_only_query_param_is_forwarded(client, set_admin_e
 
     captured = {}
 
-    def _stub_list(self, *, filters, viewer_user_id=None, viewer_roles=None):
+    def _stub_list(
+        self,
+        *,
+        filters,
+        viewer_user_id=None,
+        viewer_roles=None,
+        scoped_journal_ids=None,
+        scope_enforcement_enabled=None,
+    ):
         captured["overdue_only"] = filters.overdue_only
         return [
             {

@@ -10,7 +10,6 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.core.journal_scope import (
-    filter_rows_by_journal_scope,
     get_user_scope_journal_ids,
     is_scope_enforcement_enabled,
 )
@@ -158,6 +157,8 @@ class EditorService(EditorServicePrecheckMixin):
         rows: list[dict[str, Any]],
         viewer_user_id: str | None,
         viewer_roles: list[str] | None,
+        scoped_journal_ids: set[str] | None = None,
+        scope_enforcement_enabled: bool | None = None,
     ) -> list[dict[str, Any]]:
         """
         统一处理 Process/Intake 列表的角色可见范围。
@@ -165,10 +166,9 @@ class EditorService(EditorServicePrecheckMixin):
         规则：
         - admin：不裁剪；
         - assistant_editor（且不具备 ME/EIC 全局角色）：仅看 `assistant_editor_id == 自己`；
-        - managing_editor / editor_in_chief：
-          若已配置 journal scopes，则按 scope 裁剪；
-          若 scope 为空，返回空列表（fail-closed）；
-        - 其余角色沿用现有灰度开关逻辑（filter_rows_by_journal_scope）。
+        - scope enforcement 开启时（或角色为 ME/EIC），按 journal scopes 裁剪；
+        - 若 scope 为空，返回空列表（fail-closed）；
+        - enforcement 关闭时，保留现有可见行。
         """
         if not viewer_user_id or viewer_roles is None:
             return rows
@@ -188,27 +188,25 @@ class EditorService(EditorServicePrecheckMixin):
                 row for row in out if str(row.get("assistant_editor_id") or "") == str(viewer_user_id)
             ]
 
-        # 非 admin 的 ME/EIC：默认按已配置 scope 裁剪（即使灰度开关关闭也生效）。
-        if has_global_process_scope:
-            scoped_journal_ids = get_user_scope_journal_ids(
+        enforcement_enabled = bool(scope_enforcement_enabled or has_global_process_scope)
+        if scope_enforcement_enabled is None:
+            enforcement_enabled = bool(has_global_process_scope or is_scope_enforcement_enabled())
+
+        if not enforcement_enabled:
+            return out
+
+        allowed_ids = scoped_journal_ids
+        if allowed_ids is None:
+            allowed_ids = get_user_scope_journal_ids(
                 user_id=str(viewer_user_id),
                 roles=list(normalized_viewer_roles),
             )
-            if scoped_journal_ids:
-                out = [
-                    row for row in out if str(row.get("journal_id") or "").strip() in scoped_journal_ids
-                ]
-            else:
-                out = []
+        if not allowed_ids:
+            return []
 
-        # 其余角色继续走现有灰度策略，兼容旧环境。
-        out = filter_rows_by_journal_scope(
-            rows=out,
-            user_id=str(viewer_user_id),
-            roles=list(normalized_viewer_roles),
-            journal_key="journal_id",
-            allow_admin_bypass=True,
-        )
+        out = [
+            row for row in out if str(row.get("journal_id") or "").strip() in allowed_ids
+        ]
         return out
 
     def _build_process_query(self, *, filters: ProcessListFilters, select_clause: str):
@@ -842,6 +840,8 @@ class EditorService(EditorServicePrecheckMixin):
         filters: ProcessListFilters,
         viewer_user_id: str | None = None,
         viewer_roles: list[str] | None = None,
+        scoped_journal_ids: set[str] | None = None,
+        scope_enforcement_enabled: bool | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._list_process_rows_with_fallback(filters=filters)
 
@@ -914,8 +914,9 @@ class EditorService(EditorServicePrecheckMixin):
             rows=rows,
             viewer_user_id=viewer_user_id,
             viewer_roles=viewer_roles,
+            scoped_journal_ids=scoped_journal_ids,
+            scope_enforcement_enabled=scope_enforcement_enabled,
         )
         return rows
 
     # --- Feature 038: Pre-check Role Workflow (ME -> AE -> EIC) ---
-
