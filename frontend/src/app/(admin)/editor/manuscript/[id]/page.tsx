@@ -110,6 +110,8 @@ export default function EditorManuscriptDetailPage() {
   const [cardsLoading, setCardsLoading] = useState(false)
   const [cardsError, setCardsError] = useState<string | null>(null)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
+  const canViewReviewerFeedback =
+    capability.canManageReviewers || capability.canRecordFirstDecision || capability.canSubmitFinalDecision
   const normalizedRoles = useMemo(() => rbacContext?.normalized_roles || [], [rbacContext])
   const canManualStatusTransition = useMemo(
     () => normalizedRoles.includes('admin') || normalizedRoles.includes('managing_editor'),
@@ -323,6 +325,7 @@ export default function EditorManuscriptDetailPage() {
   }, [id])
 
   useEffect(() => {
+    if (!canViewReviewerFeedback) return
     if (reviewsActivated) return
     const node = reviewCardRef.current
     if (!node) return
@@ -341,9 +344,19 @@ export default function EditorManuscriptDetailPage() {
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [ms, reviewsActivated])
+  }, [canViewReviewerFeedback, ms, reviewsActivated])
 
   useEffect(() => {
+    if (canViewReviewerFeedback) return
+    setReviewsActivated(false)
+    setReviewsLoadedOnce(false)
+    setReviewReports([])
+    setReviewsError(null)
+    setReviewsLoading(false)
+  }, [canViewReviewerFeedback])
+
+  useEffect(() => {
+    if (!canViewReviewerFeedback) return
     if (!reviewsActivated || reviewsLoadedOnce || !id) return
     const normalizedStatus = normalizeWorkflowStatus(String(ms?.status || ''))
     if (!normalizedStatus || normalizedStatus === 'pre_check') {
@@ -354,7 +367,7 @@ export default function EditorManuscriptDetailPage() {
       return
     }
     void loadReviewReports().finally(() => setReviewsLoadedOnce(true))
-  }, [id, loadReviewReports, ms?.status, reviewsActivated, reviewsLoadedOnce])
+  }, [canViewReviewerFeedback, id, loadReviewReports, ms?.status, reviewsActivated, reviewsLoadedOnce])
 
   useEffect(() => {
     if (cardsActivated) return
@@ -614,6 +627,7 @@ export default function EditorManuscriptDetailPage() {
           />
 
           <ReviewerFeedbackSummaryCard
+            canViewReviewerFeedback={canViewReviewerFeedback}
             reviewCardRef={reviewCardRef}
             reviewsActivated={reviewsActivated}
             reviewsLoading={reviewsLoading}

@@ -285,6 +285,7 @@ export function LatestAuthorResubmissionCard({
 }
 
 type ReviewerFeedbackSummaryCardProps = {
+  canViewReviewerFeedback: boolean
   reviewCardRef: RefObject<HTMLDivElement>
   reviewsActivated: boolean
   reviewsLoading: boolean
@@ -294,6 +295,7 @@ type ReviewerFeedbackSummaryCardProps = {
 }
 
 export function ReviewerFeedbackSummaryCard({
+  canViewReviewerFeedback,
   reviewCardRef,
   reviewsActivated,
   reviewsLoading,
@@ -311,7 +313,9 @@ export function ReviewerFeedbackSummaryCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {!reviewsActivated ? (
+        {!canViewReviewerFeedback ? (
+          <div className="text-sm text-slate-500">You do not have permission to view reviewer feedback summary.</div>
+        ) : !reviewsActivated ? (
           <div className="text-sm text-slate-500">Reviewer feedback will load when this card enters the viewport.</div>
         ) : reviewsLoading ? (
           <div className="flex items-center gap-2 text-sm text-slate-500">
