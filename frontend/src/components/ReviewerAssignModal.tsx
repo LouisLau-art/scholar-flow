@@ -129,13 +129,8 @@ export default function ReviewerAssignModal({
 
   const fetchInternalStaff = useCallback(async () => {
     try {
-      const token = await authService.getAccessToken()
-      if (!token) return
-      const res = await fetch('/api/v1/editor/internal-staff', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok || !payload?.success) {
+      const payload = await EditorApi.listInternalStaff('', undefined, { ttlMs: 60_000 })
+      if (!payload?.success) {
         setInternalStaff([])
         return
       }
