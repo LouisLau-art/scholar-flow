@@ -191,37 +191,37 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
   return (
     <Card className="flex h-full flex-col shadow-sm">
       <CardHeader className="border-b py-4">
-        <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-700">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-foreground">
           <MessageSquare className="h-4 w-4" />
           Internal Notebook (Staff Only)
         </CardTitle>
       </CardHeader>
       <CardContent className="flex h-[560px] flex-1 flex-col gap-3 p-4">
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           Tip: select teammates below to create validated mentions. Duplicate and invalid mentions are blocked.
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto pr-2">
           {loading && comments.length === 0 ? (
             <div className="flex justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : comments.length === 0 ? (
-            <div className="py-8 text-center text-sm text-slate-400">No internal notes yet.</div>
+            <div className="py-8 text-center text-sm text-muted-foreground">No internal notes yet.</div>
           ) : (
             comments.map((comment) => (
               <div key={comment.id} className="group flex gap-3">
-                <div className="h-8 w-8 flex-shrink-0 rounded-full bg-blue-100 text-xs font-bold uppercase text-blue-600 flex items-center justify-center">
+                <div className="h-8 w-8 flex-shrink-0 rounded-full bg-primary/10 text-xs font-bold uppercase text-primary flex items-center justify-center">
                   {initials(comment.user?.full_name || comment.user?.email || '?')}
                 </div>
-                <div className="w-full rounded-lg rounded-tl-none border border-slate-100 bg-slate-50 p-3 transition-colors hover:bg-slate-100">
+                <div className="w-full rounded-lg rounded-tl-none border border-border/60 bg-muted/40 p-3 transition-colors hover:bg-muted">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">
+                    <span className="text-xs font-bold text-foreground">
                       {comment.user?.full_name || comment.user?.email || 'Unknown'}
                     </span>
-                    <span className="text-[10px] text-slate-400">{format(new Date(comment.created_at), 'MMM d, HH:mm')}</span>
+                    <span className="text-[10px] text-muted-foreground">{format(new Date(comment.created_at), 'MMM d, HH:mm')}</span>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">{comment.content}</p>
+                  <p className="whitespace-pre-wrap text-sm text-foreground">{comment.content}</p>
                   {(comment.mention_user_ids || []).length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1" data-testid="notebook-mentions">
                       {(comment.mention_user_ids || []).map((uid) => {
@@ -230,7 +230,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                         return (
                           <span
                             key={`${comment.id}-${uid}`}
-                            className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+                            className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
                           >
                             @{text}
                           </span>
@@ -247,7 +247,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
         <div className="mt-auto space-y-2 border-t pt-2">
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <Label className="inline-flex items-center gap-1 text-xs text-slate-600">
+              <Label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <UserRoundPlus className="h-3.5 w-3.5" /> Mention teammates
               </Label>
               <Button
@@ -269,14 +269,14 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
               </Button>
             </div>
 
-            <div className="mb-2 text-[11px] text-slate-500">
+            <div className="mb-2 text-[11px] text-muted-foreground">
               Selected {selectedMentionLabels.length} teammate(s).
             </div>
 
             {mentionPanelOpen ? (
-              <div className="rounded-md border border-slate-200 bg-white p-2">
-              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                <Search className="h-3.5 w-3.5 text-slate-500" />
+              <div className="rounded-md border border-border bg-card p-2">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1.5">
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   aria-label="Search teammates"
                   placeholder="Search by name or email..."
@@ -294,14 +294,14 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                     return (
                       <span
                         key={`selected-${uid}`}
-                        className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
                       >
                         @{text}
                         <button
                           type="button"
                           aria-label={`Remove ${text}`}
                           onClick={() => toggleMention(uid)}
-                          className="rounded-full p-0.5 text-blue-600 transition hover:bg-blue-100"
+                          className="rounded-full p-0.5 text-primary transition hover:bg-primary/10"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -310,12 +310,12 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                   })}
                 </div>
               ) : (
-                <p className="mt-2 text-[11px] text-slate-500">No teammates selected.</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">No teammates selected.</p>
               )}
 
-              <div className="mt-2 max-h-28 overflow-y-auto rounded-md border border-slate-200">
+              <div className="mt-2 max-h-28 overflow-y-auto rounded-md border border-border">
                 {filteredStaff.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-slate-500">No teammates found.</div>
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No teammates found.</div>
                 ) : (
                   filteredStaff.map((member) => {
                     const text = member.full_name || member.email || member.id
@@ -325,8 +325,8 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                         key={member.id}
                         type="button"
                         aria-label={`Mention ${text}`}
-                        className={`flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                          selected ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                        className={`flex w-full items-center justify-between border-b border-border/60 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                          selected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted/40'
                         }`}
                         onClick={() => toggleMention(member.id)}
                       >

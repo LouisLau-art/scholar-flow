@@ -63,15 +63,15 @@ function ReviewForm({
   }
 
   return (
-    <aside className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 h-fit">
-      <h2 className="text-lg font-semibold text-slate-900 mb-6">Your Evaluation</h2>
+    <aside className="rounded-lg bg-card p-6 shadow-sm ring-1 ring-border h-fit">
+      <h2 className="text-lg font-semibold text-foreground mb-6">Your Evaluation</h2>
       <form
         className="space-y-6"
         onSubmit={handleSubmit}
         data-manuscript-id={manuscriptId}
       >
         <div>
-          <label htmlFor="review_score" className="block text-sm font-semibold text-slate-900">
+          <label htmlFor="review_score" className="block text-sm font-semibold text-foreground">
             Score (1-5)
           </label>
           <Select value={String(score)} onValueChange={(value) => setScore(Number(value))}>
@@ -89,7 +89,7 @@ function ReviewForm({
         </div>
 
         <div>
-          <label htmlFor="comments_for_author" className="block text-sm font-semibold text-slate-900">
+          <label htmlFor="comments_for_author" className="block text-sm font-semibold text-foreground">
             Comments for the Authors
           </label>
           <textarea
@@ -97,12 +97,12 @@ function ReviewForm({
             rows={8}
             value={commentsToAuthor}
             onChange={(e) => setCommentsToAuthor(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-md border border-border/80 px-4 py-2 focus:ring-2 focus:ring-primary"
           />
         </div>
 
         <div>
-          <label htmlFor="confidential_comments_to_editor" className="block text-sm font-semibold text-slate-900">
+          <label htmlFor="confidential_comments_to_editor" className="block text-sm font-semibold text-foreground">
             Confidential Comments to the Editor (optional)
           </label>
           <p className="mt-1 text-xs font-semibold text-red-600">Authors will NOT see this</p>
@@ -111,7 +111,7 @@ function ReviewForm({
             rows={5}
             value={confidentialComments}
             onChange={(e) => setConfidentialComments(e.target.value)}
-            className="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-blue-500"
+            className="mt-2 w-full rounded-md border border-border/80 px-4 py-2 focus:ring-2 focus:ring-primary"
           />
         </div>
 
@@ -126,7 +126,7 @@ function ReviewForm({
 
         <button
           disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-2 rounded-md bg-slate-900 py-3 text-white hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 rounded-md bg-foreground py-3 text-white hover:bg-foreground/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <Send className="h-4 w-4" /> {isSubmitting ? 'Submitting...' : 'Submit Report'}
         </button>
@@ -188,29 +188,29 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <Loader2 className="h-10 w-10 animate-spin text-slate-900" />
+      <div className="flex h-screen items-center justify-center bg-muted/40">
+        <Loader2 className="h-10 w-10 animate-spin text-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-8">
+    <div className="min-h-screen bg-muted/40 px-4 py-6 md:p-8">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-6 border-b border-slate-200 pb-5">
-          <h1 className="font-serif text-4xl font-bold text-slate-900">Review Manuscript</h1>
-          <p className="mt-2 text-slate-600">Secure, no-login access via magic link.</p>
+        <header className="mb-6 border-b border-border pb-5">
+          <h1 className="font-serif text-4xl font-bold text-foreground">Review Manuscript</h1>
+          <p className="mt-2 text-muted-foreground">Secure, no-login access via magic link.</p>
           {manuscript?.title && (
-            <p className="mt-4 text-sm text-slate-500">
-              <span className="font-semibold text-slate-700">Title:</span> {manuscript.title}
+            <p className="mt-4 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Title:</span> {manuscript.title}
             </p>
           )}
         </header>
 
         {(latestRevision?.editor_comment || latestRevision?.response_letter) && (
-          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-900">Revision Context</h2>
-            <p className="mt-1 text-sm text-slate-500">
+          <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-foreground">Revision Context</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               If you are re-reviewing a revised manuscript, the editor request and author response are shown below.
             </p>
 
@@ -219,15 +219,15 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
                 <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
                   Editor Request{latestRevision?.decision_type ? ` (${String(latestRevision.decision_type)})` : ''}
                 </div>
-                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{latestRevision.editor_comment}</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">{latestRevision.editor_comment}</div>
               </div>
             ) : null}
 
             {latestRevision?.response_letter ? (
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">Author Response</div>
+              <div className="mt-4 rounded-lg border border-border bg-muted/40 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-foreground">Author Response</div>
                 <div
-                  className="mt-2 prose prose-sm max-w-none text-slate-700 prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
+                  className="mt-2 prose prose-sm max-w-none text-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
                   dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
                 />
               </div>
@@ -236,15 +236,15 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
         )}
 
         {attachmentUrl ? (
-          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Your Attachment</h2>
-                <p className="mt-1 text-sm text-slate-500">Only you and Editors can access this file.</p>
+                <h2 className="text-base font-semibold text-foreground">Your Attachment</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Only you and Editors can access this file.</p>
               </div>
               <button
                 onClick={() => window.open(attachmentUrl, '_blank')}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                className="rounded-md border border-border/80 bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted/40"
               >
                 Download
               </button>
@@ -253,17 +253,17 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <section className="lg:col-span-2 rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
-            <div className="border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Manuscript PDF</h2>
+          <section className="lg:col-span-2 rounded-lg bg-card shadow-sm ring-1 ring-border">
+            <div className="border-b border-border px-6 py-4">
+              <h2 className="text-lg font-semibold text-foreground">Manuscript PDF</h2>
             </div>
             <div className="p-2">
               {pdfUrl ? (
-                <div className="w-full rounded-md border border-slate-200 bg-slate-50 h-[calc(100vh-260px)] min-h-[800px]">
+                <div className="w-full rounded-md border border-border bg-muted/40 h-[calc(100vh-260px)] min-h-[800px]">
                   <iframe title="PDF Preview" src={pdfUrl} className="h-full w-full rounded-md" />
                 </div>
               ) : (
-                <div className="flex h-[400px] items-center justify-center text-sm text-slate-500">
+                <div className="flex h-[400px] items-center justify-center text-sm text-muted-foreground">
                   PDF preview is not available.
                 </div>
               )}

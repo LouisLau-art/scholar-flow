@@ -479,14 +479,14 @@ export default function SubmissionForm() {
   return (
     <div className="space-y-8">
       <div className="mb-4">
-        <Link href="/" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-900 transition-colors">
+        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
         </Link>
       </div>
 
       {/* 文件上传区域 */}
       <div className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
-        file ? 'border-blue-500 bg-blue-50/50' : 'border-slate-300 hover:border-blue-500'
+        file ? 'border-primary bg-primary/10' : 'border-border/80 hover:border-primary'
       }`}>
         <input
           type="file"
@@ -496,29 +496,29 @@ export default function SubmissionForm() {
           disabled={isUploading}
           data-testid="submission-file"
         />
-        <Upload className={`mb-4 h-12 w-12 ${file ? 'text-blue-500' : 'text-slate-400'}`} />
-        <p className="text-lg font-medium text-slate-700">
+        <Upload className={`mb-4 h-12 w-12 ${file ? 'text-primary' : 'text-muted-foreground'}`} />
+        <p className="text-lg font-medium text-foreground">
           {file ? file.name : 'Drag and drop your PDF here'}
         </p>
-        {isUploading && <Loader2 className="mt-2 h-6 w-6 animate-spin text-blue-600" />}
+        {isUploading && <Loader2 className="mt-2 h-6 w-6 animate-spin text-primary" />}
       </div>
 
       {/* Cover Letter 上传区域（可选） */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <label className="block text-sm font-semibold text-slate-900 mb-2">Cover Letter (Optional)</label>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <label className="block text-sm font-semibold text-foreground mb-2">Cover Letter (Optional)</label>
         <input
           type="file"
           accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleCoverLetterUpload}
           disabled={isUploadingCoverLetter}
           data-testid="submission-cover-letter-file"
-          className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+          className="block w-full rounded-md border border-border/80 bg-card px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1 file:text-sm file:font-medium file:text-foreground hover:file:bg-muted/70"
         />
-        <div className="mt-2 text-xs text-slate-500">
+        <div className="mt-2 text-xs text-muted-foreground">
           Accepted formats: `.pdf`, `.doc`, `.docx`.
         </div>
         {isUploadingCoverLetter && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs text-blue-600">
+          <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Uploading cover letter...
           </div>
@@ -538,7 +538,7 @@ export default function SubmissionForm() {
       {/* 元数据展示/编辑区域 */}
       <div className="grid grid-cols-1 gap-6">
         <div>
-          <label className="mb-2 block text-sm font-semibold text-slate-900">Target Journal</label>
+          <label className="mb-2 block text-sm font-semibold text-foreground">Target Journal</label>
           <Select
             value={journalId}
             onValueChange={(value) => {
@@ -548,7 +548,7 @@ export default function SubmissionForm() {
             disabled={isLoadingJournals || journals.length === 0}
           >
             <SelectTrigger
-              className="w-full border-slate-300 text-slate-900"
+              className="w-full border-border/80 text-foreground"
               data-testid="submission-journal-select"
               onBlur={() => setTouched((prev) => ({ ...prev, journal: true }))}
             >
@@ -588,7 +588,7 @@ export default function SubmissionForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-2">Manuscript Title</label>
+          <label className="block text-sm font-semibold text-foreground mb-2">Manuscript Title</label>
           <input
             type="text"
             value={metadata.title}
@@ -597,7 +597,7 @@ export default function SubmissionForm() {
               if (!touched.title) setTouched(prev => ({ ...prev, title: true }))
             }}
             onBlur={() => setTouched(prev => ({ ...prev, title: true }))}
-            className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none"
             placeholder="Parsed title will appear here..."
             data-testid="submission-title"
           />
@@ -609,7 +609,7 @@ export default function SubmissionForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-2">Abstract</label>
+          <label className="block text-sm font-semibold text-foreground mb-2">Abstract</label>
           <textarea
             rows={6}
             value={metadata.abstract}
@@ -618,7 +618,7 @@ export default function SubmissionForm() {
               if (!touched.abstract) setTouched(prev => ({ ...prev, abstract: true }))
             }}
             onBlur={() => setTouched(prev => ({ ...prev, abstract: true }))}
-            className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none"
             placeholder="Parsed abstract will appear here..."
             data-testid="submission-abstract"
           />
@@ -630,7 +630,7 @@ export default function SubmissionForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-2">Dataset URL (Optional)</label>
+          <label className="block text-sm font-semibold text-foreground mb-2">Dataset URL (Optional)</label>
           <input
             type="url"
             value={datasetUrl}
@@ -639,7 +639,7 @@ export default function SubmissionForm() {
               if (!touched.datasetUrl) setTouched(prev => ({ ...prev, datasetUrl: true }))
             }}
             onBlur={() => setTouched(prev => ({ ...prev, datasetUrl: true }))}
-            className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none"
             placeholder="https://example.com/dataset"
             data-testid="submission-dataset-url"
           />
@@ -651,7 +651,7 @@ export default function SubmissionForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-2">Source Code URL (Optional)</label>
+          <label className="block text-sm font-semibold text-foreground mb-2">Source Code URL (Optional)</label>
           <input
             type="url"
             value={sourceCodeUrl}
@@ -660,7 +660,7 @@ export default function SubmissionForm() {
               if (!touched.sourceCodeUrl) setTouched(prev => ({ ...prev, sourceCodeUrl: true }))
             }}
             onBlur={() => setTouched(prev => ({ ...prev, sourceCodeUrl: true }))}
-            className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none"
             placeholder="https://github.com/org/repo"
             data-testid="submission-source-url"
           />
@@ -699,18 +699,18 @@ export default function SubmissionForm() {
             isSubmitting ||
             !user
           }
-          className="w-full rounded-md bg-slate-900 py-3 text-white font-semibold shadow-md hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          className="w-full rounded-md bg-foreground py-3 text-white font-semibold shadow-md hover:bg-foreground/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           data-testid="submission-finalize"
         >
           {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
         </button>
         {user && (!fileValid || !titleValid || !abstractValid || !journalValid || !datasetUrlValid || !sourceCodeUrlValid) && (
-          <p className="text-xs text-slate-500 text-center" data-testid="submission-validation-hint">
+          <p className="text-xs text-muted-foreground text-center" data-testid="submission-validation-hint">
             Upload a PDF, choose a journal, add a title (at least 5 chars) and abstract (at least 30 chars). Optional URLs must start with http(s).
           </p>
         )}
         {user && (
-          <p className="text-xs text-slate-500 text-center" data-testid="submission-user">
+          <p className="text-xs text-muted-foreground text-center" data-testid="submission-user">
             Logged in as: {user.email}
           </p>
         )}

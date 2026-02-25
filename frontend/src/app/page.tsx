@@ -136,33 +136,33 @@ function NewsCard({
     <Link
       href={item.href}
       className={cn(
-        'group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg',
+        'group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg',
         className
       )}
     >
       <div
-        className={cn('bg-slate-300 bg-cover bg-center', featured ? 'h-64 sm:h-72' : 'h-44')}
+        className={cn('bg-muted bg-cover bg-center', featured ? 'h-64 sm:h-72' : 'h-44')}
         style={{
           backgroundImage: `linear-gradient(180deg, rgba(2, 6, 23, 0.12), rgba(2, 6, 23, 0.55)), url(${item.image})`,
         }}
       />
       <div className={cn('p-4', featured && 'p-6')}>
-        <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">{item.category}</p>
+        <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{item.category}</p>
         <h3
           className={cn(
             playfair.className,
-            'font-semibold leading-snug text-slate-900 transition-colors group-hover:text-blue-700',
+            'font-semibold leading-snug text-foreground transition-colors group-hover:text-primary',
             featured ? 'text-2xl' : 'line-clamp-2 text-lg'
           )}
         >
           {item.title}
         </h3>
-        <p className={cn('mt-3 text-slate-600', featured ? 'line-clamp-3 text-base' : 'line-clamp-2 text-sm')}>
+        <p className={cn('mt-3 text-muted-foreground', featured ? 'line-clamp-3 text-base' : 'line-clamp-2 text-sm')}>
           {item.summary}
         </p>
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
           <span>{item.dateLabel}</span>
-          <span className="inline-flex items-center gap-1 font-semibold text-blue-700">
+          <span className="inline-flex items-center gap-1 font-semibold text-primary">
             Read
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </span>
@@ -198,11 +198,11 @@ export default function HomePage() {
   const secondaryNews = newsItems.slice(1)
 
   return (
-    <div className={`min-h-screen bg-slate-100 text-slate-900 ${manrope.className} flex flex-col`}>
+    <div className={`min-h-screen bg-muted/40 text-foreground ${manrope.className} flex flex-col`}>
       <SiteHeader />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-slate-900 text-white">
+        <section className="relative overflow-hidden bg-foreground text-white">
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{
@@ -212,26 +212,26 @@ export default function HomePage() {
           />
           <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6 sm:pt-28 lg:px-8">
             <div className="max-w-2xl">
-              <p className="mb-4 text-xs uppercase tracking-[0.24em] text-blue-100">Frontiers-style academic portal</p>
+              <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
               <h1 className={cn(playfair.className, 'text-4xl font-semibold tracking-tight sm:text-5xl')}>
                 ScholarFlow Journal
               </h1>
               <p className={cn(playfair.className, 'mt-4 text-3xl font-semibold leading-tight text-white sm:text-5xl')}>
                 Where scientists empower society
               </p>
-              <p className="mt-5 max-w-xl text-base text-slate-100 sm:text-lg">
+              <p className="mt-5 max-w-xl text-base text-background/80 sm:text-lg">
                 Creating trusted workflows for healthy science and faster publication outcomes.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/submit"
-                  className="rounded-full bg-blue-600 px-7 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-500"
+                  className="rounded-full bg-primary px-7 py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90"
                 >
                   Submit Manuscript
                 </Link>
                 <Link
                   href="/search?status=published"
-                  className="rounded-full border border-white/40 px-7 py-3 text-sm font-semibold text-white transition-all hover:border-white hover:bg-white/10"
+                  className="rounded-full border border-white/40 px-7 py-3 text-sm font-semibold text-white transition-all hover:border-white hover:bg-card/10"
                 >
                   Explore Latest Articles
                 </Link>
@@ -243,7 +243,7 @@ export default function HomePage() {
                   <p className={cn(playfair.className, 'text-2xl font-semibold text-white sm:text-3xl')}>
                     {item.value}
                   </p>
-                  <p className="mt-2 text-sm uppercase tracking-[0.14em] text-blue-100">{item.label}</p>
+                  <p className="mt-2 text-sm uppercase tracking-[0.14em] text-primary-foreground/80">{item.label}</p>
                 </div>
               ))}
             </div>
@@ -252,13 +252,13 @@ export default function HomePage() {
 
         <section className="relative -mt-8 z-10">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-300/30 sm:p-6">
+            <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-muted/30 sm:p-6">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                 {actionCards.map((card) => (
                   <Link
                     key={card.title}
                     href={card.href}
-                    className="group rounded-2xl border border-slate-200 bg-white p-3 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                    className="group rounded-2xl border border-border bg-card p-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                   >
                     <div
                       className="h-24 rounded-xl bg-cover bg-center"
@@ -266,10 +266,10 @@ export default function HomePage() {
                         backgroundImage: `linear-gradient(180deg, rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.35)), url(${card.image})`,
                       }}
                     />
-                    <p className="mt-4 text-[10px] uppercase tracking-[0.18em] text-slate-500">{card.badge}</p>
-                    <h3 className="mt-2 text-lg font-semibold text-slate-900 transition-colors group-hover:text-blue-700">{card.title}</h3>
-                    <p className="mt-2 text-sm text-slate-600">{card.description}</p>
-                    <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">
+                    <p className="mt-4 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{card.badge}</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-primary">{card.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{card.description}</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
                       Go
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                     </span>
@@ -284,12 +284,12 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h2 className={cn(playfair.className, 'text-4xl font-semibold text-slate-900')}>
+                <h2 className={cn(playfair.className, 'text-4xl font-semibold text-foreground')}>
                   News
                 </h2>
-                <p className="mt-2 text-base text-slate-600">Latest Articles from ScholarFlow Journal</p>
+                <p className="mt-2 text-base text-muted-foreground">Latest Articles from ScholarFlow Journal</p>
               </div>
-              <Link href="/search?status=published" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-600">
+              <Link href="/search?status=published" className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary">
                 See more news
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -298,7 +298,7 @@ export default function HomePage() {
             {isLoading ? (
               <div className="grid gap-4 lg:grid-cols-3">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className={cn('animate-pulse rounded-2xl bg-slate-200', i === 1 ? 'h-[380px] lg:col-span-2' : 'h-[280px]')} />
+                  <div key={i} className={cn('animate-pulse rounded-2xl bg-muted/70', i === 1 ? 'h-[380px] lg:col-span-2' : 'h-[280px]')} />
                 ))}
               </div>
             ) : (
@@ -313,7 +313,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+                  <p className="rounded-2xl border border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground">
                     Latest Articles will appear here soon.
                   </p>
                 )}
@@ -329,9 +329,9 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mt-4 bg-blue-700 py-16 text-white">
+        <section className="mt-4 bg-primary py-16 text-white">
           <div className="mx-auto max-w-5xl px-4 text-center sm:px-6">
-            <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Newsletter</p>
+            <p className="text-xs uppercase tracking-[0.22em] text-primary-foreground/80">Newsletter</p>
             <h3 className={cn(playfair.className, 'mt-3 text-3xl font-semibold')}>
               Get the latest research updates, subscribe to our newsletter
             </h3>
@@ -339,21 +339,21 @@ export default function HomePage() {
               <input
                 type="text"
                 placeholder="Name"
-                className="h-11 rounded-md border border-white/35 bg-white/10 px-4 text-sm text-white placeholder:text-blue-100 focus:border-white focus:outline-none"
+                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
               />
               <input
                 type="text"
                 placeholder="Last name"
-                className="h-11 rounded-md border border-white/35 bg-white/10 px-4 text-sm text-white placeholder:text-blue-100 focus:border-white focus:outline-none"
+                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
               />
               <input
                 type="email"
                 placeholder="Email"
-                className="h-11 rounded-md border border-white/35 bg-white/10 px-4 text-sm text-white placeholder:text-blue-100 focus:border-white focus:outline-none"
+                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
               />
               <button
                 type="button"
-                className="mx-auto mt-2 inline-flex h-10 items-center justify-center rounded-full bg-white px-8 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 md:col-span-3"
+                className="mx-auto mt-2 inline-flex h-10 items-center justify-center rounded-full bg-card px-8 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 md:col-span-3"
               >
                 Subscribe
               </button>
