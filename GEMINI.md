@@ -327,6 +327,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 
 ## 近期关键修复快照（2026-02-26）
 - **后端大文件重构（2026-02-26）**：`EditorService` 财务能力已拆分到 `backend/app/services/editor_service_finance.py`（`editor_service.py` 从 1009 行降到 725 行）；`reviews.py` 公共能力抽到 `backend/app/api/v1/reviews_common.py`（主文件从 760 行降到 654 行），并保留原函数包装以兼容现有 monkeypatch 测试。
+- **Decision Service 拆分（2026-02-26）**：`backend/app/services/decision_service.py` 已按职责拆分为 `decision_service_letters.py`（报告/草稿）与 `decision_service_transitions.py`（最终流转/通知），主文件从 896 行降到 518 行；`test_decision_*` 相关回归 `18 passed`。
+- **Production Workflow 拆分（2026-02-26）**：`backend/app/services/production_workspace_service_workflow.py` 已按职责拆分为 `workflow_common.py`（常量/工具）、`workflow_cycle.py`（cycle 管理/上传/核准）、`workflow_author.py`（作者校对），主文件从 982 行降到 60 行；production/proofreading 回归 `20 passed`。
 - **Editor 性能体检与索引补齐（2026-02-26）**：完成两轮 API 基线复采（`baseline-2026-02-26-post-backend-hardening-*`、`baseline-2026-02-26-post-index-push-*`），并在云端执行缺失 migration `20260224173000`；当前结论是数据库索引已补齐，编辑链路瓶颈更偏向跨区域网络/冷启动与后端聚合耗时。
 - **后端最佳实践加固（2026-02-26）**：`GET /api/v1/manuscripts` 改为“必须认证 + 仅返回当前用户稿件”；`POST /api/v1/manuscripts` 与 `POST /api/v1/reviews/submit` 的异常语义改为真实 5xx（不再失败返回 200）；`GET /api/v1/stats/editor` 新增编辑角色门禁，避免普通用户读取编辑面聚合数据。
 - **Analytics/Finance/Reviewer API 收口（2026-02-26）**：`/api/v1/analytics/{summary,trends,geo,export}` 全部接入 journal-scope 参数下传（ME/EIC 默认按 scope 裁剪）；Finance 列表改为数据库侧状态筛选 + 分页/计数（移除固定 5000 行拉取）；`/api/v1/editor/available-reviewers` 增加 `page/page_size/q` 并在无 `range/offset` 的测试桩环境自动降级兼容。
