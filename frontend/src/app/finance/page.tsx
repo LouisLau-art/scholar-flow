@@ -13,6 +13,17 @@ import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
 import type { FinanceInvoiceListMeta, FinanceInvoiceRow, FinanceStatusFilter } from '@/types/finance'
 import { FinanceInvoicesTable } from '@/components/finance/FinanceInvoicesTable'
+import { Input } from '@/components/ui/input'
+
+const FINANCE_INTERNAL_ROLES = new Set([
+  'admin',
+  'managing_editor',
+  'assistant_editor',
+  'production_editor',
+  'editor_in_chief',
+  // 兼容 legacy 角色值
+  'editor',
+])
 
 export default function FinanceDashboard() {
   const router = useRouter()
@@ -23,6 +34,7 @@ export default function FinanceDashboard() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [status, setStatus] = useState<FinanceStatusFilter>('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [forbidden, setForbidden] = useState(false)
   const [internalReady, setInternalReady] = useState(false)
@@ -38,13 +50,13 @@ export default function FinanceDashboard() {
   const query = useMemo(
     () => ({
       status,
-      q: search.trim() || undefined,
+      q: debouncedSearch.trim() || undefined,
       page: 1,
       pageSize: 50,
       sortBy: 'updated_at' as const,
       sortOrder: 'desc' as const,
     }),
-    [search, status]
+    [debouncedSearch, status]
   )
 
   async function ensureInternalRole() {
@@ -67,7 +79,7 @@ export default function FinanceDashboard() {
       }
       const profileJson = await profileRes.json().catch(() => null)
       const roles = (profileJson?.data?.roles || []) as string[]
-      const isInternal = roles.includes('editor') || roles.includes('admin')
+      const isInternal = roles.some((role) => FINANCE_INTERNAL_ROLES.has(String(role || '').toLowerCase()))
       setForbidden(!isInternal)
       if (!isInternal) {
         setError('Finance is restricted to internal editor/admin roles.')
@@ -152,6 +164,13 @@ export default function FinanceDashboard() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
     if (!internalReady || forbidden) return
     void loadInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,12 +252,12 @@ export default function FinanceDashboard() {
                   <SelectItem value="waived">Waived</SelectItem>
                 </SelectContent>
               </Select>
-              <input
+              <Input
                 aria-label="Finance search input"
                 placeholder="Search invoice number or manuscript title"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-sm"
+                className="h-9 w-full sm:max-w-sm"
               />
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" onClick={() => void loadInvoices()} disabled={loading}>
