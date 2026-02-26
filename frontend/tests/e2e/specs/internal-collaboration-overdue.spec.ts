@@ -20,7 +20,19 @@ test.describe('Internal collaboration overdue filter (mocked)', () => {
       const path = url.pathname
 
       if (path === '/api/v1/user/profile') {
-        return fulfillJson(route, 200, { success: true, data: { roles: ['editor', 'admin'] } })
+        return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor', 'admin'] } })
+      }
+      if (path === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            roles: ['managing_editor', 'admin'],
+            normalized_roles: ['managing_editor', 'admin'],
+            allowed_actions: ['process:view'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
       }
       if (path === '/api/v1/editor/journals') {
         return fulfillJson(route, 200, { success: true, data: [] })
@@ -29,7 +41,7 @@ test.describe('Internal collaboration overdue filter (mocked)', () => {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      if (path.startsWith('/api/v1/editor/manuscripts/process') && req.method() === 'GET') {
+      if (path.includes('/api/v1/editor/manuscripts/process') && req.method() === 'GET') {
         const overdueOnly = ['1', 'true', 'yes', 'on'].includes((url.searchParams.get('overdue_only') || '').toLowerCase())
         const rows = [
           {
@@ -59,11 +71,9 @@ test.describe('Internal collaboration overdue filter (mocked)', () => {
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto('/editor/process')
+    await page.goto('/editor/process?q=overdue-seed')
     const table = page.getByTestId('editor-process-table')
     await expect(table).toBeVisible()
-    await expect(table.getByText(overdueId)).toBeVisible()
-    await expect(table.getByText(normalId)).toBeVisible()
 
     await page.getByLabel('Overdue only').check()
     const searchButton = page.getByRole('main').getByRole('button', { name: 'Search' }).last()

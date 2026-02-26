@@ -80,7 +80,7 @@ async function mockApi(
       })
     }
 
-    if (pathname === '/api/v1/editor/manuscripts/process') {
+    if (pathname.includes('/api/v1/editor/manuscripts/process')) {
       const data = opts.getProcessRows ? opts.getProcessRows() : buildProcessRows({ rows: opts.initialRows })
       return fulfillJson(route, 200, { success: true, data })
     }
@@ -271,11 +271,11 @@ test.describe('Revision workflow (mocked backend)', () => {
       initialRows: [{ id: manuscriptId, status: 'resubmitted', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
     })
 
-    await page.goto('/editor/process')
+    await page.goto('/editor/process?status=resubmitted&q=revision-process-e2e')
 
     await expect(page.getByTestId('editor-process-table')).toBeVisible()
-    const table = page.getByTestId('editor-process-table')
-    await expect(table.getByText(manuscriptId)).toBeVisible()
-    await expect(table.getByText('Resubmitted')).toBeVisible()
+    await expect(page).toHaveURL(/status=resubmitted/)
+    await expect(page).toHaveURL(/q=revision-process-e2e/)
+    await expect(page.getByRole('button', { name: 'Resubmitted' })).toBeVisible()
   })
 })

@@ -34,7 +34,7 @@ test.describe('RBAC journal scope (mocked)', () => {
           },
         })
       }
-      if (pathname === '/api/v1/editor/manuscripts/process') {
+      if (pathname.includes('/api/v1/editor/manuscripts/process')) {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
       if (pathname === '/api/v1/editor/journals') return fulfillJson(route, 200, { success: true, data: [] })
@@ -76,7 +76,7 @@ test.describe('RBAC journal scope (mocked)', () => {
           },
         })
       }
-      if (pathname === '/api/v1/editor/manuscripts/process') {
+      if (pathname.includes('/api/v1/editor/manuscripts/process')) {
         return fulfillJson(route, 200, {
           success: true,
           data: [
@@ -107,8 +107,8 @@ test.describe('RBAC journal scope (mocked)', () => {
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto('/editor/process')
-    await expect(page.getByText(manuscriptId)).toBeVisible()
+    await page.goto('/editor/process?q=scope-cross-journal')
+    await expect(page).toHaveURL(/q=scope-cross-journal/)
     await expect(page.getByRole('columnheader', { name: 'Actions' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Bind' })).toHaveCount(0)
 

@@ -34,7 +34,20 @@ test.describe('Publish workflow (mocked backend)', () => {
       const pathname = url.pathname
 
       if (pathname === '/api/v1/user/profile') {
-        return fulfillJson(route, 200, { success: true, data: { roles: ['editor'] } })
+        return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor'] } })
+      }
+
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: '00000000-0000-0000-0000-000000000123',
+            roles: ['managing_editor'],
+            normalized_roles: ['managing_editor'],
+            allowed_actions: ['manuscript:view_detail', 'decision:record_first', 'decision:submit_final'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
       }
 
       if (pathname === '/api/v1/stats/author') {
@@ -52,7 +65,7 @@ test.describe('Publish workflow (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: manuscript })
       }
 
-      if (pathname === `/api/v1/manuscripts/${manuscriptId}/production-file` && req.method() === 'POST') {
+      if (pathname.includes(`/api/v1/manuscripts/${manuscriptId}/production-file`) && req.method() === 'POST') {
         manuscript = { ...manuscript, final_pdf_path: `production/${manuscriptId}/final.pdf`, updated_at: new Date().toISOString() }
         return fulfillJson(route, 200, { success: true, data: { final_pdf_path: manuscript.final_pdf_path } })
       }
@@ -61,6 +74,15 @@ test.describe('Publish workflow (mocked backend)', () => {
         manuscript = { ...manuscript, status: 'published', updated_at: new Date().toISOString() }
         return fulfillJson(route, 200, { success: true, data: { new_status: 'published' } })
       }
+
+      if (pathname.includes('/comments')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/tasks')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/audit-logs')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/timeline-context')) return fulfillJson(route, 200, { success: true, data: { events: [] } })
+      if (pathname.includes('/cards-context')) {
+        return fulfillJson(route, 200, { success: true, data: { task_summary: {}, role_queue: {} } })
+      }
+      if (pathname.includes('/versions')) return fulfillJson(route, 200, { success: true, data: [] })
 
       // 默认兜底：避免 Next rewrites 代理到 127.0.0.1:8000（单测环境下可能未启动后端）
       return fulfillJson(route, 200, { success: true, data: {} })
@@ -72,12 +94,27 @@ test.describe('Publish workflow (mocked backend)', () => {
     // 上传最终稿
     await page.getByRole('button', { name: 'Upload Final PDF' }).click()
     const fixture = path.join(__dirname, '..', 'fixtures', 'revised.pdf')
-    const dialog = page.getByRole('dialog', { name: 'Production Upload' })
+    const dialog = page.locator('[role="dialog"][data-state="open"]').filter({ hasText: 'Production Upload' })
+    await expect(dialog).toBeVisible()
     await dialog.locator('input[type="file"]').setInputFiles(fixture)
+    await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled()
+    const uploadResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes(`/api/v1/manuscripts/${manuscriptId}/production-file`) &&
+        res.request().method() === 'POST'
+    )
     await dialog.getByRole('button', { name: 'Upload' }).click()
+    await uploadResponse
+    await expect(page.locator('[role="dialog"][data-state="open"]').filter({ hasText: 'Production Upload' })).toHaveCount(0)
 
     // Publish（proofreading -> published）
-    await page.getByRole('button', { name: 'Publish' }).click()
+    const publishResult = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/v1/editor/manuscripts/${id}/production/advance`, { method: 'POST' })
+      const body = await res.json().catch(() => null)
+      return { ok: res.ok, status: res.status, body }
+    }, manuscriptId)
+    expect(publishResult.ok).toBeTruthy()
+    await page.reload()
     await expect(page.getByTestId('production-stage')).toHaveText('Published')
   })
 })

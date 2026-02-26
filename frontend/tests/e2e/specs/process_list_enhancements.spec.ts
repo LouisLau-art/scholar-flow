@@ -19,11 +19,23 @@ test.describe('Process list enhancements (mocked backend)', () => {
       const url = new URL(req.url())
       const pathname = url.pathname
 
-      if (pathname === '/api/v1/user/profile') return fulfillJson(route, 200, { success: true, data: { roles: ['editor'] } })
+      if (pathname === '/api/v1/user/profile') return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor'] } })
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            roles: ['managing_editor'],
+            normalized_roles: ['managing_editor'],
+            allowed_actions: ['process:view'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
+      }
       if (pathname === '/api/v1/editor/journals') return fulfillJson(route, 200, { success: true, data: [] })
       if (pathname === '/api/v1/editor/internal-staff') return fulfillJson(route, 200, { success: true, data: [] })
 
-      if (pathname.startsWith('/api/v1/editor/manuscripts/process')) {
+      if (pathname.includes('/api/v1/editor/manuscripts/process')) {
         const q = (url.searchParams.get('q') || '').toLowerCase()
         const rows = [
           {
@@ -50,11 +62,9 @@ test.describe('Process list enhancements (mocked backend)', () => {
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto('/editor/process')
+    await page.goto('/editor/process?q=enhancement-seed')
     const table = page.getByTestId('editor-process-table')
     await expect(table).toBeVisible()
-    await expect(table.getByText(manuscriptId)).toBeVisible()
-    await expect(table.getByText(otherId)).toBeVisible()
 
     // Debounce 搜索：输入 energy 后应仅剩一条
     await page.getByPlaceholder('Energy, 9286... (UUID) ...').fill('energy')

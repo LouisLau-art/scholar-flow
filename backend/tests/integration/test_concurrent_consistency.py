@@ -18,7 +18,7 @@ def _mock_supabase_with_data(data=None):
     return mock
 
 @pytest.mark.asyncio
-async def test_concurrent_consistent_list_responses(client: AsyncClient):
+async def test_concurrent_consistent_list_responses(client: AsyncClient, auth_token: str):
     """验证并发读取列表保持一致"""
     dataset = [
         {"id": "m-1", "title": "Paper 1", "status": "pre_check"},
@@ -29,7 +29,10 @@ async def test_concurrent_consistent_list_responses(client: AsyncClient):
     with patch("app.lib.api_client.supabase", mock), \
          patch("app.api.v1.manuscripts.supabase", mock):
         async def fetch():
-            return await client.get("/api/v1/manuscripts")
+            return await client.get(
+                "/api/v1/manuscripts",
+                headers={"Authorization": f"Bearer {auth_token}"},
+            )
 
         results = await asyncio.gather(*[fetch() for _ in range(5)])
 

@@ -45,7 +45,20 @@ test.describe('Production workflow (mocked backend)', () => {
       const pathname = url.pathname
 
       if (pathname === '/api/v1/user/profile') {
-        return fulfillJson(route, 200, { success: true, data: { roles: ['editor'] } })
+        return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor'] } })
+      }
+
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: '00000000-0000-0000-0000-000000000123',
+            roles: ['managing_editor'],
+            normalized_roles: ['managing_editor'],
+            allowed_actions: ['manuscript:view_detail', 'decision:record_first', 'decision:submit_final'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
       }
 
       if (pathname.startsWith('/api/v1/cms/menu')) {
@@ -77,7 +90,15 @@ test.describe('Production workflow (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      return route.fallback()
+      if (pathname.includes('/comments')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/tasks')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/audit-logs')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/timeline-context')) return fulfillJson(route, 200, { success: true, data: { events: [] } })
+      if (pathname.includes('/cards-context')) {
+        return fulfillJson(route, 200, { success: true, data: { task_summary: {}, role_queue: {} } })
+      }
+
+      return fulfillJson(route, 200, { success: true, data: {} })
     })
 
     await page.goto(`/editor/manuscript/${manuscriptId}`)
@@ -108,7 +129,20 @@ test.describe('Production workflow (mocked backend)', () => {
       const pathname = url.pathname
 
       if (pathname === '/api/v1/user/profile') {
-        return fulfillJson(route, 200, { success: true, data: { roles: ['editor'] } })
+        return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor'] } })
+      }
+
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: '00000000-0000-0000-0000-000000000123',
+            roles: ['managing_editor'],
+            normalized_roles: ['managing_editor'],
+            allowed_actions: ['manuscript:view_detail', 'decision:record_first', 'decision:submit_final'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
       }
 
       if (pathname.startsWith('/api/v1/cms/menu')) {
@@ -137,7 +171,15 @@ test.describe('Production workflow (mocked backend)', () => {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      return route.fallback()
+      if (pathname.includes('/comments')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/tasks')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/audit-logs')) return fulfillJson(route, 200, { success: true, data: [] })
+      if (pathname.includes('/timeline-context')) return fulfillJson(route, 200, { success: true, data: { events: [] } })
+      if (pathname.includes('/cards-context')) {
+        return fulfillJson(route, 200, { success: true, data: { task_summary: {}, role_queue: {} } })
+      }
+
+      return fulfillJson(route, 200, { success: true, data: {} })
     })
 
     await page.goto(`/editor/manuscript/${manuscriptId}`)

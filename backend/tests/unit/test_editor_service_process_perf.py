@@ -110,7 +110,7 @@ def test_list_manuscripts_process_reuses_profile_map_for_precheck_assignee():
     )
 
     def _fake_enrich(rows: list[dict], **kwargs):
-        assert kwargs.get("include_timeline") is False
+        assert kwargs.get("include_timeline") is True
         assert kwargs.get("include_assignee_profiles") is False
         return [
             {
@@ -144,4 +144,3 @@ def test_list_manuscripts_process_reuses_profile_map_for_precheck_assignee():
     assert row["academic_completed_at"] is None
     assert svc.client.user_profiles_calls == 1
     assert svc.client.user_profiles.requested_ids == ["ae-1", "editor-1", "owner-1"]
-

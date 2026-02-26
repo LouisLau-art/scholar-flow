@@ -26,6 +26,24 @@ test.describe('Pre-check workflow (mocked)', () => {
           data: { roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'] },
         })
       }
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'],
+            normalized_roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'],
+            allowed_actions: ['process:view', 'manuscript:view_detail', 'decision:record_first', 'decision:submit_final'],
+            journal_scope: { enforcement_enabled: false, allowed_journal_ids: [], is_admin: true },
+          },
+        })
+      }
+      if (pathname.startsWith('/api/v1/editor/internal-staff')) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: [{ id: 'owner-1', full_name: 'Owner One', email: 'owner@example.com', roles: ['owner'] }],
+        })
+      }
 
       if (pathname === '/api/v1/editor/assistant-editors') {
         return fulfillJson(route, 200, {
@@ -34,7 +52,7 @@ test.describe('Pre-check workflow (mocked)', () => {
         })
       }
 
-      if (pathname === '/api/v1/editor/intake' && req.method() === 'GET') {
+      if (pathname.startsWith('/api/v1/editor/intake') && req.method() === 'GET') {
         const data =
           stage === 'intake'
             ? [
@@ -62,7 +80,7 @@ test.describe('Pre-check workflow (mocked)', () => {
         })
       }
 
-      if (pathname === '/api/v1/editor/workspace' && req.method() === 'GET') {
+      if (pathname.startsWith('/api/v1/editor/workspace') && req.method() === 'GET') {
         const data =
           stage === 'technical'
             ? [
@@ -112,7 +130,7 @@ test.describe('Pre-check workflow (mocked)', () => {
         })
       }
 
-      if (pathname === '/api/v1/editor/academic' && req.method() === 'GET') {
+      if (pathname.startsWith('/api/v1/editor/academic') && req.method() === 'GET') {
         const data =
           stage === 'academic'
             ? [
@@ -148,6 +166,8 @@ test.describe('Pre-check workflow (mocked)', () => {
     // 1) ME Intake -> assign AE
     await page.goto('/editor/intake')
     await expect(page.getByRole('heading', { name: 'Managing Editor Intake Queue' })).toBeVisible()
+    await page.getByPlaceholder('搜索标题 / UUID / 作者 / 期刊').fill('precheck-e2e')
+    await page.getByRole('button', { name: '搜索' }).click()
     await expect(page.getByRole('button', { name: '通过并分配 AE' })).toBeVisible()
     await page.getByRole('button', { name: '通过并分配 AE' }).click()
     await expect(page.getByRole('heading', { name: 'Assign Assistant Editor' })).toBeVisible()
