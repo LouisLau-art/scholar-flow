@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { X, Search, Users, Check, UserPlus } from 'lucide-react'
+import { X, Search, Users, UserPlus } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { toast } from 'sonner'
 import { User } from '@/types/user'
@@ -9,30 +9,13 @@ import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/m
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-type InvitePolicyHit = {
-  code: 'cooldown' | 'conflict' | 'overdue_risk' | string
-  label?: string
-  severity?: 'error' | 'warning' | 'info' | string
-  blocking?: boolean
-  detail?: string
-}
-
-type InvitePolicy = {
-  can_assign?: boolean
-  allow_override?: boolean
-  cooldown_active?: boolean
-  conflict?: boolean
-  overdue_risk?: boolean
-  overdue_open_count?: number
-  cooldown_until?: string
-  hits?: InvitePolicyHit[]
-}
-
-type ReviewerWithPolicy = User & {
-  invite_policy?: InvitePolicy
-}
+import { ReviewerCandidateList } from '@/components/editor/reviewer-assign-modal/ReviewerCandidateList'
+import { AssignActionBar } from '@/components/editor/reviewer-assign-modal/AssignActionBar'
+import { useReviewerPolicy } from '@/components/editor/reviewer-assign-modal/useReviewerPolicy'
+import { OwnerBindingPanel } from '@/components/editor/reviewer-assign-modal/OwnerBindingPanel'
+import { ExistingReviewersPanel } from '@/components/editor/reviewer-assign-modal/ExistingReviewersPanel'
+import { AiRecommendationPanel } from '@/components/editor/reviewer-assign-modal/AiRecommendationPanel'
+import type { InvitePolicy, ReviewerWithPolicy } from '@/components/editor/reviewer-assign-modal/types'
 
 type AssignOverride = {
   reviewerId: string
@@ -456,14 +439,10 @@ export default function ReviewerAssignModal({
     [existingReviewers]
   )
 
-  const isReviewerBlocked = useCallback(
-    (reviewerId: string) => {
-      const policy = policyByReviewerId[reviewerId] || {}
-      if (policy.conflict) return true
-      return false
-    },
-    [policyByReviewerId]
-  )
+  const { isReviewerBlocked, reviewerNeedsOverride, getPolicyBadgeClass } = useReviewerPolicy({
+    policyByReviewerId,
+    assignedIds,
+  })
 
   const toggleReviewer = (reviewerId: string) => {
     if (assignedIds.includes(reviewerId)) return
@@ -546,18 +525,6 @@ export default function ReviewerAssignModal({
     }
   }
 
-  const getPolicyBadgeClass = (hit: InvitePolicyHit) => {
-    const severity = String(hit.severity || '').toLowerCase()
-    if (severity === 'error') return 'bg-rose-100 text-rose-700 border-rose-200'
-    if (severity === 'warning') return 'bg-amber-100 text-amber-700 border-amber-200'
-    return 'bg-sky-100 text-sky-700 border-sky-200'
-  }
-
-  const reviewerNeedsOverride = (reviewerId: string) => {
-    const policy = policyByReviewerId[reviewerId] || {}
-    return Boolean(policy.cooldown_active && policy.allow_override)
-  }
-
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -587,162 +554,32 @@ export default function ReviewerAssignModal({
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
-            {/* Feature 023: Owner Binding（KPI 归属人） */}
-            <div className="mb-6 rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-foreground">Internal Owner / Invited By</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    在初审阶段绑定负责人（仅 editor/admin），修改后自动保存并提示。
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {savingOwner ? 'Saving…' : loadingOwner ? 'Loading…' : ''}
-                </div>
-              </div>
+            <OwnerBindingPanel
+              loadingOwner={loadingOwner}
+              savingOwner={savingOwner}
+              ownerId={ownerId}
+              ownerSearch={ownerSearch}
+              filteredInternalStaff={filteredInternalStaff}
+              currentOwnerLabel={currentOwnerLabel}
+              onOwnerSearchChange={setOwnerSearch}
+              onOwnerChange={handleOwnerChange}
+            />
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label htmlFor="reviewer-owner-search" className="sr-only">
-                  Search internal staff
-                </label>
-                <input
-                  id="reviewer-owner-search"
-                  type="text"
-                  placeholder="Search internal staff..."
-                  value={ownerSearch}
-                  onChange={(e) => setOwnerSearch(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary/30 text-sm"
-                />
-                <Select
-                  value={ownerId || '__unassigned'}
-                  onValueChange={handleOwnerChange}
-                  disabled={savingOwner || loadingOwner}
-                >
-                  <SelectTrigger className="w-full" data-testid="owner-select">
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned" disabled>
-                      Unassigned
-                    </SelectItem>
-                    {filteredInternalStaff.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {(u.full_name || u.email || u.id) as string}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <ExistingReviewersPanel
+              existingReviewers={existingReviewers}
+              onRequestRemove={(reviewer) => setPendingRemove(reviewer)}
+            />
 
-              <div className="mt-2 text-xs text-muted-foreground">
-                Current: <span className="font-medium text-foreground">{currentOwnerLabel}</span>
-              </div>
-              {!ownerId && (
-                <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  未绑定 Owner：分配时后端会自动绑定为当前操作人（建议你先手动确认归属人）。
-                </div>
-              )}
-            </div>
-
-            {/* Existing Reviewers */}
-            {existingReviewers.length > 0 && (
-              <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
-                <h3 className="font-semibold text-foreground mb-3">Current Reviewers ({existingReviewers.length})</h3>
-                <div className="space-y-2">
-                  {existingReviewers.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between bg-card p-3 rounded border border-border shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
-                          {r.reviewer_name?.charAt(0) || '?'}
-                        </div>
-                        <div>
-                          <div className="font-medium text-foreground text-sm">{r.reviewer_name}</div>
-                          <div className="text-xs text-muted-foreground">{r.reviewer_email}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                          r.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {r.status}
-                        </span>
-                        <button
-                          onClick={() => setPendingRemove(r)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                          data-testid={`reviewer-remove-${r.id}`}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* AI Analysis Section */}
-            <div className="mb-6 rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-foreground">AI Recommendations</div>
-                <button
-                  type="button"
-                  onClick={handleAiAnalyze}
-                  disabled={aiLoading || !manuscriptId}
-                  className="px-3 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
-                  data-testid="ai-analyze"
-                >
-                  {aiLoading ? 'Analyzing...' : 'AI Analysis'}
-                </button>
-              </div>
-
-              {aiLoading && (
-                <div className="mt-3 flex items-center text-sm text-muted-foreground">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  <span className="ml-2">Running local embedding match...</span>
-                </div>
-              )}
-
-              {!aiLoading && aiMessage && (
-                <div className="mt-3 text-sm text-muted-foreground" data-testid="ai-message">
-                  {aiMessage}
-                </div>
-              )}
-
-              {!aiLoading && aiRecommendations.length > 0 && (
-                <div className="mt-4 space-y-2" data-testid="ai-recommendations">
-                  {aiRecommendations.map((rec) => {
-                    const isSelected = selectedReviewers.includes(rec.reviewer_id)
-                    const blocked = isReviewerBlocked(rec.reviewer_id)
-                    return (
-                      <div key={rec.reviewer_id} className="flex items-center justify-between rounded-md border border-border p-3 hover:bg-muted/40">
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground truncate">{rec.name || rec.email}</div>
-                          <div className="text-xs text-muted-foreground truncate">{rec.email}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Match Score: {(rec.match_score * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleInviteFromAi(rec.reviewer_id)}
-                          disabled={blocked}
-                          className={`ml-3 px-3 py-2 text-sm font-semibold rounded-md transition-colors ${
-                            blocked
-                              ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                              : isSelected
-                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                : 'bg-primary text-white hover:bg-primary/90'
-                          }`}
-                          data-testid={`ai-invite-${rec.reviewer_id}`}
-                        >
-                          {blocked ? 'Blocked' : isSelected ? 'Selected' : 'Select'}
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <AiRecommendationPanel
+              manuscriptId={manuscriptId}
+              aiLoading={aiLoading}
+              aiMessage={aiMessage}
+              aiRecommendations={aiRecommendations}
+              selectedReviewers={selectedReviewers}
+              onAnalyze={handleAiAnalyze}
+              onInvite={handleInviteFromAi}
+              isReviewerBlocked={isReviewerBlocked}
+            />
 
             {/* Manual Search & List */}
             <div className="mb-6 flex gap-2">
@@ -776,110 +613,23 @@ export default function ReviewerAssignModal({
               Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is blocked by default, conflict-of-interest is hard block, overdue risk is warning-only.
             </div>
 
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : orderedReviewers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No reviewers found. Add one to the library?
-              </div>
-            ) : (
-              <div className="space-y-2" data-testid="reviewer-list">
-                {orderedReviewers.map((reviewer) => {
-                  const policy = reviewer.invite_policy || policyByReviewerId[reviewer.id] || {}
-                  const isAssigned = assignedIds.includes(reviewer.id)
-                  const isSelected = selectedReviewers.includes(reviewer.id)
-                  const showAsSelected = isAssigned || isSelected
-                  const blockedByPolicy = !isAssigned && isReviewerBlocked(reviewer.id)
-                  const rowDisabled = isAssigned || blockedByPolicy
-                  const canOverride = !isAssigned && reviewerNeedsOverride(reviewer.id) && canCurrentUserOverrideCooldown
-                  const hits = (policy.hits || []).filter(Boolean)
-                  
-                  return (
-                  <button
-                    key={reviewer.id}
-                    type="button"
-                    data-testid={`reviewer-row-${reviewer.id}`}
-                    aria-pressed={isSelected}
-                    onClick={() => toggleReviewer(reviewer.id)}
-                    disabled={rowDisabled}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-all border text-left ${
-                      isAssigned
-                        ? 'bg-primary/10 border-primary/30 shadow-sm cursor-not-allowed'
-                        : blockedByPolicy
-                          ? 'bg-rose-50 border-rose-200 cursor-not-allowed'
-                        : isSelected
-                          ? 'bg-primary/10 border-primary/30 shadow-sm'
-                          : 'hover:bg-muted/40 border-transparent hover:border-border'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                        showAsSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {reviewer.full_name?.charAt(0) || (reviewer.email || '?').charAt(0)}
-                      </div>
-                      <div>
-                        <div className={`font-medium ${showAsSelected ? 'text-primary' : 'text-foreground'}`}>
-                          {reviewer.full_name || 'Unnamed'}
-                        </div>
-                        <div className="text-sm text-muted-foreground">{reviewer.email}</div>
-                        {hits.length > 0 && (
-                          <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`policy-hits-${reviewer.id}`}>
-                            {hits.map((hit, idx) => (
-                              <span
-                                key={`${reviewer.id}-hit-${idx}-${hit.code}`}
-                                className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${getPolicyBadgeClass(hit)}`}
-                              >
-                                {hit.label || hit.code}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {hits.length > 0 && (
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            {hits.map((h) => h.detail).filter(Boolean).join(' ')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isAssigned && (
-                        <span className="text-xs font-semibold bg-muted text-foreground px-2 py-1 rounded">
-                          Assigned
-                        </span>
-                      )}
-                      {blockedByPolicy && (
-                        <span className="text-xs font-semibold bg-rose-100 text-rose-700 px-2 py-1 rounded">
-                          Blocked
-                        </span>
-                      )}
-                      {canOverride && (
-                        <span className="text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-1 rounded">
-                          Override
-                        </span>
-                      )}
-                      {showAsSelected && <Check className="h-5 w-5 text-primary" />}
-                    </div>
-                  </button>
-                  )
-                })}
-                {hasMoreReviewers && (
-                  <div className="pt-2 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => void fetchReviewers(searchTerm.trim(), { append: true, page: reviewerPage + 1 })}
-                      disabled={isLoadingMoreReviewers}
-                      className="px-3 py-1.5 rounded-md border border-border text-sm text-foreground hover:bg-muted/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      data-testid="reviewer-load-more"
-                    >
-                      {isLoadingMoreReviewers ? 'Loading…' : 'Load more'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <ReviewerCandidateList
+              isLoading={isLoading}
+              orderedReviewers={orderedReviewers}
+              assignedIds={assignedIds}
+              selectedReviewers={selectedReviewers}
+              policyByReviewerId={policyByReviewerId}
+              canCurrentUserOverrideCooldown={canCurrentUserOverrideCooldown}
+              hasMoreReviewers={hasMoreReviewers}
+              isLoadingMoreReviewers={isLoadingMoreReviewers}
+              reviewerPage={reviewerPage}
+              searchTerm={searchTerm}
+              onToggleReviewer={toggleReviewer}
+              onLoadMore={(nextPage, query) => void fetchReviewers(query.trim(), { append: true, page: nextPage })}
+              isReviewerBlocked={isReviewerBlocked}
+              reviewerNeedsOverride={reviewerNeedsOverride}
+              getPolicyBadgeClass={getPolicyBadgeClass}
+            />
 
             {selectedOverrideReviewers.length > 0 && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -914,26 +664,13 @@ export default function ReviewerAssignModal({
             )}
           </div>
 
-          <div className="flex items-center justify-between p-6 border-t border-border bg-muted/40">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleAssign}
-              disabled={selectedReviewers.length === 0 || isSubmitting}
-              className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
-              data-testid="reviewer-assign"
-            >
-               {isSubmitting
-                ? 'Assigning…'
-                : `Assign ${selectedReviewers.length || ''} Reviewer${selectedReviewers.length === 1 ? '' : 's'}${
-                    selectedOverrideReviewers.length ? ` (${selectedOverrideReviewers.length} override)` : ''
-                  }`}
-            </button>
-          </div>
+          <AssignActionBar
+            selectedCount={selectedReviewers.length}
+            overrideCount={selectedOverrideReviewers.length}
+            isSubmitting={isSubmitting}
+            onCancel={onClose}
+            onAssign={handleAssign}
+          />
         </DialogContent>
       </Dialog>
 
