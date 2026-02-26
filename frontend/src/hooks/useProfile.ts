@@ -125,12 +125,14 @@ async function updatePassword(password: string): Promise<void> {
   }
 }
 
-export function useProfile() {
+export function useProfile(options?: { enabled?: boolean }) {
   const queryClient = useQueryClient()
+  const enabled = options?.enabled ?? true
 
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['user-profile'],
     queryFn: fetchProfile,
+    enabled,
     staleTime: PROFILE_QUERY_STALE_TIME_MS,
     gcTime: PROFILE_QUERY_GC_TIME_MS,
     refetchOnWindowFocus: false,

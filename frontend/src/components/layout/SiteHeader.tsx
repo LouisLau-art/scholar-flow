@@ -24,10 +24,13 @@ export default function SiteHeader() {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  
-  // Use React Query for profile data (handles caching & updates)
-  const { profile } = useProfile()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return Boolean(window.localStorage.getItem('scholarflow:access_token'))
+  })
+
+  // 中文注释：未登录时不触发 profile 查询，减少公共页面的重复鉴权请求。
+  const { profile } = useProfile({ enabled: isAuthenticated })
 
   const [navLinks, setNavLinks] = useState<{ name: string; href: string; hasMega?: boolean }[]>([
     { name: 'Journals', href: '#', hasMega: true },
