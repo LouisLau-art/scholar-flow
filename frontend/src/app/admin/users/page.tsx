@@ -40,32 +40,51 @@ export default function UserManagementPage() {
 
   // 1. Security Check: Verify Admin Role on Mount
   useEffect(() => {
+    let cancelled = false
+
     async function checkAdminAccess() {
       try {
-        const session = await authService.getSession();
-        if (!session?.user) {
+        const token = await authService.getAccessToken()
+        if (!token) {
           router.replace('/login');
           return;
         }
 
-        // Fetch user profile to get roles
-        const profile = await authService.getUserProfile();
-        const roles = profile?.roles || [];
+        const profileRes = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!profileRes.ok) {
+          if (profileRes.status === 401) {
+            router.replace('/login')
+          } else {
+            router.replace('/dashboard')
+          }
+          return
+        }
+
+        const profileJson = await profileRes.json().catch(() => null)
+        const roles = ((profileJson?.data?.roles || []) as string[]).map((item) =>
+          String(item || '').toLowerCase()
+        )
         
         if (!roles.includes('admin')) {
           toast.error('Access Denied: You do not have permission to view this page.');
           router.replace('/dashboard'); // Redirect unauthorized users
         } else {
-          setIsAdmin(true);
+          if (!cancelled) setIsAdmin(true);
         }
       } catch (error) {
         console.error('Auth check failed:', error);
         router.replace('/dashboard');
       } finally {
-        setVerifyingRole(false);
+        if (!cancelled) setVerifyingRole(false);
       }
     }
     checkAdminAccess();
+
+    return () => {
+      cancelled = true
+    }
   }, [router]);
 
   // 2. Data Fetching (Only if Admin)

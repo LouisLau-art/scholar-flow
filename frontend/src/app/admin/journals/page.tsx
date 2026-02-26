@@ -124,13 +124,28 @@ export default function JournalManagementPage() {
 
     const checkAdminAccess = async () => {
       try {
-        const session = await authService.getSession()
-        if (!session?.user) {
+        const token = await authService.getAccessToken()
+        if (!token) {
           router.replace('/login')
           return
         }
-        const profile = await authService.getUserProfile()
-        const roles = profile?.roles || []
+
+        const profileRes = await fetch('/api/v1/user/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!profileRes.ok) {
+          if (profileRes.status === 401) {
+            router.replace('/login')
+          } else {
+            router.replace('/dashboard')
+          }
+          return
+        }
+
+        const profileJson = await profileRes.json().catch(() => null)
+        const roles = ((profileJson?.data?.roles || []) as string[]).map((item) =>
+          String(item || '').toLowerCase()
+        )
         if (!roles.includes('admin')) {
           toast.error('Access denied: admin only.')
           router.replace('/dashboard')
