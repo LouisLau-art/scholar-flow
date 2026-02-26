@@ -11,6 +11,15 @@ from app.models.revision import VersionHistoryResponse
 from app.services.revision_service import RevisionService
 
 
+def _m():
+    # 中文注释:
+    # - 运行时导入主 manuscripts 模块，避免循环依赖。
+    # - 供 detail_* 子模块复用主模块里的 supabase client 与工具函数。
+    from app.api.v1 import manuscripts as manuscripts_api
+
+    return manuscripts_api
+
+
 def _safe_iso(raw: object | None) -> str | None:
     if raw is None:
         return None
@@ -286,4 +295,3 @@ def _load_latest_author_proofreading_task(manuscript_id: str, author_id: str) ->
         ):
             return None
         return None
-
