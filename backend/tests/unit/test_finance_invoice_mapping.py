@@ -88,8 +88,11 @@ def test_list_finance_invoices_applies_pagination_and_meta():
         },
     ]
 
-    svc._load_finance_source_rows = lambda: []  # type: ignore[method-assign]
-    svc._build_finance_rows = lambda _rows: list(fake_rows)  # type: ignore[method-assign]
+    # 适配新实现：分页/总数在 _load_finance_source_rows 完成，service 仅映射当前页行。
+    svc._load_finance_source_rows = (  # type: ignore[method-assign]
+        lambda *, filters, export_mode: ([{"id": "stub-page-2"}], 2)
+    )
+    svc._build_finance_rows = lambda _rows: [fake_rows[1]]  # type: ignore[method-assign]
 
     result = svc.list_finance_invoices(
         filters=FinanceListFilters(status="all", page=2, page_size=1, sort_by="amount", sort_order="desc")
