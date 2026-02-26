@@ -1,0 +1,15 @@
+{
+  "environment": "staging",
+  "sample_set_id": "editor-perf-v1",
+  "captured_at": "2026-02-26T01:27:13.049041+00:00",
+  "captured_by": "louis.shawn@qq.com",
+  "records": [
+    {
+      "scenario": "editor_pipeline",
+      "p50_interactive_ms": 4132,
+      "p95_interactive_ms": 5052,
+      "first_screen_request_count": 1,
+      "notes": "{\"probe_mode\": \"api_ttfb\", \"url\": \"https://louisshawn-scholarflow-api.hf.space/api/v1/editor/pipeline\", \"method\": \"GET\", \"samples\": 8, \"failed_samples\": 0, \"ttfb_min_ms\": 4042, \"ttfb_max_ms\": 5052, \"ttfb_mean_ms\": 4223.5}"
+    }
+  ]
+}

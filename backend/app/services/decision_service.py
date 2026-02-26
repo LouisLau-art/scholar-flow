@@ -845,24 +845,25 @@ class DecisionService(DecisionServiceAttachmentMixin):
                     new_status = str(
                         transitioned.get("status") or ManuscriptStatus.DECISION.value
                     )
-                except HTTPException:
-                    transitioned = self.editorial.update_status(
+                except HTTPException as transition_error:
+                    # 中文注释:
+                    # - 禁止使用 allow_skip=True 绕过状态机；
+                    # - 若自动推进被状态机拦截，仅保留草稿并记录审计，不强行改稿件状态。
+                    self._safe_insert_audit_log(
                         manuscript_id=manuscript_id,
-                        to_status=ManuscriptStatus.DECISION.value,
+                        from_status=current_status,
+                        to_status=current_status,
                         changed_by=user_id,
-                        comment="first decision saved, routed to decision queue",
-                        allow_skip=True,
+                        comment="first decision saved but transition to decision queue blocked",
                         payload={
-                            "action": "first_decision_to_queue",
+                            "action": "first_decision_to_queue_blocked",
                             "source": "decision_workspace",
-                            "reason": "ae_or_me_saved_first_decision_allow_skip",
+                            "reason": "state_machine_blocked",
                             "decision_letter_id": row.get("id"),
                             "before": {"status": current_status},
-                            "after": {"status": ManuscriptStatus.DECISION.value},
+                            "after": {"status": current_status},
+                            "error_detail": str(getattr(transition_error, "detail", "") or "transition blocked"),
                         },
-                    )
-                    new_status = str(
-                        transitioned.get("status") or ManuscriptStatus.DECISION.value
                     )
 
             self._safe_insert_audit_log(

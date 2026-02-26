@@ -319,7 +319,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Playwright WebServer 复用（重要）**：`frontend/playwright.config.ts` 默认 **不复用** 已存在的 dev server，避免误连到“端口上其他服务/残留进程”导致 404/空白页；如需复用以提速本地调试，显式设置 `PLAYWRIGHT_REUSE_EXISTING_SERVER=1`。
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
-## 近期关键修复快照（2026-02-25）
+## 近期关键修复快照（2026-02-26）
+- **权限阻断清零收尾（2026-02-26）**：`assign_ae` 与 `intake-return` 补齐稿件级 scope 校验（`ensure_manuscript_scope_access`）；`First Decision` 草稿自动入队去除 `allow_skip=True` 兜底，状态机拦截时仅记审计 `first_decision_to_queue_blocked`，不再强行流转。
+- **Editor API 基线复采（2026-02-26）**：执行 `scripts/perf/capture-editor-api-baselines.sh` 产出 post-fixes 基线（`baseline-2026-02-26-post-fixes-editor_{detail,process,workspace,pipeline}.json`）；当前采样 p95：detail `6535ms`、process `3187ms`、workspace `3646ms`、pipeline `5052ms`。
 - **Tailwind v4 Phase 2 落地（2026-02-25）**：完成 CSS-first token 迁移并移除 `tailwindcss-animate` 插件依赖；动画类改为 `globals.css` 内建 `@utility`；`lint`、`vitest`、`build`、`tailwind audit(enforce)` 均通过，v4 迁移不再依赖 `@config` 兼容层。
 - **前端样式 token 化推进（2026-02-25）**：完成第 5/6/7/8/9/10/11/12/13/14/15/16 批高频页面改造（workspace/production/admin/reviewer/auth/decision 链路），统一替换 `slate|blue` 硬编码为语义 token；`hard palette` 从 `973` 降至 `0`，并保持 `w-[96vw]=0`。
 - **前端 token 化回归（2026-02-25）**：第 12/13/14/15 批提交 `6f56630`、`0804a9a`、`53ea5ba`、`1325373` 已合入 `main`；第 16 批收尾后 `bun run lint` 与 `bun run audit:tailwind-readiness` 通过，当前 `w-[96vw]/hex/inline/hard palette` 全部为 `0`，并在 `.github/workflows/ci.yml` 新增 Tailwind Readiness Gate（阈值默认 `0`）。

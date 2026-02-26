@@ -70,7 +70,7 @@ async def assign_ae(
     id: UUID,
     request: AssignAERequest,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
     Assign an Assistant Editor (AE) to a manuscript.
@@ -78,6 +78,12 @@ async def assign_ae(
     可选：一键推进到 under_review（由前端显式传 start_external_review=true）。
     """
     try:
+        ensure_manuscript_scope_access(
+            manuscript_id=str(id),
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+            allow_admin_bypass=True,
+        )
         updated = EditorService().assign_ae(
             id,
             request.ae_id,
@@ -102,7 +108,7 @@ async def submit_intake_revision(
     id: UUID,
     request: IntakeRevisionRequest,
     current_user: dict = Depends(get_current_user),
-    _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
     background_tasks: BackgroundTasks = None,
 ):
     """
@@ -110,6 +116,12 @@ async def submit_intake_revision(
     return manuscript to author for revision with mandatory comment.
     """
     try:
+        ensure_manuscript_scope_access(
+            manuscript_id=str(id),
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+            allow_admin_bypass=True,
+        )
         updated = EditorService().request_intake_revision(
             manuscript_id=id,
             current_user_id=current_user["id"],
