@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminUserService } from '@/services/admin/userService';
 import { authService } from '@/services/auth';
@@ -37,6 +37,7 @@ export default function UserManagementPage() {
   
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const fetchRequestIdRef = useRef(0);
 
   // 1. Security Check: Verify Admin Role on Mount
   useEffect(() => {
@@ -99,17 +100,21 @@ export default function UserManagementPage() {
   const fetchUsers = useCallback(async () => {
     if (!isAdmin) return; // Stop fetching if not admin
 
+    const requestId = ++fetchRequestIdRef.current;
     setLoading(true);
     try {
       const response = await adminUserService.getUsers(page, 10, debouncedSearch, role);
+      if (requestId !== fetchRequestIdRef.current) return;
       setUsers(response.data);
       setTotal(response.pagination.total);
     } catch (error) {
+      if (requestId !== fetchRequestIdRef.current) return;
       console.error('Failed to fetch users:', error);
       // Don't toast here if it's a 403, as the initial check should handle it.
       // But for robust UX, we can check status.
       toast.error('Failed to load users.');
     } finally {
+      if (requestId !== fetchRequestIdRef.current) return;
       setLoading(false);
     }
   }, [page, debouncedSearch, role, isAdmin]);
