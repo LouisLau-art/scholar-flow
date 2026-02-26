@@ -28,6 +28,7 @@ async def get_editor_pipeline_impl(
     try:
         # 中文注释: 这里使用 service_role 读取，避免启用 RLS 的云端环境导致 editor 看板空数据。
         db = supabase_admin_client
+        pipeline_select_fields = "id,title,status,created_at,updated_at"
         default_limit_raw = str(os.getenv("EDITOR_PIPELINE_STAGE_LIMIT", "80") or "80").strip()
         try:
             default_limit = int(default_limit_raw)
@@ -43,7 +44,7 @@ async def get_editor_pipeline_impl(
         # Pre-check（旧：submitted/pending_quality）
         pending_quality_resp = _with_limit(
             db.table("manuscripts")
-            .select("*")
+            .select(pipeline_select_fields)
             .eq("status", "pre_check")
             .order("created_at", desc=True)
         ).execute()
@@ -52,7 +53,7 @@ async def get_editor_pipeline_impl(
         # 评审中 (under_review)
         under_review_resp = _with_limit(
             db.table("manuscripts")
-            .select("*, review_assignments(count)")
+            .select(f"{pipeline_select_fields}, review_assignments(count)")
             .eq("status", "under_review")
             .order("created_at", desc=True)
         ).execute()
@@ -97,7 +98,7 @@ async def get_editor_pipeline_impl(
         # 待决策（decision，旧：pending_decision）
         pending_decision_resp = _with_limit(
             db.table("manuscripts")
-            .select("*, review_assignments(count)")
+            .select(f"{pipeline_select_fields}, review_assignments(count)")
             .eq("status", "decision")
             .order("created_at", desc=True)
         ).execute()
@@ -139,7 +140,7 @@ async def get_editor_pipeline_impl(
         # Post-acceptance（approved/layout/english_editing/proofreading）- 需要显示发文前的财务状态
         approved_query = (
             db.table("manuscripts")
-            .select("*, invoices(id,amount,status)")
+            .select(f"{pipeline_select_fields}, invoices(id,amount,status)")
             .order("updated_at", desc=True)
         )
         if hasattr(approved_query, "in_"):
@@ -169,7 +170,7 @@ async def get_editor_pipeline_impl(
         # 已发布 (published)
         published_resp = _with_limit(
             db.table("manuscripts")
-            .select("*")
+            .select(pipeline_select_fields)
             .eq("status", "published")
             .order("created_at", desc=True)
         ).execute()
@@ -178,7 +179,7 @@ async def get_editor_pipeline_impl(
         # 待处理修订稿 (resubmitted) - 类似待质检，需 Editor 处理
         resubmitted_resp = _with_limit(
             db.table("manuscripts")
-            .select("*")
+            .select(pipeline_select_fields)
             .eq("status", "resubmitted")
             .order("updated_at", desc=True)
         ).execute()
@@ -189,7 +190,7 @@ async def get_editor_pipeline_impl(
         try:
             rr_query = (
                 db.table("manuscripts")
-                .select("*")
+                .select(pipeline_select_fields)
                 .order("updated_at", desc=True)
             )
             if hasattr(rr_query, "in_"):
@@ -199,12 +200,18 @@ async def get_editor_pipeline_impl(
                 # fallback: 两次 eq 合并（不阻断）
                 maj = extract_data_fn(
                     _with_limit(
-                        db.table("manuscripts").select("*").eq("status", "major_revision").order("updated_at", desc=True)
+                        db.table("manuscripts")
+                        .select(pipeline_select_fields)
+                        .eq("status", "major_revision")
+                        .order("updated_at", desc=True)
                     ).execute()
                 ) or []
                 minor = extract_data_fn(
                     _with_limit(
-                        db.table("manuscripts").select("*").eq("status", "minor_revision").order("updated_at", desc=True)
+                        db.table("manuscripts")
+                        .select(pipeline_select_fields)
+                        .eq("status", "minor_revision")
+                        .order("updated_at", desc=True)
                     ).execute()
                 ) or []
                 revision_requested = (maj or []) + (minor or [])
@@ -214,7 +221,7 @@ async def get_editor_pipeline_impl(
         # 已拒稿 (rejected) - 终态归档
         rejected_resp = _with_limit(
             db.table("manuscripts")
-            .select("*")
+            .select(pipeline_select_fields)
             .eq("status", "rejected")
             .order("updated_at", desc=True)
         ).execute()
