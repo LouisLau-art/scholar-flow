@@ -24,13 +24,18 @@ class ExportService:
     分析报告导出服务
     """
 
-    def __init__(self, analytics_service: "AnalyticsService"):
+    def __init__(
+        self,
+        analytics_service: "AnalyticsService",
+        journal_ids: list[str] | None = None,
+    ):
         """
         初始化导出服务
 
         中文注释: 依赖 AnalyticsService 获取数据
         """
         self.analytics_service = analytics_service
+        self.journal_ids = journal_ids
 
     async def generate_xlsx(self) -> io.BytesIO:
         """
@@ -43,10 +48,10 @@ class ExportService:
         output = io.BytesIO()
 
         # 获取所有数据
-        kpi = await self.analytics_service.get_kpi_summary()
-        trends = await self.analytics_service.get_submission_trends()
-        geo = await self.analytics_service.get_author_geography()
-        pipeline = await self.analytics_service.get_status_pipeline()
+        kpi = await self.analytics_service.get_kpi_summary(journal_ids=self.journal_ids)
+        trends = await self.analytics_service.get_submission_trends(journal_ids=self.journal_ids)
+        geo = await self.analytics_service.get_author_geography(journal_ids=self.journal_ids)
+        pipeline = await self.analytics_service.get_status_pipeline(journal_ids=self.journal_ids)
 
         wb = Workbook()
 
@@ -134,7 +139,7 @@ class ExportService:
         output = io.BytesIO()
 
         # 获取 KPI 数据
-        kpi = await self.analytics_service.get_kpi_summary()
+        kpi = await self.analytics_service.get_kpi_summary(journal_ids=self.journal_ids)
 
         rows = [
             ("本月新投稿", kpi.new_submissions_month),

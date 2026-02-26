@@ -646,20 +646,24 @@ async def get_manuscript_version_pdf_signed(
 
 # === 3. 搜索与列表 (Discovery) ===
 @router.get("/manuscripts")
-async def get_manuscripts():
-    """获取所有稿件列表"""
+async def get_manuscripts(current_user: dict = Depends(get_current_user)):
+    """获取当前用户稿件列表（安全收口：不再暴露全量稿件）"""
     try:
         response = (
             supabase.table("manuscripts")
             .select("*")
+            .eq("author_id", str(current_user.get("id") or ""))
             .order("created_at", desc=True)
             .execute()
         )
+        rows = getattr(response, "data", None)
+        if rows is None and isinstance(response, tuple) and len(response) >= 2:
+            rows = response[1]
         # supabase-py 的 execute() 返回的是一个对象，其 data 属性包含结果
-        return {"success": True, "data": response.data}
+        return {"success": True, "data": rows or []}
     except Exception as e:
         print(f"查询失败: {str(e)}")
-        return {"success": False, "data": []}
+        raise HTTPException(status_code=500, detail="Failed to fetch manuscripts")
 
 
 @router.get("/manuscripts/mine")

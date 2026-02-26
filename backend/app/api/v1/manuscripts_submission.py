@@ -460,4 +460,4 @@ async def create_manuscript(
         raise
     except Exception as e:
         print(f"创建稿件失败: {str(e)}")
-        return {"success": False, "message": str(e)}
+        raise HTTPException(status_code=500, detail="Failed to create manuscript")

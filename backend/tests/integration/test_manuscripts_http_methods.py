@@ -15,7 +15,9 @@ def _mock_supabase_with_data(data=None):
     mock.single.return_value = mock
     mock.insert.return_value = mock
     mock.update.return_value = mock
-    mock.execute.return_value = (None, data or [])
+    resp = MagicMock()
+    resp.data = data or []
+    mock.execute.return_value = resp
     return mock
 
 @pytest.mark.asyncio

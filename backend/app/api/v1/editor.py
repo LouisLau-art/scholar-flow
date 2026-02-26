@@ -792,6 +792,9 @@ async def request_revision(
 
 @router.get("/available-reviewers")
 async def get_available_reviewers(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(50, ge=1, le=100, description="每页条数"),
+    q: str | None = Query(None, max_length=100, description="按邮箱关键词过滤"),
     current_user: dict = Depends(get_current_user),
     _profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
@@ -802,6 +805,9 @@ async def get_available_reviewers(
         current_user=current_user,
         supabase_client=supabase,
         extract_data_fn=_extract_supabase_data,
+        page=page,
+        page_size=page_size,
+        q=q,
     )
 
 

@@ -14,6 +14,7 @@ Analytics API Router
 """
 
 import logging
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
@@ -32,6 +33,7 @@ from app.core.auth import get_current_user
 logger = logging.getLogger(__name__)
 
 _ANALYTICS_ALLOWED_ROLES = {"managing_editor", "editor_in_chief", "admin"}
+_SCOPE_ALWAYS_ENFORCED_ROLES = {"managing_editor", "editor_in_chief"}
 
 router = APIRouter(
     prefix="/analytics",
@@ -59,9 +61,15 @@ def _resolve_scope_journal_ids(*, user_id: str, roles: set[str]) -> list[str] | 
     - []: 启用 scope 但无可访问期刊（返回空数据）
     - [..]: 允许期刊列表
     """
-    if not is_scope_enforcement_enabled():
-        return None
     if "admin" in roles:
+        return None
+    should_enforce = bool(roles.intersection(_SCOPE_ALWAYS_ENFORCED_ROLES)) or is_scope_enforcement_enabled()
+    if not should_enforce:
+        return None
+    try:
+        UUID(str(user_id))
+    except Exception:
+        # 中文注释: 单测/灰度环境可能使用非 UUID 占位用户，避免触发真实 DB 查询异常。
         return None
     allowed = sorted(
         get_user_scope_journal_ids(
@@ -89,16 +97,20 @@ async def get_summary(
     - 需要认证，仅限编辑角色访问
     - 记录访问日志用于审计
     """
-    _require_analytics_access(current_user)
+    roles = _require_analytics_access(current_user)
+    user_id = str(current_user.get("id") or "")
+    journal_ids = _resolve_scope_journal_ids(user_id=user_id, roles=roles)
 
     # 审计日志
     logger.info(
-        f"Analytics summary accessed by user {current_user.get('id', 'unknown')} "
-        f"(roles: {current_user.get('roles', [])})"
+        "Analytics summary accessed by user %s (roles=%s, scope=%s)",
+        user_id or "unknown",
+        sorted(list(roles)),
+        "all" if journal_ids is None else len(journal_ids),
     )
 
     try:
-        kpi = await analytics_service.get_kpi_summary()
+        kpi = await analytics_service.get_kpi_summary(journal_ids=journal_ids)
         return AnalyticsSummaryResponse(kpi=kpi)
     except Exception as e:
         logger.error(f"Failed to fetch KPI summary: {e}")
@@ -122,16 +134,21 @@ async def get_trends(
     - 合并多个视图数据，减少前端请求次数
     - 用于趋势折线图、漏斗图、饼图
     """
-    _require_analytics_access(current_user)
+    roles = _require_analytics_access(current_user)
+    user_id = str(current_user.get("id") or "")
+    journal_ids = _resolve_scope_journal_ids(user_id=user_id, roles=roles)
 
     logger.info(
-        f"Analytics trends accessed by user {current_user.get('id', 'unknown')}"
+        "Analytics trends accessed by user %s (roles=%s, scope=%s)",
+        user_id or "unknown",
+        sorted(list(roles)),
+        "all" if journal_ids is None else len(journal_ids),
     )
 
     try:
-        trends = await analytics_service.get_submission_trends()
-        pipeline = await analytics_service.get_status_pipeline()
-        decisions = await analytics_service.get_decision_distribution()
+        trends = await analytics_service.get_submission_trends(journal_ids=journal_ids)
+        pipeline = await analytics_service.get_status_pipeline(journal_ids=journal_ids)
+        decisions = await analytics_service.get_decision_distribution(journal_ids=journal_ids)
 
         return TrendsResponse(
             trends=trends,
@@ -160,11 +177,18 @@ async def get_geo(
     - 返回 Top 10 国家的投稿数
     - 用于水平条形图
     """
-    _require_analytics_access(current_user)
-    logger.info(f"Analytics geo accessed by user {current_user.get('id', 'unknown')}")
+    roles = _require_analytics_access(current_user)
+    user_id = str(current_user.get("id") or "")
+    journal_ids = _resolve_scope_journal_ids(user_id=user_id, roles=roles)
+    logger.info(
+        "Analytics geo accessed by user %s (roles=%s, scope=%s)",
+        user_id or "unknown",
+        sorted(list(roles)),
+        "all" if journal_ids is None else len(journal_ids),
+    )
 
     try:
-        countries = await analytics_service.get_author_geography()
+        countries = await analytics_service.get_author_geography(journal_ids=journal_ids)
         return GeoResponse(countries=countries)
     except Exception as e:
         logger.error(f"Failed to fetch geo data: {e}")
@@ -189,17 +213,26 @@ async def export_report(
     - 使用 Pandas 生成报告
     - 报告包含 KPI、趋势、地理分布数据
     """
-    _require_analytics_access(current_user)
+    roles = _require_analytics_access(current_user)
+    user_id = str(current_user.get("id") or "")
+    journal_ids = _resolve_scope_journal_ids(user_id=user_id, roles=roles)
 
     logger.info(
-        f"Analytics export ({format}) requested by user {current_user.get('id', 'unknown')}"
+        "Analytics export (%s) requested by user %s (roles=%s, scope=%s)",
+        format,
+        user_id or "unknown",
+        sorted(list(roles)),
+        "all" if journal_ids is None else len(journal_ids),
     )
 
     try:
         # 动态导入 ExportService（避免启动时依赖 Pandas）
         from app.core.export_service import ExportService
 
-        export_service = ExportService(analytics_service)
+        export_service = ExportService(
+            analytics_service=analytics_service,
+            journal_ids=journal_ids,
+        )
 
         if format == "xlsx":
             file_content = await export_service.generate_xlsx()

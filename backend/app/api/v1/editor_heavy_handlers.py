@@ -343,12 +343,26 @@ async def get_available_reviewers_impl(
     current_user: dict[str, Any],
     supabase_client: Any,
     extract_data_fn,
+    page: int = 1,
+    page_size: int = 50,
+    q: str | None = None,
 ) -> dict[str, Any]:
     """获取可用的审稿人专家池（搬运原逻辑）。"""
+    self_candidate = None
     try:
+        try:
+            page_num = max(int(page or 1), 1)
+        except Exception:
+            page_num = 1
+        try:
+            per_page = max(min(int(page_size or 50), 100), 1)
+        except Exception:
+            per_page = 50
+        offset = (page_num - 1) * per_page
+        keyword = q.strip() if isinstance(q, str) else ""
+
         user_id = current_user.get("id")
         email = current_user.get("email")
-        self_candidate = None
         if user_id and email:
             name_part = email.split("@")[0].replace(".", " ").title()
             self_candidate = {
@@ -360,13 +374,26 @@ async def get_available_reviewers_impl(
                 "review_count": 0,
             }
 
-        reviewers_resp = (
+        reviewers_query = (
             supabase_client.table("user_profiles")
-            .select("id, email, roles")
+            .select("id, email, roles", count="exact")
             .contains("roles", ["reviewer"])
-            .execute()
         )
+        if hasattr(reviewers_query, "order"):
+            reviewers_query = reviewers_query.order("email", desc=False)
+        if hasattr(reviewers_query, "range"):
+            reviewers_query = reviewers_query.range(offset, offset + per_page - 1)
+        else:
+            if hasattr(reviewers_query, "limit"):
+                reviewers_query = reviewers_query.limit(per_page)
+            if hasattr(reviewers_query, "offset"):
+                reviewers_query = reviewers_query.offset(offset)
+        if keyword:
+            reviewers_query = reviewers_query.ilike("email", f"%{keyword}%")
+        reviewers_resp = reviewers_query.execute()
         reviewers = extract_data_fn(reviewers_resp) or []
+        count_value = getattr(reviewers_resp, "count", None)
+        total_count = count_value if isinstance(count_value, int) else len(reviewers)
 
         formatted_reviewers = []
         for reviewer in reviewers:
@@ -386,7 +413,16 @@ async def get_available_reviewers_impl(
         if formatted_reviewers:
             if self_candidate and not any(r["id"] == self_candidate["id"] for r in formatted_reviewers):
                 formatted_reviewers.insert(0, self_candidate)
-            return {"success": True, "data": formatted_reviewers}
+            return {
+                "success": True,
+                "data": formatted_reviewers,
+                "meta": {
+                    "page": page_num,
+                    "page_size": per_page,
+                    "total": total_count,
+                    "has_more": (offset + len(reviewers)) < total_count,
+                },
+            }
 
         # fallback: demo reviewers for empty dataset
         if self_candidate:
@@ -419,6 +455,12 @@ async def get_available_reviewers_impl(
                         "review_count": 5,
                     },
                 ],
+                "meta": {
+                    "page": page_num,
+                    "page_size": per_page,
+                    "total": 4,
+                    "has_more": False,
+                },
             }
         return {
             "success": True,
@@ -448,6 +490,12 @@ async def get_available_reviewers_impl(
                     "review_count": 5,
                 },
             ],
+            "meta": {
+                "page": page_num,
+                "page_size": per_page,
+                "total": 3,
+                "has_more": False,
+            },
         }
 
     except Exception as e:

@@ -655,36 +655,51 @@ class EditorService(EditorServicePrecheckMixin):
             return "paid"
         return "unpaid"
 
-    def _load_finance_source_rows(self) -> list[dict[str, Any]]:
+    def _load_finance_source_rows(
+        self,
+        *,
+        filters: FinanceListFilters,
+        export_mode: bool,
+    ) -> tuple[list[dict[str, Any]], int]:
         select_clause = (
             "id,manuscript_id,amount,status,confirmed_at,invoice_number,created_at,"
             "manuscripts(id,title,author_id,updated_at,invoice_metadata)"
         )
-        query = (
-            self.client.table("invoices")
-            .select(select_clause)
-            .order("created_at", desc=True)
-            .range(0, 4999)
-        )
-        try:
-            if hasattr(query, "is_"):
-                resp = query.is_("deleted_at", "null").execute()
-            else:
-                resp = query.execute()
-        except Exception as e:
-            # 中文注释: 云端可能未同步 deleted_at 字段，降级为不过滤 deleted_at。
-            lowered = str(e).lower()
-            if "deleted_at" in lowered and ("column" in lowered or "schema cache" in lowered):
-                resp = (
-                    self.client.table("invoices")
-                    .select(select_clause)
-                    .order("created_at", desc=True)
-                    .range(0, 4999)
-                    .execute()
-                )
-            else:
-                raise
-        return getattr(resp, "data", None) or []
+        page = max(int(filters.page or 1), 1)
+        page_size = max(min(int(filters.page_size or 20), 100), 1)
+        offset = (page - 1) * page_size
+
+        query = self.client.table("invoices").select(select_clause, count="exact")
+
+        status = str(filters.status or "all").strip().lower()
+        if status not in {"all", "unpaid", "paid", "waived"}:
+            raise HTTPException(status_code=422, detail="Invalid status filter")
+        if status == "paid":
+            query = query.eq("status", "paid").gt("amount", 0)
+        elif status == "waived":
+            query = query.or_("status.eq.waived,amount.lte.0")
+        elif status == "unpaid":
+            query = query.gt("amount", 0).neq("status", "paid").neq("status", "waived")
+
+        sort_by = str(filters.sort_by or "updated_at").strip().lower()
+        sort_order = str(filters.sort_order or "desc").strip().lower()
+        if sort_by not in {"updated_at", "amount", "status"}:
+            raise HTTPException(status_code=422, detail="Invalid sort_by")
+        if sort_order not in {"asc", "desc"}:
+            raise HTTPException(status_code=422, detail="Invalid sort_order")
+        desc = sort_order == "desc"
+        if sort_by == "amount":
+            query = query.order("amount", desc=desc).order("created_at", desc=True)
+        elif sort_by == "status":
+            query = query.order("status", desc=desc).order("created_at", desc=True)
+        else:
+            # 中文注释: updated_at 对 invoices 不稳定，统一退化为 created_at 排序以便走索引。
+            query = query.order("created_at", desc=desc)
+
+        if not export_mode:
+            query = query.range(offset, offset + page_size - 1)
+        resp = query.execute()
+        return (getattr(resp, "data", None) or [], int(getattr(resp, "count", None) or 0))
 
     def _build_finance_rows(self, source_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         author_ids: set[str] = set()
@@ -801,19 +816,43 @@ class EditorService(EditorServicePrecheckMixin):
             out.sort(key=lambda r: self._parse_iso(str(r.get("updated_at") or "")).timestamp(), reverse=reverse)
         return out
 
+    def _apply_finance_keyword_filter(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        keyword: str | None,
+    ) -> list[dict[str, Any]]:
+        q = str(keyword or "").strip().lower()
+        if len(q) > 100:
+            raise HTTPException(status_code=422, detail="q too long (max 100)")
+        if not q:
+            return rows
+        return [
+            row
+            for row in rows
+            if q in str(row.get("invoice_number") or "").lower()
+            or q in str(row.get("manuscript_title") or "").lower()
+        ]
+
     def list_finance_invoices(self, *, filters: FinanceListFilters) -> dict[str, Any]:
         page = max(int(filters.page or 1), 1)
         page_size = max(min(int(filters.page_size or 20), 100), 1)
         snapshot_at = self._now()
-
-        source_rows = self._load_finance_source_rows()
-        mapped_rows = self._build_finance_rows(source_rows)
-        filtered = self._filter_and_sort_finance_rows(mapped_rows, filters=filters)
-
-        total = len(filtered)
-        start = (page - 1) * page_size
-        end = start + page_size
-        paged = filtered[start:end]
+        keyword = str(filters.q or "").strip()
+        if keyword:
+            source_rows, _ = self._load_finance_source_rows(
+                filters=replace(filters, q=None),
+                export_mode=True,
+            )
+            rows = self._build_finance_rows(source_rows)
+            filtered = self._apply_finance_keyword_filter(rows, keyword=keyword)
+            total = len(filtered)
+            start = (page - 1) * page_size
+            end = start + page_size
+            paged = filtered[start:end]
+        else:
+            source_rows, total = self._load_finance_source_rows(filters=filters, export_mode=False)
+            paged = self._build_finance_rows(source_rows)
 
         return {
             "rows": paged,
@@ -829,9 +868,15 @@ class EditorService(EditorServicePrecheckMixin):
 
     def export_finance_invoices_csv(self, *, filters: FinanceListFilters) -> dict[str, Any]:
         snapshot_at = self._now()
-        source_rows = self._load_finance_source_rows()
-        mapped_rows = self._build_finance_rows(source_rows)
-        filtered = self._filter_and_sort_finance_rows(mapped_rows, filters=filters)
+        keyword = str(filters.q or "").strip()
+        source_rows, _total = self._load_finance_source_rows(
+            filters=replace(filters, q=None) if keyword else filters,
+            export_mode=True,
+        )
+        filtered = self._apply_finance_keyword_filter(
+            self._build_finance_rows(source_rows),
+            keyword=keyword,
+        )
 
         buf = StringIO()
         fieldnames = [

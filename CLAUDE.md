@@ -301,6 +301,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 001（Editor Performance Indexes）迁移（2026-02-24）**：云端需执行 `supabase/migrations/20260224173000_editor_performance_indexes.sql`（新增 manuscripts 多组复合索引 + `title` trigram 索引）；完成后建议在 SQL Editor 运行 `supabase/maintenance/editor_performance_explain.sql` 对比 query plan（process/workspace/detail）。
 - **Editor 性能基线脚本（2026-02-24）**：`scripts/perf/capture-editor-baseline.sh` 已支持 `--auto-url` 自动采样 API TTFB；可用 `scripts/perf/capture-editor-api-baselines.sh` 一次性采样 detail/process/workspace/pipeline 四条链路并输出标准 JSON 基线。
 - **前端路由包体门禁（2026-02-26）**：新增 `cd frontend && bun run audit:route-budgets`（基于 `.next` manifest 统计关键路由 gzip JS 体积）；阈值配置位于 `frontend/scripts/route-budgets.json`，已接入 `.github/workflows/ci.yml` 在 build 后自动校验并超限失败。
+- **公共期刊列表短缓存（2026-02-26）**：`GET /api/v1/public/journals` 新增进程内短 TTL 缓存；可通过 `PUBLIC_JOURNALS_CACHE_TTL_SEC`（默认 `60`）调优，降低公开页面高频刷新的数据库压力。
 - **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 Scope 执行口径（2026-02-11 更新）**：`managing_editor` / `editor_in_chief` 始终按 `journal_role_scopes` 强制隔离（即使 `JOURNAL_SCOPE_ENFORCEMENT=0`；scope 为空时列表返回空、稿件级写操作返回 403）。`JOURNAL_SCOPE_ENFORCEMENT` 仅继续控制 assistant_editor 等非管理角色的灰度拦截。
@@ -320,6 +321,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-26）
+- **后端最佳实践加固（2026-02-26）**：`GET /api/v1/manuscripts` 改为“必须认证 + 仅返回当前用户稿件”；`POST /api/v1/manuscripts` 与 `POST /api/v1/reviews/submit` 的异常语义改为真实 5xx（不再失败返回 200）；`GET /api/v1/stats/editor` 新增编辑角色门禁，避免普通用户读取编辑面聚合数据。
+- **Analytics/Finance/Reviewer API 收口（2026-02-26）**：`/api/v1/analytics/{summary,trends,geo,export}` 全部接入 journal-scope 参数下传（ME/EIC 默认按 scope 裁剪）；Finance 列表改为数据库侧状态筛选 + 分页/计数（移除固定 5000 行拉取）；`/api/v1/editor/available-reviewers` 增加 `page/page_size/q` 并在无 `range/offset` 的测试桩环境自动降级兼容。
 - **权限阻断清零收尾（2026-02-26）**：`assign_ae` 与 `intake-return` 补齐稿件级 scope 校验（`ensure_manuscript_scope_access`）；`First Decision` 草稿自动入队去除 `allow_skip=True` 兜底，状态机拦截时仅记审计 `first_decision_to_queue_blocked`，不再强行流转。
 - **Editor API 基线复采（2026-02-26）**：执行 `scripts/perf/capture-editor-api-baselines.sh` 产出 post-fixes 基线（`baseline-2026-02-26-post-fixes-editor_{detail,process,workspace,pipeline}.json`）；当前采样 p95：detail `6535ms`、process `3187ms`、workspace `3646ms`、pipeline `5052ms`。
 - **Tailwind v4 Phase 2 落地（2026-02-25）**：完成 CSS-first token 迁移并移除 `tailwindcss-animate` 插件依赖；动画类改为 `globals.css` 内建 `@utility`；`lint`、`vitest`、`build`、`tailwind audit(enforce)` 均通过，v4 迁移不再依赖 `@config` 兼容层。
@@ -387,13 +390,10 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 001-editor-performance-refactor: Added Python 3.14+（backend）, TypeScript 5.x（frontend） + FastAPI, Pydantic v2, Supabase-py, Next.js 14 App Router, React 18, bun, uv
 - 047-analytics-management-insights: Added analytics management drilldown (editor efficiency ranking, stage duration breakdown, SLA overdue alerts) with `/api/v1/analytics/management`, RBAC + journal-scope filtering, and dashboard UI integration.
 - 048-role-matrix-journal-scope-rbac: Completed GAP-P1-05 end-to-end (role matrix + journal scope isolation + first/final decision semantics + high-risk audit payload + mocked E2E).
-- 047-portal-scholar-toolbox: Added article citation exports (BibTeX/RIS), dynamic subject collections API, and citation_pdf_url metadata wiring for Scholar/SEO
-- 046-finance-invoices-sync: Replaced `/finance` demo data with real invoices list/filter/export and unified Mark Paid conflict+audit flow across Finance and Editor Pipeline
-- 045-internal-collaboration-enhancement: Added @mentions + internal tasks + overdue SLA filters (backend APIs, frontend panels, regression tests)
-- 044-precheck-role-hardening: Added Python 3.14+（本地开发）/ Python 3.12（HF Docker），TypeScript 5.x（Strict） + FastAPI 0.115+, Pydantic v2, Supabase-py v2, Next.js 14.2 (App Router), React 18, Tailwind + Shadcn
 
 ## Active Technologies
-- Python 3.14+（本地）/ Python 3.12（HF Docker），TypeScript 5.x（Strict） + FastAPI 0.115+, Pydantic v2, Supabase-py v2, Next.js 14.2 (App Router), React 18, Tailwind + Shadcn (046-finance-invoices-sync)
-- Supabase PostgreSQL（`invoices`, `manuscripts`, `user_profiles`, `status_transition_logs`），Supabase Storage（复用 `invoices` bucket） (046-finance-invoices-sync)
+- Python 3.14+（backend）, TypeScript 5.x（frontend） + FastAPI, Pydantic v2, Supabase-py, Next.js 14 App Router, React 18, bun, uv (001-editor-performance-refactor)
+- Supabase PostgreSQL（云端）+ 前端内存短缓存（会话级）+ 文档化基线产物（仓库 specs） (001-editor-performance-refactor)

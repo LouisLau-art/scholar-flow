@@ -40,12 +40,12 @@ def generate_test_token(user_id: str = "00000000-0000-0000-0000-000000000000"):
     return jwt.encode(payload, secret, algorithm="HS256")
 
 @pytest.mark.asyncio
-async def test_get_manuscripts_empty(client: AsyncClient):
+async def test_get_manuscripts_empty(client: AsyncClient, auth_token: str):
     """验证列表接口返回成功"""
     mock = get_full_mock([])
     with patch("app.lib.api_client.supabase", mock), \
          patch("app.api.v1.manuscripts.supabase", mock):
-        response = await client.get("/api/v1/manuscripts")
+        response = await client.get("/api/v1/manuscripts", headers={"Authorization": f"Bearer {auth_token}"})
         assert response.status_code == 200
         assert response.json()["success"] is True
 
@@ -305,7 +305,7 @@ async def test_create_manuscript_rejects_cover_letter_outside_user_scope(client:
     assert "cover_letter_path" in str(payload.get("detail", ""))
 
 @pytest.mark.asyncio
-async def test_get_manuscripts_list(client: AsyncClient):
+async def test_get_manuscripts_list(client: AsyncClient, auth_token: str):
     """验证获取稿件列表接口"""
     mock_data = [
         {"id": str(uuid.uuid4()), "title": "Paper 1", "status": "pre_check"},
@@ -314,7 +314,7 @@ async def test_get_manuscripts_list(client: AsyncClient):
     mock = get_full_mock(mock_data)
     with patch("app.lib.api_client.supabase", mock), \
          patch("app.api.v1.manuscripts.supabase", mock):
-        response = await client.get("/api/v1/manuscripts")
+        response = await client.get("/api/v1/manuscripts", headers={"Authorization": f"Bearer {auth_token}"})
         assert response.status_code == 200
         result = response.json()
         assert result["success"] is True
@@ -331,7 +331,7 @@ async def test_route_path_matching(client: AsyncClient):
     # 测试 GET 路由
     with patch("app.lib.api_client.supabase", mock), \
          patch("app.api.v1.manuscripts.supabase", mock):
-        get_response = await client.get("/api/v1/manuscripts")
+        get_response = await client.get("/api/v1/manuscripts", headers={"Authorization": f"Bearer {mock_token}"})
         assert get_response.status_code == 200
 
     # 测试 POST 路由（使用相同的路径）

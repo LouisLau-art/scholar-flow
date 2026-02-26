@@ -1,8 +1,13 @@
+import os
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 
+from app.core.short_ttl_cache import ShortTTLCache
 from app.lib.api_client import supabase_admin
 
 router = APIRouter(prefix="/public", tags=["Public Resources"])
+_public_journals_cache = ShortTTLCache[dict[str, Any]](max_entries=16)
 
 
 def _is_missing_column_error(error_text: str, column_name: str) -> bool:
@@ -205,6 +210,11 @@ async def get_public_journals():
     """
     投稿/公开页使用的期刊列表（默认仅返回启用状态）。
     """
+    cache_key = "public_journals_active"
+    cached = _public_journals_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         try:
             resp = (
@@ -226,7 +236,14 @@ async def get_public_journals():
                 rows = getattr(fallback, "data", None) or []
             else:
                 raise
-        return {"success": True, "data": rows}
+        payload = {"success": True, "data": rows}
+        ttl_raw = str(os.getenv("PUBLIC_JOURNALS_CACHE_TTL_SEC", "60") or "60").strip()
+        try:
+            ttl = max(float(ttl_raw), 1.0)
+        except Exception:
+            ttl = 60.0
+        _public_journals_cache.set(cache_key, payload, ttl_sec=ttl)
+        return payload
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load journals: {e}")
 

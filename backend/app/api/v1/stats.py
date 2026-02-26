@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth_utils import get_current_user
+from app.core.roles import require_any_role
 from app.lib.api_client import supabase
 from datetime import datetime
 
@@ -57,7 +58,14 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
         }
 
 @router.get("/editor")
-async def get_editor_stats(current_user: dict = Depends(get_current_user)):
+async def get_editor_stats(
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(
+        require_any_role(
+            ["admin", "managing_editor", "assistant_editor", "editor_in_chief", "production_editor"]
+        )
+    ),
+):
     """
     编辑视角统计：待分配、逾期
     """

@@ -228,7 +228,15 @@ async def submit_review_impl(
         return {"success": True, "data": res.data[0] if res.data else {}}
     except APIError as e:
         print(f"Review submit failed: {e}")
-        return {"success": False, "message": "review_assignments table not found"}
+        lowered = str(e).lower()
+        if "review_assignments" in lowered and (
+            "does not exist" in lowered or "schema cache" in lowered or "pgrst205" in lowered
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail="DB not migrated: review_assignments table missing",
+            )
+        raise HTTPException(status_code=500, detail="Failed to submit review")
 
 
 async def submit_review_by_token_impl(
