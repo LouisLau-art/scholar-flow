@@ -6,6 +6,7 @@
 
 - `baseline-before.json` / `baseline-after.json`: 改造前后基线数据。
 - `baseline-*-api.json`: 自动采样 API TTFB 基线（detail/process/workspace）。
+- `baseline-2026-02-26-db-index-rollout-report.md`: 索引补齐批次体检结论（含三组基线对比）。
 - `regression-report.md`: 回归门禁结论（GO / NO-GO）。
 - `test-log-tier12.md` / `test-log-tier3.md`: 测试执行日志摘要。
 - `feedback-metrics-plan.md` / `feedback-7day-report.md`: 7 天反馈指标计划与对比。

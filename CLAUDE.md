@@ -302,6 +302,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Editor 性能基线脚本（2026-02-24）**：`scripts/perf/capture-editor-baseline.sh` 已支持 `--auto-url` 自动采样 API TTFB；可用 `scripts/perf/capture-editor-api-baselines.sh` 一次性采样 detail/process/workspace/pipeline 四条链路并输出标准 JSON 基线。
 - **前端路由包体门禁（2026-02-26）**：新增 `cd frontend && bun run audit:route-budgets`（基于 `.next` manifest 统计关键路由 gzip JS 体积）；阈值配置位于 `frontend/scripts/route-budgets.json`，已接入 `.github/workflows/ci.yml` 在 build 后自动校验并超限失败。
 - **公共期刊列表短缓存（2026-02-26）**：`GET /api/v1/public/journals` 新增进程内短 TTL 缓存；可通过 `PUBLIC_JOURNALS_CACHE_TTL_SEC`（默认 `60`）调优，降低公开页面高频刷新的数据库压力。
+- **云端索引迁移状态（2026-02-26）**：远端 Supabase 已补齐执行 `supabase/migrations/20260224173000_editor_performance_indexes.sql`（此前 local/remote migration list 不一致）；可通过 `supabase migration list --linked` 与 `supabase inspect db index-stats --linked` 校验索引存在性。
 - **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 Scope 执行口径（2026-02-11 更新）**：`managing_editor` / `editor_in_chief` 始终按 `journal_role_scopes` 强制隔离（即使 `JOURNAL_SCOPE_ENFORCEMENT=0`；scope 为空时列表返回空、稿件级写操作返回 403）。`JOURNAL_SCOPE_ENFORCEMENT` 仅继续控制 assistant_editor 等非管理角色的灰度拦截。
@@ -321,6 +322,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-26）
+- **Editor 性能体检与索引补齐（2026-02-26）**：完成两轮 API 基线复采（`baseline-2026-02-26-post-backend-hardening-*`、`baseline-2026-02-26-post-index-push-*`），并在云端执行缺失 migration `20260224173000`；当前结论是数据库索引已补齐，编辑链路瓶颈更偏向跨区域网络/冷启动与后端聚合耗时。
 - **后端最佳实践加固（2026-02-26）**：`GET /api/v1/manuscripts` 改为“必须认证 + 仅返回当前用户稿件”；`POST /api/v1/manuscripts` 与 `POST /api/v1/reviews/submit` 的异常语义改为真实 5xx（不再失败返回 200）；`GET /api/v1/stats/editor` 新增编辑角色门禁，避免普通用户读取编辑面聚合数据。
 - **Analytics/Finance/Reviewer API 收口（2026-02-26）**：`/api/v1/analytics/{summary,trends,geo,export}` 全部接入 journal-scope 参数下传（ME/EIC 默认按 scope 裁剪）；Finance 列表改为数据库侧状态筛选 + 分页/计数（移除固定 5000 行拉取）；`/api/v1/editor/available-reviewers` 增加 `page/page_size/q` 并在无 `range/offset` 的测试桩环境自动降级兼容。
 - **权限阻断清零收尾（2026-02-26）**：`assign_ae` 与 `intake-return` 补齐稿件级 scope 校验（`ensure_manuscript_scope_access`）；`First Decision` 草稿自动入队去除 `allow_skip=True` 兜底，状态机拦截时仅记审计 `first_decision_to_queue_blocked`，不再强行流转。
