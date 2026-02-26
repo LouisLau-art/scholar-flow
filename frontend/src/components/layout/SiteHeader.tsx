@@ -41,11 +41,22 @@ export default function SiteHeader() {
 
   useEffect(() => {
     let isMounted = true
-    
-    // Check initial session
-    authService.getSession().then(session => {
-      if (isMounted) setIsAuthenticated(!!session)
-    })
+
+    // 中文注释：仅当本地已有 token 时才做 session 探测，匿名访客不触发额外鉴权请求。
+    const hasLocalToken =
+      typeof window !== 'undefined' && Boolean(window.localStorage.getItem('scholarflow:access_token'))
+    if (hasLocalToken) {
+      authService
+        .getSession()
+        .then((session) => {
+          if (isMounted) setIsAuthenticated(!!session)
+        })
+        .catch(() => {
+          if (isMounted) setIsAuthenticated(false)
+        })
+    } else if (isMounted) {
+      setIsAuthenticated(false)
+    }
 
     // CMS Menu
     ;(async () => {
