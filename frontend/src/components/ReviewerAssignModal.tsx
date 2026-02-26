@@ -43,6 +43,20 @@ type AssignOptions = {
   overrides?: AssignOverride[]
 }
 
+type AssignFailure = {
+  reviewerId: string
+  detail: string
+}
+
+type AssignResultPayload = {
+  ok?: boolean
+  assignedReviewerIds?: string[]
+  failed?: AssignFailure[]
+  keepOpen?: boolean
+}
+
+type AssignResult = boolean | void | AssignResultPayload
+
 type StaffProfile = {
   id: string
   email?: string | null
@@ -56,7 +70,7 @@ const REVIEWER_PAGE_SIZE_SEARCH = 40
 interface ReviewerAssignModalProps {
   isOpen: boolean
   onClose: () => void
-  onAssign: (reviewerIds: string[], options?: AssignOptions) => Promise<boolean> | boolean | void // 统一为多选；返回 false 表示不要自动关闭
+  onAssign: (reviewerIds: string[], options?: AssignOptions) => Promise<AssignResult> | AssignResult
   manuscriptId: string
   currentOwnerId?: string
   currentOwnerLabel?: string
@@ -352,12 +366,31 @@ export default function ReviewerAssignModal({
         const ret = await Promise.resolve(
           (overrides.length > 0 ? onAssign(selectedReviewers, { overrides }) : onAssign(selectedReviewers)) as any
         )
-        await fetchExistingReviewers()
-        setSelectedReviewers([])
-        setOverrideReasons({})
-        if (ret !== false) {
-          onClose()
+        const payload = ret && typeof ret === 'object' ? (ret as AssignResultPayload) : null
+        const assignedReviewerIds = payload
+          ? (payload.assignedReviewerIds || []).map((id) => String(id)).filter(Boolean)
+          : ret === false
+            ? []
+            : [...selectedReviewers]
+        const assignedSet = new Set(assignedReviewerIds)
+        const shouldClose =
+          payload
+            ? payload.keepOpen === true
+              ? false
+              : payload.keepOpen === false
+                ? true
+                : (payload.ok ?? !((payload.failed || []).length > 0))
+            : ret !== false
+
+        if (assignedSet.size > 0) {
+          await fetchExistingReviewers()
+          setSelectedReviewers((prev) => prev.filter((id) => !assignedSet.has(id)))
+          setOverrideReasons((prev) =>
+            Object.fromEntries(Object.entries(prev).filter(([rid]) => !assignedSet.has(String(rid))))
+          )
         }
+
+        if (shouldClose) onClose()
       } finally {
         setIsSubmitting(false)
       }

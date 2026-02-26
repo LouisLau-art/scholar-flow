@@ -78,6 +78,7 @@ export function ReviewerAssignmentSearch(props: {
 
       const failures = settled.filter((item) => !item.ok)
       const successCount = settled.length - failures.length
+      const successReviewerIds = settled.filter((item) => item.ok).map((item) => item.reviewerId)
 
       if (successCount > 0) {
         props.onChanged?.()
@@ -85,7 +86,12 @@ export function ReviewerAssignmentSearch(props: {
 
       if (failures.length === 0) {
         toast.success(`Assigned ${successCount} reviewer(s).`, { id: toastId })
-        return true
+        return {
+          ok: true,
+          assignedReviewerIds: successReviewerIds,
+          failed: [],
+          keepOpen: false,
+        }
       }
 
       const sample = failures[0]
@@ -96,10 +102,23 @@ export function ReviewerAssignmentSearch(props: {
       } else {
         toast.error(sample.detail || 'Assign failed', { id: toastId })
       }
-      return false
+      return {
+        ok: false,
+        assignedReviewerIds: successReviewerIds,
+        failed: failures,
+        keepOpen: true,
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Assign failed', { id: toastId })
-      return false
+      return {
+        ok: false,
+        assignedReviewerIds: [],
+        failed: reviewerIds.map((reviewerId) => ({
+          reviewerId: String(reviewerId),
+          detail: e instanceof Error ? e.message : 'Assign failed',
+        })),
+        keepOpen: true,
+      }
     } finally {
       setSubmitting(false)
     }

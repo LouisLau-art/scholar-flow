@@ -180,6 +180,79 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     })
   })
 
+  it('keeps failed reviewers selected after partial success', async () => {
+    globalThis.fetch = vi.fn((url: any) => {
+      if (String(url).includes('/api/v1/editor/manuscripts/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: { id: 'ms-1', owner_id: 'u-owner' },
+            }),
+        }) as any
+      }
+      if (String(url).includes('/api/v1/editor/internal-staff')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: [{ id: 'u-owner', full_name: 'Owner User', email: 'owner@test.com', roles: ['editor'] }],
+            }),
+        }) as any
+      }
+      if (String(url).includes('/api/v1/reviews/assignments/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data: [] }),
+        }) as any
+      }
+      if (String(url).includes('/api/v1/editor/reviewer-library')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: [
+                { id: 'r-1', full_name: 'Reviewer One', email: 'one@test.com', roles: ['reviewer'] },
+                { id: 'r-2', full_name: 'Reviewer Two', email: 'two@test.com', roles: ['reviewer'] },
+              ],
+            }),
+        }) as any
+      }
+      return Promise.reject(new Error(`unexpected url ${url}`))
+    }) as any
+
+    const onAssign = vi.fn().mockResolvedValue({
+      ok: false,
+      assignedReviewerIds: ['r-1'],
+      failed: [{ reviewerId: 'r-2', detail: 'cooldown active' }],
+      keepOpen: true,
+    })
+    const onClose = vi.fn()
+
+    render(<ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" />)
+
+    const reviewerOneRow = await screen.findByTestId('reviewer-row-r-1')
+    const reviewerTwoRow = await screen.findByTestId('reviewer-row-r-2')
+    fireEvent.click(reviewerOneRow)
+    fireEvent.click(reviewerTwoRow)
+
+    const assignBtn = await screen.findByTestId('reviewer-assign')
+    expect(assignBtn).toHaveTextContent('Assign 2 Reviewers')
+
+    fireEvent.click(assignBtn)
+
+    await waitFor(() => {
+      expect(onAssign).toHaveBeenCalledWith(['r-1', 'r-2'])
+    })
+    await waitFor(() => {
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByTestId('reviewer-assign')).toHaveTextContent('Assign 1 Reviewer')
+    })
+  })
+
   it('pins assigned reviewers and shows as selected', async () => {
     const onAssign = vi.fn()
     const onClose = vi.fn()
