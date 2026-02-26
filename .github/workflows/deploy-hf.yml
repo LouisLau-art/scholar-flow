@@ -1,22 +1,35 @@
 name: Sync to Hugging Face Hub
 
 on:
-  push:
+  workflow_run:
+    workflows: ["ScholarFlow CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'Dockerfile'
-      - '.github/workflows/deploy-hf.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/SHA to deploy (default: main)"
+        required: false
+        type: string
 
 jobs:
   sync-to-hub:
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-hf-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      cancel-in-progress: true
     permissions:
       contents: read
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || (inputs.ref || 'main') }}
           fetch-depth: 0
           lfs: true
 
@@ -38,6 +51,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
+          DEPLOY_SHA="$(git rev-parse HEAD)"
 
           upload_with_retry() {
             local description="$1"
@@ -47,7 +61,7 @@ jobs:
             local attempt=1
             while [ "$attempt" -le "$max_attempts" ]; do
               echo "[deploy-hf] ${description} attempt ${attempt}/${max_attempts}"
-              if uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api "${src_path}" "${dst_path}" --repo-type space --token "$HF_TOKEN" --commit-message "${description}: ${{ github.sha }}"; then
+              if uvx --from "huggingface_hub[cli]" hf upload LouisShawn/scholarflow-api "${src_path}" "${dst_path}" --repo-type space --token "$HF_TOKEN" --commit-message "${description}: ${DEPLOY_SHA}"; then
                 return 0
               fi
               if [ "$attempt" -lt "$max_attempts" ]; then

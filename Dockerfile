@@ -49,5 +49,9 @@ USER user
 # 暴露端口
 EXPOSE 7860
 
+# 容器健康检查（用于平台探活）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/', timeout=3)" || exit 1
+
 # 启动
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--access-log", "--log-level", "info"]

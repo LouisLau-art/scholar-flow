@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: scholarflow-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # === 1. Backend Pipeline (Python) ===
   backend-ci:
@@ -73,7 +80,7 @@ jobs:
         node-version: '20'
 
     - name: Install Dependencies
-      run: bun install
+      run: bun install --frozen-lockfile
 
     - name: Lint
       run: bun run lint
