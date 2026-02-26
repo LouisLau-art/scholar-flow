@@ -18,7 +18,7 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    const toastId = toast.loading('Creating your account...')
+    const toastId = toast.loading('Creating your account…')
 
     try {
       const { error } = await supabase.auth.signUp({
@@ -70,7 +70,7 @@ export default function SignupPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-[box-shadow,border-color] focus:ring-2 focus:ring-primary sm:text-sm"
                   placeholder="name@university.edu"
                 />
               </div>
@@ -87,7 +87,7 @@ export default function SignupPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-[box-shadow,border-color] focus:ring-2 focus:ring-primary sm:text-sm"
                 />
               </div>
               <p className="mt-2 text-xs text-muted-foreground">At least 8 characters with numbers and symbols.</p>
@@ -96,7 +96,7 @@ export default function SignupPage() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Create Account'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}
@@ -113,7 +113,7 @@ export default function SignupPage() {
             <div className="mt-6">
               <Link 
                 href="/login" 
-                className="flex w-full justify-center rounded-xl bg-muted px-3 py-3 text-sm font-bold text-foreground shadow-sm ring-1 ring-inset ring-border transition-all hover:bg-muted/80"
+                className="flex w-full justify-center rounded-xl bg-muted px-3 py-3 text-sm font-bold text-foreground shadow-sm ring-1 ring-inset ring-border transition-colors hover:bg-muted/80"
               >
                 Sign In Instead
               </Link>

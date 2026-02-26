@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import SiteHeader from '@/components/layout/SiteHeader'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getBackendOrigin } from '@/lib/backend-origin'
@@ -191,7 +192,7 @@ function NewsCard({
     <Link
       href={item.href}
       className={cn(
-        'group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg',
+        'group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-lg',
         className
       )}
     >
@@ -270,13 +271,13 @@ export default async function HomePage() {
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/submit"
-                  className="rounded-full bg-primary px-7 py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90"
+                  className="rounded-full bg-primary px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
                 >
                   Submit Manuscript
                 </Link>
                 <Link
                   href="/search?status=published"
-                  className="rounded-full border border-white/40 px-7 py-3 text-sm font-semibold text-white transition-all hover:border-white hover:bg-card/10"
+                  className="rounded-full border border-white/40 px-7 py-3 text-sm font-semibold text-white transition-colors hover:border-white hover:bg-card/10"
                 >
                   Explore Latest Articles
                 </Link>
@@ -303,7 +304,7 @@ export default async function HomePage() {
                   <Link
                     key={card.title}
                     href={card.href}
-                    className="group rounded-2xl border border-border bg-card p-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                    className="group rounded-2xl border border-border bg-card p-3 transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                   >
                     <OverlayImage
                       src={card.image}
@@ -375,6 +376,7 @@ export default async function HomePage() {
               </Label>
               <Input
                 id="newsletter-first-name"
+                name="first_name"
                 type="text"
                 placeholder="Name"
                 autoComplete="given-name"
@@ -385,6 +387,7 @@ export default async function HomePage() {
               </Label>
               <Input
                 id="newsletter-last-name"
+                name="last_name"
                 type="text"
                 placeholder="Last name"
                 autoComplete="family-name"
@@ -395,17 +398,18 @@ export default async function HomePage() {
               </Label>
               <Input
                 id="newsletter-email"
+                name="email"
                 type="email"
                 placeholder="Email"
                 autoComplete="email"
                 className="h-11 border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus-visible:border-white focus-visible:ring-white/60"
               />
-              <button
+              <Button
                 type="button"
                 className="mx-auto mt-2 inline-flex h-10 items-center justify-center rounded-full bg-card px-8 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 md:col-span-3"
               >
                 Subscribe
-              </button>
+              </Button>
             </form>
           </div>
         </section>

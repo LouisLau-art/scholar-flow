@@ -6,6 +6,7 @@ import Autoplay from 'embla-carousel-autoplay'
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import Link from 'next/link'
 import { demoJournals } from '@/lib/demo-journals'
+import { Button } from '@/components/ui/button'
 
 export default function JournalCarousel() {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start' }, [Autoplay({ delay: 4000 })])
@@ -22,22 +23,26 @@ export default function JournalCarousel() {
             <p className="mt-2 text-muted-foreground font-medium text-lg">Explore high-impact research across diverse domains.</p>
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="icon"
               aria-label="Previous journals"
               onClick={scrollPrev}
-              className="p-3 rounded-full bg-background shadow-md hover:bg-muted text-muted-foreground border border-border transition-all"
+              className="rounded-full border-border bg-background text-muted-foreground shadow-md transition-colors hover:bg-muted hover:text-foreground"
             >
               <ChevronLeft className="h-6 w-6" />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="icon"
               aria-label="Next journals"
               onClick={scrollNext}
-              className="p-3 rounded-full bg-background shadow-md hover:bg-muted text-muted-foreground border border-border transition-all"
+              className="rounded-full border-border bg-background text-muted-foreground shadow-md transition-colors hover:bg-muted hover:text-foreground"
             >
               <ChevronRight className="h-6 w-6" />
-            </button>
+            </Button>
           </div>
         </div>
 

@@ -18,7 +18,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    const toastId = toast.loading('Signing you in...')
+    const toastId = toast.loading('Signing you in…')
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -69,7 +69,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-[box-shadow,border-color] focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
                   placeholder="name@university.edu"
                   data-testid="login-email"
                 />
@@ -87,7 +87,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-[box-shadow,border-color] focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
                   data-testid="login-password"
                 />
               </div>
@@ -96,7 +96,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
               data-testid="login-submit"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign In'}

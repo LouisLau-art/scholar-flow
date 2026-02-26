@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 
 export default function HeroSection() {
   const [searchMode, setSearchMode] = useState<'articles' | 'journals'>('articles')
@@ -73,18 +74,20 @@ export default function HeroSection() {
                 <Input
                   id="hero-search-input"
                   type="text"
-                  placeholder={searchMode === 'articles' ? "Search by title, DOI, or author..." : "Search journals by field or title..."}
+                  name="hero-search-query"
+                  autoComplete="off"
+                  placeholder={searchMode === 'articles' ? 'Search by title, DOI, or author…' : 'Search journals by field or title…'}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="h-auto w-full border-0 bg-background py-4 pl-12 pr-4 text-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
-              <button 
+              <Button
                 type="submit"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0"
+                className="h-auto shrink-0 rounded-xl bg-primary px-8 py-4 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Search <ArrowRight className="h-5 w-5" />
-              </button>
+              </Button>
             </form>
           </div>
           

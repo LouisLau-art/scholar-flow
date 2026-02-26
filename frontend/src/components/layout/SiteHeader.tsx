@@ -101,7 +101,7 @@ export default function SiteHeader() {
   const displayAvatar = profile?.avatar_url
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/30 bg-foreground text-white shadow-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-card/95 text-foreground shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-between">
           
@@ -124,6 +124,13 @@ export default function SiteHeader() {
                   className="relative group"
                   onMouseEnter={() => link.hasMega && setIsMegaMenuOpen(true)}
                   onMouseLeave={() => link.hasMega && setIsMegaMenuOpen(false)}
+                  onBlur={(event) => {
+                    if (!link.hasMega) return
+                    const nextTarget = event.relatedTarget as Node | null
+                    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+                      setIsMegaMenuOpen(false)
+                    }
+                  }}
                 >
                   {link.hasMega ? (
                     <Button
@@ -134,7 +141,12 @@ export default function SiteHeader() {
                       aria-controls="site-mega-menu"
                       onClick={() => setIsMegaMenuOpen((prev) => !prev)}
                       onFocus={() => setIsMegaMenuOpen(true)}
-                      className="flex items-center gap-1 py-8 px-0 text-sm font-semibold text-background/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setIsMegaMenuOpen(false)
+                        }
+                      }}
+                      className="flex items-center gap-1 py-8 px-0 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                     >
                       {link.name}
                       <ChevronDown className="h-4 w-4 opacity-50" />
@@ -142,7 +154,7 @@ export default function SiteHeader() {
                   ) : (
                     <Link 
                       href={link.href}
-                      className="flex items-center gap-1 text-sm font-semibold text-background/70 hover:text-white transition-colors py-8"
+                      className="flex items-center gap-1 py-8 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {link.name}
                     </Link>
@@ -160,49 +172,49 @@ export default function SiteHeader() {
               size="icon"
               aria-label="Search"
               onClick={() => setIsSearchOpen(true)}
-              className="hidden text-background/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground sm:inline-flex"
+              className="hidden text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card sm:inline-flex"
             >
               <Search className="h-5 w-5" />
             </Button>
-            <div className="h-6 w-px bg-border/30 hidden sm:block" />
+            <div className="hidden h-6 w-px bg-border/60 sm:block" />
 
             {isAuthenticated ? <NotificationBell isAuthenticated={isAuthenticated} /> : null}
 
             {isAuthenticated ? (
-              <div className="hidden sm:flex items-center gap-3 text-sm font-semibold text-background/80">
+              <div className="hidden items-center gap-3 text-sm font-semibold text-foreground sm:flex">
                 <Link href="/settings" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                  <Avatar className="h-8 w-8 border border-border/40">
+                  <Avatar className="h-8 w-8 border border-border/70">
                     <AvatarImage src={displayAvatar || undefined} />
-                    <AvatarFallback className="bg-foreground/80 text-background/80 text-xs">
+                    <AvatarFallback className="bg-muted text-foreground text-xs">
                       {displayName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="max-w-40 truncate text-background/80">{displayName}</span>
+                  <span className="max-w-40 truncate text-foreground">{displayName}</span>
                 </Link>
-                <Link href="/dashboard" className="text-background/60 hover:text-white transition-colors">
+                <Link href="/dashboard" className="text-muted-foreground transition-colors hover:text-foreground">
                   Dashboard
                 </Link>
-                <Link href="/settings" className="text-background/60 hover:text-white transition-colors">
+                <Link href="/settings" className="text-muted-foreground transition-colors hover:text-foreground">
                   Settings
                 </Link>
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={handleSignOut}
-                  className="px-0 text-background/60 hover:text-white transition-colors"
+                  className="px-0 text-muted-foreground transition-colors hover:text-foreground"
                 >
                   Sign Out
                 </Button>
               </div>
             ) : (
-              <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-background/70 hover:text-white">
+              <Link href="/login" className="hidden items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground sm:flex">
                 <UserIcon className="h-4 w-4" /> Sign In
               </Link>
             )}
             
             <Link 
               href="/submit" 
-              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all"
+              className="rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-[background-color,transform,box-shadow] duration-200 hover:bg-primary/90 hover:scale-105 active:scale-95"
             >
               Submit
             </Link>
@@ -213,7 +225,7 @@ export default function SiteHeader() {
               variant="ghost"
               size="icon"
               aria-label={isMobileMenuOpen ? 'Close mobile menu' : 'Open mobile menu'}
-              className="text-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground lg:hidden"
+              className="text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:hidden"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -263,6 +275,11 @@ export default function SiteHeader() {
           className="absolute left-0 w-full bg-card text-foreground shadow-2xl border-b border-border sf-motion-enter-top-fast"
           onMouseEnter={() => setIsMegaMenuOpen(true)}
           onMouseLeave={() => setIsMegaMenuOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setIsMegaMenuOpen(false)
+            }
+          }}
         >
           {/* ... (Existing Mega Menu Content) ... */}
           <div className="mx-auto max-w-7xl px-8 py-12 grid grid-cols-4 gap-12">
@@ -303,12 +320,12 @@ export default function SiteHeader() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-foreground border-t border-border/30 px-4 py-8 space-y-4 sf-motion-enter-right w-full h-screen fixed">
+        <div className="fixed h-screen w-full space-y-4 border-t border-border/30 bg-card px-4 py-8 text-foreground sf-motion-enter-right lg:hidden">
           {navLinks.map(link => (
             <Link 
               key={link.name} 
               href={link.href}
-              className="block text-xl font-bold text-background/80"
+              className="block text-xl font-bold text-foreground/90"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               {link.name}
@@ -317,19 +334,19 @@ export default function SiteHeader() {
           <div className="pt-8 border-t border-border/30 space-y-4">
             {isAuthenticated ? (
               <>
-                <Link href="/dashboard" className="block text-background/60">Dashboard</Link>
-                <Link href="/settings" className="block text-background/60">Settings</Link>
+                <Link href="/dashboard" className="block text-muted-foreground transition-colors hover:text-foreground">Dashboard</Link>
+                <Link href="/settings" className="block text-muted-foreground transition-colors hover:text-foreground">Settings</Link>
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={handleSignOut}
-                  className="block justify-start px-0 text-left text-background/60"
+                  className="block justify-start px-0 text-left text-muted-foreground"
                 >
                   Sign Out
                 </Button>
               </>
             ) : (
-              <Link href="/login" className="block text-background/60">Sign In</Link>
+              <Link href="/login" className="block text-muted-foreground">Sign In</Link>
             )}
             <Link href="/submit" className="block text-primary font-bold text-xl">Submit your manuscript</Link>
           </div>

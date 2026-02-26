@@ -14,11 +14,11 @@ const subjects = [
   { name: 'Medicine', icon: Stethoscope, count: 42, color: 'text-destructive bg-destructive/10' },
   { name: 'Technology', icon: Cpu, count: 38, color: 'text-primary bg-primary/10' },
   { name: 'Life Sciences', icon: FlaskConical, count: 31, color: 'text-primary bg-primary/10' },
-  { name: 'Physics', icon: Atom, count: 25, color: 'text-indigo-600 bg-indigo-50' },
+  { name: 'Physics', icon: Atom, count: 25, color: 'text-primary bg-primary/10' },
   { name: 'Social Sciences', icon: Landmark, count: 22, color: 'text-secondary-foreground bg-secondary' },
   { name: 'Legal', icon: Gavel, count: 15, color: 'text-muted-foreground bg-muted' },
   { name: 'Arts & Design', icon: Palette, count: 12, color: 'text-foreground bg-muted' },
-  { name: 'Global Studies', icon: Globe2, count: 18, color: 'text-cyan-600 bg-cyan-50' },
+  { name: 'Global Studies', icon: Globe2, count: 18, color: 'text-primary bg-primary/10' },
 ]
 
 export default function HomeDiscoveryBlocks() {
@@ -48,11 +48,11 @@ export default function HomeDiscoveryBlocks() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
             {subjects.map((sub) => (
-              <Link
-                key={sub.name}
-                href={`/search?mode=journals&q=${encodeURIComponent(sub.name)}`}
-                className="group block rounded-3xl border border-border/60 bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-2xl"
-              >
+                <Link
+                  key={sub.name}
+                  href={`/search?mode=journals&q=${encodeURIComponent(sub.name)}`}
+                  className="group block rounded-3xl border border-border/60 bg-card p-8 transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-2xl"
+                >
                 <div className={`${sub.color} w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
                   <sub.icon className="h-7 w-7" />
                 </div>
