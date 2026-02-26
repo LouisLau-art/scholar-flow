@@ -328,7 +328,7 @@ export default function MEIntakePage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
                   </tr>
                 ) : manuscripts.length === 0 ? (
                   <tr>

@@ -10,6 +10,8 @@ interface TagInputProps {
   placeholder?: string
   tags: string[]
   setTags: (tags: string[]) => void
+  inputId?: string
+  ariaLabel?: string
   maxTags?: number
   maxLength?: number
   className?: string
@@ -19,6 +21,8 @@ export function TagInput({
   placeholder,
   tags,
   setTags,
+  inputId,
+  ariaLabel,
   maxTags = 10,
   maxLength = 50,
   className,
@@ -80,6 +84,8 @@ export function TagInput({
       </div>
       <div className="flex gap-2">
         <Input
+          id={inputId}
+          aria-label={ariaLabel}
           type="text"
           placeholder={placeholder}
           value={inputValue}

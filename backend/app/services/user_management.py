@@ -1,6 +1,7 @@
 import os
 import secrets
 import string
+import logging
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, Dict, Any, List
@@ -26,6 +27,20 @@ ALLOWED_USER_ROLES = {
     "admin",
 }
 
+
+logger = logging.getLogger("scholarflow.user_management")
+
+
+def _mask_email(email: str | None) -> str:
+    value = str(email or "").strip()
+    if "@" not in value:
+        return "<empty>"
+    local, domain = value.split("@", 1)
+    if not local:
+        return f"***@{domain}"
+    return f"{local[:1]}***@{domain}"
+
+
 class UserManagementService:
     """
     Service for handling user management operations including:
@@ -42,7 +57,7 @@ class UserManagementService:
         
         if not url or not service_key:
             # Fallback or raise error? For now, we print a warning, but this is critical.
-            print("WARNING: SUPABASE_SERVICE_ROLE_KEY not set. Admin operations will fail.")
+            logger.warning("SUPABASE_SERVICE_ROLE_KEY not set. Admin operations will fail.")
         
         self.admin_client: Client = create_client(url, service_key)
 
@@ -71,7 +86,7 @@ class UserManagementService:
             }
             self.admin_client.table("role_change_logs").insert(data).execute()
         except Exception as e:
-            print(f"Failed to log role change: {e}")
+            logger.warning("Failed to log role change: %s", e)
             # Consider if we should raise this or just log error. 
             # Ideally audit logs are critical, so failure might need attention.
 
@@ -88,7 +103,7 @@ class UserManagementService:
             }
             self.admin_client.table("account_creation_logs").insert(data).execute()
         except Exception as e:
-            print(f"Failed to log account creation: {e}")
+            logger.warning("Failed to log account creation: %s", e)
 
     def log_email_notification(self, recipient_email: str, notification_type: str, status: str, error_message: Optional[str] = None):
         """
@@ -104,7 +119,7 @@ class UserManagementService:
             }
             self.admin_client.table("email_notification_logs").insert(data).execute()
         except Exception as e:
-            print(f"Failed to log email notification: {e}")
+            logger.warning("Failed to log email notification: %s", e)
 
     # --- T033, T034: Implement search, filter and pagination logic ---
 
@@ -158,7 +173,7 @@ class UserManagementService:
                 }
             }
         except Exception as e:
-            print(f"Failed to fetch users: {e}")
+            logger.error("Failed to fetch users: %s", e)
             raise Exception(f"Internal server error while fetching users: {e}")
 
     # --- T057, T058, T059, T060: Implement role change logic ---
@@ -260,7 +275,7 @@ class UserManagementService:
             }
 
         except Exception as e:
-            print(f"Update role failed: {e}")
+            logger.error("Update role failed: %s", e)
             if (
                 "User not found" in str(e)
                 or "Cannot modify" in str(e)
@@ -285,7 +300,7 @@ class UserManagementService:
             
             return response.data
         except Exception as e:
-            print(f"Failed to fetch role history: {e}")
+            logger.warning("Failed to fetch role history: %s", e)
             return []
 
     def reset_user_password(
@@ -433,7 +448,11 @@ class UserManagementService:
             )
             
             # 5. Send Notification (T086)
-            print(f"[UserManagement] internal user created: email={email} role={role}")
+            logger.info(
+                "[UserManagement] internal user created: email=%s role=%s",
+                _mask_email(email),
+                role,
+            )
 
             self.log_email_notification(
                 recipient_email=email,
@@ -453,7 +472,7 @@ class UserManagementService:
             }
 
         except Exception as e:
-            print(f"Create user failed: {e}")
+            logger.error("Create user failed: %s", e)
             if "already exists" in str(e) or "already registered" in str(e):
                 raise ValueError("User with this email already exists")
             raise Exception(f"Internal error creating user: {e}")
@@ -525,7 +544,7 @@ class UserManagementService:
                             user_id = u.id
                             break
                 except Exception as list_err:
-                    print(f"Failed to list users for ID retrieval: {list_err}")
+                    logger.warning("Failed to list users for ID retrieval: %s", list_err)
 
             if not user_id:
                  # CRITICAL: If we still don't have user_id, we cannot return a valid UserResponse.
@@ -552,7 +571,7 @@ class UserManagementService:
                         {"user_metadata": {"full_name": full_name}}
                     )
                 except Exception as meta_err:
-                    print(f"Failed to update auth metadata: {meta_err}")
+                    logger.warning("Failed to update auth metadata: %s", meta_err)
 
                 profile_data = {
                     "id": user_id,
@@ -572,7 +591,7 @@ class UserManagementService:
                 )
             
             # 5. Send Notification (Email with Magic Link)
-            print(f"[UserManagement] reviewer invite link generated for {email}")
+            logger.info("[UserManagement] reviewer invite link generated for %s", _mask_email(email))
 
             try:
                 self.log_email_notification(
@@ -583,7 +602,7 @@ class UserManagementService:
                     error_message="Magic link generated; delivery not implemented in this flow.",
                 )
             except Exception as log_err:
-                print(f"WARNING: Failed to log email notification: {log_err}")
+                logger.warning("Failed to log email notification: %s", log_err)
             
             return {
                 "id": user_id,
@@ -595,7 +614,7 @@ class UserManagementService:
             }
 
         except Exception as e:
-            print(f"Invite reviewer failed: {e}")
+            logger.error("Invite reviewer failed: %s", e)
             if "already exists" in str(e):
                 raise ValueError("User with this email already exists")
             raise Exception(f"Internal error inviting reviewer: {e}")

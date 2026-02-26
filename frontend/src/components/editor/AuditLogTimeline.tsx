@@ -5,7 +5,8 @@ import { EditorApi } from '@/services/editorApi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { format } from 'date-fns'
+import { formatDateTimeLocal } from '@/lib/date-display'
+import { UI_COPY } from '@/lib/ui-copy'
 import { Activity } from 'lucide-react'
 import type { InternalTask, InternalTaskActivity } from '@/types/internal-collaboration'
 
@@ -389,7 +390,7 @@ export function AuditLogTimeline({
 
         <div className="relative pl-4 border-l-2 border-border/60 space-y-6 max-h-[520px] overflow-auto pr-1">
           {!activated ? <div className="text-xs text-muted-foreground">Timeline will load when visible.</div> : null}
-          {loading ? <div className="text-xs text-muted-foreground">Loading timeline...</div> : null}
+          {loading ? <div className="text-xs text-muted-foreground">{UI_COPY.loading} timeline</div> : null}
           {!loading && loadError ? (
             <div className="space-y-2">
               <div className="text-xs text-rose-600">{loadError}</div>
@@ -413,7 +414,7 @@ export function AuditLogTimeline({
                 ) : null}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                {format(new Date(event.createdAt), 'yyyy-MM-dd HH:mm')}
+                {formatDateTimeLocal(event.createdAt)}
                 {event.actor ? ` by ${event.actor}` : ''}
               </div>
               {event.content ? (

@@ -307,7 +307,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
             </Button>
             <Button type="submit" disabled={isReadOnly || isSubmitting || isUploading} className="gap-1.5">
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {isReadOnly ? 'Read-only' : isSubmitting ? 'Submitting...' : 'Submit Review'}
+              {isReadOnly ? 'Read-only' : isSubmitting ? 'Submitting…' : 'Submit Review'}
             </Button>
           </div>
         </form>

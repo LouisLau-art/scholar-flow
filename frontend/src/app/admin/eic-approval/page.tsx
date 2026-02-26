@@ -10,7 +10,6 @@ export default function EICApprovalPage() {
   ])
 
   const handlePublish = (id: string) => {
-    console.log('Publishing manuscript', id)
     setPendingItems(pendingItems.filter(item => item.id !== id))
   }
 

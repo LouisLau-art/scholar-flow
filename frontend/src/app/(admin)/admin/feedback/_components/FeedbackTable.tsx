@@ -10,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { format } from "date-fns"
+import { formatDateTimeLocal } from "@/lib/date-display"
+import { UI_COPY } from "@/lib/ui-copy"
 
 interface Feedback {
   id: string
@@ -33,7 +34,7 @@ export function FeedbackTable() {
     queryFn: getFeedback,
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <div>{UI_COPY.loading}</div>
   if (error) return <div>Error loading feedback</div>
 
   const items = data?.items || []
@@ -61,7 +62,7 @@ export function FeedbackTable() {
             items.map((item: Feedback) => (
               <TableRow key={item.id}>
                 <TableCell className="whitespace-nowrap">
-                  {format(new Date(item.created_at), "MMM d, HH:mm")}
+                  {formatDateTimeLocal(item.created_at)}
                 </TableCell>
                 <TableCell>
                   <Badge

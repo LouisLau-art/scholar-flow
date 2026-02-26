@@ -21,7 +21,6 @@ export default function PlagiarismActions({ manuscriptId, status }: Props) {
     setIsUploading(true)
     try {
       // 调用 T016 后端重试接口
-      console.log('Retrying plagiarism check for', manuscriptId)
       // await ApiClient.retryPlagiarism(manuscriptId)
       toast.success('任务已重新加入队列')
     } catch (error) {

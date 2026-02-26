@@ -2,8 +2,11 @@
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { formatDateTimeLocal } from '@/lib/date-display'
+import { UI_COPY } from '@/lib/ui-copy'
 import type { FinanceInvoiceRow } from '@/types/finance'
 import { cn } from '@/lib/utils'
+import { cva } from 'class-variance-authority'
 
 type Props = {
   rows: FinanceInvoiceRow[]
@@ -13,18 +16,18 @@ type Props = {
   emptyText?: string
 }
 
-function statusBadgeClass(status: FinanceInvoiceRow['effective_status']) {
-  if (status === 'paid') return 'bg-emerald-100 text-emerald-700 border-transparent'
-  if (status === 'waived') return 'bg-indigo-100 text-indigo-700 border-transparent'
-  return 'bg-amber-100 text-amber-700 border-transparent'
-}
-
-function formatDateTime(raw: string | null | undefined) {
-  if (!raw) return '—'
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return raw
-  return d.toLocaleString()
-}
+const financeStatusBadgeVariants = cva('border-transparent', {
+  variants: {
+    status: {
+      paid: 'bg-primary/10 text-primary',
+      waived: 'bg-secondary text-secondary-foreground',
+      unpaid: 'bg-destructive/10 text-destructive',
+    },
+  },
+  defaultVariants: {
+    status: 'unpaid',
+  },
+})
 
 function formatAmount(amount: number, currency: string) {
   return `${currency} ${amount.toFixed(2)}`
@@ -32,7 +35,7 @@ function formatAmount(amount: number, currency: string) {
 
 export function FinanceInvoicesTable(props: Props) {
   if (props.loading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading invoices...</div>
+    return <div className="p-8 text-sm text-muted-foreground">{UI_COPY.loading} invoices</div>
   }
 
   if (!props.rows.length) {
@@ -67,11 +70,11 @@ export function FinanceInvoicesTable(props: Props) {
                 </td>
                 <td className="px-4 py-3 text-foreground">{formatAmount(Number(row.amount || 0), row.currency || 'USD')}</td>
                 <td className="px-4 py-3">
-                  <Badge variant="outline" className={cn(statusBadgeClass(row.effective_status))}>
+                  <Badge variant="outline" className={cn(financeStatusBadgeVariants({ status: row.effective_status }))}>
                     {row.effective_status.toUpperCase()}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDateTime(row.updated_at)}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatDateTimeLocal(row.updated_at)}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end">
                     <Button
@@ -80,7 +83,7 @@ export function FinanceInvoicesTable(props: Props) {
                       disabled={confirming || row.effective_status !== 'unpaid'}
                       onClick={() => props.onConfirm?.(row)}
                     >
-                      {confirming ? 'Confirming...' : 'Mark Paid'}
+                      {confirming ? UI_COPY.confirming : 'Mark Paid'}
                     </Button>
                   </div>
                 </td>

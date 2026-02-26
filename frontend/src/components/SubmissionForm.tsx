@@ -9,6 +9,10 @@ import { authService } from '@/services/auth'
 import { supabase } from '@/lib/supabase'
 import LoginPrompt from '@/components/LoginPrompt'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { InlineNotice } from '@/components/ui/inline-notice'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
 import type { Journal } from '@/types/journal'
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
@@ -56,6 +60,88 @@ function isSupportedCoverLetter(file: File): boolean {
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+type MetadataParsePayload = {
+  response: Response
+  raw: string
+  result: any
+  traceId: string
+}
+
+async function parseManuscriptMetadataWithFallback(file: File): Promise<MetadataParsePayload> {
+  let response: Response | null = null
+  let raw = ''
+  let result: any = null
+  let lastError: Error | null = null
+  let traceId = ''
+
+  const parseEndpoints = getUploadParseEndpoints()
+  const parseStartedAt = Date.now()
+  for (let idx = 0; idx < parseEndpoints.length; idx += 1) {
+    if (Date.now() - parseStartedAt > METADATA_PARSE_TOTAL_TIMEOUT_MS) {
+      lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TOTAL_TIMEOUT_MS / 1000)}s`)
+      break
+    }
+    const endpoint = parseEndpoints[idx]
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), METADATA_PARSE_TIMEOUT_MS)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      })
+      raw = await response.text()
+      try {
+        result = raw ? JSON.parse(raw) : null
+      } catch {
+        result = null
+      }
+      traceId = String(result?.trace_id || '')
+
+      if (!response.ok && response.status < 500) {
+        break
+      }
+      if (response.ok) {
+        break
+      }
+      lastError = new Error(
+        result?.message ||
+          result?.detail ||
+          `Metadata parsing failed (${response.status})`
+      )
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TIMEOUT_MS / 1000)}s`)
+        break
+      }
+      lastError = error instanceof Error ? error : new Error('Metadata parsing failed')
+    } finally {
+      window.clearTimeout(timer)
+    }
+
+    if (idx < parseEndpoints.length - 1) {
+      console.warn(`[Submission] parse endpoint failed, fallback to next: ${endpoint}`)
+    }
+  }
+
+  if (!response) {
+    throw (lastError || new Error('AI parsing failed'))
+  }
+
+  return { response, raw, result, traceId }
+}
+
+function extractTraceId(error: unknown): string {
+  try {
+    if (typeof (error as any)?.trace_id === 'string' && (error as any).trace_id) {
+      return String((error as any).trace_id)
+    }
+  } catch {}
+  return ''
 }
 
 export default function SubmissionForm() {
@@ -203,73 +289,7 @@ export default function SubmissionForm() {
       setUploadedPath(uploadPath)
       toast.loading('File uploaded. Extracting metadata...', { id: toastId })
 
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-
-      let response: Response | null = null
-      let raw = ''
-      let result: any = null
-      let lastError: Error | null = null
-      let parseTraceId = ''
-
-      const parseEndpoints = getUploadParseEndpoints()
-      const parseStartedAt = Date.now()
-      for (let idx = 0; idx < parseEndpoints.length; idx += 1) {
-        if (Date.now() - parseStartedAt > METADATA_PARSE_TOTAL_TIMEOUT_MS) {
-          lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TOTAL_TIMEOUT_MS / 1000)}s`)
-          break
-        }
-        const endpoint = parseEndpoints[idx]
-        const controller = new AbortController()
-        const timer = window.setTimeout(() => controller.abort(), METADATA_PARSE_TIMEOUT_MS)
-        try {
-          const formData = new FormData()
-          formData.append('file', selectedFile)
-          response = await fetch(endpoint, {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal,
-          })
-          raw = await response.text()
-          try {
-            result = raw ? JSON.parse(raw) : null
-          } catch {
-            result = null
-          }
-          parseTraceId = String(result?.trace_id || '')
-
-          // 非 5xx（例如 400 文件格式错误）直接返回给用户，不再切换端点重试。
-          if (!response.ok && response.status < 500) {
-            break
-          }
-          if (response.ok) {
-            break
-          }
-          lastError = new Error(
-            result?.message ||
-              result?.detail ||
-              `Metadata parsing failed (${response.status})`
-          )
-        } catch (err) {
-          if (isAbortLikeError(err)) {
-            // 中文注释:
-            // 当前端点超时后直接结束（不再尝试下一个 endpoint），避免用户等待时间翻倍导致“一直转圈”的体感。
-            lastError = new Error(`Metadata parsing timeout after ${Math.round(METADATA_PARSE_TIMEOUT_MS / 1000)}s`)
-            break
-          }
-          lastError = err instanceof Error ? err : new Error('Metadata parsing failed')
-        } finally {
-          window.clearTimeout(timer)
-        }
-
-        if (idx < parseEndpoints.length - 1) {
-          console.warn(`[Submission] parse endpoint failed, fallback to next: ${endpoint}`)
-        }
-      }
-
-      if (!response) {
-        throw (lastError || new Error('AI parsing failed'))
-      }
+      const { response, raw, result, traceId: parseTraceId } = await parseManuscriptMetadataWithFallback(selectedFile)
 
       if (!response.ok) {
         const msg =
@@ -311,12 +331,7 @@ export default function SubmissionForm() {
           : error instanceof Error
             ? error.message
             : "AI parsing failed"
-      const traceInError = (() => {
-        try {
-          if (typeof (error as any)?.trace_id === 'string' && (error as any).trace_id) return String((error as any).trace_id)
-        } catch {}
-        return ''
-      })()
+      const traceInError = extractTraceId(error)
       const finalMessage = traceInError ? `${message}（trace: ${traceInError}）` : message
       toast.error(finalMessage, { id: toastId })
       if (message.toLowerCase().includes('upload failed')) {
@@ -488,11 +503,11 @@ export default function SubmissionForm() {
       <div className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
         file ? 'border-primary bg-primary/10' : 'border-border/80 hover:border-primary'
       }`}>
-        <input
+        <Input
           type="file"
           accept=".pdf,application/pdf"
           onChange={handleFileUpload}
-          className="absolute inset-0 cursor-pointer opacity-0"
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           disabled={isUploading}
           data-testid="submission-file"
         />
@@ -505,8 +520,9 @@ export default function SubmissionForm() {
 
       {/* Cover Letter 上传区域（可选） */}
       <div className="rounded-lg border border-border bg-card p-5">
-        <label className="block text-sm font-semibold text-foreground mb-2">Cover Letter (Optional)</label>
-        <input
+        <label htmlFor="submission-cover-letter-file" className="block text-sm font-semibold text-foreground mb-2">Cover Letter (Optional)</label>
+        <Input
+          id="submission-cover-letter-file"
           type="file"
           accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleCoverLetterUpload}
@@ -524,21 +540,21 @@ export default function SubmissionForm() {
           </div>
         )}
         {!isUploadingCoverLetter && coverLetterPath && (
-          <div className="mt-2 text-xs text-emerald-700">
+          <InlineNotice tone="info" size="sm" className="mt-2">
             Cover letter uploaded: {coverLetterFile?.name || 'file'}
-          </div>
+          </InlineNotice>
         )}
         {coverLetterUploadError && (
-          <div className="mt-2 text-xs text-red-600">
+          <InlineNotice tone="danger" size="sm" className="mt-2">
             Cover letter upload failed: {coverLetterUploadError}
-          </div>
+          </InlineNotice>
         )}
       </div>
 
       {/* 元数据展示/编辑区域 */}
       <div className="grid grid-cols-1 gap-6">
         <div>
-          <label className="mb-2 block text-sm font-semibold text-foreground">Target Journal</label>
+          <label htmlFor="submission-journal-select" className="mb-2 block text-sm font-semibold text-foreground">Target Journal</label>
           <Select
             value={journalId}
             onValueChange={(value) => {
@@ -548,6 +564,7 @@ export default function SubmissionForm() {
             disabled={isLoadingJournals || journals.length === 0}
           >
             <SelectTrigger
+              id="submission-journal-select"
               className="w-full border-border/80 text-foreground"
               data-testid="submission-journal-select"
               onBlur={() => setTouched((prev) => ({ ...prev, journal: true }))}
@@ -571,25 +588,26 @@ export default function SubmissionForm() {
             </SelectContent>
           </Select>
           {showJournalError && (
-            <p className="mt-2 text-xs text-red-600" data-testid="submission-journal-error">
+            <InlineNotice tone="danger" size="sm" className="mt-2" data-testid="submission-journal-error">
               Please select a target journal.
-            </p>
+            </InlineNotice>
           )}
           {journalLoadError && (
-            <p className="mt-2 text-xs text-amber-700">
+            <InlineNotice tone="warning" size="sm" className="mt-2">
               Journal list load failed: {journalLoadError}
-            </p>
+            </InlineNotice>
           )}
           {!isLoadingJournals && journals.length === 0 && !journalLoadError && (
-            <p className="mt-2 text-xs text-amber-700">
+            <InlineNotice tone="warning" size="sm" className="mt-2">
               No active journal found. Please ask admin to configure journals first.
-            </p>
+            </InlineNotice>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">Manuscript Title</label>
-          <input
+          <label htmlFor="submission-title" className="block text-sm font-semibold text-foreground mb-2">Manuscript Title</label>
+          <Input
+            id="submission-title"
             type="text"
             value={metadata.title}
             onChange={(e) => {
@@ -602,15 +620,16 @@ export default function SubmissionForm() {
             data-testid="submission-title"
           />
           {showTitleError && (
-            <p className="mt-2 text-xs text-red-600" data-testid="submission-title-error">
+            <p className="mt-2 text-xs text-destructive" data-testid="submission-title-error">
               Title must be at least 5 characters.
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">Abstract</label>
-          <textarea
+          <label htmlFor="submission-abstract" className="block text-sm font-semibold text-foreground mb-2">Abstract</label>
+          <Textarea
+            id="submission-abstract"
             rows={6}
             value={metadata.abstract}
             onChange={(e) => {
@@ -623,15 +642,16 @@ export default function SubmissionForm() {
             data-testid="submission-abstract"
           />
           {showAbstractError && (
-            <p className="mt-2 text-xs text-red-600" data-testid="submission-abstract-error">
+            <p className="mt-2 text-xs text-destructive" data-testid="submission-abstract-error">
               Abstract must be at least 30 characters.
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">Dataset URL (Optional)</label>
-          <input
+          <label htmlFor="submission-dataset-url" className="block text-sm font-semibold text-foreground mb-2">Dataset URL (Optional)</label>
+          <Input
+            id="submission-dataset-url"
             type="url"
             value={datasetUrl}
             onChange={(e) => {
@@ -644,15 +664,16 @@ export default function SubmissionForm() {
             data-testid="submission-dataset-url"
           />
           {showDatasetError && (
-            <p className="mt-2 text-xs text-red-600" data-testid="submission-dataset-url-error">
+            <p className="mt-2 text-xs text-destructive" data-testid="submission-dataset-url-error">
               Dataset URL must start with http:// or https://.
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">Source Code URL (Optional)</label>
-          <input
+          <label htmlFor="submission-source-url" className="block text-sm font-semibold text-foreground mb-2">Source Code URL (Optional)</label>
+          <Input
+            id="submission-source-url"
             type="url"
             value={sourceCodeUrl}
             onChange={(e) => {
@@ -665,7 +686,7 @@ export default function SubmissionForm() {
             data-testid="submission-source-url"
           />
           {showSourceCodeError && (
-            <p className="mt-2 text-xs text-red-600" data-testid="submission-source-url-error">
+            <p className="mt-2 text-xs text-destructive" data-testid="submission-source-url-error">
               Source code URL must start with http:// or https://.
             </p>
           )}
@@ -675,16 +696,16 @@ export default function SubmissionForm() {
       <div className="space-y-3">
         {!user && <LoginPrompt />}
         {uploadError && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <InlineNotice tone="danger" size="sm">
             Upload failed: {uploadError}
-          </div>
+          </InlineNotice>
         )}
         {parseError && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <InlineNotice tone="warning" size="sm">
             Parsing failed: {parseError}
-          </div>
+          </InlineNotice>
         )}
-        <button
+        <Button
           onClick={handleFinalize}
           disabled={
             !fileValid ||
@@ -703,7 +724,7 @@ export default function SubmissionForm() {
           data-testid="submission-finalize"
         >
           {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalize Submission'}
-        </button>
+        </Button>
         {user && (!fileValid || !titleValid || !abstractValid || !journalValid || !datasetUrlValid || !sourceCodeUrlValid) && (
           <p className="text-xs text-muted-foreground text-center" data-testid="submission-validation-hint">
             Upload a PDF, choose a journal, add a title (at least 5 chars) and abstract (at least 30 chars). Optional URLs must start with http(s).

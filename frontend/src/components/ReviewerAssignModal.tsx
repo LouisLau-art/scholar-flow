@@ -8,7 +8,9 @@ import { User } from '@/types/user'
 import { analyzeReviewerMatchmaking, ReviewerRecommendation } from '@/services/matchmaking'
 import { EditorApi } from '@/services/editorApi'
 import { AddReviewerModal } from '@/components/editor/AddReviewerModal'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { ReviewerCandidateList } from '@/components/editor/reviewer-assign-modal/ReviewerCandidateList'
 import { AssignActionBar } from '@/components/editor/reviewer-assign-modal/AssignActionBar'
 import { useReviewerPolicy } from '@/components/editor/reviewer-assign-modal/useReviewerPolicy'
@@ -49,6 +51,17 @@ type StaffProfile = {
 
 const REVIEWER_PAGE_SIZE_DEFAULT = 20
 const REVIEWER_PAGE_SIZE_SEARCH = 40
+
+async function resolveApiErrorMessage(response: Response, fallback: string): Promise<string> {
+  const raw = await response.text().catch(() => '')
+  if (!raw) return fallback
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    return parsed?.detail || parsed?.message || fallback
+  } catch {
+    return raw || fallback
+  }
+}
 
 interface ReviewerAssignModalProps {
   isOpen: boolean
@@ -193,16 +206,9 @@ export default function ReviewerAssignModal({
       })
       if (res.ok) {
         toast.success("Reviewer removed")
-        fetchExistingReviewers()
+        void fetchExistingReviewers()
       } else {
-        const text = await res.text().catch(() => '')
-        let detail = ''
-        try {
-          const j = JSON.parse(text || '{}')
-          detail = j?.detail || j?.message || ''
-        } catch {
-          detail = text
-        }
+        const detail = await resolveApiErrorMessage(res, "Failed to remove reviewer")
         toast.error(detail || "Failed to remove reviewer")
       }
     } catch (e) {
@@ -529,7 +535,8 @@ export default function ReviewerAssignModal({
     <>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
         <DialogContent
-          className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-card p-0 shadow-2xl flex flex-col [&>button]:hidden"
+          className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-xl bg-card p-0 shadow-2xl flex flex-col"
+          showCloseButton={false}
           data-testid="reviewer-modal"
         >
           <DialogHeader className="sr-only">
@@ -543,14 +550,17 @@ export default function ReviewerAssignModal({
               <Users className="h-6 w-6 text-primary" />
               <h2 className="text-xl font-bold text-foreground">Assign Reviewer</h2>
             </div>
-            <button
-              type="button"
-              aria-label="Close reviewer assignment dialog"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-muted-foreground transition-colors"
-            >
-              <X className="h-6 w-6" />
-            </button>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                aria-label="Close reviewer assignment dialog"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                <X className="h-6 w-6" />
+              </Button>
+            </DialogClose>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
@@ -588,7 +598,7 @@ export default function ReviewerAssignModal({
                 <label htmlFor="reviewer-library-search" className="sr-only">
                   Search reviewers by name
                 </label>
-                <input
+                <Input
                   id="reviewer-library-search"
                   type="text"
                   placeholder="Search reviewers by name..."
@@ -599,13 +609,15 @@ export default function ReviewerAssignModal({
                 />
               </div>
               {canAddReviewerToLibrary ? (
-                <button
+                <Button
                   onClick={() => setIsAddDialogOpen(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-muted text-foreground rounded-lg hover:bg-muted transition-colors text-sm font-medium"
+                  type="button"
+                  variant="secondary"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium"
                 >
                   <UserPlus className="h-4 w-4" />
                   Add to Library
-                </button>
+                </Button>
               ) : null}
             </div>
 
@@ -632,18 +644,18 @@ export default function ReviewerAssignModal({
             />
 
             {selectedOverrideReviewers.length > 0 && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div className="text-sm font-semibold text-amber-800">Cooldown override required</div>
-                <div className="mt-1 text-xs text-amber-700">
+              <div className="mt-4 rounded-lg border border-secondary-foreground/20 bg-secondary p-3">
+                <div className="text-sm font-semibold text-secondary-foreground">Cooldown override required</div>
+                <div className="mt-1 text-xs text-secondary-foreground">
                   你已选择 {selectedOverrideReviewers.length} 位命中 cooldown 的审稿人。提交前请填写 override 原因（将写入审计日志）。
                 </div>
                 <div className="mt-3 space-y-2">
                   {selectedOverrideReviewers.map((rid) => (
                     <div key={`override-${rid}`}>
-                      <label className="mb-1 block text-xs font-medium text-amber-900" htmlFor={`override-reason-${rid}`}>
+                      <label className="mb-1 block text-xs font-medium text-foreground" htmlFor={`override-reason-${rid}`}>
                         Reviewer {rid}
                       </label>
-                      <input
+                      <Input
                         id={`override-reason-${rid}`}
                         type="text"
                         value={overrideReasons[rid] || ''}
@@ -654,7 +666,7 @@ export default function ReviewerAssignModal({
                           }))
                         }
                         placeholder="Why is cooldown override justified?"
-                        className="w-full rounded-md border border-amber-300 bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         data-testid={`override-reason-${rid}`}
                       />
                     </div>
@@ -689,15 +701,16 @@ export default function ReviewerAssignModal({
                 <div className="text-xs text-muted-foreground">{pendingRemove.reviewer_email || ''}</div>
               </div>
               <div className="flex justify-end gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => setPendingRemove(null)}
-                  className="px-4 py-2 text-foreground rounded-lg hover:bg-muted transition-colors"
+                  variant="ghost"
+                  className="px-4 py-2"
                   data-testid="unassign-cancel"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={async () => {
                     if (!pendingRemove) return
@@ -706,11 +719,12 @@ export default function ReviewerAssignModal({
                     await handleUnassign(assignmentId)
                   }}
                   disabled={removingId === String(pendingRemove.id)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                  variant="destructive"
+                  className="px-4 py-2 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
                   data-testid="unassign-confirm-remove"
                 >
-                  {removingId === String(pendingRemove.id) ? 'Removing...' : 'Remove'}
-                </button>
+                  {removingId === String(pendingRemove.id) ? 'Removing…' : 'Remove'}
+                </Button>
               </div>
             </>
           ) : null}

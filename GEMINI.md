@@ -33,7 +33,7 @@
     - **CI/CD**: GitHub Actions (`.github/workflows/deploy-hf.yml`) 监听 `main` 分支，自动同步 `backend/` 和 `Dockerfile` 到 HF Space（需配置 GitHub Secret `HF_TOKEN`）。
   - **Legacy**: Render/Railway/Zeabur 方案已降级为备选，相关配置文件 (`deploy/*.env`) 仍保留供参考。
 - **Sentry（Feature 027，全栈监控）**：
-  - **Frontend**：`@sentry/nextjs`（`frontend/sentry.client.config.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
+  - **Frontend**：`@sentry/nextjs`（`frontend/instrumentation-client.ts` / `frontend/sentry.server.config.ts` / `frontend/sentry.edge.config.ts`），UAT 阶段 `replaysSessionSampleRate=1.0`、`tracesSampleRate=1.0`。
   - **Sourcemaps**：`frontend/next.config.mjs` **始终**包裹 `withSentryConfig`（保证 config 注入与事件上报可用）；若 Vercel 未配置 `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT`，则自动禁用 sourcemaps 上传（但 DSN 上报仍可用）。
   - **Backend**：`sentry-sdk` 在 `backend/main.py` 初始化；`SqlalchemyIntegration` **可选**（仅当环境安装了 `sqlalchemy` 才会自动启用）。为兼容 HF Space 可能存在的旧版 `sentry-sdk`，初始化会在遇到 `Unknown option`（如 `with_locals`/`max_request_body_size`）时自动降级重试。隐私策略为“永不上传请求体”（PDF/密码）且初始化失败不阻塞启动（零崩溃原则）。
   - **自测入口**：后端 `GET /api/v1/internal/sentry/test-error`（需 `ADMIN_API_KEY`）；前端 `/admin/sentry-test`。
@@ -269,6 +269,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **默认数据库**：使用**云端 Supabase**（project ref：`mmvulyrfsorqdpdrzbkd`，见 `backend/.env` 里的 `SUPABASE_URL`）。
 - **包管理器统一**：前端统一使用 `bun`（替代 `pnpm/npm`），后端统一使用 `uv`（替代 `pip`）；脚本与 CI 均以 `bun run` + `uv pip` 为准。
 - **编辑端列表限流参数（2026-02-25）**：新增 `EDITOR_PROCESS_QUERY_LIMIT`（默认 `300`，范围 `50-1000`）与 `EDITOR_PIPELINE_STAGE_LIMIT`（默认 `80`，范围 `10-300`）；用于限制 Process/Pipeline 单次查询规模，避免全量扫描导致高延迟。
+- **API 基础限流中间件（2026-02-26）**：后端新增 `RateLimitMiddleware`（`backend/app/core/rate_limit.py`），默认在非测试环境开启（`RATE_LIMIT_ENABLED=1`）；全局默认窗口 `60s/600req`（`RATE_LIMIT_WINDOW_SEC`、`RATE_LIMIT_MAX_REQUESTS`），并对 `auth dev-login`、`magic-link verify`、`reviews token/magic` 路径提供独立阈值（`RATE_LIMIT_*`）。
+- **后端模块拆分补充（2026-02-26）**：`DOIService` 继续拆分为 `doi_service_data.py` + `doi_service_workflow.py`（入口仍为 `app.services.doi_service.DOIService`）；`EditorServicePrecheckWorkspaceMixin` 拆分为 `editor_service_precheck_workspace_views.py` + `editor_service_precheck_workspace_decisions.py`（入口仍为 `app.services.editor_service_precheck_workspace`），降低单文件复杂度并保持现有 import/monkeypatch 路径兼容。
 - **Tailwind 设计系统化基线（2026-02-25）**：前端基线文档统一维护在 `docs/TAILWIND_V4_MIGRATION_BASELINE.md`；审计命令为 `cd frontend && bun run audit:tailwind-readiness`。当前基线：`w-[96vw]=0`、`hex=0`、`inline style=0`、`hard palette=0`、`magic width=0`（五项核心计数已全清零，且 `frontend-ci` 已对 `legacy motion/long duration` 增设门禁防回退）。
 - **Tailwind v4 迁移 Phase 2（2026-02-25）**：前端已完成 CSS-first 迁移：`globals.css` 内新增 `@theme` 承载语义 token（颜色/字体/圆角/accordion 动画），并用 `@utility` 实现 `animate-in/out + fade/zoom/slide` 动画兼容层；已删除 `@config` 与 `tailwind.config.mjs`，`components.json` 的 `tailwind.config` 置空。
 - **Tailwind v4 迁移 Phase 3（2026-02-25）**：已完成动画语义层收敛（`sf-motion-*`）并替换高频组件（`dialog/popover/select/dashboard/home/header/version`）中的长动画拼接 class；`motion budget` 门禁（`legacy motion=0`、`long duration=0`）已接入 `frontend-ci`，下一步聚焦真实页面数据下的动画进一步降载。
@@ -326,7 +328,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-26）
-- **Editor Detail / Manuscripts Detail 拆分（2026-02-26）**：`backend/app/api/v1/editor_detail.py` 与 `backend/app/api/v1/manuscripts_detail.py` 已改为“路由薄层 + handlers 实现层”（新增 `editor_detail_handlers.py`、`manuscripts_detail_handlers.py`），保持原路由/返回不变；定向后端回归 `14 passed`。
+- **Editor Detail / Manuscripts Detail 深拆（二阶段，2026-02-26）**：`editor_detail_handlers.py`、`manuscripts_detail_handlers.py` 已降为兼容门面；新增 `editor_detail_runtime.py`、`editor_detail_main.py`、`editor_detail_cards.py` 与 `manuscripts_detail_utils.py`、`manuscripts_detail_author.py`、`manuscripts_detail_access.py`，保持原路由/返回与 `editor_detail.py` 的 monkeypatch 覆盖链路（`_get_signed_url`/`supabase_admin`）不变；定向后端回归 `18 passed`。
 - **EditorApi 第二阶段拆分完成（2026-02-26）**：在 `frontend/src/services/editor-api/` 新增 `http.ts`、`rbac.ts`、`manuscripts.ts`，当前已形成 `manuscripts/reviewers/production(decision)/finance/rbac/http` 六域结构；`editorApi.ts` 主文件降至 `231` 行并保留统一导出层。
 - **ReviewerAssignModal 结构化重构（2026-02-26）**：`frontend/src/components/ReviewerAssignModal.tsx` 拆分出 `OwnerBindingPanel`、`ExistingReviewersPanel`、`AiRecommendationPanel`、`ReviewerCandidateList`、`AssignActionBar` 与 `useReviewerPolicy`，主文件从 `991` 行降到 `728` 行；相关前端测试 `22 passed`。
 - **Editor Heavy Handlers 拆分（2026-02-26）**：`backend/app/api/v1/editor_heavy_handlers.py` 已拆为 `editor_heavy_pipeline.py`、`editor_heavy_revision.py`、`editor_heavy_reviewer.py`、`editor_heavy_decision.py`、`editor_heavy_publish.py`，主文件改为兼容聚合导出（保留原导入路径，避免路由与测试引用回归）；相关后端定向回归 `24 passed`。
@@ -401,6 +403,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 033（详情页布局对齐）**：重构 `/editor/manuscript/[id]`：顶部 Header (Title/Authors/Funding/APC/Owner/Editor)、文件区三卡（Cover/Original/Peer Review + Upload）、Invoice Info 移到底部表格；新增 Editor-only 上传 peer review file 接口 `POST /api/v1/editor/manuscripts/{id}/files/review-attachment`，文件写入 `review-attachments` 私有桶并记录到 `public.manuscript_files`。
 - **Feature 036 (内部协作与详情页升级)**：重构稿件详情页为双栏布局（左侧信息/文件/评论，右侧流程/审计）；新增 `internal_comments` 表用于内部沟通（Notebook）；集成 `status_transition_logs` 可视化审计时间轴；文件下载中心化管理。
 - **Portal（UAT 线上稳定性）**：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异（`order(desc=...)`）与云端 schema 漂移（缺失 `authors`/`published_at`）导致的 500；作者显示不再返回 `Unknown`，且不会泄露明文邮箱。
+- **CI 回归门补强（2026-02-26）**：`.github/workflows/ci.yml` 的 `backend-ci` 在 unit 后新增 integration smoke（`tests/integration/test_editor_invite.py`、`tests/integration/test_concurrent_assignments.py`），用于兜底 reviewer 指派链路回归。
+- **Reviewer Assignment 模块拆分（2026-02-26）**：`backend/app/api/v1/reviews_handlers_assignment.py` 改为门面导出，核心逻辑拆分到 `reviews_handlers_assignment_assign.py`、`reviews_handlers_assignment_session.py`、`reviews_handlers_assignment_manage.py`，路由调用与响应结构保持兼容。
+- **Production Cycle 模块拆分（2026-02-26）**：`ProductionWorkspaceWorkflowCycleMixin` 拆分为 `production_workspace_service_workflow_cycle_context_queue.py`（上下文/队列）+ `production_workspace_service_workflow_cycle_writes.py`（create/update/upload）+ 入口 `production_workspace_service_workflow_cycle.py`（approve/signed-url），保留原类名与 import 路径。
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes

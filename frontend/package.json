@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "audit:tailwind-readiness": "bash scripts/tailwind-readiness-audit.sh",
+    "audit:ui-guidelines": "bash scripts/ui-guidelines-audit.sh",
     "audit:route-budgets": "node scripts/check-route-budgets.mjs",
     "test": "vitest",
     "test:run": "vitest run",
@@ -43,7 +44,6 @@
     "react-day-picker": "^9.13.2",
     "react-dom": "^18",
     "react-hook-form": "^7.62.0",
-    "react-pdf": "^9.2.1",
     "recharts": "^2.15.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"

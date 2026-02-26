@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Globe, ArrowRight, Loader2, Mail, Lock } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -60,14 +62,14 @@ export default function LoginPage() {
               <label htmlFor="login-email" className="block text-sm font-bold leading-6 text-foreground">Email address</label>
               <div className="mt-2 relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
+                <Input
                   id="login-email"
                   type="email"
                   autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
                   placeholder="name@university.edu"
                   data-testid="login-email"
                 />
@@ -78,20 +80,20 @@ export default function LoginPage() {
               <label htmlFor="login-password" className="block text-sm font-bold leading-6 text-foreground">Password</label>
               <div className="mt-2 relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
+                <Input
                   id="login-password"
                   type="password"
                   autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
                   data-testid="login-password"
                 />
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={isLoading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
@@ -99,7 +101,7 @@ export default function LoginPage() {
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign In'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}
-            </button>
+            </Button>
           </form>
 
           <p className="mt-10 text-center text-sm font-medium text-muted-foreground">

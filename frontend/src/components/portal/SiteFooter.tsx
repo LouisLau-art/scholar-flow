@@ -45,9 +45,21 @@ export function SiteFooter() {
             Resources
           </h4>
           <ul className="space-y-4 text-sm">
-            <li className="hover:text-primary-foreground cursor-pointer">Author Guidelines</li>
-            <li className="hover:text-primary-foreground cursor-pointer">Editorial Policies</li>
-            <li className="hover:text-primary-foreground cursor-pointer">Open Access Policy</li>
+            <li>
+              <Link href={siteConfig.links.resources.authorGuidelines} className="hover:text-primary-foreground transition-colors">
+                Author Guidelines
+              </Link>
+            </li>
+            <li>
+              <Link href={siteConfig.links.resources.editorialPolicies} className="hover:text-primary-foreground transition-colors">
+                Editorial Policies
+              </Link>
+            </li>
+            <li>
+              <Link href={siteConfig.links.resources.openAccessPolicy} className="hover:text-primary-foreground transition-colors">
+                Open Access Policy
+              </Link>
+            </li>
           </ul>
         </div>
         <div>

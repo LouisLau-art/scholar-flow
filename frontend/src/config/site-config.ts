@@ -4,10 +4,18 @@ export const siteConfig = {
   issn: "2073-4433",
   impact_factor: "3.2",
   links: {
+    home: "/",
     about: "/about",
     contact: "/about",
     submit: "/submit",
     dashboard: "/dashboard",
+    journals: "/journals",
+    topics: "/topics",
+    resources: {
+      authorGuidelines: "/submit",
+      editorialPolicies: "/about",
+      openAccessPolicy: "/about",
+    },
   },
   copyright: `Copyright © ${new_stringDate().getFullYear()} ScholarFlow`,
 };

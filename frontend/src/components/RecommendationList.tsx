@@ -23,7 +23,6 @@ export default function RecommendationList() {
 
   const handleInvite = (id: string) => {
     setInvitedIds([...invitedIds, id])
-    console.log('Sending invitation email to', id)
   }
 
   return (

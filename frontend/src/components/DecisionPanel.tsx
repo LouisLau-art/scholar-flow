@@ -392,8 +392,8 @@ export default function DecisionPanel({
     return (
       <Card className="text-center">
         <CardContent className="p-8">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <CheckCircle2 className="h-8 w-8 text-primary" />
           </div>
           <h3 className="mb-2 text-xl font-semibold text-foreground">成功</h3>
           <p className="mb-6 text-sm text-muted-foreground">
@@ -403,8 +403,8 @@ export default function DecisionPanel({
             <div className="mb-2 flex items-center justify-center gap-2">
               <div
                 className={`h-2 w-2 rounded-full ${
-                  decision === "accept" ? "bg-emerald-500" : 
-                  decision === "revision" ? "bg-amber-500" : "bg-rose-500"
+                  decision === "accept" ? "bg-primary" : 
+                  decision === "revision" ? "bg-secondary-foreground/70" : "bg-destructive"
                 }`}
               />
               <span className="text-sm font-medium text-foreground capitalize">
@@ -450,7 +450,7 @@ export default function DecisionPanel({
               </div>
 
               {pdfError ? (
-                <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   PDF preview unavailable: {pdfError}
                 </div>
               ) : null}
@@ -490,7 +490,7 @@ export default function DecisionPanel({
           </div>
 
           {reviewsError ? (
-            <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Failed to load reviews: {reviewsError}
             </div>
           ) : reviewsLoaded && reviews.length === 0 ? (
@@ -498,7 +498,7 @@ export default function DecisionPanel({
               No reviews found for this manuscript yet.
             </div>
           ) : reviewsLoaded && completedCount === 0 ? (
-            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <div className="mt-3 rounded-md border border-secondary-foreground/20 bg-secondary px-3 py-2 text-sm text-secondary-foreground">
               Reviews are assigned, but none has been submitted yet. Please wait for at least one completed review before making a decision.
             </div>
           ) : (
@@ -595,7 +595,7 @@ export default function DecisionPanel({
               disabled={isSubmitting}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                 decisionStage === 'final'
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                  ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'border-border bg-card text-foreground hover:bg-muted/40'
               }`}
             >
@@ -609,7 +609,7 @@ export default function DecisionPanel({
         <div className="space-y-4">
           <h4 className="text-sm font-medium text-foreground">Select Decision</h4>
           {decisionStage === 'final' && !canDecide && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <div className="rounded-md border border-secondary-foreground/20 bg-secondary px-3 py-2 text-sm text-secondary-foreground">
               录用/拒稿需要至少 1 份已提交审稿意见；如需退修可直接选择 “Request Revision”。
             </div>
           )}
@@ -634,7 +634,7 @@ export default function DecisionPanel({
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                   decision === "accept"
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                    ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border bg-background text-foreground hover:bg-accent"
                 }`}
               >
@@ -646,7 +646,7 @@ export default function DecisionPanel({
                   </div>
 
                   {decision === 'accept' && (
-                    <div className="mt-2 rounded-lg bg-card/60 p-3 border border-emerald-100">
+                    <div className="mt-2 rounded-lg bg-card/60 p-3 border border-primary/20">
                       <Label htmlFor="apc-amount" className="text-xs font-semibold text-foreground">
                         Confirm APC Amount (USD)
                       </Label>
@@ -673,7 +673,7 @@ export default function DecisionPanel({
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                   decision === "revision"
-                    ? "border-amber-500 bg-amber-50 text-amber-900"
+                    ? "border-secondary-foreground/30 bg-secondary text-secondary-foreground"
                     : "border-border bg-background text-foreground hover:bg-accent"
                 }`}
               >
@@ -691,7 +691,7 @@ export default function DecisionPanel({
                   
                   {/* Nested Options for Revision Type */}
                   {decision === 'revision' && (
-                    <div className="mt-3 pl-2 border-l-2 border-amber-200">
+                    <div className="mt-3 pl-2 border-l-2 border-border">
                       <RadioGroup
                         value={revisionType ?? ""}
                         onValueChange={(v) => setRevisionType(v as 'major' | 'minor')}
@@ -712,7 +712,7 @@ export default function DecisionPanel({
                          </div>
                       </RadioGroup>
                       {majorLocked && (
-                        <div className="mt-2 text-xs text-amber-800">
+                        <div className="mt-2 text-xs text-secondary-foreground">
                           上一轮为小修：为避免流程反复，编辑无权升级为大修；如确需大修请用 Admin 账号操作。
                         </div>
                       )}
@@ -730,7 +730,7 @@ export default function DecisionPanel({
               <div
                 className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                   decision === "reject"
-                    ? "border-rose-500 bg-rose-50 text-rose-700"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : "border-border bg-background text-foreground hover:bg-accent"
                 }`}
               >

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from dotenv import load_dotenv
 
 # 在应用启动前加载环境变量
 load_dotenv()
+logger = logging.getLogger("scholarflow.main")
 
 _SENTRY_ENABLED = False
 try:
@@ -14,10 +16,10 @@ try:
 
     _SENTRY_ENABLED = init_sentry()
     if _SENTRY_ENABLED:
-        print("[sentry] enabled")
+        logger.info("[sentry] enabled")
 except Exception as e:
     # 中文注释: 零崩溃原则 — Sentry 任何异常不得阻塞启动
-    print(f"[sentry] init failed (ignored): {e}")
+    logger.warning("[sentry] init failed (ignored): %s", e)
 
 from app.api.v1 import (
     auth,
@@ -43,6 +45,7 @@ from app.api.v1.admin import users as admin_users
 from app.api import oaipmh
 from app.core.middleware import ExceptionHandlerMiddleware
 from app.core.init_cms import ensure_cms_initialized
+from app.core.rate_limit import RateLimitMiddleware, is_rate_limit_enabled
 from app.lib.api_client import supabase_admin
 
 @asynccontextmanager
@@ -64,9 +67,9 @@ async def lifespan(app: FastAPI):
 
                 cfg = MatchmakingConfig.from_env()
                 await asyncio.to_thread(embed_text, "warmup", cfg.model_name)
-                print(f"[matchmaking] warmup done: model={cfg.model_name}")
+                logger.info("[matchmaking] warmup done: model=%s", cfg.model_name)
             except Exception as e:
-                print(f"[matchmaking] warmup failed: {e}")
+                logger.warning("[matchmaking] warmup failed: %s", e)
 
         asyncio.create_task(_warmup())
     yield
@@ -85,7 +88,7 @@ if _SENTRY_ENABLED:
 
         app.add_middleware(SentryAsgiMiddleware)
     except Exception as e:
-        print(f"[sentry] middleware attach failed (ignored): {e}")
+        logger.warning("[sentry] middleware attach failed (ignored): %s", e)
 
 def _parse_frontend_origins() -> list[str]:
     """
@@ -129,6 +132,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. 基础限流（Auth / MagicLink / Token 端点重点防刷）
+if is_rate_limit_enabled():
+    app.add_middleware(RateLimitMiddleware)
 
 # 2. 统一异常处理 (T011 实现)
 app.add_middleware(ExceptionHandlerMiddleware)

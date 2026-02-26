@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { format } from 'date-fns'
 import { Check, ChevronDown, ChevronUp, Loader2, MessageSquare, Search, Send, UserRoundPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -10,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { formatDateTimeLocal } from '@/lib/date-display'
 import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
 import type { InternalComment } from '@/types/internal-collaboration'
@@ -219,7 +219,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
                     <span className="text-xs font-bold text-foreground">
                       {comment.user?.full_name || comment.user?.email || 'Unknown'}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">{format(new Date(comment.created_at), 'MMM d, HH:mm')}</span>
+                    <span className="text-[10px] text-muted-foreground">{formatDateTimeLocal(comment.created_at)}</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-foreground">{comment.content}</p>
                   {(comment.mention_user_ids || []).length > 0 ? (

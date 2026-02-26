@@ -110,9 +110,9 @@ export function AddReviewerModal(props: {
         <div className="grid gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Title</label>
+              <label htmlFor="reviewer-library-title" className="text-sm font-medium">Title</label>
               <Select value={title} onValueChange={setTitle}>
-                <SelectTrigger>
+                <SelectTrigger id="reviewer-library-title">
                   <SelectValue placeholder="Select title" />
                 </SelectTrigger>
                 <SelectContent>
@@ -125,15 +125,16 @@ export function AddReviewerModal(props: {
               </Select>
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Full Name</label>
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Louis Lau" />
+              <label htmlFor="reviewer-library-full-name" className="text-sm font-medium">Full Name</label>
+              <Input id="reviewer-library-full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Louis Lau" />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Email</label>
+              <label htmlFor="reviewer-library-email" className="text-sm font-medium">Email</label>
               <Input
+                id="reviewer-library-email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@university.edu"
@@ -141,22 +142,29 @@ export function AddReviewerModal(props: {
               />
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Affiliation</label>
-              <Input value={affiliation} onChange={(e) => setAffiliation(e.target.value)} placeholder="University / Institute" />
+              <label htmlFor="reviewer-library-affiliation" className="text-sm font-medium">Affiliation</label>
+              <Input id="reviewer-library-affiliation" value={affiliation} onChange={(e) => setAffiliation(e.target.value)} placeholder="University / Institute" />
             </div>
           </div>
 
           <div className="grid gap-2">
-            <label className="text-sm font-medium">Homepage URL</label>
-            <Input value={homepageUrl} onChange={(e) => setHomepageUrl(e.target.value)} placeholder="https://..." />
+            <label htmlFor="reviewer-library-homepage" className="text-sm font-medium">Homepage URL</label>
+            <Input id="reviewer-library-homepage" value={homepageUrl} onChange={(e) => setHomepageUrl(e.target.value)} placeholder="https://..." />
             {homepageUrl.trim() && !isValidHttpUrl(homepageUrl.trim()) && (
               <div className="text-xs text-red-600">Please enter a valid http(s) URL.</div>
             )}
           </div>
 
           <div className="grid gap-2">
-            <label className="text-sm font-medium">Research Interests</label>
-            <TagInput tags={interests} setTags={setInterests} placeholder="Type keyword and press Enter" maxTags={20} />
+            <label htmlFor="reviewer-library-interests" className="text-sm font-medium">Research Interests</label>
+            <TagInput
+              inputId="reviewer-library-interests"
+              ariaLabel="Research interests"
+              tags={interests}
+              setTags={setInterests}
+              placeholder="Type keyword and press Enter"
+              maxTags={20}
+            />
           </div>
         </div>
 

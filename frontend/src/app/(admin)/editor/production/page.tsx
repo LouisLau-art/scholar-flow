@@ -123,7 +123,7 @@ export default function ProductionQueuePage() {
 
             {loading ? (
               <div className="flex items-center justify-center gap-3 px-5 py-10 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
             ) : sorted.length === 0 ? (
               <div className="px-5 py-10 text-sm text-muted-foreground">暂无分配到你的生产轮次。</div>

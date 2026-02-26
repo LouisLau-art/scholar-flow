@@ -27,8 +27,7 @@ export default function QualityCheckDialog({ manuscriptId, onClose }: QCProps) {
     }
     
     // 调用 ApiClient 进行质检提交 (T010 已封装部分逻辑)
-    console.log('Submitting QC for', manuscriptId, { passed, kpiOwner })
-    toast.success('Quality check submitted')
+    toast.success(`Quality check submitted: ${manuscriptId}`)
     onClose()
   }
 

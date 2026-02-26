@@ -51,13 +51,24 @@ jobs:
         SUPABASE_URL: "https://mock.supabase.co"
         SUPABASE_KEY: "mock-key"
         SUPABASE_JWT_SECRET: "mock-secret"
-        # Skip tests that require real DB connection
+        # Unit 阶段仍排除 integration，避免与下面 smoke 重复执行。
         PYTEST_ADDOPTS: "-m 'not integration'"
       run: |
         # 中文注释:
         # - repo 的 pytest.ini 有 --cov-fail-under=80 的全局门槛，但当前单元测试覆盖率尚未达标。
         # - 为了让 CI 先作为“质量烟囱”保持绿，这里禁用 pytest.ini 的 addopts（仍会跑全部 unit 用例）。
         pytest -o addopts= tests/unit
+
+    - name: Run Integration Smoke Tests
+      env:
+        SUPABASE_URL: "https://mock.supabase.co"
+        SUPABASE_KEY: "mock-key"
+        SUPABASE_JWT_SECRET: "mock-secret"
+      run: |
+        # 中文注释:
+        # - 这两条集成用例不依赖真实 Supabase，可稳定在 CI 运行。
+        # - 目标是防止“单元测试全绿但关键链路回归”。
+        pytest -q -o addopts= tests/integration/test_editor_invite.py tests/integration/test_concurrent_assignments.py
 
   # === 2. Frontend Pipeline (Next.js) ===
   frontend-ci:

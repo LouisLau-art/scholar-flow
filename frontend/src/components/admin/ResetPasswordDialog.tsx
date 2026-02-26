@@ -48,24 +48,24 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+        <div className="space-y-3 rounded-md border border-secondary-foreground/20 bg-secondary p-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-secondary-foreground">
             <AlertTriangle className="h-4 w-4" />
             Sensitive operation
           </div>
-          <div className="text-sm text-amber-900">
+          <div className="text-sm text-foreground">
             Target user: <span className="font-semibold">{user?.full_name || user?.email || '-'}</span>
           </div>
-          <div className="text-sm text-amber-900">
+          <div className="text-sm text-foreground">
             The system will generate a random temporary password for this reset.
           </div>
-          <div className="text-xs text-amber-700">
+          <div className="text-xs text-secondary-foreground">
             Ask the user to log in and immediately change their password in Settings.
           </div>
         </div>
 
         {error ? (
-          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>
+          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         ) : null}
 
         <DialogFooter>

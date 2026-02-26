@@ -1,0 +1,147 @@
+openapi: 3.0.3
+info:
+  title: ScholarFlow UI Regression Compatibility Contract
+  version: 1.0.0
+  description: |
+    本合同用于 UI Guideline Remediation 的回归保护。
+    约束本次改造依赖的关键既有接口，不引入新后端接口。
+servers:
+  - url: /
+paths:
+  /api/v1/manuscripts/search:
+    get:
+      summary: Search manuscripts or journals for portal/search pages
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [articles, journals]
+          required: true
+      responses:
+        "200":
+          description: Search results payload for UI rendering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+  /api/v1/reviews/my-tasks:
+    get:
+      summary: Reviewer task list used by reviewer dashboard
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Reviewer tasks payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewerTasksResponse"
+  /api/v1/reviews/submit:
+    post:
+      summary: Submit reviewer report from reviewer pages/dialogs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewSubmitRequest"
+      responses:
+        "200":
+          description: Submission succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandardSuccess"
+components:
+  schemas:
+    StandardSuccess:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          nullable: true
+      required: [success]
+    SearchResultItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+          nullable: true
+        slug:
+          type: string
+          nullable: true
+        issn:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+    SearchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+      required: [success]
+    ReviewerTaskItem:
+      type: object
+      properties:
+        id:
+          type: string
+        manuscript_id:
+          type: string
+        status:
+          type: string
+        due_at:
+          type: string
+          nullable: true
+    ReviewerTasksResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewerTaskItem"
+      required: [success]
+    ReviewSubmitRequest:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+        scores:
+          type: object
+          additionalProperties:
+            type: number
+        comments_for_author:
+          type: string
+        confidential_comments_to_editor:
+          type: string
+          nullable: true
+        attachment_path:
+          type: string
+          nullable: true
+      required:
+        - assignment_id
+        - comments_for_author

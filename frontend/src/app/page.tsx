@@ -4,6 +4,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import SiteHeader from '@/components/layout/SiteHeader'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { getBackendOrigin } from '@/lib/backend-origin'
 import { formatDateLocal } from '@/lib/date-display'
 import { cn } from '@/lib/utils'
@@ -368,20 +370,35 @@ export default async function HomePage() {
               Get the latest research updates, subscribe to our newsletter
             </h3>
             <form className="mx-auto mt-8 grid max-w-3xl gap-3 md:grid-cols-3">
-              <input
+              <Label htmlFor="newsletter-first-name" className="sr-only">
+                First name
+              </Label>
+              <Input
+                id="newsletter-first-name"
                 type="text"
                 placeholder="Name"
-                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
+                autoComplete="given-name"
+                className="h-11 border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus-visible:border-white focus-visible:ring-white/60"
               />
-              <input
+              <Label htmlFor="newsletter-last-name" className="sr-only">
+                Last name
+              </Label>
+              <Input
+                id="newsletter-last-name"
                 type="text"
                 placeholder="Last name"
-                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
+                autoComplete="family-name"
+                className="h-11 border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus-visible:border-white focus-visible:ring-white/60"
               />
-              <input
+              <Label htmlFor="newsletter-email" className="sr-only">
+                Email
+              </Label>
+              <Input
+                id="newsletter-email"
                 type="email"
                 placeholder="Email"
-                className="h-11 rounded-md border border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus:border-white focus:outline-none"
+                autoComplete="email"
+                className="h-11 border-white/35 bg-card/10 px-4 text-sm text-white placeholder:text-primary-foreground/80 focus-visible:border-white focus-visible:ring-white/60"
               />
               <button
                 type="button"

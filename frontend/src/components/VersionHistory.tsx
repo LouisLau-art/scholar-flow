@@ -6,6 +6,7 @@ import { Loader2, FileText, Download, MessageSquare, History, ChevronDown, Chevr
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
 
 interface VersionHistoryProps {
   manuscriptId: string
@@ -157,7 +158,7 @@ export default function VersionHistory({ manuscriptId }: VersionHistoryProps) {
                             <p className="font-semibold text-foreground mb-1 text-xs uppercase tracking-wide">Author Response</p>
                             <div 
                               className="prose prose-sm max-w-none text-muted-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
-                              dangerouslySetInnerHTML={{ __html: revision.response_letter }} 
+                              dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(String(revision.response_letter)) }} 
                             />
                           </div>
                         )}

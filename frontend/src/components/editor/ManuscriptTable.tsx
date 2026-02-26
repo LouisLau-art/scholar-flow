@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/statusStyles'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
 import { ArrowRight } from 'lucide-react'
@@ -31,10 +31,7 @@ export type ProcessRow = {
 }
 
 function fmt(ts?: string) {
-  if (!ts) return '—'
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return '—'
-  return format(d, 'yyyy-MM-dd HH:mm')
+  return formatDateTimeLocal(ts)
 }
 
 const INITIAL_VISIBLE_ROWS = 50

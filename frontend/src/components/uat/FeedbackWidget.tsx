@@ -107,7 +107,7 @@ export default function FeedbackWidget() {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Submitting..." : "Submit"}
+              {loading ? "Submitting…" : "Submit"}
             </Button>
           </DialogFooter>
         </form>

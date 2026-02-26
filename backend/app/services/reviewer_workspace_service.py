@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 from datetime import datetime, timezone
@@ -10,6 +11,8 @@ from postgrest.exceptions import APIError
 
 from app.lib.api_client import supabase_admin
 from app.schemas.review import ReviewSubmission, WorkspaceData
+
+logger = logging.getLogger("scholarflow.reviewer_workspace")
 
 
 def _utc_now_iso() -> str:
@@ -121,9 +124,11 @@ class ReviewerWorkspaceService:
                 "id", str(assignment_id)
             ).execute()
         except Exception as e:
-            print(
-                "[ReviewerWorkspace] failed to persist invitation acceptance "
-                f"(assignment_id={assignment_id}): first={first_error!r}, fallback={e!r}"
+            logger.error(
+                "[ReviewerWorkspace] failed to persist invitation acceptance (assignment_id=%s): first=%r, fallback=%r",
+                assignment_id,
+                first_error,
+                e,
             )
             raise RuntimeError("Failed to persist invitation acceptance") from e
 
@@ -555,10 +560,10 @@ class ReviewerWorkspaceService:
                     self.client.table("manuscripts").update({"status": "decision"}).eq("id", manuscript_id).eq(
                         "status", "pending_decision"
                     ).execute()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Advance manuscript fallback from pending_decision skipped: %s", e)
             except Exception as e:
                 # 中文注释：审稿提交优先，不应因“推进 decision 失败”导致 reviewer 端 500。
-                print(f"[ReviewerSubmit] advance manuscript to decision failed (ignored): {e}")
+                logger.warning("[ReviewerSubmit] advance manuscript to decision failed (ignored): %s", e)
 
         return {"success": True, "status": "completed"}

@@ -305,47 +305,50 @@ export function ProcessFilterBar({
         <div className="md:col-span-2">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <div className="relative mt-1" ref={statusDropdownRef}>
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setStatusDropdownOpen((v) => !v)}
-              className="h-10 w-full rounded-md border border-border bg-card px-3 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-10 w-full justify-start rounded-md border border-border bg-card px-3 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               aria-haspopup="listbox"
               aria-expanded={statusDropdownOpen}
             >
               <span className="block truncate pr-7">{selectedStatusesText}</span>
               <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            </button>
+            </Button>
 
             {statusDropdownOpen ? (
               <div className="absolute z-40 mt-2 w-full sf-min-w-230 rounded-md border border-border bg-card shadow-lg">
                 <div className="max-h-56 overflow-auto p-2">
                   {STATUS_OPTIONS.map((s) => (
                     <label key={s.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-foreground hover:bg-muted/50">
-                      <input
+                      <Input
                         type="checkbox"
                         checked={statuses.includes(s.value)}
                         onChange={() => toggleStatus(s.value)}
-                        className="h-4 w-4 rounded border-border"
+                        className="h-4 w-4 rounded border-border px-0"
                       />
                       <span>{s.label}</span>
                     </label>
                   ))}
                 </div>
                 <div className="flex items-center justify-between border-t border-border px-2 py-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setStatuses([])}
+                    variant="ghost"
                     className="rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     Clear
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setStatusDropdownOpen(false)}
+                    variant="ghost"
                     className="rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     Done
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : null}
@@ -354,11 +357,11 @@ export function ProcessFilterBar({
 
         <div className="md:col-span-12 flex flex-wrap gap-2 pt-2">
           <label className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground">
-            <input
+            <Input
               type="checkbox"
               checked={overdueOnly}
               onChange={(e) => setOverdueOnly(e.target.checked)}
-              className="h-4 w-4"
+              className="h-4 w-4 px-0"
             />
             Overdue only
           </label>

@@ -8,6 +8,7 @@ from fastapi import (
 )
 from fastapi.responses import Response
 import httpx
+import logging
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
@@ -35,6 +36,8 @@ from datetime import datetime, timezone
 from typing import Optional, Any
 
 router = APIRouter(tags=["Manuscripts"])
+logger = logging.getLogger("scholarflow.manuscripts")
+
 router.include_router(manuscripts_detail_router)
 router.include_router(manuscripts_public_router)
 router.include_router(manuscripts_reviews_router)
@@ -408,7 +411,11 @@ async def download_invoice_pdf(
         try:
             supabase_admin.table("invoices").upsert(invoice_payload, on_conflict="manuscript_id").execute()
         except Exception as e:
-            print(f"[InvoicePDF] invoice upsert failed: manuscript={manuscript_id} error={e}")
+            logger.error(
+                "[InvoicePDF] invoice upsert failed: manuscript=%s error=%s",
+                manuscript_id,
+                e,
+            )
             raise HTTPException(status_code=500, detail="Failed to create invoice")
 
         inv_resp = (
@@ -432,7 +439,11 @@ async def download_invoice_pdf(
     if (not pdf_path) or pdf_error:
         res = generate_and_store_invoice_pdf(invoice_id=invoice_id)
         if res.pdf_error:
-            print(f"[InvoicePDF] generate failed for manuscript={manuscript_id}: {res.pdf_error}")
+            logger.error(
+                "[InvoicePDF] generate failed for manuscript=%s: %s",
+                manuscript_id,
+                res.pdf_error,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=(
@@ -445,7 +456,7 @@ async def download_invoice_pdf(
     try:
         signed_url, _expires_in = get_invoice_pdf_signed_url(invoice_id=invoice_id)
     except Exception as e:
-        print(f"[InvoicePDF] signed url failed for invoice={invoice_id}: {e}")
+        logger.error("[InvoicePDF] signed url failed for invoice=%s: %s", invoice_id, e)
         raise HTTPException(
             status_code=500,
             detail=(f"Invoice not available: {e}" if is_internal else "Invoice not available. Please retry later."),
@@ -515,7 +526,7 @@ async def upload_production_file(
             path, content, {"content-type": "application/pdf"}
         )
     except Exception as e:
-        print(f"[Production] upload failed: {e}")
+        logger.error("[Production] upload failed: %s", e)
         raise HTTPException(status_code=500, detail="Failed to upload production file")
 
     try:
@@ -524,7 +535,7 @@ async def upload_production_file(
         ).execute()
     except Exception as e:
         err = str(e)
-        print(f"[Production] update final_pdf_path failed: {err}")
+        logger.error("[Production] update final_pdf_path failed: %s", err)
         lowered = err.lower()
         if "final_pdf_path" in lowered and ("column" in lowered or "schema cache" in lowered):
             # MVP 提速：Production Gate 默认关闭；字段缺失时允许“只上传、不落库”
@@ -622,7 +633,11 @@ async def get_manuscript_version_pdf_signed(
                 if getattr(rr, "data", None):
                     allowed = True
             except Exception:
-                pass
+                logger.debug(
+                    "[VersionPDF] review_reports fallback query failed (ignored): manuscript_id=%s reviewer_id=%s",
+                    manuscript_id,
+                    user_id,
+                )
 
     if not allowed:
         raise HTTPException(status_code=403, detail="No permission to access this manuscript version PDF")
@@ -662,7 +677,7 @@ async def get_manuscripts(current_user: dict = Depends(get_current_user)):
         # supabase-py 的 execute() 返回的是一个对象，其 data 属性包含结果
         return {"success": True, "data": rows or []}
     except Exception as e:
-        print(f"查询失败: {str(e)}")
+        logger.error("查询稿件失败: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch manuscripts")
 
 
@@ -715,7 +730,7 @@ async def get_my_manuscripts(current_user: dict = Depends(get_current_user)):
                         pass
         except Exception as e:
             # 保守兜底：某些环境可能尚未迁移 production_cycles；作者列表不应被阻塞。
-            print(f"[AuthorMine] proofreading task probe failed (ignored): {e}")
+            logger.warning("[AuthorMine] proofreading task probe failed (ignored): %s", e)
             proofreading_by_ms = {}
 
         for r in rows:
@@ -736,7 +751,7 @@ async def get_my_manuscripts(current_user: dict = Depends(get_current_user)):
 
         return {"success": True, "data": rows}
     except Exception as e:
-        print(f"作者稿件查询失败: {str(e)}")
+        logger.error("作者稿件查询失败: %s", e)
         return {"success": False, "data": []}
 
 
@@ -761,7 +776,7 @@ async def public_search(q: str, mode: str = "articles"):
             )
         return {"success": True, "results": response.data}
     except Exception as e:
-        print(f"搜索异常: {str(e)}")
+        logger.error("公开搜索异常: %s", e)
         return {"success": False, "results": []}
 
 @router.patch("/manuscripts/{manuscript_id}")
@@ -802,5 +817,5 @@ async def update_manuscript(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[OwnerBinding] 更新 owner_id 失败: {e}")
+        logger.error("[OwnerBinding] 更新 owner_id 失败: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update manuscript")

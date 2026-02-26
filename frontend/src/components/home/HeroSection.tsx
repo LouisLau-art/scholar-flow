@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { Search, ArrowRight, FileText, BookOpen } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function HeroSection() {
   const [searchMode, setSearchMode] = useState<'articles' | 'journals'>('articles')
@@ -61,13 +64,19 @@ export default function HeroSection() {
             {/* Input Area */}
             <form onSubmit={handleSearch} className="flex items-center gap-2">
               <div className="relative flex-1">
+                <Label htmlFor="hero-search-input" className="sr-only">
+                  {searchMode === 'articles'
+                    ? 'Search by title, DOI, or author'
+                    : 'Search journals by field or title'}
+                </Label>
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input 
+                <Input
+                  id="hero-search-input"
                   type="text"
                   placeholder={searchMode === 'articles' ? "Search by title, DOI, or author..." : "Search journals by field or title..."}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 text-foreground bg-background border-0 focus:ring-0 focus:outline-none text-lg placeholder:text-muted-foreground"
+                  className="h-auto w-full border-0 bg-background py-4 pl-12 pr-4 text-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
               <button 
@@ -81,7 +90,12 @@ export default function HeroSection() {
           
           {/* Quick Stats / Trending */}
           <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-primary-foreground/70">
-            <span className="flex items-center gap-2">Trending: <span className="text-primary hover:underline cursor-pointer">AI Ethics</span></span>
+            <span className="flex items-center gap-2">
+              Trending:
+              <Link href="/search?mode=articles&q=AI%20Ethics" className="text-primary hover:underline">
+                AI Ethics
+              </Link>
+            </span>
             <span className="flex items-center gap-2">Impact Factor: <span className="text-primary-foreground font-mono">8.42</span></span>
             <span className="flex items-center gap-2 text-primary-foreground font-semibold">2.4M+ Citations</span>
           </div>

@@ -9,6 +9,7 @@
 """
 
 import os
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -21,6 +22,7 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
+logger = logging.getLogger("scholarflow.auth")
 
 
 def get_supabase_admin():
@@ -70,8 +72,8 @@ async def get_current_user(
                     "email": email,
                     "roles": roles,
                 }
-            except JWTError:
-                pass  # 尝试 fallback
+            except JWTError as e:
+                logger.debug("Local JWT decode failed, fallback to Supabase auth: %s", e)
 
         # Fallback: 通过 Supabase Auth API 验证
         supabase = get_supabase_admin()
@@ -86,8 +88,8 @@ async def get_current_user(
                         "email": user.email,
                         "roles": roles,
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Supabase auth fallback failed: %s", e)
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -128,7 +130,8 @@ async def _get_user_roles(user_id: str) -> list[str]:
             return response.data["roles"]
 
         return ["author"]
-    except Exception:
+    except Exception as e:
+        logger.warning("Fetch user roles failed, fallback to ['author']: user_id=%s err=%s", user_id, e)
         return ["author"]
 
 

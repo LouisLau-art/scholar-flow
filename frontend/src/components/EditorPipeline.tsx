@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { FileText, Users, CheckCircle2, ArrowRight, Loader2, RefreshCw, Clock } from 'lucide-react'
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
+import { StatusPill } from '@/components/ui/status-pill'
 import { toast } from 'sonner'
 import ProductionUploadDialog from '@/components/ProductionUploadDialog'
 import { getStatusLabel } from '@/lib/statusStyles'
@@ -260,10 +261,11 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* 待质检 */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('pending_quality')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'pending_quality'
               ? 'border-primary/50 bg-primary/10'
               : 'border-border hover:border-primary/40 hover:bg-primary/10'
@@ -277,93 +279,98 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             {getData('pending_quality').length}
           </div>
           <div className="text-sm text-muted-foreground">New submissions</div>
-        </button>
+        </Button>
 
         {/* Resubmitted */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('resubmitted')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'resubmitted'
-              ? 'border-indigo-400 bg-indigo-50'
-              : 'border-border hover:border-indigo-200 hover:bg-indigo-50/50'
+              ? 'border-primary/50 bg-primary/10'
+              : 'border-border hover:border-primary/30 hover:bg-primary/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Resubmitted</h3>
-            <RefreshCw className="h-5 w-5 text-indigo-600" />
+            <RefreshCw className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-3xl font-bold text-indigo-600 mb-2">
+          <div className="text-3xl font-bold text-primary mb-2">
             {getData('resubmitted').length}
           </div>
           <div className="text-sm text-muted-foreground">Revisions received</div>
-        </button>
+        </Button>
 
         {/* 评审中 */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('under_review')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'under_review'
-              ? 'border-amber-400 bg-amber-50'
-              : 'border-border hover:border-amber-200 hover:bg-amber-50/50'
+              ? 'border-primary/50 bg-primary/10'
+              : 'border-border hover:border-primary/30 hover:bg-primary/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Under Review</h3>
-            <Users className="h-5 w-5 text-amber-600" />
+            <Users className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-3xl font-bold text-amber-600 mb-2">
+          <div className="text-3xl font-bold text-primary mb-2">
             {getData('under_review').length}
           </div>
           <div className="text-sm text-muted-foreground">In peer review</div>
-        </button>
+        </Button>
 
         {/* 待录用 */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('pending_decision')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'pending_decision'
-              ? 'border-purple-400 bg-purple-50'
-              : 'border-border hover:border-purple-200 hover:bg-purple-50/50'
+              ? 'border-secondary-foreground/30 bg-secondary'
+              : 'border-border hover:border-secondary-foreground/30 hover:bg-secondary'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Pending Decision</h3>
-            <CheckCircle2 className="h-5 w-5 text-purple-600" />
+            <CheckCircle2 className="h-5 w-5 text-secondary-foreground" />
           </div>
-          <div className="text-3xl font-bold text-purple-600 mb-2">
+          <div className="text-3xl font-bold text-secondary-foreground mb-2">
             {getData('pending_decision').length}
           </div>
           <div className="text-sm text-muted-foreground">Ready for decision</div>
-        </button>
+        </Button>
 
         {/* Approved (Waiting for Payment / Ready to Publish) */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('approved')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'approved'
-              ? 'border-emerald-400 bg-emerald-50'
-              : 'border-border hover:border-emerald-200 hover:bg-emerald-50/50'
+              ? 'border-primary/50 bg-primary/10'
+              : 'border-border hover:border-primary/30 hover:bg-primary/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Approved</h3>
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <CheckCircle2 className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-3xl font-bold text-emerald-600 mb-2">
+          <div className="text-3xl font-bold text-primary mb-2">
             {getData('approved').length}
           </div>
           <div className="text-sm text-muted-foreground">Waiting for payment / publish</div>
-        </button>
+        </Button>
 
         {/* Revision Requested (Waiting) */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('revision_requested')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'revision_requested'
               ? 'border-border bg-muted/40'
               : 'border-border hover:border-border/80 hover:bg-muted/40'
@@ -377,47 +384,49 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
             {getData('revision_requested').length}
           </div>
           <div className="text-sm text-muted-foreground">Revision requested</div>
-        </button>
+        </Button>
 
         {/* 已发布 */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('published')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'published'
-              ? 'border-emerald-400 bg-emerald-50'
-              : 'border-border hover:border-emerald-200 hover:bg-emerald-50/50'
+              ? 'border-primary/50 bg-primary/10'
+              : 'border-border hover:border-primary/30 hover:bg-primary/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Published</h3>
-            <ArrowRight className="h-5 w-5 text-emerald-600" />
+            <ArrowRight className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-3xl font-bold text-emerald-600 mb-2">
+          <div className="text-3xl font-bold text-primary mb-2">
             {getData('published').length}
           </div>
           <div className="text-sm text-muted-foreground">Completed</div>
-        </button>
+        </Button>
 
         {/* 已拒稿 */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => handleFilterClick('rejected')}
-          className={`text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          className={`h-auto w-full justify-start text-left bg-card rounded-xl border p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
             activeFilter === 'rejected'
-              ? 'border-rose-400 bg-rose-50'
-              : 'border-border hover:border-rose-200 hover:bg-rose-50/50'
+              ? 'border-destructive/40 bg-destructive/10'
+              : 'border-border hover:border-destructive/30 hover:bg-destructive/10'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-foreground">Rejected</h3>
-            <FileText className="h-5 w-5 text-rose-600" />
+            <FileText className="h-5 w-5 text-destructive" />
           </div>
-          <div className="text-3xl font-bold text-rose-600 mb-2">
+          <div className="text-3xl font-bold text-destructive mb-2">
             {getData('rejected').length}
           </div>
           <div className="text-sm text-muted-foreground">Archived</div>
-        </button>
+        </Button>
       </div>
 
       {/* 详细列表 */}
@@ -452,7 +461,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-medium rounded-full">New</span>
+                    <StatusPill tone="primary">New</StatusPill>
                     <Button size="sm" onClick={() => onAssign?.(manuscript)}>Assign Reviewers</Button>
                   </div>
                 </div>
@@ -477,7 +486,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full">Resubmitted</span>
+                    <StatusPill tone="primary">Resubmitted</StatusPill>
                     <Button size="sm" onClick={() => onAssign?.(manuscript)}>Manage Review</Button>
                     <Button size="sm" variant="outline" onClick={() => onDecide?.(manuscript)}>Decide</Button>
                   </div>
@@ -500,7 +509,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     <div className="text-sm text-muted-foreground">Reviewers: {manuscript.review_count || 0}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-sm font-medium rounded-full">In Review</span>
+                    <StatusPill tone="secondary">In Review</StatusPill>
                     <Button size="sm" variant="ghost" onClick={() => onAssign?.(manuscript)}>Manage</Button>
                     <Button size="sm" variant="outline" onClick={() => onDecide?.(manuscript)}>View Decision</Button>
                   </div>
@@ -523,7 +532,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     <div className="text-sm text-muted-foreground">Ready for decision</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">Action Req</span>
+                    <StatusPill tone="secondary">Action Req</StatusPill>
                     <Button size="sm" onClick={() => onDecide?.(manuscript)}>Make Decision</Button>
                   </div>
                 </div>
@@ -564,11 +573,11 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                         {!invoiceMissing ? ` • APC: $${amount}` : ''}
                         {!invoiceMissing ? ` • Invoice: ${invoiceStatus}` : ''}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">
+                  </div>
+                  <div className="flex items-center gap-2">
+                      <StatusPill tone="primary">
                         {getStatusLabel((manuscript.status || 'approved').toString())}
-                      </span>
+                      </StatusPill>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -645,7 +654,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-muted text-muted-foreground text-sm font-medium rounded-full">Waiting</span>
+                    <StatusPill tone="neutral">Waiting</StatusPill>
                     <Button size="sm" variant="ghost" disabled>View Details</Button>
                   </div>
                 </div>
@@ -667,7 +676,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     <div className="text-sm text-muted-foreground">Published</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-full">Published</span>
+                    <StatusPill tone="primary">Published</StatusPill>
                   </div>
                 </div>
               ))}
@@ -690,7 +699,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-rose-100 text-rose-700 text-sm font-medium rounded-full">Rejected</span>
+                    <StatusPill tone="destructive">Rejected</StatusPill>
                   </div>
                 </div>
               ))}

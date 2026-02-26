@@ -127,7 +127,7 @@ export default function EICAcademicQueuePage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
                 </tr>
               ) : academicManuscripts.length === 0 ? (
                 <tr>
@@ -175,7 +175,7 @@ export default function EICAcademicQueuePage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading...</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
                 </tr>
               ) : finalDecisionManuscripts.length === 0 ? (
                 <tr>

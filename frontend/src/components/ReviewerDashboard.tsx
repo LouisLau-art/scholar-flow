@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Star, FileText, Send } from "lucide-react"
 import { toast } from "sonner"
@@ -8,7 +8,10 @@ import { authService } from "@/services/auth"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { FileUpload } from "@/components/FileUpload"
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml"
 
 interface ReviewTask {
   id: string
@@ -27,6 +30,48 @@ type ReviewData = {
   commentsForAuthor: string
   confidentialCommentsToEditor: string
   attachment: File | null
+}
+
+async function uploadReviewAttachment(taskId: string, token: string, file: File): Promise<string> {
+  const formData = new FormData()
+  formData.set("attachment", file)
+  const uploadRes = await fetch(`/api/v1/reviews/assignments/${encodeURIComponent(taskId)}/attachment`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const uploadJson = await uploadRes.json().catch(() => null)
+  if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.attachment_path) {
+    throw new Error(uploadJson?.detail || uploadJson?.message || "Attachment upload failed.")
+  }
+  return String(uploadJson.data.attachment_path)
+}
+
+async function submitStructuredReview(params: {
+  taskId: string
+  token: string
+  reviewData: ReviewData
+  attachmentPath: string | null
+}): Promise<void> {
+  const { taskId, token, reviewData, attachmentPath } = params
+  const response = await fetch("/api/v1/reviews/submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      assignment_id: taskId,
+      scores: { novelty: reviewData.novelty, rigor: reviewData.rigor, language: reviewData.language },
+      comments_for_author: reviewData.commentsForAuthor,
+      confidential_comments_to_editor: reviewData.confidentialCommentsToEditor || null,
+      attachment_path: attachmentPath,
+    }),
+  })
+  const result = await response.json().catch(() => null)
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.detail || result?.message || "Submit failed. Please try again.")
+  }
 }
 
 function ReviewModal({
@@ -86,6 +131,11 @@ function ReviewModal({
     }
   }, [task?.manuscript_id])
 
+  const sanitizedResponseLetter = useMemo(
+    () => sanitizeRichHtml(String(latestRevision?.response_letter || '')),
+    [latestRevision?.response_letter]
+  )
+
   const handleSubmit = async () => {
     if (!reviewData.commentsForAuthor.trim()) {
       toast.error("Comments for the Authors is required.")
@@ -102,51 +152,26 @@ function ReviewModal({
 
       let attachmentPath: string | null = null
       if (reviewData.attachment) {
-        const fd = new FormData()
-        fd.set("attachment", reviewData.attachment)
-        const uploadRes = await fetch(`/api/v1/reviews/assignments/${encodeURIComponent(task.id)}/attachment`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        })
-        const uploadJson = await uploadRes.json().catch(() => null)
-        if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.attachment_path) {
-          toast.error(uploadJson?.detail || uploadJson?.message || "Attachment upload failed.", { id: toastId })
-          return
-        }
-        attachmentPath = uploadJson.data.attachment_path
+        attachmentPath = await uploadReviewAttachment(task.id, token, reviewData.attachment)
       }
 
-      const res = await fetch("/api/v1/reviews/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          assignment_id: task.id,
-          scores: { novelty: reviewData.novelty, rigor: reviewData.rigor, language: reviewData.language },
-          comments_for_author: reviewData.commentsForAuthor,
-          confidential_comments_to_editor: reviewData.confidentialCommentsToEditor || null,
-          attachment_path: attachmentPath,
-        }),
+      await submitStructuredReview({
+        taskId: task.id,
+        token,
+        reviewData,
+        attachmentPath,
       })
-      const result = await res.json().catch(() => null)
-      if (!res.ok || !result?.success) {
-        toast.error(result?.detail || result?.message || "Submit failed. Please try again.", { id: toastId })
-        return
-      }
       toast.success("Review submitted. Thank you!", { id: toastId })
       onClose()
       onSubmitted()
     } catch (e) {
-      toast.error("Submit failed. Please try again.", { id: toastId })
+      toast.error(e instanceof Error ? e.message : "Submit failed. Please try again.", { id: toastId })
     }
   }
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="w-full sf-max-w-720 min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl sm:p-8 [&>button]:hidden">
+      <DialogContent className="w-full sf-max-w-720 min-h-[600px] max-h-[92vh] overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl sm:p-8">
         <DialogHeader className="sr-only">
           <DialogTitle>Structured Peer Review</DialogTitle>
           <DialogDescription>Submit structured review scores and comments for the selected manuscript.</DialogDescription>
@@ -182,7 +207,7 @@ function ReviewModal({
                 </div>
                 <div
                   className="mt-2 prose prose-sm max-w-none text-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
-                  dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizedResponseLetter }}
                 />
               </div>
             ) : null}
@@ -195,7 +220,7 @@ function ReviewModal({
               <Label className="font-semibold text-foreground">Novelty & Originality</Label>
               <span className="text-primary font-mono font-bold text-xl">{reviewData.novelty}/5</span>
             </div>
-            <input
+            <Input
               type="range"
               min="1"
               max="5"
@@ -210,7 +235,7 @@ function ReviewModal({
               <Label className="font-semibold text-foreground">Technical Rigor</Label>
               <span className="text-primary font-mono font-bold text-xl">{reviewData.rigor}/5</span>
             </div>
-            <input
+            <Input
               type="range"
               min="1"
               max="5"
@@ -225,7 +250,7 @@ function ReviewModal({
               <Label className="font-semibold text-foreground">Language Quality</Label>
               <span className="text-primary font-mono font-bold text-xl">{reviewData.language}/5</span>
             </div>
-            <input
+            <Input
               type="range"
               min="1"
               max="5"
@@ -237,7 +262,7 @@ function ReviewModal({
 
           <div className="space-y-3">
             <Label className="font-semibold text-foreground">Comments for the Authors</Label>
-            <textarea
+            <Textarea
               placeholder="Provide detailed feedback for the authors..."
               className="min-h-[140px] sm:min-h-[160px] w-full rounded-2xl border border-border p-3 focus:ring-2 focus:ring-primary"
               value={reviewData.commentsForAuthor}
@@ -250,7 +275,7 @@ function ReviewModal({
               <Label className="font-semibold text-foreground">Confidential Comments to the Editor</Label>
               <span className="text-xs font-semibold text-red-600">Authors will NOT see this</span>
             </div>
-            <textarea
+            <Textarea
               placeholder="Optional notes for editor only..."
               className="min-h-[110px] w-full rounded-2xl border border-border p-3 focus:ring-2 focus:ring-primary"
               value={reviewData.confidentialCommentsToEditor}
@@ -427,7 +452,7 @@ export default function ReviewerDashboard() {
       )}
 
       <Dialog open={isPreviewOpen} onOpenChange={(open) => (!open ? handleClosePreview() : undefined)}>
-        <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-card p-6 shadow-2xl sm:p-8 flex flex-col [&>button]:hidden">
+        <DialogContent className="h-[80vh] max-h-[90vh] w-full max-w-5xl rounded-3xl bg-card p-6 shadow-2xl sm:p-8 flex flex-col">
             <DialogHeader className="sr-only">
               <DialogTitle>Full Text Preview</DialogTitle>
               <DialogDescription>Preview manuscript PDF in an embedded viewer.</DialogDescription>

@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 
 const NotificationBell = dynamic(
   () => import('@/components/notifications/NotificationBell').then((mod) => mod.NotificationBell),
@@ -30,7 +31,7 @@ export default function SiteHeader() {
   const { profile } = useProfile({ enabled: isAuthenticated })
 
   const [navLinks, setNavLinks] = useState<{ name: string; href: string; hasMega?: boolean }[]>([
-    { name: 'Journals', href: '#', hasMega: true },
+    { name: 'Journals', href: '/journals', hasMega: true },
     { name: 'Topics', href: '/topics' },
     { name: 'Publish', href: '/submit' },
     { name: 'About', href: '/about' },
@@ -63,7 +64,7 @@ export default function SiteHeader() {
           .filter(Boolean) as { name: string; href: string }[]
 
         if (isMounted && dynamic.length > 0) {
-          setNavLinks([{ name: 'Journals', href: '#', hasMega: true }, ...dynamic])
+          setNavLinks([{ name: 'Journals', href: '/journals', hasMega: true }, ...dynamic])
         }
       } catch {
         // Ignore
@@ -124,13 +125,28 @@ export default function SiteHeader() {
                   onMouseEnter={() => link.hasMega && setIsMegaMenuOpen(true)}
                   onMouseLeave={() => link.hasMega && setIsMegaMenuOpen(false)}
                 >
-                  <Link 
-                    href={link.href}
-                    className="flex items-center gap-1 text-sm font-semibold text-background/70 hover:text-white transition-colors py-8"
-                  >
-                    {link.name}
-                    {link.hasMega && <ChevronDown className="h-4 w-4 opacity-50" />}
-                  </Link>
+                  {link.hasMega ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-haspopup="menu"
+                      aria-expanded={isMegaMenuOpen}
+                      aria-controls="site-mega-menu"
+                      onClick={() => setIsMegaMenuOpen((prev) => !prev)}
+                      onFocus={() => setIsMegaMenuOpen(true)}
+                      className="flex items-center gap-1 py-8 px-0 text-sm font-semibold text-background/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground"
+                    >
+                      {link.name}
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  ) : (
+                    <Link 
+                      href={link.href}
+                      className="flex items-center gap-1 text-sm font-semibold text-background/70 hover:text-white transition-colors py-8"
+                    >
+                      {link.name}
+                    </Link>
+                  )}
                 </div>
               ))}
             </nav>
@@ -138,14 +154,16 @@ export default function SiteHeader() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-6">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               aria-label="Search"
               onClick={() => setIsSearchOpen(true)}
-              className="hidden sm:block text-background/60 hover:text-white transition-colors"
+              className="hidden text-background/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground sm:inline-flex"
             >
               <Search className="h-5 w-5" />
-            </button>
+            </Button>
             <div className="h-6 w-px bg-border/30 hidden sm:block" />
 
             {isAuthenticated ? <NotificationBell isAuthenticated={isAuthenticated} /> : null}
@@ -167,13 +185,14 @@ export default function SiteHeader() {
                 <Link href="/settings" className="text-background/60 hover:text-white transition-colors">
                   Settings
                 </Link>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={handleSignOut}
-                  className="text-background/60 hover:text-white transition-colors"
+                  className="px-0 text-background/60 hover:text-white transition-colors"
                 >
                   Sign Out
-                </button>
+                </Button>
               </div>
             ) : (
               <Link href="/login" className="hidden sm:flex items-center gap-2 text-sm font-semibold text-background/70 hover:text-white">
@@ -189,14 +208,16 @@ export default function SiteHeader() {
             </Link>
 
             {/* Mobile Menu Toggle */}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               aria-label={isMobileMenuOpen ? 'Close mobile menu' : 'Open mobile menu'}
-              className="lg:hidden text-background/70"
+              className="text-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-foreground lg:hidden"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -207,8 +228,11 @@ export default function SiteHeader() {
             <DialogTitle>搜索</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <Label htmlFor="site-header-search-input" className="sr-only">
+              Search by title, abstract, or DOI
+            </Label>
             <Input
-              autoFocus
+              id="site-header-search-input"
               value={searchQuery}
               placeholder="输入关键词（标题 / 摘要 / DOI）"
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -235,6 +259,7 @@ export default function SiteHeader() {
       {/* Mega Menu */}
       {isMegaMenuOpen && (
         <div 
+          id="site-mega-menu"
           className="absolute left-0 w-full bg-card text-foreground shadow-2xl border-b border-border sf-motion-enter-top-fast"
           onMouseEnter={() => setIsMegaMenuOpen(true)}
           onMouseLeave={() => setIsMegaMenuOpen(false)}
@@ -244,31 +269,31 @@ export default function SiteHeader() {
             <div>
               <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Medicine</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="hover:text-primary cursor-pointer">Oncology</li>
-                <li className="hover:text-primary cursor-pointer">Neuroscience</li>
-                <li className="hover:text-primary cursor-pointer">Public Health</li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Oncology">Oncology</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Neuroscience">Neuroscience</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Public%20Health">Public Health</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Physical Sciences</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="hover:text-primary cursor-pointer">Physics</li>
-                <li className="hover:text-primary cursor-pointer">Chemistry</li>
-                <li className="hover:text-primary cursor-pointer">Materials</li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Physics">Physics</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Chemistry">Chemistry</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Materials">Materials</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-serif text-lg font-bold mb-4 text-primary border-b border-primary/20 pb-2">Social Sciences</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="hover:text-primary cursor-pointer">Psychology</li>
-                <li className="hover:text-primary cursor-pointer">Economics</li>
-                <li className="hover:text-primary cursor-pointer">Education</li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Psychology">Psychology</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Economics">Economics</Link></li>
+                <li><Link className="hover:text-primary" href="/search?mode=journals&q=Education">Education</Link></li>
               </ul>
             </div>
             <div className="bg-muted/40 p-6 rounded-xl border border-border/60">
               <h4 className="font-bold mb-2">Can&apos;t find your journal?</h4>
               <p className="text-sm text-muted-foreground mb-4">Explore our full portfolio of 200+ high-impact journals.</p>
-              <Link href="#" className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
+              <Link href="/search?mode=journals" className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
                 View all journals →
               </Link>
             </div>
@@ -294,13 +319,14 @@ export default function SiteHeader() {
               <>
                 <Link href="/dashboard" className="block text-background/60">Dashboard</Link>
                 <Link href="/settings" className="block text-background/60">Settings</Link>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={handleSignOut}
-                  className="block text-left text-background/60"
+                  className="block justify-start px-0 text-left text-background/60"
                 >
                   Sign Out
-                </button>
+                </Button>
               </>
             ) : (
               <Link href="/login" className="block text-background/60">Sign In</Link>

@@ -50,27 +50,27 @@ export function getStatusLabel(status: ManuscriptStatus): string {
 export function getStatusBadgeClass(status: ManuscriptStatus): string {
   switch (status) {
     case 'pre_check':
-      return 'bg-slate-100 text-slate-700 border-slate-200'
+      return 'bg-muted text-muted-foreground border-border'
     case 'under_review':
       return 'bg-blue-50 text-blue-700 border-blue-200'
     case 'decision':
     case 'decision_done':
-      return 'bg-amber-100 text-amber-900 border-amber-200'
+      return 'bg-accent text-accent-foreground border-border'
     case 'major_revision':
     case 'minor_revision':
     case 'resubmitted':
-      return 'bg-violet-50 text-violet-800 border-violet-200'
+      return 'bg-secondary text-secondary-foreground border-border'
     case 'approved':
     case 'layout':
     case 'english_editing':
     case 'proofreading':
-      return 'bg-emerald-50 text-emerald-800 border-emerald-200'
+      return 'bg-primary/10 text-primary border-primary/20'
     case 'published':
       return 'bg-indigo-100 text-indigo-700 border-indigo-200'
     case 'rejected':
-      return 'bg-rose-50 text-rose-700 border-rose-200'
+      return 'bg-destructive/10 text-destructive border-destructive/20'
     default:
-      return 'bg-slate-100 text-slate-700 border-slate-200'
+      return 'bg-muted text-muted-foreground border-border'
   }
 }
 

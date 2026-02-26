@@ -1,10 +1,14 @@
 'use client'
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { FileText, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { FileUpload } from '@/components/FileUpload'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { UI_COPY } from '@/lib/ui-copy'
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
 
 function ReviewForm({
   token,
@@ -67,9 +71,9 @@ function ReviewForm({
       <h2 className="text-lg font-semibold text-foreground mb-6">Your Evaluation</h2>
       <form className="space-y-6" onSubmit={handleSubmit} data-manuscript-id={manuscriptId}>
         <div>
-          <label className="block text-sm font-semibold text-foreground">Score (1-5)</label>
+          <label htmlFor="review-score" className="block text-sm font-semibold text-foreground">Score (1-5)</label>
           <Select value={String(score)} onValueChange={(value) => setScore(Number(value))}>
-            <SelectTrigger className="mt-1 w-full">
+            <SelectTrigger id="review-score" className="mt-1 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -83,25 +87,27 @@ function ReviewForm({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground">Comments for the Authors</label>
-          <textarea
+          <label htmlFor="review-comments-to-author" className="block text-sm font-semibold text-foreground">Comments for the Authors</label>
+          <Textarea
+            id="review-comments-to-author"
             rows={8}
             value={commentsToAuthor}
             onChange={(e) => setCommentsToAuthor(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border/80 px-4 py-2 focus:ring-2 focus:ring-primary"
+            className="mt-1 border-border/80 px-4 py-2"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground">
+          <label htmlFor="review-confidential-comments" className="block text-sm font-semibold text-foreground">
             Confidential Comments to the Editor (optional)
           </label>
           <p className="mt-1 text-xs font-semibold text-red-600">Authors will NOT see this</p>
-          <textarea
+          <Textarea
+            id="review-confidential-comments"
             rows={5}
             value={confidentialComments}
             onChange={(e) => setConfidentialComments(e.target.value)}
-            className="mt-2 w-full rounded-md border border-border/80 px-4 py-2 focus:ring-2 focus:ring-primary"
+            className="mt-2 border-border/80 px-4 py-2"
           />
         </div>
 
@@ -114,12 +120,9 @@ function ReviewForm({
           onFileSelected={setAttachment}
         />
 
-        <button
-          disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-2 rounded-md bg-foreground py-3 text-white hover:bg-foreground/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <Send className="h-4 w-4" /> {isSubmitting ? 'Submitting...' : 'Submit Report'}
-        </button>
+        <Button disabled={isSubmitting} className="w-full gap-2 py-3">
+          <Send className="h-4 w-4" /> {isSubmitting ? UI_COPY.submitting : 'Submit Report'}
+        </Button>
       </form>
     </aside>
   )
@@ -185,6 +188,11 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
     loadData()
   }, [params.token, reloadKey])
 
+  const sanitizedResponseLetter = useMemo(
+    () => sanitizeRichHtml(String(latestRevision?.response_letter || '')),
+    [latestRevision?.response_letter]
+  )
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-muted/40">
@@ -231,7 +239,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
                 </div>
                 <div
                   className="mt-2 prose prose-sm max-w-none text-foreground prose-img:max-w-full prose-img:h-auto prose-img:rounded-md"
-                  dangerouslySetInnerHTML={{ __html: String(latestRevision.response_letter) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizedResponseLetter }}
                 />
               </div>
             ) : null}

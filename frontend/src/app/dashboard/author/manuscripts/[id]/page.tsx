@@ -9,6 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
 
 type TimelineAttachment =
   | { type: 'review_attachment'; label: string; download_url: string }
@@ -221,8 +222,7 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
                               ev.actor === 'author' ? (
                                 <div
                                   className="prose prose-sm max-w-none rounded-md border border-border bg-muted/50 p-3"
-                                  // 注意：response_letter 允许内嵌图片(Data URL)，用于对账与可追溯；MVP 不做后端清洗。
-                                  dangerouslySetInnerHTML={{ __html: String(ev.message) }}
+                                  dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(String(ev.message)) }}
                                 />
                               ) : (
                                 <div className="whitespace-pre-wrap rounded-md border border-border bg-muted/50 p-3 text-sm text-foreground">

@@ -7,6 +7,7 @@ import VersionHistory from '@/components/VersionHistory'
 import { FileText, Download, Quote, Calendar, Hash, ExternalLink, Loader2, Clock3, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { authService } from '@/services/auth'
+import { Button } from '@/components/ui/button'
 
 const PRIVATE_PROGRESS_STEPS: Array<{ key: string; label: string }> = [
   { key: 'submitted', label: 'Submitted' },
@@ -345,7 +346,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
         <SiteHeader />
         <main className="flex-1 mx-auto max-w-5xl w-full px-4 py-12 sm:px-6 lg:px-8">
           <section className="bg-card border border-border shadow-sm rounded-3xl p-8 sm:p-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-secondary-foreground/20 bg-secondary px-3 py-1 text-xs font-bold uppercase tracking-wide text-secondary-foreground">
               <Lock className="h-3.5 w-3.5" />
               Private Manuscript View
             </div>
@@ -375,10 +376,10 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
             </div>
 
             {normalizedStatus === 'revision_requested' && latestFeedbackComment ? (
-              <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Editorial Feedback</div>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900">{latestFeedbackComment}</p>
-                {latestFeedbackAt !== 'N/A' ? <p className="mt-2 text-xs text-amber-700">Updated at: {latestFeedbackAt}</p> : null}
+              <div className="mt-6 rounded-2xl border border-secondary-foreground/20 bg-secondary p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-secondary-foreground">Editorial Feedback</div>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{latestFeedbackComment}</p>
+                {latestFeedbackAt !== 'N/A' ? <p className="mt-2 text-xs text-secondary-foreground">Updated at: {latestFeedbackAt}</p> : null}
               </div>
             ) : null}
 
@@ -393,7 +394,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                       key={step.key}
                       className={[
                         'rounded-xl border px-3 py-2 text-sm font-medium',
-                        done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : '',
+                        done ? 'border-primary/30 bg-primary/10 text-primary' : '',
                         active ? 'border-primary/30 bg-primary/10 text-primary' : '',
                         !done && !active ? 'border-border bg-card text-muted-foreground' : '',
                       ].join(' ').trim()}
@@ -404,7 +405,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                 })}
               </div>
               {isRejected ? (
-                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+                <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
                   Current stage: Rejected
                 </div>
               ) : null}
@@ -465,12 +466,12 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
             </div>
             {canPublish && !isPublished && (
               <div>
-                <button
+                <Button
                   onClick={handlePublish}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 transition-colors"
                 >
                   Publish (dev)
-                </button>
+                </Button>
               </div>
             )}
           </header>
@@ -487,13 +488,13 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-foreground">Full Text Preview</h2>
-              <button
+              <Button
                 onClick={() => handleDownload(article.id)}
                 disabled={!hasFile}
                 className="flex items-center gap-2 px-4 py-2 bg-foreground text-white rounded-full text-sm font-bold hover:bg-foreground/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="h-4 w-4" /> Download PDF
-              </button>
+              </Button>
             </div>
             <div className="aspect-[3/4] w-full bg-muted rounded-3xl overflow-hidden border-4 border-white shadow-2xl relative">
               {previewUrl ? (
@@ -539,25 +540,25 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                 <div className="text-xs text-background/70 font-bold uppercase">Downloads</div>
               </div>
             </div>
-            <button
+            <Button
               onClick={handleCopyCitation}
               className="w-full mt-8 py-3 border border-background/20 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-foreground/90 transition-all"
             >
               <Quote className="h-4 w-4" /> {citeCopied ? 'Citation Copied' : 'Cite this Article'}
-            </button>
+            </Button>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
+              <Button
                 onClick={() => handleDownloadCitation('bib')}
                 className="py-2 border border-background/20 rounded-xl text-xs font-bold hover:bg-foreground/90 transition-all"
               >
                 BibTeX
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => handleDownloadCitation('ris')}
                 className="py-2 border border-background/20 rounded-xl text-xs font-bold hover:bg-foreground/90 transition-all"
               >
                 RIS
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -590,16 +591,16 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
                   href={sourceCodeUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full p-4 bg-card rounded-2xl border border-border transition-all group hover:border-emerald-200"
+                  className="block w-full p-4 bg-card rounded-2xl border border-border transition-all group hover:border-primary/30"
                 >
-                  <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
-                  <div className="text-sm font-bold text-foreground group-hover:text-emerald-600 flex items-center justify-between">
+                  <div className="text-xs font-bold text-primary mb-1">SOURCE CODE</div>
+                  <div className="text-sm font-bold text-foreground group-hover:text-primary flex items-center justify-between">
                     Algorithm Implementation <ExternalLink className="h-3 w-3" />
                   </div>
                 </a>
               ) : (
                 <div className="p-4 bg-card rounded-2xl border border-border opacity-60 cursor-not-allowed transition-all group">
-                  <div className="text-xs font-bold text-emerald-600 mb-1">SOURCE CODE</div>
+                  <div className="text-xs font-bold text-primary mb-1">SOURCE CODE</div>
                   <div className="text-sm font-bold text-foreground flex items-center justify-between">
                     Algorithm Implementation <ExternalLink className="h-3 w-3" />
                   </div>

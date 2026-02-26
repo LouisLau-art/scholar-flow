@@ -227,7 +227,7 @@ export function ReviewerLibraryList() {
               }}
               disabled={!!removingId}
             >
-              {removingId ? 'Removing...' : 'Remove'}
+              {removingId ? 'Removing…' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-TARGETS=(src/app src/components src/pages)
+TARGETS=(src/app src/components src/lib src/pages)
+HARD_PALETTE_GROUP='red|green|amber|violet|purple|gray|slate|yellow|emerald|rose|blue|indigo|cyan|orange'
 
 count_matches() {
   local pattern="$1"
@@ -20,7 +21,7 @@ count_view_matches() {
 count_w96="$(count_matches 'w-\[96vw\]')"
 count_hex="$(count_matches '#[0-9a-fA-F]{3,8}')"
 count_inline_style="$(count_matches 'style=\{\{')"
-count_hard_palette="$(count_matches '(bg|text|border)-(slate|blue)-')"
+count_hard_palette="$(count_matches "(bg|text|border)-(${HARD_PALETTE_GROUP})-")"
 count_magic_width="$(count_matches 'w-\[[0-9]+(px|vw|vh|rem)\]')"
 count_semantic_motion="$(count_view_matches 'sf-motion-[a-z0-9-]+')"
 count_legacy_motion="$(count_view_matches '(animate-in|animate-out)')"
@@ -35,7 +36,7 @@ echo "Core counters"
 echo "- w-[96vw]                        : $count_w96"
 echo "- hex colors (#xxxxxx)           : $count_hex"
 echo "- inline style={{...}}           : $count_inline_style"
-echo "- hard palette (slate/blue)      : $count_hard_palette"
+echo "- hard palette (semantic bypass)  : $count_hard_palette"
 echo "- magic width tokens (w-[...])   : $count_magic_width"
 echo "- semantic motion tokens          : $count_semantic_motion"
 echo "- legacy motion tokens            : $count_legacy_motion"
@@ -43,7 +44,7 @@ echo "- long duration tokens (>=700ms)  : $count_long_duration"
 echo "- motion delay tokens             : $count_motion_delay"
 echo
 echo "Top files: hard palette usage"
-(rg -n '(bg|text|border)-(slate|blue)-' "${TARGETS[@]}" || true) \
+(rg -n "(bg|text|border)-(${HARD_PALETTE_GROUP})-" "${TARGETS[@]}" || true) \
   | cut -d: -f1 \
   | sort \
   | uniq -c \

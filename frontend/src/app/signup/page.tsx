@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Globe, ArrowRight, Loader2, Mail, Lock, UserPlus } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -61,14 +63,14 @@ export default function SignupPage() {
               <label htmlFor="signup-email" className="block text-sm font-bold text-foreground">University Email</label>
               <div className="mt-2 relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
+                <Input
                   id="signup-email"
                   type="email"
                   autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
                   placeholder="name@university.edu"
                 />
               </div>
@@ -78,27 +80,27 @@ export default function SignupPage() {
               <label htmlFor="signup-password" className="block text-sm font-bold text-foreground">Create Password</label>
               <div className="mt-2 relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
+                <Input
                   id="signup-password"
                   type="password"
                   autoComplete="new-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-3 pl-10 text-foreground shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
+                  className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-all focus:ring-2 focus:ring-primary sm:text-sm"
                 />
               </div>
               <p className="mt-2 text-xs text-muted-foreground">At least 8 characters with numbers and symbols.</p>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={isLoading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold leading-6 text-primary-foreground shadow-lg transition-all hover:bg-primary/90 disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Create Account'}
               {!isLoading && <ArrowRight className="h-4 w-4" />}
-            </button>
+            </Button>
           </form>
 
           <div className="mt-10">

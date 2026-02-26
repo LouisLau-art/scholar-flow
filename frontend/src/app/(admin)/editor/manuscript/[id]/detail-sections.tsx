@@ -185,11 +185,11 @@ export function MetadataStaffCard({
             </div>
             <div className="flex items-center gap-2 h-9">
               {invoiceStatus === 'paid' ? (
-                <span className="text-sm font-bold text-green-600 flex items-center gap-1">
+                <span className="text-sm font-bold text-primary flex items-center gap-1">
                   PAID <span className="text-xs font-normal text-muted-foreground">(${invoiceAmount ?? 0})</span>
                 </span>
               ) : (
-                <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
+                <span className="text-sm font-bold text-secondary-foreground flex items-center gap-1">
                   {invoiceStatus ? String(invoiceStatus).toUpperCase() : 'PENDING'}
                   <span className="text-xs font-normal text-muted-foreground">(${apcAmount || '0'})</span>
                 </span>
@@ -324,7 +324,7 @@ export function ReviewerFeedbackSummaryCard({
           </div>
         ) : reviewsError ? (
           <div className="space-y-2">
-            <div className="text-sm text-rose-600">{reviewsError}</div>
+            <div className="text-sm text-destructive">{reviewsError}</div>
             <Button size="sm" variant="outline" onClick={onRetry}>
               Retry
             </Button>
@@ -354,11 +354,11 @@ export function ReviewerFeedbackSummaryCard({
                   <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">{publicComment || '—'}</div>
                 </div>
                 {confidentialComment ? (
-                  <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
-                    <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+                  <div className="space-y-1 rounded-md border border-secondary-foreground/20 bg-secondary px-2.5 py-2">
+                    <div className="text-[11px] font-semibold text-secondary-foreground uppercase tracking-wide">
                       Confidential to Editor
                     </div>
-                    <div className="whitespace-pre-wrap text-sm leading-6 text-amber-900">{confidentialComment}</div>
+                    <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">{confidentialComment}</div>
                   </div>
                 ) : null}
               </div>
@@ -554,13 +554,13 @@ export function NextActionCard({ nextAction }: NextActionCardProps) {
         <div className="text-sm font-semibold text-foreground">{nextAction.title}</div>
         <div className="text-sm text-muted-foreground">{nextAction.description}</div>
         {nextAction.blockers.length > 0 && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 space-y-1">
-            <div className="text-xs font-semibold text-rose-700 flex items-center gap-1">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 space-y-1">
+            <div className="text-xs font-semibold text-destructive flex items-center gap-1">
               <AlertTriangle className="h-3.5 w-3.5" />
               Blocking Conditions
             </div>
             {nextAction.blockers.map((item) => (
-              <div key={item} className="text-xs text-rose-700">
+              <div key={item} className="text-xs text-destructive">
                 - {item}
               </div>
             ))}
@@ -600,7 +600,7 @@ export function TaskSlaSummaryCard({
       <CardContent className="space-y-2 text-sm">
         {cardsError ? (
           <div className="space-y-2">
-            <div className="text-sm text-rose-600">{cardsError}</div>
+            <div className="text-sm text-destructive">{cardsError}</div>
             <Button size="sm" variant="outline" onClick={onRetry} data-testid="cards-context-retry">
               Retry
             </Button>
@@ -613,7 +613,7 @@ export function TaskSlaSummaryCard({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Overdue Tasks</span>
-              <span className={`font-medium ${taskSummary?.is_overdue ? 'text-rose-700' : 'text-foreground'}`}>
+              <span className={`font-medium ${taskSummary?.is_overdue ? 'text-destructive' : 'text-foreground'}`}>
                 {taskSummary?.overdue_tasks_count ?? 0}
               </span>
             </div>
@@ -663,7 +663,7 @@ export function PrecheckRoleQueueCard({
       <CardContent>
         {cardsError ? (
           <div className="space-y-2">
-            <div className="text-sm text-rose-600">{cardsError}</div>
+            <div className="text-sm text-destructive">{cardsError}</div>
             <Button size="sm" variant="outline" onClick={onRetry} data-testid="precheck-cards-context-retry">
               Retry
             </Button>

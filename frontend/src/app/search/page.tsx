@@ -6,6 +6,7 @@ import { getBackendOrigin } from '@/lib/backend-origin'
 import { demoJournals } from '@/lib/demo-journals'
 
 type SearchMode = 'articles' | 'journals'
+const SEARCH_REVALIDATE_SECONDS = 60
 
 type SearchResultItem = {
   id: string
@@ -41,7 +42,10 @@ async function searchOnServer(query: string, mode: SearchMode): Promise<SearchRe
     const origin = getBackendOrigin()
     const params = new URLSearchParams({ q: query, mode })
     const res = await fetch(`${origin}/api/v1/manuscripts/search?${params.toString()}`, {
-      cache: 'no-store',
+      next: {
+        revalidate: SEARCH_REVALIDATE_SECONDS,
+        tags: ['search-results', `search:${mode}:${query.toLowerCase()}`],
+      },
     })
     if (!res.ok) return []
     const payload = await res.json().catch(() => null)

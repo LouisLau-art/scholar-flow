@@ -59,8 +59,12 @@ const sentryBuildOptions = {
   widenClientFileUpload: true,
   // 不把 sourcemap 公开给用户（只上传到 Sentry）
   hideSourceMaps: true,
-  // 避免在控制台刷 sentry debug log
-  disableLogger: true,
+  webpack: {
+    treeshake: {
+      // 避免在控制台刷 sentry debug log（替代已弃用 disableLogger）
+      removeDebugLogging: true,
+    },
+  },
 }
 
 export default withSentryConfig(nextConfig, sentryBuildOptions)
