@@ -326,6 +326,8 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-26）
+- **Editor Heavy Handlers 拆分（2026-02-26）**：`backend/app/api/v1/editor_heavy_handlers.py` 已拆为 `editor_heavy_pipeline.py`、`editor_heavy_revision.py`、`editor_heavy_reviewer.py`、`editor_heavy_decision.py`、`editor_heavy_publish.py`，主文件改为兼容聚合导出（保留原导入路径，避免路由与测试引用回归）；相关后端定向回归 `24 passed`。
+- **EditorApi 模块化拆分（2026-02-26）**：`frontend/src/services/editorApi.ts` 已将财务、Reviewer Library、内部协作、Decision/Production 四块能力拆入 `frontend/src/services/editor-api/{finance,reviewer-library,internal-collaboration,decision-production}.ts`，并统一类型到 `editor-api/types.ts`；主文件从 `1124` 行降至 `615` 行，前端 lint 与 editorApi 定向单测通过（`15 passed`）。
 - **后端大文件重构（2026-02-26）**：`EditorService` 财务能力已拆分到 `backend/app/services/editor_service_finance.py`（`editor_service.py` 从 1009 行降到 725 行）；`reviews.py` 公共能力抽到 `backend/app/api/v1/reviews_common.py`（主文件从 760 行降到 654 行），并保留原函数包装以兼容现有 monkeypatch 测试。
 - **Decision Service 拆分（2026-02-26）**：`backend/app/services/decision_service.py` 已按职责拆分为 `decision_service_letters.py`（报告/草稿）与 `decision_service_transitions.py`（最终流转/通知），主文件从 896 行降到 518 行；`test_decision_*` 相关回归 `18 passed`。
 - **Production Workflow 拆分（2026-02-26）**：`backend/app/services/production_workspace_service_workflow.py` 已按职责拆分为 `workflow_common.py`（常量/工具）、`workflow_cycle.py`（cycle 管理/上传/核准）、`workflow_author.py`（作者校对），主文件从 982 行降到 60 行；production/proofreading 回归 `20 passed`。

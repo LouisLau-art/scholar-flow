@@ -1,91 +1,40 @@
 import { authService } from '@/services/auth'
-import type { AcademicDecision, TechnicalDecision } from '@/types/precheck'
+import { createDecisionProductionApi } from './editor-api/decision-production'
+import { createFinanceApi } from './editor-api/finance'
+import { createInternalCollaborationApi } from './editor-api/internal-collaboration'
+import { createReviewerLibraryApi } from './editor-api/reviewer-library'
 import type {
-  CreateInternalCommentPayload,
-  CreateInternalTaskPayload,
-  UpdateInternalTaskPayload,
-  InternalTaskStatus,
-} from '@/types/internal-collaboration'
-import type {
-  FinanceExportResponse,
-  FinanceInvoiceListResponse,
-  FinanceSortBy,
-  FinanceSortOrder,
-  FinanceStatusFilter,
-} from '@/types/finance'
-import type { EditorRbacContext } from '@/types/rbac'
+  AssignAEPayload,
+  CachedGetOptions,
+  EditorRbacContextResponse,
+  IntakeQueueFetchOptions,
+  ManuscriptDetailGetOptions,
+  ManuscriptsProcessFilters,
+  ProcessFetchOptions,
+  SubmitAcademicCheckPayload,
+  SubmitIntakeRevisionPayload,
+  SubmitTechnicalCheckPayload,
+  WorkspaceFetchOptions,
+} from './editor-api/types'
 
-export type ManuscriptsProcessFilters = {
-  q?: string
-  journalId?: string
-  manuscriptId?: string
-  statuses?: string[]
-  ownerId?: string
-  editorId?: string
-  overdueOnly?: boolean
-}
-
-export type FinanceInvoiceFilters = {
-  status?: FinanceStatusFilter
-  q?: string
-  page?: number
-  pageSize?: number
-  sortBy?: FinanceSortBy
-  sortOrder?: FinanceSortOrder
-}
-
-export type EditorRbacContextResponse = {
-  success: boolean
-  data?: EditorRbacContext
-  detail?: string
-  message?: string
-}
-
-export type DecisionSubmissionPayload = {
-  content: string
-  decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision'
-  is_final: boolean
-  decision_stage?: 'first' | 'final'
-  attachment_paths: string[]
-  last_updated_at: string | null
-}
-
-export type ProductionCycleCreatePayload = {
-  layout_editor_id: string
-  collaborator_editor_ids?: string[]
-  proofreader_author_id: string
-  proof_due_at: string
-}
-
-export type ProductionCycleEditorsUpdatePayload = {
-  layout_editor_id?: string
-  collaborator_editor_ids?: string[] | null
-}
-
-export type AssignAEPayload = {
-  ae_id: string
-  owner_id?: string
-  start_external_review?: boolean
-  bind_owner_if_empty?: boolean
-  idempotency_key?: string
-}
-
-export type SubmitIntakeRevisionPayload = {
-  comment: string
-  idempotency_key?: string
-}
-
-export type SubmitTechnicalCheckPayload = {
-  decision: TechnicalDecision
-  comment?: string
-  idempotency_key?: string
-}
-
-export type SubmitAcademicCheckPayload = {
-  decision: AcademicDecision
-  comment?: string
-  idempotency_key?: string
-}
+export type {
+  AssignAEPayload,
+  CachedGetOptions,
+  DecisionSubmissionPayload,
+  EditorRbacContextResponse,
+  FinanceInvoiceFilters,
+  IntakeQueueFetchOptions,
+  ManuscriptDetailGetOptions,
+  ManuscriptsProcessFilters,
+  ProcessFetchOptions,
+  ProductionCycleCreatePayload,
+  ProductionCycleEditorsUpdatePayload,
+  ReviewerLibrarySearchOptions,
+  SubmitAcademicCheckPayload,
+  SubmitIntakeRevisionPayload,
+  SubmitTechnicalCheckPayload,
+  WorkspaceFetchOptions,
+} from './editor-api/types'
 
 async function authedFetch(input: RequestInfo, init?: RequestInit) {
   const token = await authService.getAccessToken()
@@ -94,36 +43,6 @@ async function authedFetch(input: RequestInfo, init?: RequestInit) {
   }
   if (token) headers.Authorization = `Bearer ${token}`
   return fetch(input, { ...init, headers })
-}
-
-type CachedGetOptions = {
-  ttlMs?: number
-  force?: boolean
-}
-
-type ReviewerLibrarySearchOptions = {
-  ttlMs?: number
-  force?: boolean
-  disableCache?: boolean
-  roleScopeKey?: string
-  page?: number
-}
-
-type WorkspaceFetchOptions = CachedGetOptions & {
-  signal?: AbortSignal
-}
-
-type IntakeQueueFetchOptions = CachedGetOptions & {
-  signal?: AbortSignal
-}
-
-type ProcessFetchOptions = CachedGetOptions & {
-  signal?: AbortSignal
-}
-
-type ManuscriptDetailGetOptions = CachedGetOptions & {
-  skipCards?: boolean
-  includeHeavy?: boolean
 }
 
 const GET_CACHE_TTL_MS = 8_000
@@ -290,46 +209,35 @@ function getFilenameFromContentDisposition(contentDisposition: string | null) {
   return m?.[1] || 'finance_invoices.csv'
 }
 
-export const EditorApi = {
-  async listFinanceInvoices(filters: FinanceInvoiceFilters = {}): Promise<FinanceInvoiceListResponse> {
-    const params = new URLSearchParams()
-    if (filters.status) params.set('status', filters.status)
-    if (filters.q) params.set('q', filters.q)
-    if (typeof filters.page === 'number') params.set('page', String(filters.page))
-    if (typeof filters.pageSize === 'number') params.set('page_size', String(filters.pageSize))
-    if (filters.sortBy) params.set('sort_by', filters.sortBy)
-    if (filters.sortOrder) params.set('sort_order', filters.sortOrder)
-    const qs = params.toString()
-    const res = await authedFetch(`/api/v1/editor/finance/invoices${qs ? `?${qs}` : ''}`)
-    return res.json()
-  },
+const financeApi = createFinanceApi({
+  authedFetch,
+  getFilenameFromContentDisposition,
+})
 
-  async exportFinanceInvoices(filters: FinanceInvoiceFilters = {}): Promise<FinanceExportResponse> {
-    const params = new URLSearchParams()
-    if (filters.status) params.set('status', filters.status)
-    if (filters.q) params.set('q', filters.q)
-    if (filters.sortBy) params.set('sort_by', filters.sortBy)
-    if (filters.sortOrder) params.set('sort_order', filters.sortOrder)
-    const qs = params.toString()
-    const res = await authedFetch(`/api/v1/editor/finance/invoices/export${qs ? `?${qs}` : ''}`)
-    if (!res.ok) {
-      let msg = 'Export failed'
-      try {
-        const j = await res.json()
-        msg = (j?.detail || j?.message || msg).toString()
-      } catch {
-        // ignore
-      }
-      throw new Error(msg)
-    }
-    const blob = await res.blob()
-    return {
-      blob,
-      filename: getFilenameFromContentDisposition(res.headers.get('content-disposition')),
-      snapshotAt: res.headers.get('x-export-snapshot-at') || undefined,
-      empty: res.headers.get('x-export-empty') === '1',
-    }
-  },
+const reviewerLibraryApi = createReviewerLibraryApi({
+  authedFetch,
+  buildReviewerSearchCacheKey,
+  normalizeRoleScopeKey,
+  invalidateReviewerSearchCacheByPredicate,
+  reviewerSearchCache,
+  reviewerSearchInflight,
+  reviewerLibraryCacheTtlMs: REVIEWER_LIBRARY_CACHE_TTL_MS,
+})
+
+const internalCollaborationApi = createInternalCollaborationApi({
+  authedFetch,
+  authedGetJsonCached,
+  invalidateManuscriptInternalCache,
+})
+
+const decisionProductionApi = createDecisionProductionApi({
+  authedFetch,
+  invalidateManuscriptDetailCache,
+  invalidateProcessRowsCache,
+})
+
+export const EditorApi = {
+  ...financeApi,
 
   async listJournals() {
     const res = await authedFetch('/api/v1/editor/journals')
@@ -664,331 +572,9 @@ export const EditorApi = {
   async getManuscriptReviews(manuscriptId: string, options?: CachedGetOptions) {
     return authedGetJsonCached(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/reviews`, options)
   },
+  ...decisionProductionApi,
 
-  async getDecisionContext(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-context`)
-    return res.json()
-  },
-
-  async submitDecision(manuscriptId: string, payload: DecisionSubmissionPayload) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/submit-decision`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    return res.json()
-  },
-
-  async uploadDecisionAttachment(manuscriptId: string, file: File) {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-attachments`, {
-      method: 'POST',
-      body: formData,
-    })
-    return res.json()
-  },
-
-  async getDecisionAttachmentSignedUrl(manuscriptId: string, attachmentId: string) {
-    const res = await authedFetch(
-      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/decision-attachments/${encodeURIComponent(
-        attachmentId
-      )}/signed-url`
-    )
-    return res.json()
-  },
-
-  async getProductionWorkspaceContext(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-workspace`)
-    return res.json()
-  },
-
-  async createProductionCycle(manuscriptId: string, payload: ProductionCycleCreatePayload) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async updateProductionCycleEditors(manuscriptId: string, cycleId: string, payload: ProductionCycleEditorsUpdatePayload) {
-    const res = await authedFetch(
-      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/editors`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }
-    )
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async uploadProductionGalley(
-    manuscriptId: string,
-    cycleId: string,
-    payload: { file: File; version_note: string; proof_due_at?: string }
-  ) {
-    const formData = new FormData()
-    formData.append('file', payload.file)
-    formData.append('version_note', payload.version_note)
-    if (payload.proof_due_at) formData.append('proof_due_at', payload.proof_due_at)
-    const res = await authedFetch(
-      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/galley`,
-      {
-        method: 'POST',
-        body: formData,
-      }
-    )
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async getProductionGalleySignedUrl(manuscriptId: string, cycleId: string) {
-    const res = await authedFetch(
-      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/galley-signed`
-    )
-    return res.json()
-  },
-
-  async approveProductionCycle(manuscriptId: string, cycleId: string) {
-    const res = await authedFetch(
-      `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/approve`,
-      {
-        method: 'POST',
-      }
-    )
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async listMyProductionQueue(limit = 50) {
-    const qs = new URLSearchParams()
-    qs.set('limit', String(limit))
-    const res = await authedFetch(`/api/v1/editor/production/queue?${qs.toString()}`)
-    return res.json()
-  },
-
-  async patchManuscriptStatus(manuscriptId: string, status: string, comment?: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, comment }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      invalidateProcessRowsCache()
-      invalidateManuscriptDetailCache(manuscriptId)
-    }
-    return json
-  },
-
-  // Feature 031: Post-Acceptance Workflow
-  async advanceProduction(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/advance`, {
-      method: 'POST',
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async revertProduction(manuscriptId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/production/revert`, {
-      method: 'POST',
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async confirmInvoicePaid(
-    manuscriptId: string,
-    payload?: {
-      expectedStatus?: 'unpaid' | 'paid' | 'waived'
-      source?: 'editor_pipeline' | 'finance_page' | 'unknown'
-    }
-  ) {
-    const res = await authedFetch('/api/v1/editor/invoices/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        manuscript_id: manuscriptId,
-        expected_status: payload?.expectedStatus,
-        source: payload?.source || 'unknown',
-      }),
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async updateInvoiceInfo(
-    manuscriptId: string,
-    payload: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string }
-  ) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/invoice-info`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async bindOwner(manuscriptId: string, ownerId: string) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/bind-owner`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner_id: ownerId }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      invalidateProcessRowsCache()
-      invalidateManuscriptDetailCache(manuscriptId)
-    }
-    return json
-  },
-
-  // Feature 032: Quick Actions
-  async quickPrecheck(manuscriptId: string, payload: { decision: 'approve' | 'revision'; comment?: string }) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/quick-precheck`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      invalidateProcessRowsCache()
-      invalidateManuscriptDetailCache(manuscriptId)
-    }
-    return json
-  },
-
-  // Feature 033: Editor uploads peer review files (internal)
-  async uploadPeerReviewFile(manuscriptId: string, file: File) {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/files/review-attachment`, {
-      method: 'POST',
-      body: formData,
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  async uploadCoverLetterFile(manuscriptId: string, file: File) {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/files/cover-letter`, {
-      method: 'POST',
-      body: formData,
-    })
-    const json = await res.json()
-    if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
-    return json
-  },
-
-  // Feature 030: Reviewer Library
-  async addReviewerToLibrary(payload: {
-    email: string
-    full_name: string
-    title: string
-    affiliation?: string
-    homepage_url?: string
-    research_interests?: string[]
-  }) {
-    const res = await authedFetch('/api/v1/editor/reviewer-library', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    return res.json()
-  },
-
-  async searchReviewerLibrary(
-    query?: string,
-    limit: number = 50,
-    manuscriptId?: string,
-    options: ReviewerLibrarySearchOptions = {}
-  ) {
-    const page = Math.max(1, Number.isFinite(Number(options.page)) ? Number(options.page) : 1)
-    const ttlMs = options.ttlMs ?? REVIEWER_LIBRARY_CACHE_TTL_MS
-    const force = Boolean(options.force)
-    const useCache = !options.disableCache
-    const cacheKey = buildReviewerSearchCacheKey({
-      manuscriptId,
-      query,
-      limit,
-      page,
-      roleScopeKey: options.roleScopeKey,
-    })
-
-    if (useCache && !force) {
-      const cached = reviewerSearchCache.get(cacheKey)
-      if (cached && cached.expiresAt > Date.now()) {
-        return cached.data
-      }
-      const inflight = reviewerSearchInflight.get(cacheKey)
-      if (inflight) {
-        return inflight
-      }
-    }
-
-    const params = new URLSearchParams()
-    if (query) params.set('query', query)
-    params.set('limit', String(limit))
-    params.set('page', String(page))
-    if (manuscriptId) params.set('manuscript_id', manuscriptId)
-    const requestPromise = (async () => {
-      const res = await authedFetch(`/api/v1/editor/reviewer-library?${params.toString()}`)
-      const json = await res.json().catch(() => ({}))
-      if (res.ok && useCache) {
-        reviewerSearchCache.set(cacheKey, {
-          expiresAt: Date.now() + ttlMs,
-          data: json,
-        })
-      }
-      return json
-    })()
-    reviewerSearchInflight.set(cacheKey, requestPromise)
-    try {
-      return await requestPromise
-    } finally {
-      if (reviewerSearchInflight.get(cacheKey) === requestPromise) {
-        reviewerSearchInflight.delete(cacheKey)
-      }
-    }
-  },
-
-  invalidateReviewerSearchCache(filters?: { manuscriptId?: string; roleScopeKey?: string }) {
-    if (!filters?.manuscriptId && !filters?.roleScopeKey) {
-      reviewerSearchCache.clear()
-      reviewerSearchInflight.clear()
-      return
-    }
-
-    const manuscriptToken = filters?.manuscriptId
-      ? `ms=${encodeURIComponent(String(filters.manuscriptId).trim())}`
-      : null
-    const scopeToken = filters?.roleScopeKey
-      ? `scope=${encodeURIComponent(normalizeRoleScopeKey(filters.roleScopeKey))}`
-      : null
-
-    invalidateReviewerSearchCacheByPredicate((key) => {
-      if (manuscriptToken && !key.includes(manuscriptToken)) return false
-      if (scopeToken && !key.includes(scopeToken)) return false
-      return true
-    })
-  },
+  ...reviewerLibraryApi,
 
   invalidateAEWorkspaceCache() {
     aeWorkspaceCache.clear()
@@ -1009,116 +595,5 @@ export const EditorApi = {
     invalidateProcessRowsCache()
   },
 
-  async updateReviewerLibraryItem(reviewerId: string, payload: Record<string, any>) {
-    const res = await authedFetch(`/api/v1/editor/reviewer-library/${encodeURIComponent(reviewerId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    return res.json()
-  },
-
-  async deactivateReviewerLibraryItem(reviewerId: string) {
-    const res = await authedFetch(`/api/v1/editor/reviewer-library/${encodeURIComponent(reviewerId)}`, {
-      method: 'DELETE',
-    })
-    return res.json()
-  },
-
-  // Feature 036: Internal Notebook & Audit
-  async getInternalComments(manuscriptId: string, options?: CachedGetOptions) {
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, options)
-  },
-
-  async postInternalComment(manuscriptId: string, content: string) {
-    const payload: CreateInternalCommentPayload = { content }
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
-    return json
-  },
-
-  async postInternalCommentWithMentions(manuscriptId: string, payload: CreateInternalCommentPayload) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/comments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
-    return json
-  },
-
-  async listInternalTasks(
-    manuscriptId: string,
-    filters?: {
-      status?: InternalTaskStatus
-      overdueOnly?: boolean
-    },
-    options?: CachedGetOptions
-  ) {
-    const params = new URLSearchParams()
-    if (filters?.status) params.set('status', filters.status)
-    if (filters?.overdueOnly) params.set('overdue_only', 'true')
-    const query = params.toString()
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks${query ? `?${query}` : ''}`, options)
-  },
-
-  async createInternalTask(manuscriptId: string, payload: CreateInternalTaskPayload) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
-    return json
-  },
-
-  async patchInternalTask(manuscriptId: string, taskId: string, payload: UpdateInternalTaskPayload) {
-    const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const json = await res.json()
-    if (res.ok && json?.success) invalidateManuscriptInternalCache(manuscriptId)
-    return json
-  },
-
-  async getInternalTaskActivity(manuscriptId: string, taskId: string, options?: CachedGetOptions) {
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/${taskId}/activity`, options)
-  },
-
-  async getInternalTasksActivity(
-    manuscriptId: string,
-    params?: { taskLimit?: number; activityLimit?: number },
-    options?: CachedGetOptions
-  ) {
-    const query = new URLSearchParams()
-    if (typeof params?.taskLimit === 'number') query.set('task_limit', String(params.taskLimit))
-    if (typeof params?.activityLimit === 'number') query.set('activity_limit', String(params.activityLimit))
-    const qs = query.toString()
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/tasks/activity${qs ? `?${qs}` : ''}`, options)
-  },
-
-  async getTimelineContext(
-    manuscriptId: string,
-    params?: { taskLimit?: number; activityLimit?: number },
-    options?: CachedGetOptions
-  ) {
-    const query = new URLSearchParams()
-    if (typeof params?.taskLimit === 'number') query.set('task_limit', String(params.taskLimit))
-    if (typeof params?.activityLimit === 'number') query.set('activity_limit', String(params.activityLimit))
-    const qs = query.toString()
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/timeline-context${qs ? `?${qs}` : ''}`, options)
-  },
-
-  async getAuditLogs(manuscriptId: string, options?: CachedGetOptions) {
-    return authedGetJsonCached(`/api/v1/editor/manuscripts/${manuscriptId}/audit-logs`, options)
-  },
+  ...internalCollaborationApi,
 }
