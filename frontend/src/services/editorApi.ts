@@ -113,6 +113,10 @@ type WorkspaceFetchOptions = CachedGetOptions & {
   signal?: AbortSignal
 }
 
+type IntakeQueueFetchOptions = CachedGetOptions & {
+  signal?: AbortSignal
+}
+
 type ProcessFetchOptions = CachedGetOptions & {
   signal?: AbortSignal
 }
@@ -126,6 +130,7 @@ const GET_CACHE_TTL_MS = 8_000
 const REVIEWER_LIBRARY_CACHE_TTL_MS = 20_000
 const AE_WORKSPACE_CACHE_TTL_MS = 15_000
 const MANAGING_WORKSPACE_CACHE_TTL_MS = 15_000
+const INTAKE_QUEUE_CACHE_TTL_MS = 15_000
 const PROCESS_CACHE_TTL_MS = 12_000
 const DETAIL_CACHE_TTL_MS = 10_000
 const getJsonCache = new Map<string, { expiresAt: number; data: unknown }>()
@@ -136,6 +141,8 @@ const aeWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
 const aeWorkspaceInflight = new Map<string, Promise<unknown>>()
 const managingWorkspaceCache = new Map<string, { expiresAt: number; data: unknown }>()
 const managingWorkspaceInflight = new Map<string, Promise<unknown>>()
+const intakeQueueCache = new Map<string, { expiresAt: number; data: unknown }>()
+const intakeQueueInflight = new Map<string, Promise<unknown>>()
 const processRowsCache = new Map<string, { expiresAt: number; data: unknown }>()
 const processRowsInflight = new Map<string, Promise<unknown>>()
 const detailCache = new Map<string, { expiresAt: number; data: unknown }>()
@@ -255,6 +262,12 @@ function buildWorkspaceCacheKey(kind: 'ae' | 'managing', page: number, pageSize:
   return `workspace|kind=${kind}|page=${page}|pageSize=${pageSize}|q=${query}`
 }
 
+function buildIntakeQueueCacheKey(page: number, pageSize: number, filters?: { q?: string; overdueOnly?: boolean }): string {
+  const query = encodeURIComponent(String(filters?.q || '').trim().toLowerCase())
+  const overdue = filters?.overdueOnly ? '1' : '0'
+  return `intake|page=${page}|pageSize=${pageSize}|q=${query}|overdue=${overdue}`
+}
+
 function buildProcessCacheKey(filters: ManuscriptsProcessFilters): string {
   const normalizedStatuses = (filters.statuses || [])
     .map((item) => String(item || '').trim().toLowerCase())
@@ -346,14 +359,52 @@ export const EditorApi = {
     return res.json()
   },
 
-  async getIntakeQueue(page = 1, pageSize = 20, filters?: { q?: string; overdueOnly?: boolean }) {
+  async getIntakeQueue(
+    page = 1,
+    pageSize = 20,
+    filters?: { q?: string; overdueOnly?: boolean },
+    options?: IntakeQueueFetchOptions
+  ) {
+    const force = Boolean(options?.force)
+    const ttlMs = options?.ttlMs ?? INTAKE_QUEUE_CACHE_TTL_MS
+    const cacheKey = buildIntakeQueueCacheKey(page, pageSize, filters)
+    const now = Date.now()
+    if (!force) {
+      const cached = intakeQueueCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.data
+      }
+      const inflight = intakeQueueInflight.get(cacheKey)
+      if (inflight) return inflight
+    }
+
     const params = new URLSearchParams()
     params.set('page', String(page))
     params.set('page_size', String(pageSize))
     if (filters?.q) params.set('q', filters.q)
     if (filters?.overdueOnly) params.set('overdue_only', 'true')
-    const res = await authedFetch(`/api/v1/editor/intake?${params.toString()}`)
-    return res.json()
+    const requestPromise = (async () => {
+      const res = await authedFetch(`/api/v1/editor/intake?${params.toString()}`, {
+        signal: options?.signal,
+        headers: force ? { 'x-sf-force-refresh': '1' } : undefined,
+      })
+      const json = await res.json().catch(() => [])
+      if (res.ok && Array.isArray(json)) {
+        intakeQueueCache.set(cacheKey, {
+          expiresAt: Date.now() + ttlMs,
+          data: json,
+        })
+      }
+      return json
+    })()
+    intakeQueueInflight.set(cacheKey, requestPromise)
+    try {
+      return await requestPromise
+    } finally {
+      if (intakeQueueInflight.get(cacheKey) === requestPromise) {
+        intakeQueueInflight.delete(cacheKey)
+      }
+    }
   },
 
   async assignAE(manuscriptId: string, payload: AssignAEPayload) {
@@ -364,6 +415,8 @@ export const EditorApi = {
     })
     const json = await res.json()
     if (res.ok) {
+      intakeQueueCache.clear()
+      intakeQueueInflight.clear()
       invalidateProcessRowsCache()
       invalidateManuscriptDetailCache(manuscriptId)
     }
@@ -378,6 +431,8 @@ export const EditorApi = {
     })
     const json = await res.json()
     if (res.ok) {
+      intakeQueueCache.clear()
+      intakeQueueInflight.clear()
       invalidateProcessRowsCache()
       invalidateManuscriptDetailCache(manuscriptId)
     }
@@ -943,6 +998,11 @@ export const EditorApi = {
   invalidateManagingWorkspaceCache() {
     managingWorkspaceCache.clear()
     managingWorkspaceInflight.clear()
+  },
+
+  invalidateIntakeQueueCache() {
+    intakeQueueCache.clear()
+    intakeQueueInflight.clear()
   },
 
   invalidateManuscriptsProcessCache() {

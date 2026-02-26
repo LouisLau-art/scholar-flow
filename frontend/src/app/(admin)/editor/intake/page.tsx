@@ -78,9 +78,19 @@ function renderPriority(row: Manuscript) {
   return <Badge variant="outline">正常</Badge>
 }
 
+const INTAKE_PAGE_SIZE = 100
+const INTAKE_CACHE_TTL_MS = 20_000
+const intakeRowsCache = new Map<string, { rows: Manuscript[]; cachedAt: number }>()
+
+function buildCacheKey(query: string, overdueOnly: boolean): string {
+  const q = encodeURIComponent(String(query || '').trim().toLowerCase())
+  return `q=${q}|overdue=${overdueOnly ? '1' : '0'}`
+}
+
 export default function MEIntakePage() {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
   const [queryInput, setQueryInput] = useState('')
@@ -93,22 +103,81 @@ export default function MEIntakePage() {
   const [returnError, setReturnError] = useState('')
   const [returnTarget, setReturnTarget] = useState<{ id: string; title: string } | null>(null)
   const aePrefetchedRef = useRef(false)
-
-  const fetchQueue = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await editorService.getIntakeQueue(1, 100, { q: query || undefined, overdueOnly })
-      setManuscripts(data as unknown as Manuscript[])
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [query, overdueOnly])
+  const manuscriptsRef = useRef<Manuscript[]>([])
+  const requestIdRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    void fetchQueue()
+    manuscriptsRef.current = manuscripts
+  }, [manuscripts])
+
+  const fetchQueue = useCallback(
+    async (options?: {
+      preferCache?: boolean
+      silent?: boolean
+      forceRefresh?: boolean
+      queryOverride?: string
+      overdueOnlyOverride?: boolean
+    }) => {
+      const effectiveQuery = String(options?.queryOverride ?? query).trim()
+      const effectiveOverdueOnly = options?.overdueOnlyOverride ?? overdueOnly
+      const cacheKey = buildCacheKey(effectiveQuery, effectiveOverdueOnly)
+      const cacheItem = intakeRowsCache.get(cacheKey)
+      const now = Date.now()
+      const cacheValid = Boolean(cacheItem && now - cacheItem.cachedAt < INTAKE_CACHE_TTL_MS)
+
+      if (options?.preferCache && cacheValid && cacheItem) {
+        setManuscripts(cacheItem.rows)
+      }
+
+      const hasRows = (cacheValid && Boolean(cacheItem?.rows.length)) || manuscriptsRef.current.length > 0
+      const blockUi = !options?.silent && !hasRows
+      if (blockUi) setLoading(true)
+      else setIsRefreshing(true)
+
+      const currentRequestId = ++requestIdRef.current
+      abortRef.current?.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
+      try {
+        const data = await editorService.getIntakeQueue(
+          1,
+          INTAKE_PAGE_SIZE,
+          { q: effectiveQuery || undefined, overdueOnly: effectiveOverdueOnly },
+          {
+            forceRefresh: Boolean(options?.forceRefresh),
+            signal: controller.signal,
+            ttlMs: INTAKE_CACHE_TTL_MS,
+          }
+        )
+        if (currentRequestId !== requestIdRef.current) return
+        setManuscripts(data as unknown as Manuscript[])
+        intakeRowsCache.set(cacheKey, {
+          rows: data as unknown as Manuscript[],
+          cachedAt: Date.now(),
+        })
+      } catch (err) {
+        if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return
+        console.error(err)
+      } finally {
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false)
+          setIsRefreshing(false)
+        }
+      }
+    },
+    [query, overdueOnly]
+  )
+
+  useEffect(() => {
+    void fetchQueue({ preferCache: true })
   }, [fetchQueue])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     if (aePrefetchedRef.current) return
@@ -157,13 +226,17 @@ export default function MEIntakePage() {
     try {
       await editorService.submitIntakeRevision(returnTarget.id, comment)
       closeReturnModal()
-      await fetchQueue()
+      await fetchQueue({ silent: true, forceRefresh: true })
     } catch (err) {
       setReturnError(err instanceof Error ? err.message : '提交失败，请重试')
     } finally {
       setReturning(false)
     }
   }
+
+  const handleAssignSuccess = useCallback(() => {
+    void fetchQueue({ silent: true, forceRefresh: true })
+  }, [fetchQueue])
 
   const applySearch = () => {
     setQuery(queryInput.trim())
@@ -212,18 +285,29 @@ export default function MEIntakePage() {
               <Button variant={overdueOnly ? 'default' : 'outline'} onClick={() => setOverdueOnly((v) => !v)}>
                 {overdueOnly ? '仅看高优先级: 开' : '仅看高优先级: 关'}
               </Button>
-              {(query || overdueOnly) && (
+              <div className="flex items-center justify-end gap-2">
                 <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setQueryInput('')
-                    setQuery('')
-                    setOverdueOnly(false)
-                  }}
+                  variant="outline"
+                  onClick={() => void fetchQueue({ silent: true, forceRefresh: true })}
+                  disabled={isRefreshing}
+                  className="gap-1.5"
                 >
-                  清空筛选
+                  {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  刷新
                 </Button>
-              )}
+                {(query || overdueOnly) && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setQueryInput('')
+                      setQuery('')
+                      setOverdueOnly(false)
+                    }}
+                  >
+                    清空筛选
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -317,7 +401,7 @@ export default function MEIntakePage() {
               isOpen={assignModalOpen}
               onClose={() => setAssignModalOpen(false)}
               manuscriptId={selectedManuscriptId}
-              onAssignSuccess={fetchQueue}
+              onAssignSuccess={handleAssignSuccess}
             />
           )}
 

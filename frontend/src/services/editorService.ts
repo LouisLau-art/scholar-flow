@@ -42,8 +42,17 @@ export const editorService = {
     return res.data
   },
 
-  getIntakeQueue: async (page = 1, pageSize = 20, filters?: { q?: string; overdueOnly?: boolean }) => {
-    const res = await EditorApi.getIntakeQueue(page, pageSize, filters)
+  getIntakeQueue: async (
+    page = 1,
+    pageSize = 20,
+    filters?: { q?: string; overdueOnly?: boolean },
+    options?: { forceRefresh?: boolean; signal?: AbortSignal; ttlMs?: number }
+  ) => {
+    const res = await EditorApi.getIntakeQueue(page, pageSize, filters, {
+      force: Boolean(options?.forceRefresh),
+      signal: options?.signal,
+      ttlMs: options?.ttlMs,
+    })
     if (!Array.isArray(res)) {
       throw new Error(res?.detail || res?.message || 'Failed to fetch intake queue')
     }
