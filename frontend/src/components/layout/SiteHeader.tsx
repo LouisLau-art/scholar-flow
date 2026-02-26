@@ -24,10 +24,7 @@ export default function SiteHeader() {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return Boolean(window.localStorage.getItem('scholarflow:access_token'))
-  })
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // 中文注释：未登录时不触发 profile 查询，减少公共页面的重复鉴权请求。
   const { profile } = useProfile({ enabled: isAuthenticated })
@@ -42,21 +39,15 @@ export default function SiteHeader() {
   useEffect(() => {
     let isMounted = true
 
-    // 中文注释：仅当本地已有 token 时才做 session 探测，匿名访客不触发额外鉴权请求。
-    const hasLocalToken =
-      typeof window !== 'undefined' && Boolean(window.localStorage.getItem('scholarflow:access_token'))
-    if (hasLocalToken) {
-      authService
-        .getSession()
-        .then((session) => {
-          if (isMounted) setIsAuthenticated(!!session)
-        })
-        .catch(() => {
-          if (isMounted) setIsAuthenticated(false)
-        })
-    } else if (isMounted) {
-      setIsAuthenticated(false)
-    }
+    // 中文注释：统一通过 Supabase session 探测登录态，不再依赖 localStorage token 镜像。
+    authService
+      .getSession()
+      .then((session) => {
+        if (isMounted) setIsAuthenticated(!!session)
+      })
+      .catch(() => {
+        if (isMounted) setIsAuthenticated(false)
+      })
 
     // CMS Menu
     ;(async () => {
@@ -198,7 +189,9 @@ export default function SiteHeader() {
             </Link>
 
             {/* Mobile Menu Toggle */}
-            <button 
+            <button
+              type="button"
+              aria-label={isMobileMenuOpen ? 'Close mobile menu' : 'Open mobile menu'}
               className="lg:hidden text-background/70"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >

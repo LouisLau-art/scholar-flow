@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import SiteHeader from '@/components/layout/SiteHeader'
+import { getBackendOrigin } from '@/lib/backend-origin'
 import { formatDateLocal } from '@/lib/date-display'
 import { cn } from '@/lib/utils'
 import type { PublicArticle } from '@/services/portal'
@@ -122,14 +123,6 @@ interface NewsCardData {
 
 const HOME_LATEST_ARTICLES_LIMIT = 7
 const HOME_LATEST_ARTICLES_REVALIDATE_SECONDS = 3600
-
-function getBackendOrigin(): string {
-  const raw =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://127.0.0.1:8000'
-  return raw.replace(/\/$/, '')
-}
 
 async function getLatestArticlesServer(limit: number): Promise<PublicArticle[]> {
   try {

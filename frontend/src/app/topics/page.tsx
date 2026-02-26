@@ -1,4 +1,5 @@
 import SiteHeader from '@/components/layout/SiteHeader'
+import { getBackendOrigin } from '@/lib/backend-origin'
 import { Stethoscope, Cpu, FlaskConical, Landmark, ArrowRight, Globe } from 'lucide-react'
 import Link from 'next/link'
 
@@ -18,14 +19,6 @@ const iconMap: Record<string, typeof Globe> = {
   Cpu,
   FlaskConical,
   Landmark,
-}
-
-function getBackendOrigin(): string {
-  const raw =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://127.0.0.1:8000'
-  return raw.replace(/\/$/, '')
 }
 
 async function getTopicsServer(): Promise<TopicItem[]> {

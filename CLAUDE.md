@@ -69,7 +69,7 @@
 
 ```text
 backend/
-├── src/
+├── app/
 │   ├── models/
 │   ├── services/
 │   └── api/
@@ -81,7 +81,7 @@ backend/
 frontend/
 ├── src/
 │   ├── components/
-│   ├── pages/
+│   ├── app/
 │   └── services/
 └── tests/
     ├── unit/
@@ -274,6 +274,9 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Tailwind v4 迁移 Phase 3（2026-02-25）**：已完成动画语义层收敛（`sf-motion-*`）并替换高频组件（`dialog/popover/select/dashboard/home/header/version`）中的长动画拼接 class；`motion budget` 门禁（`legacy motion=0`、`long duration=0`）已接入 `frontend-ci`，下一步聚焦真实页面数据下的动画进一步降载。
 - **站点 Metadata 域名（2026-02-25）**：`frontend/src/app/layout.tsx` 已不再使用 `scholarflow.example.com` 占位域名；优先读取 `NEXT_PUBLIC_SITE_URL`，其次 `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`，用于 `metadataBase`、OpenGraph、Twitter 图片地址生成。生产环境建议显式配置 `NEXT_PUBLIC_SITE_URL`（含协议）。
 - **App Router 规范收敛（2026-02-25）**：首页 `frontend/src/app/page.tsx` 已改为 Server Component 服务端取 `latest articles`（`revalidate=3600` + fallback 数据），不再在客户端 `useQuery` 拉取；`frontend/src/pages/editor/*` 已移除，`/editor/{workspace,intake,managing-workspace,academic}` 全部仅由 `app/(admin)/editor/*` 承载，避免 pages/app 混用导致 layout/metadata/cache 口径分裂。
+- **Editor API 安全与解耦（2026-02-26）**：已移除 `GET /api/v1/editor/test/pipeline`、`GET /api/v1/editor/test/available-reviewers`、`POST /api/v1/editor/test/decision` 三个无鉴权测试端点；`/editor/rbac/context` 与 `/editor/manuscripts/process` 已拆分至 `backend/app/api/v1/editor_process.py`，降低 `editor.py` 路由耦合度。
+- **Auth Token 硬化（2026-02-26）**：前端 `authService` 不再维护 `scholarflow:access_token` 的 localStorage 镜像，也不再从 localStorage 直读 token；统一通过 `supabase.auth.getSession()/refreshSession()` 获取会话，减少 token 暴露面。
+- **Backend Origin 基础设施收敛（2026-02-26）**：新增 `frontend/src/lib/backend-origin.ts` 统一 `BACKEND_ORIGIN/NEXT_PUBLIC_API_URL` 解析，Server Component 页面不再重复定义 `getBackendOrigin()`，避免缓存策略与容错口径漂移。
 - **Invoice PDF 中文字体（2026-02-24）**：HF Docker 镜像需安装 `fonts-noto-cjk`；`backend/app/core/templates/invoice_pdf.html` 字体栈已包含 `PingFang SC` / `Noto Sans CJK SC` 回退。若本地直接生成发票 PDF，也需在系统安装任一 CJK 字体以避免中文方块字。
 - **Schema 来源**：以仓库内 `supabase/migrations/*.sql` 为准；若云端未应用最新 migration（例如缺少 `public.manuscripts.version`），后端修订集成测试会出现 `PGRST204` 并被跳过/失败。
 - **Portal Latest Articles（公开接口兼容）**：`GET /api/v1/portal/articles/latest` **不得依赖** `public.manuscripts.authors`（云端历史 schema 可能不存在该列），作者展示字段由后端从 `public.user_profiles.full_name` 组装；如 profile 缺失则通过 Supabase Admin API 获取邮箱并**脱敏**（不泄露明文），最终兜底 `Author`。
@@ -303,6 +306,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **前端路由包体门禁（2026-02-26）**：新增 `cd frontend && bun run audit:route-budgets`（基于 `.next` manifest 统计关键路由 gzip JS 体积）；阈值配置位于 `frontend/scripts/route-budgets.json`，已接入 `.github/workflows/ci.yml` 在 build 后自动校验并超限失败。
 - **公共期刊列表短缓存（2026-02-26）**：`GET /api/v1/public/journals` 新增进程内短 TTL 缓存；可通过 `PUBLIC_JOURNALS_CACHE_TTL_SEC`（默认 `60`）调优，降低公开页面高频刷新的数据库压力。
 - **云端索引迁移状态（2026-02-26）**：远端 Supabase 已补齐执行 `supabase/migrations/20260224173000_editor_performance_indexes.sql`（此前 local/remote migration list 不一致）；可通过 `supabase migration list --linked` 与 `supabase inspect db index-stats --linked` 校验索引存在性。
+- **部署拓扑延迟约束（2026-02-26）**：当前默认拓扑仍为 `Vercel(Frontend) + HuggingFace Spaces(Backend) + Supabase(DB)`；若出现首屏/接口高延迟，优先做“同区域部署”或“同云迁移”再评估代码瓶颈，避免跨区域 RTT 放大导致误判为纯代码问题。
 - **GAP-P1-03（Analytics 管理视角增强）迁移**：云端需执行 `supabase/migrations/20260210150000_analytics_management_insights.sql`（新增 `get_editor_efficiency_ranking`、`get_stage_duration_breakdown`、`get_sla_overdue_manuscripts`）；若未迁移，`GET /api/v1/analytics/management` 将退化为空列表（并保持页面可用）。
 - **GAP-P1-05（Role Matrix + Journal Scope RBAC）迁移前置**：进入实现阶段后，云端需执行 `supabase/migrations/20260210110000_create_journal_role_scopes.sql`（新增 `public.journal_role_scopes`）；未迁移前仅保持 legacy 角色校验，不启用强制跨期刊隔离写拦截。
 - **GAP-P1-05 Scope 执行口径（2026-02-11 更新）**：`managing_editor` / `editor_in_chief` 始终按 `journal_role_scopes` 强制隔离（即使 `JOURNAL_SCOPE_ENFORCEMENT=0`；scope 为空时列表返回空、稿件级写操作返回 403）。`JOURNAL_SCOPE_ENFORCEMENT` 仅继续控制 assistant_editor 等非管理角色的灰度拦截。
@@ -322,6 +326,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **安全提醒**：云端使用 `SUPABASE_SERVICE_ROLE_KEY` 等敏感凭证时，务必仅存于本地/CI Secret，避免提交到仓库；如已泄露请立即轮换。
 
 ## 近期关键修复快照（2026-02-26）
+- **后端大文件重构（2026-02-26）**：`EditorService` 财务能力已拆分到 `backend/app/services/editor_service_finance.py`（`editor_service.py` 从 1009 行降到 725 行）；`reviews.py` 公共能力抽到 `backend/app/api/v1/reviews_common.py`（主文件从 760 行降到 654 行），并保留原函数包装以兼容现有 monkeypatch 测试。
 - **Editor 性能体检与索引补齐（2026-02-26）**：完成两轮 API 基线复采（`baseline-2026-02-26-post-backend-hardening-*`、`baseline-2026-02-26-post-index-push-*`），并在云端执行缺失 migration `20260224173000`；当前结论是数据库索引已补齐，编辑链路瓶颈更偏向跨区域网络/冷启动与后端聚合耗时。
 - **后端最佳实践加固（2026-02-26）**：`GET /api/v1/manuscripts` 改为“必须认证 + 仅返回当前用户稿件”；`POST /api/v1/manuscripts` 与 `POST /api/v1/reviews/submit` 的异常语义改为真实 5xx（不再失败返回 200）；`GET /api/v1/stats/editor` 新增编辑角色门禁，避免普通用户读取编辑面聚合数据。
 - **Analytics/Finance/Reviewer API 收口（2026-02-26）**：`/api/v1/analytics/{summary,trends,geo,export}` 全部接入 journal-scope 参数下传（ME/EIC 默认按 scope 裁剪）；Finance 列表改为数据库侧状态筛选 + 分页/计数（移除固定 5000 行拉取）；`/api/v1/editor/available-reviewers` 增加 `page/page_size/q` 并在无 `range/offset` 的测试桩环境自动降级兼容。

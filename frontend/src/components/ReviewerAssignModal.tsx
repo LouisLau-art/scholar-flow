@@ -937,45 +937,48 @@ export default function ReviewerAssignModal({
         </DialogContent>
       </Dialog>
 
-      {/* 自定义确认弹窗：替代浏览器 confirm() */}
-      {pendingRemove && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" data-testid="unassign-confirm">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setPendingRemove(null)} />
-          <div className="relative w-full max-w-md rounded-xl bg-card shadow-2xl border border-border p-6">
-            <div className="text-base font-semibold text-foreground">Remove reviewer?</div>
-            <div className="mt-2 text-sm text-muted-foreground">
+      <Dialog open={Boolean(pendingRemove)} onOpenChange={(open) => (!open ? setPendingRemove(null) : undefined)}>
+        <DialogContent className="max-w-md" data-testid="unassign-confirm">
+          <DialogHeader>
+            <DialogTitle>Remove reviewer?</DialogTitle>
+            <DialogDescription>
               This will remove the reviewer from the current manuscript.
-            </div>
-            <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
-              <div className="text-sm font-medium text-foreground">{pendingRemove.reviewer_name || 'Unknown'}</div>
-              <div className="text-xs text-muted-foreground">{pendingRemove.reviewer_email || ''}</div>
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPendingRemove(null)}
-                className="px-4 py-2 text-foreground rounded-lg hover:bg-muted transition-colors"
-                data-testid="unassign-cancel"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const id = String(pendingRemove.id)
-                  setPendingRemove(null)
-                  await handleUnassign(id)
-                }}
-                disabled={removingId === String(pendingRemove.id)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
-                data-testid="unassign-confirm-remove"
-              >
-                {removingId === String(pendingRemove.id) ? 'Removing...' : 'Remove'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          {pendingRemove ? (
+            <>
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <div className="text-sm font-medium text-foreground">{pendingRemove.reviewer_name || 'Unknown'}</div>
+                <div className="text-xs text-muted-foreground">{pendingRemove.reviewer_email || ''}</div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingRemove(null)}
+                  className="px-4 py-2 text-foreground rounded-lg hover:bg-muted transition-colors"
+                  data-testid="unassign-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!pendingRemove) return
+                    const assignmentId = String(pendingRemove.id)
+                    setPendingRemove(null)
+                    await handleUnassign(assignmentId)
+                  }}
+                  disabled={removingId === String(pendingRemove.id)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                  data-testid="unassign-confirm-remove"
+                >
+                  {removingId === String(pendingRemove.id) ? 'Removing...' : 'Remove'}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <AddReviewerModal
         open={isAddDialogOpen}

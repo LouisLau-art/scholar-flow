@@ -2,14 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, Up
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
-from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import normalize_roles
 from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
-from datetime import datetime, timezone
-import os
 
 from fastapi import Cookie
 
@@ -18,6 +15,17 @@ from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, Review
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
 from app.services.reviewer_service import ReviewPolicyService, ReviewerInviteService, ReviewerWorkspaceService
+from app.api.v1.reviews_common import (
+    ensure_review_attachments_bucket_exists,
+    ensure_review_management_access,
+    get_signed_url_for_manuscripts_bucket,
+    get_signed_url_for_review_attachments_bucket,
+    is_admin_email,
+    is_foreign_key_user_error,
+    is_missing_relation_error,
+    parse_roles,
+    safe_insert_invite_policy_audit,
+)
 from app.api.v1.reviews_heavy_handlers import (
     assign_reviewer_impl,
     establish_reviewer_workspace_session_impl,
@@ -47,95 +55,32 @@ from app.api.v1.reviews_handlers_workspace_magic import (
 router = APIRouter(tags=["Reviews"])
 
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
-    """
-    生成 manuscripts bucket 的 signed URL（优先使用 service_role）。
-
-    中文注释:
-    - 免登录 token 页面与 iframe 无法携带 Authorization header，因此需要后端返回可访问的 signed URL。
-    - 为避免受 Storage RLS 影响，这里优先用 supabase_admin（service_role）签名。
-    """
-    last_err: Exception | None = None
-    for client in (supabase_admin, supabase):
-        try:
-            signed = client.storage.from_("manuscripts").create_signed_url(file_path, expires_in)
-            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
-            if url:
-                return str(url)
-        except Exception as e:
-            last_err = e
-            continue
-    raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
-
-
-def _get_signed_url_for_review_attachments_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
-    """
-    生成 review-attachments bucket 的 signed URL（优先使用 service_role）。
-
-    中文注释:
-    - review-attachments 是私有桶：Author 不可见；Reviewer/Editor 通过后端鉴权拿 signed URL 下载。
-    """
-    last_err: Exception | None = None
-    for client in (supabase_admin, supabase):
-        try:
-            signed = client.storage.from_("review-attachments").create_signed_url(file_path, expires_in)
-            url = (signed or {}).get("signedUrl") or (signed or {}).get("signedURL")
-            if url:
-                return str(url)
-        except Exception as e:
-            last_err = e
-            continue
-    raise HTTPException(status_code=500, detail=f"Failed to create signed url: {last_err}")
-
-
-def _ensure_review_attachments_bucket_exists() -> None:
-    """
-    确保 review-attachments 桶存在（用于开发/演示环境的一键可用）。
-
-    中文注释:
-    - 正式环境建议通过 migration / Dashboard 创建 bucket。
-    - 但为了减少“缺桶导致 500”的踩坑，这里做一次性兜底创建。
-    """
-    storage = getattr(supabase_admin, "storage", None)
-    # 单元测试里会用 FakeStorage 替换；若不支持 bucket 管理方法则直接跳过
-    if storage is None or not hasattr(storage, "get_bucket") or not hasattr(storage, "create_bucket"):
-        return
-
-    try:
-        storage.get_bucket("review-attachments")
-        return
-    except Exception:
-        pass
-    try:
-        storage.create_bucket("review-attachments", options={"public": False})
-    except Exception as e:
-        text = str(e).lower()
-        if "already" in text or "exists" in text or "duplicate" in text:
-            return
-        raise
-
-def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
-    """判断是否为缺表/Schema cache 未更新错误。"""
-    if not isinstance(err, APIError):
-        return False
-    text = str(err).lower()
-    # 常见信号：
-    # - Postgres: 42P01 (undefined_table)
-    # - PostgREST: PGRST205 / "schema cache"
-    # - 直接报 "relation ... does not exist"
-    return (
-        "42p01" in text
-        or "pgrst205" in text
-        or "schema cache" in text
-        or f'"{relation.lower()}"' in text
-        and "does not exist" in text
+    return get_signed_url_for_manuscripts_bucket(
+        file_path=file_path,
+        supabase_client=supabase,
+        supabase_admin_client=supabase_admin,
+        expires_in=expires_in,
     )
 
 
+def _get_signed_url_for_review_attachments_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
+    return get_signed_url_for_review_attachments_bucket(
+        file_path=file_path,
+        supabase_client=supabase,
+        supabase_admin_client=supabase_admin,
+        expires_in=expires_in,
+    )
+
+
+def _ensure_review_attachments_bucket_exists() -> None:
+    return ensure_review_attachments_bucket_exists(supabase_admin_client=supabase_admin)
+
+def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
+    return is_missing_relation_error(err, relation=relation)
+
+
 def _is_foreign_key_user_error(err: Exception, *, constraint: str) -> bool:
-    if not isinstance(err, APIError):
-        return False
-    text = str(err).lower()
-    return ("23503" in text or "foreign key" in text) and constraint.lower() in text
+    return is_foreign_key_user_error(err, constraint=constraint)
 
 
 def _safe_insert_invite_policy_audit(
@@ -147,42 +92,19 @@ def _safe_insert_invite_policy_audit(
     comment: str | None,
     payload: dict[str, Any],
 ) -> None:
-    """
-    邀请策略相关审计日志（fail-open，不影响主流程）。
-    """
-    base = {
-        "manuscript_id": manuscript_id,
-        "from_status": from_status,
-        "to_status": to_status,
-        "comment": comment,
-        "changed_by": changed_by,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "payload": payload,
-    }
-    candidates = [dict(base)]
-    no_payload = dict(base)
-    no_payload.pop("payload", None)
-    candidates.append(no_payload)
-    if changed_by:
-        changed_by_none = dict(base)
-        changed_by_none["changed_by"] = None
-        changed_by_none["payload"] = {**payload, "changed_by_raw": changed_by}
-        candidates.append(changed_by_none)
-        changed_by_none_no_payload = dict(changed_by_none)
-        changed_by_none_no_payload.pop("payload", None)
-        candidates.append(changed_by_none_no_payload)
-
-    for row in candidates:
-        try:
-            supabase_admin.table("status_transition_logs").insert(row).execute()
-            return
-        except Exception:
-            continue
+    return safe_insert_invite_policy_audit(
+        supabase_admin_client=supabase_admin,
+        manuscript_id=manuscript_id,
+        from_status=from_status,
+        to_status=to_status,
+        changed_by=changed_by,
+        comment=comment,
+        payload=payload,
+    )
 
 
 def _parse_roles(profile: dict | None) -> list[str]:
-    raw = (profile or {}).get("roles") or []
-    return [str(r).strip().lower() for r in raw if str(r).strip()]
+    return parse_roles(profile)
 
 
 def _ensure_review_management_access(
@@ -191,36 +113,11 @@ def _ensure_review_management_access(
     user_id: str,
     roles: set[str],
 ) -> None:
-    """
-    审稿人管理权限校验（assign/unassign/list）。
-
-    规则：
-    - admin: 全局允许
-    - managing_editor: 受 journal scope 约束
-    - assistant_editor: 仅可操作 assistant_editor_id == 自己 的稿件
-    """
-    if "admin" in roles:
-        return
-
-    manuscript_id = str(manuscript.get("id") or "").strip()
-    if not manuscript_id:
-        raise HTTPException(status_code=404, detail="Manuscript not found")
-
-    if "managing_editor" in roles:
-        ensure_manuscript_scope_access(
-            manuscript_id=manuscript_id,
-            user_id=str(user_id),
-            roles=roles,
-        )
-        return
-
-    if "assistant_editor" in roles:
-        assigned_ae = str(manuscript.get("assistant_editor_id") or "").strip()
-        if assigned_ae != str(user_id).strip():
-            raise HTTPException(status_code=403, detail="Forbidden: manuscript not assigned to current assistant editor")
-        return
-
-    raise HTTPException(status_code=403, detail="Insufficient role")
+    return ensure_review_management_access(
+        manuscript=manuscript,
+        user_id=user_id,
+        roles=roles,
+    )
 
 
 @router.get("/reviewer/assignments/{assignment_id}/workspace")
@@ -649,10 +546,7 @@ async def upload_review_attachment(
 
 
 def _is_admin_email(email: Optional[str]) -> bool:
-    if not email:
-        return False
-    admins = [e.strip().lower() for e in (os.environ.get("ADMIN_EMAILS") or "").split(",") if e.strip()]
-    return email.strip().lower() in set(admins)
+    return is_admin_email(email)
 
 
 @router.get("/reviews/token/{token}")

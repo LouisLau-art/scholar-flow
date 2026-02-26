@@ -1,156 +1,120 @@
-'use client'
-
-import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import SiteHeader from '@/components/layout/SiteHeader'
 import Link from 'next/link'
-import { Loader2, Search as SearchIcon, ArrowRight, ExternalLink } from 'lucide-react'
+import { ArrowRight, ExternalLink, Search as SearchIcon } from 'lucide-react'
+
+import SiteHeader from '@/components/layout/SiteHeader'
+import { getBackendOrigin } from '@/lib/backend-origin'
 import { demoJournals } from '@/lib/demo-journals'
-import { authService } from '@/services/auth'
 
-function SearchContent() {
-  const searchParams = useSearchParams()
-  const query = searchParams?.get('q')
-  const mode = searchParams?.get('mode')
-  const [results, setResults] = useState<any[]>([])
-  const [fallback, setFallback] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+type SearchMode = 'articles' | 'journals'
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const q = (query || '').trim()
-    if (!q) {
-      setIsLoading(false)
-      setResults([])
-      setFallback([])
-      return () => controller.abort()
-    }
+type SearchResultItem = {
+  id: string
+  title?: string | null
+  slug?: string | null
+  issn?: string | null
+  description?: string | null
+  abstract?: string | null
+  journals?: {
+    title?: string | null
+  } | null
+}
 
-    async function doSearch() {
-      setIsLoading(true)
-      setResults([])
-      setFallback([])
-      try {
-        const currentMode = mode || 'articles'
-        const searchParams = new URLSearchParams({
-          q,
-          mode: currentMode,
-        })
-        const res = await fetch(
-          `/api/v1/manuscripts/search?${searchParams.toString()}`,
-          {
-            signal: controller.signal,
-          }
-        )
-        const data = await res.json()
-        if (data.success) setResults(data.results || [])
-
-        // 搜索为空时，给出对用户“有用”的可见内容，避免页面看起来像坏掉。
-        if ((data.results || []).length === 0) {
-          if (currentMode === 'journals') {
-            const q = (query || '').trim().toLowerCase()
-            const demo = demoJournals.filter((j) => {
-              if (!q) return true
-              return (
-                j.title.toLowerCase().includes(q) ||
-                j.slug.toLowerCase().includes(q) ||
-                (j.issn || '').toLowerCase().includes(q)
-              )
-            })
-            setFallback(demo)
-          } else {
-            const token = await authService.getAccessToken()
-            if (token) {
-              const mine = await fetch('/api/v1/manuscripts/mine', {
-                headers: { Authorization: `Bearer ${token}` },
-                signal: controller.signal,
-              }).then((r) => r.json())
-
-              if (mine?.success && Array.isArray(mine.data)) {
-                const q = (query || '').trim().toLowerCase()
-                const filtered = mine.data.filter((m: any) => {
-                  if (!q) return true
-                  return (
-                    String(m.title || '').toLowerCase().includes(q) ||
-                    String(m.abstract || '').toLowerCase().includes(q)
-                  )
-                })
-                setFallback(filtered)
-              }
-            }
-          }
-        }
-      } catch (err) {
-        if ((err as { name?: string })?.name === 'AbortError') return
-        console.error('Search failed:', err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    doSearch()
-
-    return () => {
-      controller.abort()
-    }
-  }, [query, mode])
-
-  const currentMode = mode || 'articles'
-
-  const renderResult = (res: any, kind: 'primary' | 'fallback') => {
-    const href = currentMode === 'journals' ? `/journals/${res.slug}` : `/articles/${res.id}`
-    const meta = currentMode === 'journals' ? (res.issn || 'Journal') : (res.journals?.title || 'Scientific Report')
-    const subtitle = currentMode === 'journals' ? res.description : res.abstract
-
-    return (
-      <Link
-        href={href}
-        key={`${kind}:${res.id}`}
-        className="group block bg-card p-8 rounded-3xl border border-border/60 hover:border-primary hover:shadow-2xl transition-all"
-      >
-        <div className="flex justify-between items-center gap-6">
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-primary uppercase tracking-widest mb-2">
-              {meta}
-            </div>
-            <h3 className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors mb-2 leading-snug">
-              {res.title}
-            </h3>
-            <p className="text-muted-foreground line-clamp-2">{subtitle}</p>
-          </div>
-          <ArrowRight className="h-6 w-6 text-muted-foreground group-hover:text-primary group-hover:translate-x-2 transition-all shrink-0" />
-        </div>
-      </Link>
-    )
+interface SearchPageProps {
+  searchParams?: {
+    q?: string | string[]
+    mode?: string | string[]
   }
+}
+
+function pickFirst(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] || ''
+  return value || ''
+}
+
+function normalizeMode(raw: string): SearchMode {
+  return raw === 'journals' ? 'journals' : 'articles'
+}
+
+async function searchOnServer(query: string, mode: SearchMode): Promise<SearchResultItem[]> {
+  if (!query) return []
+  try {
+    const origin = getBackendOrigin()
+    const params = new URLSearchParams({ q: query, mode })
+    const res = await fetch(`${origin}/api/v1/manuscripts/search?${params.toString()}`, {
+      cache: 'no-store',
+    })
+    if (!res.ok) return []
+    const payload = await res.json().catch(() => null)
+    if (!payload?.success || !Array.isArray(payload?.results)) return []
+    return payload.results as SearchResultItem[]
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Search failed on server:', error)
+    }
+    return []
+  }
+}
+
+function renderResult(res: SearchResultItem, mode: SearchMode, kind: 'primary' | 'fallback') {
+  const fallbackKey = `fallback:${kind}:${res.id}`
+  const href = mode === 'journals' ? `/journals/${res.slug || ''}` : `/articles/${res.id}`
+  const meta = mode === 'journals' ? (res.issn || 'Journal') : (res.journals?.title || 'Scientific Report')
+  const subtitle = mode === 'journals' ? res.description : res.abstract
+
+  return (
+    <Link
+      href={href}
+      key={fallbackKey}
+      className="group block bg-card p-8 rounded-3xl border border-border/60 hover:border-primary hover:shadow-2xl transition-all"
+    >
+      <div className="flex justify-between items-center gap-6">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-primary uppercase tracking-widest mb-2">
+            {meta}
+          </div>
+          <h3 className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors mb-2 leading-snug">
+            {res.title || 'Untitled'}
+          </h3>
+          <p className="text-muted-foreground line-clamp-2">{subtitle || 'No summary available.'}</p>
+        </div>
+        <ArrowRight className="h-6 w-6 text-muted-foreground group-hover:text-primary group-hover:translate-x-2 transition-all shrink-0" />
+      </div>
+    </Link>
+  )
+}
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const query = pickFirst(searchParams?.q).trim()
+  const currentMode = normalizeMode(pickFirst(searchParams?.mode))
+  const results = await searchOnServer(query, currentMode)
+  const fallback =
+    query && results.length === 0 && currentMode === 'journals'
+      ? demoJournals.filter((journal) => {
+          const keyword = query.toLowerCase()
+          return (
+            journal.title.toLowerCase().includes(keyword) ||
+            journal.slug.toLowerCase().includes(keyword) ||
+            (journal.issn || '').toLowerCase().includes(keyword)
+          )
+        })
+      : []
 
   return (
     <div className="min-h-screen bg-muted/40 flex flex-col">
       <SiteHeader />
-      
+
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-12">
         <header className="mb-12 border-b border-border pb-8">
           <h1 className="text-3xl font-serif font-bold text-foreground flex items-center gap-4">
             <SearchIcon className="h-8 w-8 text-primary" />
-            {((query || '').trim() ? (
-              <>Search Results for &quot;{query}&quot;</>
-            ) : (
-              <>Search</>
-            ))}
+            {query ? <>Search Results for &quot;{query}&quot;</> : <>Search</>}
           </h1>
           <p className="mt-2 text-muted-foreground font-medium">
-            {((query || '').trim()
-              ? `Showing top results in ${currentMode}`
-              : '请输入关键词后回车搜索（例如：title / DOI）')}
+            {query ? `Showing top results in ${currentMode}` : '请输入关键词后回车搜索（例如：title / DOI）'}
           </p>
         </header>
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-40">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground font-medium tracking-widest uppercase text-xs">Aggregating Global Research...</p>
-          </div>
-        ) : !((query || '').trim()) ? (
+        {!query ? (
           <div className="bg-card rounded-3xl border border-border/60 p-10">
             <div className="max-w-xl space-y-4">
               <p className="text-foreground font-semibold">快速开始</p>
@@ -166,7 +130,7 @@ function SearchContent() {
           </div>
         ) : (
           <div className="space-y-6">
-            {results.map((r: any) => renderResult(r, 'primary'))}
+            {results.map((item) => renderResult(item, currentMode, 'primary'))}
 
             {results.length === 0 && (
               <div className="bg-card rounded-3xl border border-border/60 p-10 space-y-6">
@@ -182,14 +146,12 @@ function SearchContent() {
                 {fallback.length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-bold text-foreground">
-                        {currentMode === 'articles' ? 'Your submissions (unpublished)' : 'Sample journals'}
-                      </p>
+                      <p className="text-sm font-bold text-foreground">Sample journals</p>
                       <Link href="/dashboard" className="text-sm font-bold text-primary hover:underline inline-flex items-center gap-1">
                         Dashboard <ExternalLink className="h-4 w-4" />
                       </Link>
                     </div>
-                    {fallback.slice(0, 10).map((r: any) => renderResult(r, 'fallback'))}
+                    {fallback.slice(0, 10).map((item) => renderResult(item, currentMode, 'fallback'))}
                   </div>
                 )}
               </div>
@@ -198,17 +160,5 @@ function SearchContent() {
         )}
       </main>
     </div>
-  )
-}
-
-export default function SearchPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-muted/40 flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    }>
-      <SearchContent />
-    </Suspense>
   )
 }

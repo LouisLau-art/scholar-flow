@@ -1,56 +1,15 @@
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
-const STORAGE_KEY = 'scholarflow:access_token'
 const SESSION_CACHE_TTL_MS = 10_000
-const SUPABASE_STORAGE_KEY = (() => {
-  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  try {
-    const ref = new URL(raw).hostname.split('.')[0]
-    if (ref) return `sb-${ref}-auth-token`
-  } catch {
-    // ignore
-  }
-  return 'sb-mmvulyrfsorqdpdrzbkd-auth-token'
-})()
 
 let sessionCache: { value: Session | null; expiresAt: number } | null = null
 let inflightSessionRequest: Promise<Session | null> | null = null
-
-const cacheToken = (token?: string | null) => {
-  if (typeof window === 'undefined') return
-  if (token) {
-    localStorage.setItem(STORAGE_KEY, token)
-  } else {
-    localStorage.removeItem(STORAGE_KEY)
-  }
-}
 
 function cacheSession(session: Session | null): void {
   sessionCache = {
     value: session,
     expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
-  }
-}
-
-function readAccessTokenFromLocalStorage(): string | null {
-  if (typeof window === 'undefined') return null
-
-  const cached = window.localStorage.getItem(STORAGE_KEY)
-  if (cached) return cached
-
-  // 中文注释：E2E / 部分环境下 supabase-js 的 getSession 可能触发网络刷新并导致卡住。
-  // 这里优先从 Supabase 自己的 localStorage session 里取 access_token，避免阻塞页面加载。
-  const raw = window.localStorage.getItem(SUPABASE_STORAGE_KEY)
-  if (!raw) return null
-
-  try {
-    const parsed = JSON.parse(raw) as { access_token?: string | null } | null
-    const token = parsed?.access_token ?? null
-    if (token) cacheToken(token)
-    return token
-  } catch {
-    return null
   }
 }
 
@@ -86,7 +45,6 @@ export const authService = {
       const { data } = await supabase.auth.getSession()
       const token = data.session?.access_token
       if (token && !isLikelyExpired(token)) {
-        cacheToken(token)
         cacheSession(data.session ?? null)
         return data.session ?? null
       }
@@ -94,7 +52,6 @@ export const authService = {
       const refreshed = await supabase.auth.refreshSession().catch(() => null)
       const refreshedSession = refreshed?.data?.session ?? null
       const finalSession = refreshedSession ?? data.session ?? null
-      cacheToken(finalSession?.access_token ?? null)
       cacheSession(finalSession)
       return finalSession
     })()
@@ -106,14 +63,6 @@ export const authService = {
     }
   },
   async getAccessToken(): Promise<string | null> {
-    const local = readAccessTokenFromLocalStorage()
-    if (local && !isLikelyExpired(local)) return local
-
-    if (local && isLikelyExpired(local)) {
-      const refreshed = await authService.forceRefreshAccessToken()
-      if (refreshed) return refreshed
-    }
-
     const session = await authService.getSession()
     return session?.access_token ?? null
   },
@@ -121,7 +70,6 @@ export const authService = {
     const refreshed = await supabase.auth.refreshSession().catch(() => null)
     const refreshedSession = refreshed?.data?.session ?? null
     const token = refreshedSession?.access_token ?? null
-    cacheToken(token)
     cacheSession(refreshedSession)
     return token
   },
@@ -136,13 +84,11 @@ export const authService = {
   },
   async signOut(): Promise<void> {
     await supabase.auth.signOut()
-    cacheToken(null)
     sessionCache = null
     inflightSessionRequest = null
   },
   onAuthStateChange(handler: (session: Session | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
-      cacheToken(session?.access_token)
       cacheSession(session ?? null)
       handler(session)
     })

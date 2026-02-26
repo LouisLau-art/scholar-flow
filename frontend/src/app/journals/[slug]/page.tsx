@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowRight, BookOpen, FileText, Star } from 'lucide-react'
 
 import SiteHeader from '@/components/layout/SiteHeader'
+import { getBackendOrigin } from '@/lib/backend-origin'
 
 export const revalidate = 60
 
@@ -20,14 +21,6 @@ interface JournalArticle {
   abstract?: string | null
   doi?: string | null
   published_at?: string | null
-}
-
-function getBackendOrigin(): string {
-  const raw =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://127.0.0.1:8000'
-  return raw.replace(/\/$/, '')
 }
 
 async function getJournalDetail(slug: string): Promise<{ journal: Journal; articles: JournalArticle[] }> {
