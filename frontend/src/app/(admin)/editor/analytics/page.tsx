@@ -1,220 +1,30 @@
-/**
- * Analytics Dashboard 页面
- * 功能: 主编/编辑分析仪表盘
- *
- * 中文注释:
- * - 展示 KPI 卡片、趋势图表、地理分布
- * - 使用 TanStack Query 获取数据
- * - 需要 EIC/ME 角色权限
- */
+import dynamic from 'next/dynamic'
+import { Loader2 } from 'lucide-react'
 
-'use client'
-
-import { useQuery } from '@tanstack/react-query'
-import { AnalyticsApi } from '@/lib/api/analytics'
-import { KPIGrid, FinanceKPIRow } from '@/components/analytics/KPISection'
-import {
-  KPIGridSkeleton,
-  FinanceKPISkeleton,
-  ChartSkeleton,
-} from '@/components/analytics/KPISkeleton'
-import { SubmissionTrendChart } from '@/components/analytics/SubmissionTrendChart'
-import {
-  StatusPipelineChart,
-  DecisionDistributionChart,
-} from '@/components/analytics/EditorialCharts'
-import { AuthorGeoChart } from '@/components/analytics/AuthorGeoChart'
-import { ExportButton } from '@/components/analytics/ExportButton'
-import { ManagementInsights } from '@/components/analytics/ManagementInsights'
-import QueryProvider from '@/components/providers/QueryProvider'
 import SiteHeader from '@/components/layout/SiteHeader'
-import Link from 'next/link'
-import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { BarChart3, ArrowLeft } from 'lucide-react'
 
-function AnalyticsDashboardContent() {
-  // 获取 KPI 数据
-  const {
-    data: summaryData,
-    isLoading: summaryLoading,
-    error: summaryError,
-  } = useQuery({
-    queryKey: ['analytics', 'summary'],
-    queryFn: () => AnalyticsApi.getSummary(),
-  })
-
-  // 获取趋势数据
-  const {
-    data: trendsData,
-    isLoading: trendsLoading,
-    error: trendsError,
-  } = useQuery({
-    queryKey: ['analytics', 'trends'],
-    queryFn: () => AnalyticsApi.getTrends(),
-  })
-
-  // 获取地理数据
-  const {
-    data: geoData,
-    isLoading: geoLoading,
-    error: geoError,
-  } = useQuery({
-    queryKey: ['analytics', 'geo'],
-    queryFn: () => AnalyticsApi.getGeo(),
-  })
-
-  const {
-    data: managementData,
-    isLoading: managementLoading,
-    error: managementError,
-  } = useQuery({
-    queryKey: ['analytics', 'management'],
-    queryFn: () => AnalyticsApi.getManagement({ rankingLimit: 10, slaLimit: 20 }),
-  })
-
-  // 错误处理
-  if (summaryError || trendsError || geoError || managementError) {
-    const error = summaryError || trendsError || geoError || managementError
-    return (
-      <div className="p-6">
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-          <h3 className="font-semibold text-destructive">加载失败</h3>
-          <p className="text-sm text-destructive/80">
-            {error instanceof Error ? error.message : '请稍后重试'}
-          </p>
-        </div>
+const AnalyticsDashboardClient = dynamic(
+  () =>
+    import('@/components/analytics/AnalyticsDashboardClient').then(
+      (mod) => mod.AnalyticsDashboardClient
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl border border-border bg-card p-10 text-sm text-muted-foreground flex items-center justify-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading analytics workspace...
       </div>
-    )
+    ),
   }
-
-  return (
-    <div className="space-y-6">
-      {/* 页面标题 */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-xl bg-card p-2 shadow-sm ring-1 ring-border">
-            <BarChart3 className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Analytics</h1>
-            <p className="mt-1 text-muted-foreground font-medium">期刊运营核心指标概览</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/dashboard"
-            className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回编辑台
-          </Link>
-          <ExportButton />
-        </div>
-      </div>
-
-      {/* KPI 网格 */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">核心指标</h2>
-        {summaryLoading ? (
-          <KPIGridSkeleton />
-        ) : summaryData?.kpi ? (
-          <KPIGrid data={summaryData.kpi} />
-        ) : null}
-      </section>
-
-      {/* 财务 KPI */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">财务指标</h2>
-        {summaryLoading ? (
-          <FinanceKPISkeleton />
-        ) : summaryData?.kpi ? (
-          <FinanceKPIRow data={summaryData.kpi} />
-        ) : null}
-      </section>
-
-      {/* 趋势图表 */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">投稿趋势</h2>
-        {trendsLoading ? (
-          <ChartSkeleton height={300} />
-        ) : trendsData?.trends && trendsData.trends.length > 0 ? (
-          <SubmissionTrendChart data={trendsData.trends} />
-        ) : (
-          <div className="rounded-lg border p-8 text-center text-muted-foreground">
-            暂无趋势数据
-          </div>
-        )}
-      </section>
-
-      {/* 编辑流程图表 */}
-      <section className="grid gap-6 md:grid-cols-2">
-        <div>
-          <h2 className="text-lg font-semibold mb-4">状态分布</h2>
-          {trendsLoading ? (
-            <ChartSkeleton height={250} />
-          ) : trendsData?.pipeline && trendsData.pipeline.length > 0 ? (
-            <StatusPipelineChart data={trendsData.pipeline} />
-          ) : (
-            <div className="rounded-lg border p-8 text-center text-muted-foreground">
-              暂无状态数据
-            </div>
-          )}
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold mb-4">决定分布</h2>
-          {trendsLoading ? (
-            <ChartSkeleton height={250} />
-          ) : trendsData?.decisions && trendsData.decisions.length > 0 ? (
-            <DecisionDistributionChart data={trendsData.decisions} />
-          ) : (
-            <div className="rounded-lg border p-8 text-center text-muted-foreground">
-              暂无决定数据
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 地理分布 */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">作者地理分布</h2>
-        {geoLoading ? (
-          <ChartSkeleton height={350} />
-        ) : geoData?.countries && geoData.countries.length > 0 ? (
-          <AuthorGeoChart data={geoData.countries} />
-        ) : (
-          <div className="rounded-lg border p-8 text-center text-muted-foreground">
-            暂无地理数据
-          </div>
-        )}
-      </section>
-
-      <section>
-        {managementLoading ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <ChartSkeleton height={260} />
-            <ChartSkeleton height={260} />
-          </div>
-        ) : (
-          <ManagementInsights
-            ranking={managementData?.editor_ranking || []}
-            stageDurations={managementData?.stage_durations || []}
-            slaAlerts={managementData?.sla_alerts || []}
-          />
-        )}
-      </section>
-    </div>
-  )
-}
+)
 
 export default function AnalyticsDashboardPage() {
   return (
     <div className="min-h-screen bg-muted/40 flex flex-col font-sans">
       <SiteHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 py-10 sm:px-6 lg:px-8">
-        <QueryProvider>
-          <AnalyticsDashboardContent />
-        </QueryProvider>
+        <AnalyticsDashboardClient />
       </main>
     </div>
   )

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "audit:tailwind-readiness": "bash scripts/tailwind-readiness-audit.sh",
+    "audit:route-budgets": "node scripts/check-route-budgets.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",

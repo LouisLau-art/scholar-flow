@@ -1,0 +1,10 @@
+{
+  "routes": {
+    "/editor/analytics": { "maxGzipKb": 320 },
+    "/editor/process": { "maxGzipKb": 360 },
+    "/editor/workspace": { "maxGzipKb": 345 },
+    "/editor/managing-workspace": { "maxGzipKb": 320 },
+    "/editor/manuscript/[id]": { "maxGzipKb": 340 },
+    "/dashboard": { "maxGzipKb": 320 }
+  }
+}
