@@ -133,4 +133,16 @@ echo "[capture-editor-api-baselines] sampling editor_workspace ..."
   --token "$TOKEN" \
   --samples "$SAMPLES"
 
+echo "[capture-editor-api-baselines] sampling editor_pipeline ..."
+"$CAPTURE_SCRIPT" \
+  --output "$OUT_DIR/${PREFIX}-editor_pipeline.json" \
+  --environment "$ENVIRONMENT" \
+  --sample-set "$SAMPLE_SET_ID" \
+  --captured-by "$CAPTURED_BY" \
+  --scenario "editor_pipeline" \
+  --requests "$REQUEST_COUNT" \
+  --auto-url "$BASE_URL/api/v1/editor/pipeline" \
+  --token "$TOKEN" \
+  --samples "$SAMPLES"
+
 echo "[capture-editor-api-baselines] done: $OUT_DIR/${PREFIX}-editor_*.json"

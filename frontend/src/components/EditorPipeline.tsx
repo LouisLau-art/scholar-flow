@@ -34,6 +34,9 @@ type PipelineStage =
 
 const SECTION_PREVIEW_LIMIT = 3
 const ACTIVE_FILTER_RENDER_LIMIT = 30
+const PIPELINE_CACHE_TTL_MS = 15_000
+
+let pipelineCache: { data: any; cachedAt: number } | null = null
 
 interface EditorPipelineProps {
   onAssign?: (manuscript: Manuscript) => void
@@ -44,31 +47,75 @@ interface EditorPipelineProps {
 export default function EditorPipeline({ onAssign, onDecide, refreshKey }: EditorPipelineProps) {
   const [pipelineData, setPipelineData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeFilter, setActiveFilter] = useState<PipelineStage | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const requestIdRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+  const pipelineDataRef = useRef<any>(null)
 
-  const reloadPipeline = async () => {
-    const token = await authService.getAccessToken()
-    const response = await fetch('/api/v1/editor/pipeline', {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-    const data = await response.json()
-    if (data.success) setPipelineData(data.data)
+  useEffect(() => {
+    pipelineDataRef.current = pipelineData
+  }, [pipelineData])
+
+  const reloadPipeline = async (
+    options?: { preferCache?: boolean; silent?: boolean; suppressErrorToast?: boolean; forceRefresh?: boolean }
+  ) => {
+    const now = Date.now()
+    const cacheValid = Boolean(pipelineCache && now - pipelineCache.cachedAt < PIPELINE_CACHE_TTL_MS)
+
+    if (options?.preferCache && cacheValid && pipelineCache) {
+      setPipelineData(pipelineCache.data)
+    }
+
+    const hasVisibleData = pipelineDataRef.current !== null || (cacheValid && Boolean(pipelineCache))
+    const blockUi = !options?.silent && !hasVisibleData
+    if (blockUi) setIsLoading(true)
+    else setIsRefreshing(true)
+
+    const currentRequestId = ++requestIdRef.current
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      const token = await authService.getAccessToken()
+      const response = await fetch('/api/v1/editor/pipeline', {
+        signal: controller.signal,
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(options?.forceRefresh ? { 'x-sf-force-refresh': '1' } : {}),
+        },
+      })
+      const data = await response.json().catch(() => ({}))
+      if (currentRequestId !== requestIdRef.current || controller.signal.aborted) return
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.detail || data?.message || 'Failed to fetch pipeline data')
+      }
+      setPipelineData(data.data)
+      pipelineCache = { data: data.data, cachedAt: Date.now() }
+    } catch (error) {
+      if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return
+      if (!options?.suppressErrorToast) {
+        toast.error(error instanceof Error ? error.message : 'Failed to fetch pipeline data')
+      }
+    } finally {
+      if (currentRequestId === requestIdRef.current) {
+        setIsLoading(false)
+        setIsRefreshing(false)
+      }
+    }
   }
 
   useEffect(() => {
-    async function fetchPipelineData() {
-      try {
-        await reloadPipeline()
-      } catch (error) {
-        console.error('Failed to fetch pipeline data:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchPipelineData()
+    reloadPipeline({ preferCache: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   const handleFilterClick = (stage: PipelineStage) => {
     setActiveFilter(stage)
@@ -141,14 +188,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         return
       }
       toast.success('Published.', { id: toastId })
-      setPipelineData((prev: any) => prev) // keep state shape
-      // 刷新数据
-      setIsLoading(true)
-      await reloadPipeline()
+      await reloadPipeline({ silent: true, forceRefresh: true })
     } catch (error) {
       toast.error('Publish failed. Please try again.', { id: toastId })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -174,12 +216,9 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         return
       }
       toast.success('Payment confirmed.', { id: toastId })
-      setIsLoading(true)
-      await reloadPipeline()
+      await reloadPipeline({ silent: true, forceRefresh: true })
     } catch {
       toast.error('Confirm payment failed. Please try again.', { id: toastId })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -201,18 +240,23 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
         return
       }
       toast.success('Invoice PDF regenerated.', { id: toastId })
-      setIsLoading(true)
-      await reloadPipeline()
+      await reloadPipeline({ silent: true, forceRefresh: true })
     } catch {
       toast.error('Regenerate failed. Please try again.', { id: toastId })
-    } finally {
-      setIsLoading(false)
     }
   }
 
   return (
     <div className="space-y-6" data-testid="editor-pipeline">
-      <h2 className="text-2xl font-bold text-foreground">Manuscript Pipeline</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-foreground">Manuscript Pipeline</h2>
+        {isRefreshing && !isLoading ? (
+          <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Syncing latest data...
+          </div>
+        ) : null}
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* 待质检 */}
@@ -538,8 +582,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
                         manuscriptId={manuscript.id}
                         manuscriptTitle={manuscript.title}
                         onUploaded={() => {
-                          setIsLoading(true)
-                          reloadPipeline().finally(() => setIsLoading(false))
+                          reloadPipeline({ silent: true, forceRefresh: true, suppressErrorToast: true })
                         }}
                       />
                       {manuscript.invoice_id && (

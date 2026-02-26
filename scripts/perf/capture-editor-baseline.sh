@@ -35,7 +35,7 @@ Options:
   --environment <value>   staging | local-ci (default: staging)
   --sample-set <value>    Sample set id (default: editor-perf-v1)
   --captured-by <value>   Operator id/name
-  --scenario <value>      editor_detail | editor_process | editor_workspace | reviewer_search_repeat
+  --scenario <value>      editor_detail | editor_process | editor_workspace | editor_pipeline | reviewer_search_repeat
   --p50 <ms>              p50 interactive time (manual mode)
   --p95 <ms>              p95 interactive time (manual mode)
   --requests <count>      First screen request count
