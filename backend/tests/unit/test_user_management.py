@@ -121,8 +121,9 @@ class TestLogRoleChange:
             )
             # Should not raise
 
-    def test_log_role_change_failure(self, mock_env, caplog):
+    def test_log_role_change_failure(self, mock_env, capsys, caplog):
         """Test role change logging failure"""
+        caplog.set_level(logging.WARNING, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
             mock_query = MockQueryBuilder(raise_error=RuntimeError("DB error"))
             mock_client = MockAdminClient(mock_query)
@@ -137,7 +138,9 @@ class TestLogRoleChange:
                 reason="promotion",
             )
 
-            assert "Failed to log role change" in caplog.text
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}"
+            assert "Failed to log role change" in combined
 
 
 class TestLogAccountCreation:
@@ -157,8 +160,9 @@ class TestLogAccountCreation:
             )
             # Should not raise
 
-    def test_log_account_creation_failure(self, mock_env, caplog):
+    def test_log_account_creation_failure(self, mock_env, capsys, caplog):
         """Test account creation logging failure"""
+        caplog.set_level(logging.WARNING, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
             mock_query = MockQueryBuilder(raise_error=RuntimeError("DB error"))
             mock_client = MockAdminClient(mock_query)
@@ -171,7 +175,9 @@ class TestLogAccountCreation:
                 initial_role="reviewer",
             )
 
-            assert "Failed to log account creation" in caplog.text
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}"
+            assert "Failed to log account creation" in combined
 
 
 class TestLogEmailNotification:
@@ -206,8 +212,9 @@ class TestLogEmailNotification:
             )
             # Should not raise
 
-    def test_log_email_notification_failure(self, mock_env, caplog):
+    def test_log_email_notification_failure(self, mock_env, capsys, caplog):
         """Test email notification logging failure"""
+        caplog.set_level(logging.WARNING, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
             mock_query = MockQueryBuilder(raise_error=RuntimeError("DB error"))
             mock_client = MockAdminClient(mock_query)
@@ -220,7 +227,9 @@ class TestLogEmailNotification:
                 status="sent",
             )
 
-            assert "Failed to log email notification" in caplog.text
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}"
+            assert "Failed to log email notification" in combined
 
 
 class TestGetUsers:
@@ -651,8 +660,9 @@ class TestGetRoleChanges:
 
             assert result == []
 
-    def test_get_role_changes_error(self, mock_env, caplog):
+    def test_get_role_changes_error(self, mock_env, capsys, caplog):
         """Test role change history retrieval error"""
+        caplog.set_level(logging.WARNING, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
             mock_query = MockQueryBuilder(raise_error=RuntimeError("DB error"))
             mock_client = MockAdminClient(mock_query)
@@ -662,13 +672,15 @@ class TestGetRoleChanges:
             result = service.get_role_changes(UUID(int=1))
 
             assert result == []
-            assert "Failed to fetch role history" in caplog.text
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}"
+            assert "Failed to fetch role history" in combined
 
 
 class TestCreateInternalUser:
     """Test internal user creation"""
 
-    def test_create_internal_user_success(self, mock_env, caplog):
+    def test_create_internal_user_success(self, mock_env, capsys, caplog):
         """Test successful internal user creation"""
         caplog.set_level(logging.INFO, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
@@ -707,7 +719,9 @@ class TestCreateInternalUser:
             assert result["roles"] == ["managing_editor"]
 
             # Verify console output
-            assert "internal user created" in caplog.text.lower()
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}".lower()
+            assert "internal user created" in combined
 
     def test_create_internal_user_already_exists(self, mock_env):
         """Test user creation when email already exists"""
@@ -771,7 +785,7 @@ class TestCreateInternalUser:
 class TestInviteReviewer:
     """Test reviewer invitation"""
 
-    def test_invite_reviewer_success(self, mock_env, caplog):
+    def test_invite_reviewer_success(self, mock_env, capsys, caplog):
         """Test successful reviewer invitation"""
         caplog.set_level(logging.INFO, logger="scholarflow.user_management")
         with patch("app.services.user_management.create_client") as mock_create:
@@ -813,7 +827,9 @@ class TestInviteReviewer:
             assert result["email"] == "reviewer@test.com"
             assert result["roles"] == ["reviewer"]
 
-            assert "reviewer invite link generated" in caplog.text.lower()
+            captured = capsys.readouterr()
+            combined = f"{caplog.text}\n{captured.out}\n{captured.err}".lower()
+            assert "reviewer invite link generated" in combined
 
     def test_invite_reviewer_already_exists(self, mock_env):
         """Test invite when reviewer already exists"""
