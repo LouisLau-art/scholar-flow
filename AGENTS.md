@@ -404,6 +404,7 @@ Python 3.14+, TypeScript 5.x, Node.js 20.x: 遵循标准规范
 - **Feature 036 (内部协作与详情页升级)**：重构稿件详情页为双栏布局（左侧信息/文件/评论，右侧流程/审计）；新增 `internal_comments` 表用于内部沟通（Notebook）；集成 `status_transition_logs` 可视化审计时间轴；文件下载中心化管理。
 - **Portal（UAT 线上稳定性）**：修复 `/api/v1/portal/articles/latest` 在 HF Space 上因 Supabase SDK 参数差异（`order(desc=...)`）与云端 schema 漂移（缺失 `authors`/`published_at`）导致的 500；作者显示不再返回 `Unknown`，且不会泄露明文邮箱。
 - **CI 回归门补强（2026-02-26）**：`.github/workflows/ci.yml` 的 `backend-ci` 在 unit 后新增 integration smoke（`tests/integration/test_editor_invite.py`、`tests/integration/test_concurrent_assignments.py`），用于兜底 reviewer 指派链路回归。
+- **CI 构建职责收敛（2026-02-26）**：`frontend-ci` 的 `Build Check` 与 `Route Bundle Budget Gate` 改为仅在 `pull_request` 触发，`push main` 保留 lint/test 门禁并交由 Vercel 执行部署构建，减少重复构建耗时。
 - **Reviewer Assignment 模块拆分（2026-02-26）**：`backend/app/api/v1/reviews_handlers_assignment.py` 改为门面导出，核心逻辑拆分到 `reviews_handlers_assignment_assign.py`、`reviews_handlers_assignment_session.py`、`reviews_handlers_assignment_manage.py`，路由调用与响应结构保持兼容。
 - **Production Cycle 模块拆分（2026-02-26）**：`ProductionWorkspaceWorkflowCycleMixin` 拆分为 `production_workspace_service_workflow_cycle_context_queue.py`（上下文/队列）+ `production_workspace_service_workflow_cycle_writes.py`（create/update/upload）+ 入口 `production_workspace_service_workflow_cycle.py`（approve/signed-url），保留原类名与 import 路径。
 <!-- MANUAL ADDITIONS END -->

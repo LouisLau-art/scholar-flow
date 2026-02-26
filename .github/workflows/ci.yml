@@ -110,12 +110,14 @@ jobs:
     - name: Run Unit Tests (Vitest)
       run: bun run test:run
 
-    - name: Build Check
+    - name: Build Check (PR only)
+      if: github.event_name == 'pull_request'
       env:
         # Next.js build often needs these to be present even if empty
         NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock-key"
       run: bun run build
 
-    - name: Route Bundle Budget Gate
+    - name: Route Bundle Budget Gate (PR only)
+      if: github.event_name == 'pull_request'
       run: bun run audit:route-budgets
