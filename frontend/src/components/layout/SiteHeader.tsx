@@ -310,7 +310,7 @@ export default function SiteHeader() {
             <div className="bg-muted/40 p-6 rounded-xl border border-border/60">
               <h4 className="font-bold mb-2">Can&apos;t find your journal?</h4>
               <p className="text-sm text-muted-foreground mb-4">Explore our full portfolio of 200+ high-impact journals.</p>
-              <Link href="/search?mode=journals" className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
+              <Link href="/journals" className="text-sm font-bold text-primary flex items-center gap-1 hover:underline">
                 View all journals →
               </Link>
             </div>
