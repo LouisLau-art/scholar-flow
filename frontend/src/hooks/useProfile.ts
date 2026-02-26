@@ -3,6 +3,9 @@ import { authService } from '@/services/auth'
 import { User } from '@/types/user'
 import { toast } from 'sonner'
 
+const PROFILE_QUERY_STALE_TIME_MS = 60_000
+const PROFILE_QUERY_GC_TIME_MS = 10 * 60_000
+
 async function requestProfile(token: string): Promise<Response> {
   return fetch('/api/v1/user/profile', {
     headers: { Authorization: `Bearer ${token}` },
@@ -128,6 +131,10 @@ export function useProfile() {
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['user-profile'],
     queryFn: fetchProfile,
+    staleTime: PROFILE_QUERY_STALE_TIME_MS,
+    gcTime: PROFILE_QUERY_GC_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   })
 

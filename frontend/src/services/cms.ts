@@ -1,5 +1,9 @@
 import { authService } from '@/services/auth'
 
+const CMS_MENU_CACHE_TTL_MS = 60_000
+const cmsMenuCache = new Map<string, { expiresAt: number; data: any }>()
+const cmsMenuInflight = new Map<string, Promise<any>>()
+
 export type CmsPage = {
   id: string
   slug: string
@@ -77,11 +81,37 @@ export async function uploadCmsImage(file: File): Promise<string> {
 }
 
 export async function getCmsMenu(location?: 'header' | 'footer'): Promise<any> {
+  const cacheKey = `menu:${location || 'all'}`
+  const now = Date.now()
+  const cached = cmsMenuCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    return cached.data
+  }
+  const inflight = cmsMenuInflight.get(cacheKey)
+  if (inflight) {
+    return inflight
+  }
+
   const url = location ? `/api/v1/cms/menu?location=${location}` : '/api/v1/cms/menu'
-  const res = await fetch(url)
-  const body = await res.json()
-  if (!res.ok || !body?.success) throw new Error(body?.detail || 'Failed to load menu')
-  return body.data
+  const requestPromise = (async () => {
+    const res = await fetch(url)
+    const body = await res.json()
+    if (!res.ok || !body?.success) throw new Error(body?.detail || 'Failed to load menu')
+    const data = body.data
+    cmsMenuCache.set(cacheKey, {
+      expiresAt: Date.now() + CMS_MENU_CACHE_TTL_MS,
+      data,
+    })
+    return data
+  })()
+  cmsMenuInflight.set(cacheKey, requestPromise)
+  try {
+    return await requestPromise
+  } finally {
+    if (cmsMenuInflight.get(cacheKey) === requestPromise) {
+      cmsMenuInflight.delete(cacheKey)
+    }
+  }
 }
 
 export async function updateCmsMenu(payload: CmsMenuUpdateRequest): Promise<any> {
@@ -93,6 +123,7 @@ export async function updateCmsMenu(payload: CmsMenuUpdateRequest): Promise<any>
   })
   const body = await res.json()
   if (!res.ok || !body?.success) throw new Error(body?.detail || 'Failed to update menu')
+  cmsMenuCache.clear()
+  cmsMenuInflight.clear()
   return body.data
 }
-
