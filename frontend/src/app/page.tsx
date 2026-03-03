@@ -252,54 +252,86 @@ export default async function HomePage() {
         <section className="relative overflow-hidden bg-foreground text-white">
           <OverlayImage
             src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2200&q=80"
-            className="absolute inset-0"
+            className="absolute inset-x-0 top-0 h-[min(34vh,300px)]"
             overlayClassName="bg-gradient-to-r from-foreground/85 to-primary/35"
             eager
           />
-          <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6 sm:pt-28 lg:px-8">
-            <div className="max-w-2xl">
-              <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
-              <p className="mb-3 inline-flex w-fit items-center rounded-full border border-white/35 bg-white/10 px-3 py-1 text-[11px] tracking-[0.08em] text-white/90">
-                Deployment check: 2026-03-03
-              </p>
-              <h1 className={cn(playfair.className, 'text-4xl font-semibold tracking-tight sm:text-5xl')}>
-                ScholarFlow Journal
-              </h1>
-              <p className={cn(playfair.className, 'mt-4 text-3xl font-semibold leading-tight text-white sm:text-5xl')}>
-                Where scientists empower society
-              </p>
-              <p className="mt-5 max-w-xl text-base text-background/80 sm:text-lg">
-                Creating trusted workflows for healthy science and faster publication outcomes.
-              </p>
-              <div className="mt-9 flex flex-wrap gap-3">
+          <div className="relative mx-auto max-w-7xl px-4 pb-7 pt-8 sm:px-6 sm:pt-9 lg:px-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
+                <p className="mb-3 inline-flex w-fit items-center rounded-full border border-white/35 bg-white/10 px-3 py-1 text-[11px] tracking-[0.08em] text-white/90">
+                  Deployment check: 2026-03-03
+                </p>
+                <h1 className={cn(playfair.className, 'text-3xl font-semibold tracking-tight sm:text-4xl')}>
+                  ScholarFlow Journal
+                </h1>
+                <p className={cn(playfair.className, 'mt-3 text-2xl font-semibold leading-tight text-white sm:text-3xl')}>
+                  Where scientists empower society
+                </p>
+                <p className="mt-4 max-w-xl text-sm text-background/80 sm:text-base">
+                  Creating trusted workflows for healthy science and faster publication outcomes.
+                </p>
+                <form action="/search" method="get" className="mt-6 rounded-2xl border border-white/20 bg-card/10 p-3 backdrop-blur-sm">
+                  <div className="grid gap-2 sm:grid-cols-[1fr,160px,auto]">
+                    <Input
+                      name="q"
+                      placeholder="Search articles, DOI, authors..."
+                      className="h-10 border-white/30 bg-white/10 text-white placeholder:text-primary-foreground/75"
+                    />
+                    <select
+                      name="mode"
+                      defaultValue="articles"
+                      className="h-10 rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white"
+                    >
+                      <option value="articles">Articles</option>
+                      <option value="journals">Journals</option>
+                    </select>
+                    <Button type="submit" className="h-10 bg-primary text-white hover:bg-primary/90">
+                      Search
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    <Link href="/search/advanced" className="underline underline-offset-4 hover:text-white">
+                      Advanced Search
+                    </Link>
+                    <span className="text-primary-foreground/70">Tip: combine keyword + DOI for precise lookup.</span>
+                  </div>
+                </form>
+              </div>
+
+              <div className="flex w-full flex-col gap-3 rounded-2xl border border-white/25 bg-card/10 p-3 backdrop-blur-sm lg:mt-1 lg:w-[280px]">
                 <Link
                   href="/submit"
-                  className="rounded-full bg-primary px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                  className="rounded-full bg-primary px-6 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-primary/90"
                 >
                   Submit Manuscript
                 </Link>
                 <Link
                   href="/search?status=published"
-                  className="rounded-full border border-white/40 px-7 py-3 text-sm font-semibold text-white transition-colors hover:border-white hover:bg-card/10"
+                  className="rounded-full border border-white/40 px-6 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:border-white hover:bg-card/10"
                 >
                   Explore Latest Articles
                 </Link>
               </div>
             </div>
-            <div className="mt-16 grid gap-6 border-t border-white/20 pt-8 sm:grid-cols-3">
+          </div>
+        </section>
+
+        <section className="relative z-10 -mt-4">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
               {heroStats.map((item) => (
-                <div key={item.label}>
-                  <p className={cn(playfair.className, 'text-2xl font-semibold text-white sm:text-3xl')}>
-                    {item.value}
-                  </p>
-                  <p className="mt-2 text-sm uppercase tracking-[0.14em] text-primary-foreground/80">{item.label}</p>
+                <div key={item.label} className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
+                  <p className={cn(playfair.className, 'text-2xl font-semibold text-foreground')}>{item.value}</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="relative -mt-8 z-10">
+        <section className="relative z-10">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-muted/30 sm:p-6">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
