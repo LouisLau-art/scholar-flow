@@ -24,6 +24,13 @@ interface SearchPageProps {
   searchParams?: {
     q?: string | string[]
     mode?: string | string[]
+    title?: string | string[]
+    doi?: string | string[]
+    journal?: string | string[]
+    author?: string | string[]
+    year_from?: string | string[]
+    year_to?: string | string[]
+    sort?: string | string[]
   }
 }
 
@@ -36,15 +43,42 @@ function normalizeMode(raw: string): SearchMode {
   return raw === 'journals' ? 'journals' : 'articles'
 }
 
-async function searchOnServer(query: string, mode: SearchMode): Promise<SearchResultItem[]> {
-  if (!query) return []
+type SearchQueryParams = {
+  q: string
+  mode: SearchMode
+  title: string
+  doi: string
+  journal: string
+  author: string
+  yearFrom: string
+  yearTo: string
+  sort: string
+}
+
+function hasQueryPayload(params: SearchQueryParams): boolean {
+  if (params.q) return true
+  if (params.mode === 'journals') return Boolean(params.journal)
+  return Boolean(params.title || params.doi || params.journal || params.author || params.yearFrom || params.yearTo)
+}
+
+async function searchOnServer(paramsInput: SearchQueryParams): Promise<SearchResultItem[]> {
+  if (!hasQueryPayload(paramsInput)) return []
   try {
     const origin = getBackendOrigin()
-    const params = new URLSearchParams({ q: query, mode })
+    const params = new URLSearchParams()
+    params.set('mode', paramsInput.mode)
+    if (paramsInput.q) params.set('q', paramsInput.q)
+    if (paramsInput.title) params.set('title', paramsInput.title)
+    if (paramsInput.doi) params.set('doi', paramsInput.doi)
+    if (paramsInput.journal) params.set('journal', paramsInput.journal)
+    if (paramsInput.author) params.set('author', paramsInput.author)
+    if (paramsInput.yearFrom) params.set('year_from', paramsInput.yearFrom)
+    if (paramsInput.yearTo) params.set('year_to', paramsInput.yearTo)
+    if (paramsInput.sort) params.set('sort', paramsInput.sort)
     const res = await fetch(`${origin}/api/v1/manuscripts/search?${params.toString()}`, {
       next: {
         revalidate: SEARCH_REVALIDATE_SECONDS,
-        tags: ['search-results', `search:${mode}:${query.toLowerCase()}`],
+        tags: ['search-results', `search-mode:${paramsInput.mode}`],
       },
     })
     if (!res.ok) return []
@@ -90,15 +124,45 @@ function renderResult(res: SearchResultItem, mode: SearchMode, kind: 'primary' |
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const query = pickFirst(searchParams?.q).trim()
   const currentMode = normalizeMode(pickFirst(searchParams?.mode))
-  const results = await searchOnServer(query, currentMode)
+  const title = pickFirst(searchParams?.title).trim()
+  const doi = pickFirst(searchParams?.doi).trim()
+  const journal = pickFirst(searchParams?.journal).trim()
+  const author = pickFirst(searchParams?.author).trim()
+  const yearFrom = pickFirst(searchParams?.year_from).trim()
+  const yearTo = pickFirst(searchParams?.year_to).trim()
+  const sort = pickFirst(searchParams?.sort).trim() || 'latest'
+  const results = await searchOnServer({
+    q: query,
+    mode: currentMode,
+    title,
+    doi,
+    journal,
+    author,
+    yearFrom,
+    yearTo,
+    sort,
+  })
+  const hasAdvancedFilters = Boolean(title || doi || journal || author || yearFrom || yearTo || (sort && sort !== 'latest'))
+  const hasAnyQuery = hasQueryPayload({
+    q: query,
+    mode: currentMode,
+    title,
+    doi,
+    journal,
+    author,
+    yearFrom,
+    yearTo,
+    sort,
+  })
+  const fallbackKeyword = (query || journal).toLowerCase().trim()
   const fallback =
-    query && results.length === 0 && currentMode === 'journals'
-      ? demoJournals.filter((journal) => {
-          const keyword = query.toLowerCase()
+    hasAnyQuery && results.length === 0 && currentMode === 'journals'
+      ? demoJournals.filter((item) => {
+          if (!fallbackKeyword) return true
           return (
-            journal.title.toLowerCase().includes(keyword) ||
-            journal.slug.toLowerCase().includes(keyword) ||
-            (journal.issn || '').toLowerCase().includes(keyword)
+            item.title.toLowerCase().includes(fallbackKeyword) ||
+            item.slug.toLowerCase().includes(fallbackKeyword) ||
+            (item.issn || '').toLowerCase().includes(fallbackKeyword)
           )
         })
       : []
@@ -114,11 +178,41 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {query ? <>Search Results for &quot;{query}&quot;</> : <>Search</>}
           </h1>
           <p className="mt-2 text-muted-foreground font-medium">
-            {query ? `Showing top results in ${currentMode}` : '请输入关键词后回车搜索（例如：title / DOI）'}
+            {hasAnyQuery ? `Showing top results in ${currentMode}` : '请输入关键词后回车搜索（例如：title / DOI）'}
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <Link href="/search/advanced" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 hover:border-primary">
+              Advanced Search
+            </Link>
+            {hasAnyQuery ? (
+              <Link href="/search" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 hover:border-primary">
+                Clear Filters
+              </Link>
+            ) : null}
+            {currentMode === 'articles' ? (
+              <Link href="/search?mode=journals" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 hover:border-primary">
+                Switch to Journals
+              </Link>
+            ) : (
+              <Link href="/search?mode=articles" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 hover:border-primary">
+                Switch to Articles
+              </Link>
+            )}
+          </div>
+          {hasAdvancedFilters ? (
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              {title ? <span className="rounded-full bg-muted px-3 py-1">Title: {title}</span> : null}
+              {doi ? <span className="rounded-full bg-muted px-3 py-1">DOI: {doi}</span> : null}
+              {journal ? <span className="rounded-full bg-muted px-3 py-1">Journal: {journal}</span> : null}
+              {author ? <span className="rounded-full bg-muted px-3 py-1">Author: {author}</span> : null}
+              {yearFrom ? <span className="rounded-full bg-muted px-3 py-1">From: {yearFrom}</span> : null}
+              {yearTo ? <span className="rounded-full bg-muted px-3 py-1">To: {yearTo}</span> : null}
+              {sort && sort !== 'latest' ? <span className="rounded-full bg-muted px-3 py-1">Sort: {sort}</span> : null}
+            </div>
+          ) : null}
         </header>
 
-        {!query ? (
+        {!hasAnyQuery ? (
           <div className="bg-card rounded-3xl border border-border/60 p-10">
             <div className="max-w-xl space-y-4">
               <p className="text-foreground font-semibold">快速开始</p>
