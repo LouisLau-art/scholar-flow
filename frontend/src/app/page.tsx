@@ -272,9 +272,6 @@ export default async function HomePage() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
                 <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
-                <p className="mb-3 inline-flex w-fit items-center rounded-full border border-white/35 bg-white/10 px-3 py-1 text-[11px] tracking-[0.08em] text-white/90">
-                  Deployment check: 2026-03-03
-                </p>
                 <h1 className={cn(playfair.className, 'text-3xl font-semibold tracking-tight sm:text-4xl')}>
                   ScholarFlow Journal
                 </h1>
