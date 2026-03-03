@@ -268,27 +268,27 @@ export default async function HomePage() {
             overlayClassName="bg-gradient-to-r from-foreground/80 via-foreground/55 to-primary/35"
             eager
           />
-          <div className="relative mx-auto max-w-7xl px-4 pb-5 pt-7 sm:px-6 sm:pt-8 lg:px-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="relative mx-auto max-w-7xl px-4 pb-3 pt-5 sm:px-6 sm:pt-6 lg:px-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
-                <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
-                <h1 className={cn(playfair.className, 'text-3xl font-semibold tracking-tight sm:text-4xl')}>
+                <p className="mb-2 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
+                <h1 className={cn(playfair.className, 'text-2xl font-semibold tracking-tight sm:text-3xl')}>
                   ScholarFlow Journal
                 </h1>
-                <p className={cn(playfair.className, 'mt-3 text-2xl font-semibold leading-tight text-white sm:text-3xl')}>
+                <p className={cn(playfair.className, 'mt-2 text-xl font-semibold leading-tight text-white sm:text-2xl')}>
                   Where scientists empower society
                 </p>
-                <p className="mt-4 max-w-xl text-sm text-background/80 sm:text-base">
+                <p className="mt-2 max-w-xl text-sm text-background/80 sm:text-[15px]">
                   Creating trusted workflows for healthy science and faster publication outcomes.
                 </p>
-                <form action="/search" method="get" className="mt-5 w-full max-w-xl">
+                <form action="/search" method="get" className="mt-3 w-full max-w-lg">
                   <div className="flex items-center gap-2 rounded-xl border border-white/20 bg-card/10 p-2 backdrop-blur-sm">
                     <Input
                       name="q"
                       placeholder="Search by title, DOI, author..."
-                      className="h-9 border-white/30 bg-white/10 text-white placeholder:text-primary-foreground/75"
+                      className="h-8 border-white/30 bg-white/10 text-white placeholder:text-primary-foreground/75"
                     />
-                    <Button type="submit" className="h-9 px-5 bg-primary text-white hover:bg-primary/90">
+                    <Button type="submit" className="h-8 px-4 bg-primary text-white hover:bg-primary/90">
                       Search
                     </Button>
                   </div>
@@ -300,16 +300,16 @@ export default async function HomePage() {
                 </form>
               </div>
 
-              <div className="flex w-full flex-col gap-3 rounded-2xl border border-white/25 bg-card/10 p-3 backdrop-blur-sm lg:mt-1 lg:w-[280px]">
+              <div className="flex w-full flex-col gap-2 rounded-2xl border border-white/25 bg-card/10 p-2.5 backdrop-blur-sm lg:mt-1 lg:w-[250px]">
                 <Link
                   href="/submit"
-                  className="rounded-full bg-primary px-6 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                  className="rounded-full bg-primary px-5 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary/90"
                 >
                   Submit Manuscript
                 </Link>
                 <Link
                   href="/search?status=published"
-                  className="rounded-full border border-white/40 px-6 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:border-white hover:bg-card/10"
+                  className="rounded-full border border-white/40 px-5 py-2 text-center text-sm font-semibold text-white transition-colors hover:border-white hover:bg-card/10"
                 >
                   Explore Latest Articles
                 </Link>
@@ -318,7 +318,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section className="relative z-10 -mt-4">
+        <section className="relative z-10 -mt-2">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               {heroStats.map((item) => (
