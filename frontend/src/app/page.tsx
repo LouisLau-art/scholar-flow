@@ -11,6 +11,7 @@ import { getBackendOrigin } from '@/lib/backend-origin'
 import { formatDateLocal } from '@/lib/date-display'
 import { cn } from '@/lib/utils'
 import type { PublicArticle } from '@/services/portal'
+import { getJournalImpactLabel, getPublicJournals, type PublicJournal } from '@/services/public-journals'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -229,6 +230,7 @@ function NewsCard({
 
 export default async function HomePage() {
   const articles = await getLatestArticlesServer(HOME_LATEST_ARTICLES_LIMIT)
+  const featuredJournals: PublicJournal[] = (await getPublicJournals()).slice(0, 6)
   const newsItems: NewsCardData[] = articles.length === 0
     ? fallbackNews
     : articles.map((article, index) => ({
@@ -243,20 +245,30 @@ export default async function HomePage() {
 
   const featuredNews = newsItems[0]
   const secondaryNews = newsItems.slice(1)
+  const latestArticles = (articles.length > 0
+    ? articles
+    : newsItems.slice(0, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        abstract: item.summary,
+        authors: [item.category],
+        published_at: '',
+      } as PublicArticle))
+  ).slice(0, 8)
 
   return (
     <div className={`min-h-screen bg-muted/40 text-foreground ${manrope.className} flex flex-col`}>
       <SiteHeader />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-foreground text-white">
+        <section className="relative overflow-hidden text-white">
           <OverlayImage
             src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=2200&q=80"
-            className="absolute inset-x-0 top-0 h-[min(34vh,300px)]"
-            overlayClassName="bg-gradient-to-r from-foreground/85 to-primary/35"
+            className="absolute inset-0"
+            overlayClassName="bg-gradient-to-r from-foreground/80 via-foreground/55 to-primary/35"
             eager
           />
-          <div className="relative mx-auto max-w-7xl px-4 pb-7 pt-8 sm:px-6 sm:pt-9 lg:px-8">
+          <div className="relative mx-auto max-w-7xl px-4 pb-5 pt-7 sm:px-6 sm:pt-8 lg:px-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
                 <p className="mb-4 text-xs uppercase tracking-[0.24em] text-primary-foreground/80">Frontiers-style academic portal</p>
@@ -272,30 +284,21 @@ export default async function HomePage() {
                 <p className="mt-4 max-w-xl text-sm text-background/80 sm:text-base">
                   Creating trusted workflows for healthy science and faster publication outcomes.
                 </p>
-                <form action="/search" method="get" className="mt-6 rounded-2xl border border-white/20 bg-card/10 p-3 backdrop-blur-sm">
-                  <div className="grid gap-2 sm:grid-cols-[1fr,160px,auto]">
+                <form action="/search" method="get" className="mt-5 w-full max-w-xl">
+                  <div className="flex items-center gap-2 rounded-xl border border-white/20 bg-card/10 p-2 backdrop-blur-sm">
                     <Input
                       name="q"
-                      placeholder="Search articles, DOI, authors..."
-                      className="h-10 border-white/30 bg-white/10 text-white placeholder:text-primary-foreground/75"
+                      placeholder="Search by title, DOI, author..."
+                      className="h-9 border-white/30 bg-white/10 text-white placeholder:text-primary-foreground/75"
                     />
-                    <select
-                      name="mode"
-                      defaultValue="articles"
-                      className="h-10 rounded-md border border-white/30 bg-white/10 px-3 text-sm text-white"
-                    >
-                      <option value="articles">Articles</option>
-                      <option value="journals">Journals</option>
-                    </select>
-                    <Button type="submit" className="h-10 bg-primary text-white hover:bg-primary/90">
+                    <Button type="submit" className="h-9 px-5 bg-primary text-white hover:bg-primary/90">
                       Search
                     </Button>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                  <div className="mt-2 flex items-center gap-3 text-xs">
                     <Link href="/search/advanced" className="underline underline-offset-4 hover:text-white">
                       Advanced Search
                     </Link>
-                    <span className="text-primary-foreground/70">Tip: combine keyword + DOI for precise lookup.</span>
                   </div>
                 </form>
               </div>
@@ -396,6 +399,87 @@ export default async function HomePage() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="pb-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <h2 className={cn(playfair.className, 'text-3xl font-semibold text-foreground')}>Featured Journals</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Discover active journals and match your manuscript scope.</p>
+              </div>
+              <Link href="/search?mode=journals" className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary">
+                Browse journals
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            {featuredJournals.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border/80 bg-card p-6 text-center text-sm text-muted-foreground">
+                Journals directory will appear here soon.
+              </p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {featuredJournals.map((journal) => (
+                  <Link
+                    key={journal.id}
+                    href={`/journals/${journal.slug}`}
+                    className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Impact {getJournalImpactLabel(journal.impact_factor)}</p>
+                    <h3 className={cn(playfair.className, 'mt-2 text-xl font-semibold text-foreground')}>{journal.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+                      {journal.description || 'Peer-reviewed journal with rigorous editorial workflow.'}
+                    </p>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {journal.issn ? `ISSN ${journal.issn}` : `Slug ${journal.slug}`}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="pb-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <h2 className={cn(playfair.className, 'text-3xl font-semibold text-foreground')}>Latest Articles</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Recently published research from ScholarFlow journals.</p>
+              </div>
+              <Link href="/search?mode=articles&sort=latest" className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary">
+                View all articles
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/70 text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Author</th>
+                    <th className="px-4 py-3">Published</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestArticles.map((article) => (
+                    <tr key={article.id} className="border-t border-border/80 hover:bg-muted/40">
+                      <td className="px-4 py-3">
+                        <Link href={`/articles/${article.id}`} className="font-medium text-foreground hover:text-primary hover:underline">
+                          {article.title || 'Untitled'}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{article.authors?.[0] || 'Author'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {article.published_at ? formatDateLocal(article.published_at) : 'Recently published'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
