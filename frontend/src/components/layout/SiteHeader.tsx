@@ -254,6 +254,14 @@ export default function SiteHeader() {
             />
             <div className="flex justify-end gap-2">
               <Button
+                asChild
+                type="button"
+                variant="outline"
+                onClick={() => setIsSearchOpen(false)}
+              >
+                <Link href="/search/advanced">Advanced Search</Link>
+              </Button>
+              <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsSearchOpen(false)}
@@ -331,6 +339,13 @@ export default function SiteHeader() {
               {link.name}
             </Link>
           ))}
+          <Link
+            href="/search/advanced"
+            className="block text-xl font-bold text-foreground/90"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Advanced Search
+          </Link>
           <div className="pt-8 border-t border-border/30 space-y-4">
             {isAuthenticated ? (
               <>
