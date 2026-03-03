@@ -292,11 +292,6 @@ export default async function HomePage() {
                       Search
                     </Button>
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-xs">
-                    <Link href="/search/advanced" className="underline underline-offset-4 hover:text-white">
-                      Advanced Search
-                    </Link>
-                  </div>
                 </form>
               </div>
 
