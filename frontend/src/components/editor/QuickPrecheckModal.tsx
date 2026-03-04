@@ -88,9 +88,13 @@ export function QuickPrecheckModal({
         throw new Error(normalizeQuickPrecheckError(detail || res?.message))
       }
       const updated = res.data || {}
-      toast.success('Updated', { id: toastId })
-      onUpdated?.({ id: updated.id || manuscriptId, status: updated.status, updated_at: updated.updated_at })
       onOpenChange(false)
+      try {
+        onUpdated?.({ id: updated.id || manuscriptId, status: updated.status, updated_at: updated.updated_at })
+      } catch (callbackError) {
+        console.warn('[QuickPrecheckModal] onUpdated callback failed', callbackError)
+      }
+      toast.success('Updated', { id: toastId })
     } catch (e) {
       const message = normalizeQuickPrecheckError(e instanceof Error ? e.message : '')
       toast.error(message, { id: toastId })

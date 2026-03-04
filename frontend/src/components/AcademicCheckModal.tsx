@@ -51,8 +51,11 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
         SUBMIT_TIMEOUT_MS,
         'Submit check request timed out. Please retry.',
       )
-      onSuccess()
+
       onClose()
+      void Promise.resolve(onSuccess()).catch((callbackError) => {
+        console.warn('[AcademicCheckModal] onSuccess callback failed', callbackError)
+      })
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to submit check')
     } finally {
