@@ -412,12 +412,19 @@ async def get_published_article_pdf(id: UUID):
 @router.get("/manuscripts/journals/{slug}")
 async def get_journal_detail(slug: str):
     try:
-        journal_response = (
-            _m().supabase.table("journals").select("*").eq("slug", slug).single().execute()
-        )
-        journal = journal_response.data
+        try:
+            journal_response = (
+                _m().supabase.table("journals").select("*").eq("slug", slug).single().execute()
+            )
+            journal = getattr(journal_response, "data", None) or {}
+        except Exception as e:
+            if _m()._is_postgrest_single_no_rows_error(str(e)):
+                raise HTTPException(status_code=404, detail="Journal not found")
+            raise
+
         if not journal:
             raise HTTPException(status_code=404, detail="Journal not found")
+
         articles_response = (
             _m()
             .supabase.table("manuscripts")
@@ -426,7 +433,11 @@ async def get_journal_detail(slug: str):
             .eq("status", "published")
             .execute()
         )
-        return {"success": True, "journal": journal, "articles": articles_response.data}
+        return {
+            "success": True,
+            "journal": journal,
+            "articles": getattr(articles_response, "data", None) or [],
+        }
     except HTTPException:
         raise
     except Exception as e:
