@@ -1,0 +1,565 @@
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+
+import { authService } from '@/services/auth'
+import { supabase } from '@/lib/supabase'
+import type { Journal } from '@/types/journal'
+import {
+  COVER_LETTER_UPLOAD_TIMEOUT_MS,
+  INITIAL_METADATA,
+  INITIAL_TOUCHED,
+  STORAGE_UPLOAD_TIMEOUT_MS,
+  extractTraceId,
+  hasJournalSelection,
+  isHttpUrl,
+  isSupportedCoverLetter,
+  isSupportedWordDocument,
+  parseManuscriptMetadataWithFallback,
+  sanitizeFilename,
+  type MetadataState,
+  type TouchedState,
+  withTimeout,
+} from './submission-form-utils'
+
+export function useSubmissionForm() {
+  const router = useRouter()
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [metadata, setMetadata] = useState<MetadataState>(INITIAL_METADATA)
+  const [file, setFile] = useState<File | null>(null)
+  const [uploadedPath, setUploadedPath] = useState<string | null>(null)
+  const [wordFile, setWordFile] = useState<File | null>(null)
+  const [wordFilePath, setWordFilePath] = useState<string | null>(null)
+  const [isUploadingWordFile, setIsUploadingWordFile] = useState(false)
+  const [wordFileUploadError, setWordFileUploadError] = useState<string | null>(null)
+  const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null)
+  const [coverLetterPath, setCoverLetterPath] = useState<string | null>(null)
+  const [isUploadingCoverLetter, setIsUploadingCoverLetter] = useState(false)
+  const [coverLetterUploadError, setCoverLetterUploadError] = useState<string | null>(null)
+  const [user, setUser] = useState<any>(null)
+  const [journals, setJournals] = useState<Journal[]>([])
+  const [isLoadingJournals, setIsLoadingJournals] = useState(false)
+  const [journalLoadError, setJournalLoadError] = useState<string | null>(null)
+  const [journalId, setJournalId] = useState('')
+  const [specialIssue, setSpecialIssue] = useState('')
+  const [touched, setTouched] = useState<TouchedState>(INITIAL_TOUCHED)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [datasetUrl, setDatasetUrl] = useState('')
+  const [sourceCodeUrl, setSourceCodeUrl] = useState('')
+  const [policyConsent, setPolicyConsent] = useState(false)
+  const [ethicsConsent, setEthicsConsent] = useState(false)
+
+  const titleValid = metadata.title.trim().length >= 5
+  const abstractValid = metadata.abstract.trim().length >= 30
+  const fileValid = !!uploadedPath
+  const wordFileValid = !!wordFilePath
+  const coverLetterValid = !!coverLetterPath
+  const datasetValue = datasetUrl.trim()
+  const sourceCodeValue = sourceCodeUrl.trim()
+  const journalValid = hasJournalSelection(journals, journalId)
+  const datasetUrlValid = datasetValue === '' || isHttpUrl(datasetValue)
+  const sourceCodeUrlValid = sourceCodeValue === '' || isHttpUrl(sourceCodeValue)
+  const showTitleError = touched.title && !titleValid
+  const showAbstractError = touched.abstract && !abstractValid
+  const showDatasetError = touched.datasetUrl && !datasetUrlValid
+  const showSourceCodeError = touched.sourceCodeUrl && !sourceCodeUrlValid
+  const showJournalError = touched.journal && !journalValid
+  const showPolicyConsentError = touched.policyConsent && !policyConsent
+  const showEthicsConsentError = touched.ethicsConsent && !ethicsConsent
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const session = await authService.getSession()
+      if (session?.user) {
+        setUser(session.user)
+      } else {
+        toast.error('Please log in to submit a manuscript')
+      }
+    }
+    checkUser()
+
+    const { data: { subscription } } = authService.onAuthStateChange((session) => {
+      setUser(session?.user || null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadJournals = async () => {
+      setIsLoadingJournals(true)
+      setJournalLoadError(null)
+      try {
+        const response = await fetch('/api/v1/public/journals')
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.detail || payload?.message || 'Failed to load journals')
+        }
+        const rows = Array.isArray(payload.data) ? payload.data : []
+        if (!cancelled) {
+          setJournals(rows)
+          if (rows.length === 1) {
+            setJournalId(String(rows[0]?.id || ''))
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load journals'
+          setJournalLoadError(message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingJournals(false)
+        }
+      }
+    }
+
+    loadJournals()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const markTouched = (field: keyof TouchedState) => {
+    setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (!selectedFile) return
+
+    const isPdf = selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      setFile(null)
+      setUploadedPath(null)
+      setUploadError(null)
+      setParseError(null)
+      event.currentTarget.value = ''
+      toast.error('Only PDF files are supported.')
+      return
+    }
+
+    if (!user) {
+      toast.error('Please log in to upload a manuscript.')
+      return
+    }
+
+    setFile(selectedFile)
+    setUploadedPath(null)
+    setUploadError(null)
+    setParseError(null)
+    setIsUploading(true)
+    const toastId = toast.loading('Uploading and analyzing manuscript...')
+
+    try {
+      const uploadPath = `${user.id}/${crypto.randomUUID()}.pdf`
+      const { error: uploadErrorResult } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: 'application/pdf',
+            upsert: false,
+          }),
+        STORAGE_UPLOAD_TIMEOUT_MS,
+        'Storage upload',
+      )
+      if (uploadErrorResult) {
+        throw new Error(`Upload failed: ${uploadErrorResult.message}`)
+      }
+      setUploadedPath(uploadPath)
+      toast.loading('File uploaded. Extracting metadata...', { id: toastId })
+
+      const { response, raw, result, traceId: parseTraceId } = await parseManuscriptMetadataWithFallback(selectedFile)
+
+      if (!response.ok) {
+        const message = result?.message || result?.detail || (raw && raw.length < 500 ? raw : '') || 'AI parsing failed'
+        const error: any = new Error(message)
+        if (parseTraceId) error.trace_id = parseTraceId
+        throw error
+      }
+
+      if (!result) {
+        const error: any = new Error('AI parsing failed: invalid response')
+        if (parseTraceId) error.trace_id = parseTraceId
+        throw error
+      }
+
+      if (result.success) {
+        setMetadata(result.data)
+        if (result.message) {
+          const info = parseTraceId ? `${result.message}（trace: ${parseTraceId}）` : result.message
+          toast.success(info, { id: toastId })
+        } else {
+          const info = parseTraceId ? `AI parsing successful!（trace: ${parseTraceId}）` : 'AI parsing successful!'
+          toast.success(info, { id: toastId })
+        }
+      } else {
+        const error: any = new Error(result.message || 'AI parsing failed')
+        if (parseTraceId) error.trace_id = parseTraceId
+        throw error
+      }
+    } catch (error) {
+      console.error('Parsing failed:', error)
+      const lowered = String((error as any)?.message || '').toLowerCase()
+      const message =
+        (error instanceof DOMException && error.name === 'AbortError') || lowered.includes('timeout')
+          ? '解析超时（>25s），已跳过 AI 预填，请手动填写标题与摘要。'
+          : error instanceof Error
+            ? error.message
+            : 'AI parsing failed'
+      const traceInError = extractTraceId(error)
+      const finalMessage = traceInError ? `${message}（trace: ${traceInError}）` : message
+      toast.error(finalMessage, { id: toastId })
+      if (message.toLowerCase().includes('upload failed')) {
+        setUploadError(message.replace('Upload failed: ', ''))
+      } else {
+        setParseError(finalMessage)
+      }
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleCoverLetterUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (!selectedFile) {
+      setCoverLetterFile(null)
+      setCoverLetterPath(null)
+      setCoverLetterUploadError(null)
+      return
+    }
+
+    if (!isSupportedCoverLetter(selectedFile)) {
+      setCoverLetterFile(null)
+      setCoverLetterPath(null)
+      setCoverLetterUploadError(null)
+      event.currentTarget.value = ''
+      toast.error('Cover letter only supports .pdf/.doc/.docx files.')
+      return
+    }
+
+    if (!user) {
+      toast.error('Please log in to upload a cover letter.')
+      return
+    }
+
+    setCoverLetterFile(selectedFile)
+    setCoverLetterPath(null)
+    setCoverLetterUploadError(null)
+    setIsUploadingCoverLetter(true)
+    const toastId = toast.loading('Uploading cover letter...')
+
+    try {
+      const safeName = sanitizeFilename(selectedFile.name || 'cover_letter')
+      const uploadPath = `${user.id}/cover-letters/${crypto.randomUUID()}_${safeName}`
+      const { error: uploadErrorResult } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: selectedFile.type || 'application/octet-stream',
+            upsert: false,
+          }),
+        COVER_LETTER_UPLOAD_TIMEOUT_MS,
+        'Cover letter upload',
+      )
+      if (uploadErrorResult) {
+        throw new Error(`Upload failed: ${uploadErrorResult.message}`)
+      }
+
+      setCoverLetterPath(uploadPath)
+      toast.success('Cover letter uploaded.', { id: toastId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Cover letter upload failed.'
+      setCoverLetterUploadError(message.replace('Upload failed: ', ''))
+      toast.error(message, { id: toastId })
+    } finally {
+      setIsUploadingCoverLetter(false)
+    }
+  }
+
+  const handleWordFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (!selectedFile) {
+      setWordFile(null)
+      setWordFilePath(null)
+      setWordFileUploadError(null)
+      return
+    }
+
+    if (!isSupportedWordDocument(selectedFile)) {
+      setWordFile(null)
+      setWordFilePath(null)
+      setWordFileUploadError(null)
+      event.currentTarget.value = ''
+      toast.error('Word manuscript only supports .doc/.docx files.')
+      return
+    }
+
+    if (!user) {
+      toast.error('Please log in to upload the Word manuscript.')
+      return
+    }
+
+    setWordFile(selectedFile)
+    setWordFilePath(null)
+    setWordFileUploadError(null)
+    setIsUploadingWordFile(true)
+    const toastId = toast.loading('Uploading Word manuscript…')
+
+    try {
+      const safeName = sanitizeFilename(selectedFile.name || 'manuscript')
+      const extension = safeName.toLowerCase().endsWith('.doc') ? '.doc' : '.docx'
+      const uploadPath = `${user.id}/word-manuscripts/${crypto.randomUUID()}_${safeName.replace(/\.(doc|docx)$/i, '')}${extension}`
+      const { error: uploadErrorResult } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: selectedFile.type || 'application/octet-stream',
+            upsert: false,
+          }),
+        COVER_LETTER_UPLOAD_TIMEOUT_MS,
+        'Word manuscript upload',
+      )
+      if (uploadErrorResult) {
+        throw new Error(`Upload failed: ${uploadErrorResult.message}`)
+      }
+
+      setWordFilePath(uploadPath)
+      toast.success('Word manuscript uploaded.', { id: toastId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Word manuscript upload failed.'
+      setWordFileUploadError(message.replace('Upload failed: ', ''))
+      toast.error(message, { id: toastId })
+    } finally {
+      setIsUploadingWordFile(false)
+    }
+  }
+
+  const handleFinalize = async () => {
+    setTouched((prev) => ({
+      ...prev,
+      policyConsent: true,
+      ethicsConsent: true,
+    }))
+
+    if (!file) {
+      toast.error('Please select a PDF file before submitting.')
+      return
+    }
+    if (!uploadedPath) {
+      toast.error('File upload is incomplete. Please try again.')
+      return
+    }
+    if (!wordFile) {
+      toast.error('Please upload the Word version of the manuscript before submitting.')
+      return
+    }
+    if (!wordFilePath) {
+      toast.error('Word manuscript upload is incomplete. Please try again.')
+      return
+    }
+    if (!coverLetterFile) {
+      toast.error('Please upload a cover letter before submitting.')
+      return
+    }
+    if (!coverLetterPath) {
+      toast.error('Cover letter upload is incomplete. Please try again.')
+      return
+    }
+    if (!titleValid) {
+      toast.error('Title must be at least 5 characters.')
+      return
+    }
+    if (!abstractValid) {
+      toast.error('Abstract must be at least 30 characters.')
+      return
+    }
+    if (!datasetUrlValid) {
+      toast.error('Dataset URL must start with http:// or https://.')
+      return
+    }
+    if (!sourceCodeUrlValid) {
+      toast.error('Source code URL must start with http:// or https://.')
+      return
+    }
+    if (isLoadingJournals) {
+      toast.error('Journal list is still loading. Please wait a moment.')
+      return
+    }
+    if (!journalValid) {
+      toast.error('Please select a target journal before finalizing submission.')
+      return
+    }
+    if (journals.length === 0) {
+      toast.error('No active journals available. Please contact admin.')
+      return
+    }
+    if (!policyConsent) {
+      toast.error('Please confirm submission policy and publication terms before finalizing.')
+      return
+    }
+    if (!ethicsConsent) {
+      toast.error('Please confirm ethics and compliance declaration before finalizing.')
+      return
+    }
+    if (!user) {
+      toast.error('Please log in to submit a manuscript')
+      return
+    }
+
+    setIsSubmitting(true)
+    const toastId = toast.loading('Saving manuscript to database...')
+
+    try {
+      const accessToken = await authService.getAccessToken()
+      if (!accessToken) {
+        throw new Error('No authentication token available')
+      }
+
+      const response = await fetch('/api/v1/manuscripts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title: metadata.title,
+          abstract: metadata.abstract,
+          author_id: user.id,
+          file_path: uploadedPath,
+          manuscript_word_path: wordFilePath,
+          manuscript_word_filename: wordFile?.name || null,
+          manuscript_word_content_type: wordFile?.type || null,
+          cover_letter_path: coverLetterPath,
+          cover_letter_filename: coverLetterFile?.name || null,
+          cover_letter_content_type: coverLetterFile?.type || null,
+          dataset_url: datasetValue || null,
+          source_code_url: sourceCodeValue || null,
+          journal_id: journalId || null,
+          special_issue: specialIssue.trim() || null,
+        }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success('Manuscript submitted successfully!', { id: toastId })
+        router.push('/dashboard')
+      } else {
+        throw new Error(result.message || 'Persistence failed')
+      }
+    } catch (error) {
+      console.error('Submission failed:', error)
+      toast.error('Failed to save. Check database connection.', { id: toastId })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return {
+    userEmail: user?.email || null,
+    fileName: file?.name || null,
+    wordFileName: wordFile?.name || null,
+    wordFilePath,
+    wordFileUploadError,
+    isUploadingWordFile,
+    coverLetterFileName: coverLetterFile?.name || null,
+    coverLetterPath,
+    coverLetterUploadError,
+    isUploadingCoverLetter,
+    isUploading,
+    isSubmitting,
+    uploadError,
+    parseError,
+    journals,
+    isLoadingJournals,
+    journalLoadError,
+    journalId,
+    specialIssue,
+    metadata,
+    datasetUrl,
+    sourceCodeUrl,
+    policyConsent,
+    ethicsConsent,
+    touched,
+    showTitleError,
+    showAbstractError,
+    showDatasetError,
+    showSourceCodeError,
+    showJournalError,
+    showPolicyConsentError,
+    showEthicsConsentError,
+    submitDisabled:
+      !fileValid ||
+      !wordFileValid ||
+      !coverLetterValid ||
+      !titleValid ||
+      !abstractValid ||
+      !journalValid ||
+      !datasetUrlValid ||
+      !sourceCodeUrlValid ||
+      !policyConsent ||
+      !ethicsConsent ||
+      isLoadingJournals ||
+      isUploading ||
+      isUploadingWordFile ||
+      isUploadingCoverLetter ||
+      isSubmitting ||
+      !user,
+    showValidationHint:
+      !!user &&
+      (!fileValid ||
+        !wordFileValid ||
+        !coverLetterValid ||
+        !titleValid ||
+        !abstractValid ||
+        !journalValid ||
+        !datasetUrlValid ||
+        !sourceCodeUrlValid ||
+        !policyConsent ||
+        !ethicsConsent),
+    handleFileUpload,
+    handleWordFileUpload,
+    handleCoverLetterUpload,
+    handleFinalize,
+    onJournalChange: (value: string) => {
+      setJournalId(value)
+      markTouched('journal')
+    },
+    onJournalBlur: () => markTouched('journal'),
+    onSpecialIssueChange: (value: string) => {
+      setSpecialIssue(value)
+    },
+    onTitleChange: (value: string) => {
+      setMetadata((prev) => ({ ...prev, title: value }))
+      markTouched('title')
+    },
+    onTitleBlur: () => markTouched('title'),
+    onAbstractChange: (value: string) => {
+      setMetadata((prev) => ({ ...prev, abstract: value }))
+      markTouched('abstract')
+    },
+    onAbstractBlur: () => markTouched('abstract'),
+    onDatasetUrlChange: (value: string) => {
+      setDatasetUrl(value)
+      markTouched('datasetUrl')
+    },
+    onDatasetUrlBlur: () => markTouched('datasetUrl'),
+    onSourceCodeUrlChange: (value: string) => {
+      setSourceCodeUrl(value)
+      markTouched('sourceCodeUrl')
+    },
+    onSourceCodeUrlBlur: () => markTouched('sourceCodeUrl'),
+    onPolicyConsentChange: (value: boolean) => {
+      setPolicyConsent(value)
+      markTouched('policyConsent')
+    },
+    onEthicsConsentChange: (value: boolean) => {
+      setEthicsConsent(value)
+      markTouched('ethicsConsent')
+    },
+  }
+}
