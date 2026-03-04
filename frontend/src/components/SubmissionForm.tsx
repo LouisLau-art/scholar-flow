@@ -4,7 +4,6 @@ import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 import {
-  SubmissionCoverLetterCard,
   SubmissionFileUploadCard,
   SubmissionFinalizePanel,
   SubmissionMetadataForm,
@@ -55,14 +54,6 @@ export default function SubmissionForm() {
         onSourceCodeUrlBlur={form.onSourceCodeUrlBlur}
         onPolicyConsentChange={form.onPolicyConsentChange}
         onEthicsConsentChange={form.onEthicsConsentChange}
-      />
-
-      <SubmissionCoverLetterCard
-        isUploadingCoverLetter={form.isUploadingCoverLetter}
-        coverLetterPath={form.coverLetterPath}
-        coverLetterFileName={form.coverLetterFileName}
-        coverLetterUploadError={form.coverLetterUploadError}
-        onCoverLetterChange={form.handleCoverLetterUpload}
       />
 
       <SubmissionWordUploadCard

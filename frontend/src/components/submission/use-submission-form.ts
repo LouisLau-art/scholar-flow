@@ -6,14 +6,13 @@ import { authService } from '@/services/auth'
 import { supabase } from '@/lib/supabase'
 import type { Journal } from '@/types/journal'
 import {
-  COVER_LETTER_UPLOAD_TIMEOUT_MS,
   INITIAL_METADATA,
   INITIAL_TOUCHED,
   STORAGE_UPLOAD_TIMEOUT_MS,
+  SUPPLEMENTAL_UPLOAD_TIMEOUT_MS,
   extractTraceId,
   hasJournalSelection,
   isHttpUrl,
-  isSupportedCoverLetter,
   isSupportedWordDocument,
   parseManuscriptMetadataWithFallback,
   sanitizeFilename,
@@ -33,10 +32,6 @@ export function useSubmissionForm() {
   const [wordFilePath, setWordFilePath] = useState<string | null>(null)
   const [isUploadingWordFile, setIsUploadingWordFile] = useState(false)
   const [wordFileUploadError, setWordFileUploadError] = useState<string | null>(null)
-  const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null)
-  const [coverLetterPath, setCoverLetterPath] = useState<string | null>(null)
-  const [isUploadingCoverLetter, setIsUploadingCoverLetter] = useState(false)
-  const [coverLetterUploadError, setCoverLetterUploadError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
   const [journals, setJournals] = useState<Journal[]>([])
   const [isLoadingJournals, setIsLoadingJournals] = useState(false)
@@ -55,7 +50,6 @@ export function useSubmissionForm() {
   const abstractValid = metadata.abstract.trim().length >= 30
   const fileValid = !!uploadedPath
   const wordFileValid = !!wordFilePath
-  const coverLetterValid = !!coverLetterPath
   const datasetValue = datasetUrl.trim()
   const sourceCodeValue = sourceCodeUrl.trim()
   const journalValid = hasJournalSelection(journals, journalId)
@@ -224,63 +218,6 @@ export function useSubmissionForm() {
     }
   }
 
-  const handleCoverLetterUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0]
-    if (!selectedFile) {
-      setCoverLetterFile(null)
-      setCoverLetterPath(null)
-      setCoverLetterUploadError(null)
-      return
-    }
-
-    if (!isSupportedCoverLetter(selectedFile)) {
-      setCoverLetterFile(null)
-      setCoverLetterPath(null)
-      setCoverLetterUploadError(null)
-      event.currentTarget.value = ''
-      toast.error('Cover letter only supports .pdf/.doc/.docx files.')
-      return
-    }
-
-    if (!user) {
-      toast.error('Please log in to upload a cover letter.')
-      return
-    }
-
-    setCoverLetterFile(selectedFile)
-    setCoverLetterPath(null)
-    setCoverLetterUploadError(null)
-    setIsUploadingCoverLetter(true)
-    const toastId = toast.loading('Uploading cover letter...')
-
-    try {
-      const safeName = sanitizeFilename(selectedFile.name || 'cover_letter')
-      const uploadPath = `${user.id}/cover-letters/${crypto.randomUUID()}_${safeName}`
-      const { error: uploadErrorResult } = await withTimeout(
-        supabase.storage
-          .from('manuscripts')
-          .upload(uploadPath, selectedFile, {
-            contentType: selectedFile.type || 'application/octet-stream',
-            upsert: false,
-          }),
-        COVER_LETTER_UPLOAD_TIMEOUT_MS,
-        'Cover letter upload',
-      )
-      if (uploadErrorResult) {
-        throw new Error(`Upload failed: ${uploadErrorResult.message}`)
-      }
-
-      setCoverLetterPath(uploadPath)
-      toast.success('Cover letter uploaded.', { id: toastId })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Cover letter upload failed.'
-      setCoverLetterUploadError(message.replace('Upload failed: ', ''))
-      toast.error(message, { id: toastId })
-    } finally {
-      setIsUploadingCoverLetter(false)
-    }
-  }
-
   const handleWordFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) {
@@ -321,7 +258,7 @@ export function useSubmissionForm() {
             contentType: selectedFile.type || 'application/octet-stream',
             upsert: false,
           }),
-        COVER_LETTER_UPLOAD_TIMEOUT_MS,
+        SUPPLEMENTAL_UPLOAD_TIMEOUT_MS,
         'Word manuscript upload',
       )
       if (uploadErrorResult) {
@@ -360,14 +297,6 @@ export function useSubmissionForm() {
     }
     if (!wordFilePath) {
       toast.error('Word manuscript upload is incomplete. Please try again.')
-      return
-    }
-    if (!coverLetterFile) {
-      toast.error('Please upload a cover letter before submitting.')
-      return
-    }
-    if (!coverLetterPath) {
-      toast.error('Cover letter upload is incomplete. Please try again.')
       return
     }
     if (!titleValid) {
@@ -434,9 +363,6 @@ export function useSubmissionForm() {
           manuscript_word_path: wordFilePath,
           manuscript_word_filename: wordFile?.name || null,
           manuscript_word_content_type: wordFile?.type || null,
-          cover_letter_path: coverLetterPath,
-          cover_letter_filename: coverLetterFile?.name || null,
-          cover_letter_content_type: coverLetterFile?.type || null,
           dataset_url: datasetValue || null,
           source_code_url: sourceCodeValue || null,
           journal_id: journalId || null,
@@ -466,10 +392,6 @@ export function useSubmissionForm() {
     wordFilePath,
     wordFileUploadError,
     isUploadingWordFile,
-    coverLetterFileName: coverLetterFile?.name || null,
-    coverLetterPath,
-    coverLetterUploadError,
-    isUploadingCoverLetter,
     isUploading,
     isSubmitting,
     uploadError,
@@ -495,7 +417,6 @@ export function useSubmissionForm() {
     submitDisabled:
       !fileValid ||
       !wordFileValid ||
-      !coverLetterValid ||
       !titleValid ||
       !abstractValid ||
       !journalValid ||
@@ -506,14 +427,12 @@ export function useSubmissionForm() {
       isLoadingJournals ||
       isUploading ||
       isUploadingWordFile ||
-      isUploadingCoverLetter ||
       isSubmitting ||
       !user,
     showValidationHint:
       !!user &&
       (!fileValid ||
         !wordFileValid ||
-        !coverLetterValid ||
         !titleValid ||
         !abstractValid ||
         !journalValid ||
@@ -523,7 +442,6 @@ export function useSubmissionForm() {
         !ethicsConsent),
     handleFileUpload,
     handleWordFileUpload,
-    handleCoverLetterUpload,
     handleFinalize,
     onJournalChange: (value: string) => {
       setJournalId(value)

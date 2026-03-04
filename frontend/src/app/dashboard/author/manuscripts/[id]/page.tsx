@@ -36,7 +36,7 @@ type AuthorContextPayload = {
   }
   files: {
     current_pdf_signed_url: string | null
-    cover_letters: Array<{
+    word_manuscripts: Array<{
       id: string
       filename: string
       content_type?: string | null
@@ -175,8 +175,8 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
                         Download Manuscript PDF
                       </Button>
                     ) : null}
-                    {ctx.files.cover_letters?.length ? (
-                      ctx.files.cover_letters.map((f) => (
+                    {ctx.files.word_manuscripts?.length ? (
+                      ctx.files.word_manuscripts.map((f) => (
                         <Button
                           key={f.id}
                           variant="outline"
@@ -185,7 +185,7 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
                           onClick={() => f.signed_url && window.open(String(f.signed_url), '_blank')}
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          Cover Letter: {f.filename}
+                          Download Manuscript Word: {f.filename}
                         </Button>
                       ))
                     ) : null}

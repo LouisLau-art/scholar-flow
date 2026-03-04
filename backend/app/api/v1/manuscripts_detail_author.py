@@ -52,7 +52,7 @@ async def get_manuscript_author_context_impl(
     logs = utils._load_transition_logs(manuscript_id_str)
     review_reports = utils._load_review_reports(manuscript_id_str)
     decision_letters = utils._load_final_decision_letters(manuscript_id_str)
-    cover_letters = utils._load_cover_letter_files(manuscript_id_str)
+    word_manuscripts = utils._load_word_manuscript_files(manuscript_id_str)
 
     # Reviewer 匿名编号
     reviewer_index: dict[str, int] = {}
@@ -233,16 +233,16 @@ async def get_manuscript_author_context_impl(
 
     events.sort(key=_sort_key)
 
-    cover_letter_items: list[dict] = []
-    for row in cover_letters:
+    word_manuscript_items: list[dict] = []
+    for row in word_manuscripts:
         bucket = str(row.get("bucket") or "manuscripts")
         path = str(row.get("path") or "").strip()
         if not path:
             continue
-        cover_letter_items.append(
+        word_manuscript_items.append(
             {
                 "id": str(row.get("id") or ""),
-                "filename": str(row.get("original_filename") or "cover_letter"),
+                "filename": str(row.get("original_filename") or "manuscript_word"),
                 "content_type": row.get("content_type"),
                 "created_at": utils._safe_iso(row.get("created_at")),
                 "signed_url": utils._sign_storage_url(bucket=bucket, path=path, expires_in_sec=60 * 10),
@@ -265,7 +265,7 @@ async def get_manuscript_author_context_impl(
             },
             "files": {
                 "current_pdf_signed_url": current_pdf_url,
-                "cover_letters": cover_letter_items,
+                "word_manuscripts": word_manuscript_items,
             },
             "proofreading_task": proofreading_task,
             "timeline": events,
@@ -350,4 +350,3 @@ async def download_review_attachment_for_author_impl(
             "Cache-Control": "no-store",
         },
     )
-

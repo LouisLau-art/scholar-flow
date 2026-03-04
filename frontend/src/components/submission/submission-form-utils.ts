@@ -1,7 +1,7 @@
 import type { Journal } from '@/types/journal'
 
 export const STORAGE_UPLOAD_TIMEOUT_MS = 90_000
-export const COVER_LETTER_UPLOAD_TIMEOUT_MS = 60_000
+export const SUPPLEMENTAL_UPLOAD_TIMEOUT_MS = 60_000
 export const METADATA_PARSE_TIMEOUT_MS = 25_000
 export const METADATA_PARSE_TOTAL_TIMEOUT_MS = 35_000
 const DIRECT_API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '')
@@ -76,11 +76,6 @@ function isAbortLikeError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === 'AbortError') return true
   const text = String((error as any)?.name || '') + ' ' + String((error as any)?.message || '')
   return /abort/i.test(text)
-}
-
-export function isSupportedCoverLetter(file: File): boolean {
-  const name = String(file.name || '').toLowerCase()
-  return name.endsWith('.pdf') || name.endsWith('.doc') || name.endsWith('.docx')
 }
 
 export function isSupportedWordDocument(file: File): boolean {

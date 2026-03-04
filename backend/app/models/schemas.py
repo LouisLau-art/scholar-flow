@@ -11,6 +11,9 @@ class ManuscriptBase(BaseModel):
     title: str = Field(..., min_length=5, max_length=500, description="稿件标题")
     abstract: str = Field(..., min_length=30, max_length=5000, description="稿件摘要")
     file_path: Optional[str] = Field(None, description="Supabase Storage 路径")
+    manuscript_word_path: Optional[str] = Field(None, max_length=1000, description="Word 主稿在 Storage 中的路径")
+    manuscript_word_filename: Optional[str] = Field(None, max_length=255, description="Word 主稿原始文件名")
+    manuscript_word_content_type: Optional[str] = Field(None, max_length=255, description="Word 主稿 MIME 类型")
     cover_letter_path: Optional[str] = Field(None, max_length=1000, description="Cover Letter 在 Storage 中的路径")
     cover_letter_filename: Optional[str] = Field(None, max_length=255, description="Cover Letter 原始文件名")
     cover_letter_content_type: Optional[str] = Field(None, max_length=255, description="Cover Letter MIME 类型")
@@ -36,7 +39,16 @@ class ManuscriptBase(BaseModel):
             raise ValueError("abstract must be at least 30 characters")
         return trimmed
 
-    @field_validator("file_path", "cover_letter_path", "cover_letter_filename", "cover_letter_content_type", mode="before")
+    @field_validator(
+        "file_path",
+        "manuscript_word_path",
+        "manuscript_word_filename",
+        "manuscript_word_content_type",
+        "cover_letter_path",
+        "cover_letter_filename",
+        "cover_letter_content_type",
+        mode="before",
+    )
     @classmethod
     def normalize_optional_strings(cls, value):
         # 中文注释: 允许可选字段为空字符串；写入前统一做 trim

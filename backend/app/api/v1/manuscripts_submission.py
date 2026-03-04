@@ -359,6 +359,30 @@ async def create_manuscript(
         manuscript_id = uuid4()
         current_user_id = str(current_user.get("id") or "").strip()
 
+        pdf_path = str(manuscript.file_path or "").strip()
+        if not pdf_path:
+            raise HTTPException(status_code=422, detail="file_path is required")
+        if ".." in pdf_path or pdf_path.startswith("/"):
+            raise HTTPException(status_code=422, detail="Invalid file_path")
+        if current_user_id and not pdf_path.startswith(f"{current_user_id}/"):
+            raise HTTPException(status_code=422, detail="file_path must belong to current user")
+        if not pdf_path.lower().endswith(".pdf"):
+            raise HTTPException(status_code=422, detail="Manuscript PDF only supports .pdf")
+
+        manuscript_word_path = str(manuscript.manuscript_word_path or "").strip()
+        if not manuscript_word_path:
+            raise HTTPException(status_code=422, detail="manuscript_word_path is required")
+        if ".." in manuscript_word_path or manuscript_word_path.startswith("/"):
+            raise HTTPException(status_code=422, detail="Invalid manuscript_word_path")
+        if current_user_id and not manuscript_word_path.startswith(f"{current_user_id}/"):
+            raise HTTPException(status_code=422, detail="manuscript_word_path must belong to current user")
+        lowered_word_path = manuscript_word_path.lower()
+        if not (lowered_word_path.endswith(".doc") or lowered_word_path.endswith(".docx")):
+            raise HTTPException(status_code=422, detail="Manuscript Word file only supports .doc/.docx")
+
+        manuscript_word_filename = str(manuscript.manuscript_word_filename or "").strip() or None
+        manuscript_word_content_type = str(manuscript.manuscript_word_content_type or "").strip() or None
+
         cover_letter_path = str(manuscript.cover_letter_path or "").strip()
         cover_letter_filename = str(manuscript.cover_letter_filename or "").strip() or None
         cover_letter_content_type = str(manuscript.cover_letter_content_type or "").strip() or None
@@ -381,7 +405,7 @@ async def create_manuscript(
             "id": str(manuscript_id),
             "title": manuscript.title,
             "abstract": manuscript.abstract,
-            "file_path": manuscript.file_path,
+            "file_path": pdf_path,
             "dataset_url": manuscript.dataset_url,
             "source_code_url": manuscript.source_code_url,
             "journal_id": validated_journal_id,
@@ -397,30 +421,46 @@ async def create_manuscript(
         if response.data:
             created = response.data[0]
 
+            supplemental_files = [
+                {
+                    "manuscript_id": str(manuscript_id),
+                    "file_type": "manuscript",
+                    "bucket": "manuscripts",
+                    "path": manuscript_word_path,
+                    "original_filename": manuscript_word_filename,
+                    "content_type": manuscript_word_content_type,
+                    "uploaded_by": current_user_id or None,
+                },
+            ]
             if cover_letter_path:
-                try:
+                supplemental_files.append(
+                    {
+                        "manuscript_id": str(manuscript_id),
+                        "file_type": "cover_letter",
+                        "bucket": "manuscripts",
+                        "path": cover_letter_path,
+                        "original_filename": cover_letter_filename,
+                        "content_type": cover_letter_content_type,
+                        "uploaded_by": current_user_id or None,
+                    }
+                )
+
+            try:
+                for file_item in supplemental_files:
                     _m().supabase_admin.table("manuscript_files").upsert(
-                        {
-                            "manuscript_id": str(manuscript_id),
-                            "file_type": "cover_letter",
-                            "bucket": "manuscripts",
-                            "path": cover_letter_path,
-                            "original_filename": cover_letter_filename,
-                            "content_type": cover_letter_content_type,
-                            "uploaded_by": current_user_id or None,
-                        },
+                        file_item,
                         on_conflict="bucket,path",
                     ).execute()
-                except Exception as e:
-                    try:
-                        _m().supabase_admin.table("manuscripts").delete().eq("id", str(manuscript_id)).execute()
-                    except Exception as rollback_error:
-                        print(f"[CoverLetter] rollback manuscript failed: {rollback_error}")
+            except Exception as e:
+                try:
+                    _m().supabase_admin.table("manuscripts").delete().eq("id", str(manuscript_id)).execute()
+                except Exception as rollback_error:
+                    print(f"[SubmissionFiles] rollback manuscript failed: {rollback_error}")
 
-                    if _m()._is_missing_table_error(str(e), "manuscript_files"):
-                        raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
-                    print(f"[CoverLetter] persist failed: {e}")
-                    raise HTTPException(status_code=500, detail="Failed to save cover letter metadata")
+                if _m()._is_missing_table_error(str(e), "manuscript_files"):
+                    raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
+                print(f"[SubmissionFiles] persist failed: {e}")
+                raise HTTPException(status_code=500, detail="Failed to save submission file metadata")
 
             notification_service = NotificationService()
             notification_service.create_notification(

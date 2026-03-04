@@ -254,6 +254,33 @@ def _load_cover_letter_files(manuscript_id: str) -> list[dict]:
         return []
 
 
+def _is_word_file_record(row: dict) -> bool:
+    path = str((row or {}).get("path") or "").strip().lower()
+    content_type = str((row or {}).get("content_type") or "").strip().lower()
+    return path.endswith(".doc") or path.endswith(".docx") or "msword" in content_type or "wordprocessingml" in content_type
+
+
+def _load_word_manuscript_files(manuscript_id: str) -> list[dict]:
+    try:
+        resp = (
+            _m()
+            .supabase_admin.table("manuscript_files")
+            .select("id,file_type,bucket,path,original_filename,content_type,created_at,uploaded_by")
+            .eq("manuscript_id", manuscript_id)
+            .eq("file_type", "manuscript")
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        return [row for row in rows if _is_word_file_record(row)]
+    except Exception as e:
+        lowered = str(e).lower()
+        if "manuscript_files" in lowered and ("does not exist" in lowered or "schema cache" in lowered or "pgrst205" in lowered):
+            return []
+        return []
+
+
 def _load_latest_author_proofreading_task(manuscript_id: str, author_id: str) -> dict | None:
     """
     Feature 042: 作者侧校对任务入口（awaiting_author / 提交后回看）。

@@ -38,7 +38,7 @@ export function SubmissionFinalizePanel(props: SubmissionFinalizePanelProps) {
       </Button>
       {props.userEmail && props.showValidationHint ? (
         <p className="text-center text-xs text-muted-foreground" data-testid="submission-validation-hint">
-          Complete journal + metadata + required confirmations, then upload required PDF/Word/Cover Letter files.
+          Complete journal + metadata + required confirmations, then upload required PDF/Word files.
           Optional URLs must start with http(s).
         </p>
       ) : null}

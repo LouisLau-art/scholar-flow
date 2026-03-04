@@ -239,7 +239,7 @@ describe('SubmissionForm Component', () => {
     })
   })
 
-  it('keeps finalize disabled until Word manuscript and cover letter are uploaded', async () => {
+  it('keeps finalize disabled until Word manuscript is uploaded', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
       access_token: 'token',
@@ -291,17 +291,6 @@ describe('SubmissionForm Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
-    })
-    expect(screen.getByTestId('submission-finalize')).toBeDisabled()
-
-    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
-    const coverFile = new File(['cover'], 'cover.docx', {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    })
-    fireEvent.change(coverInput, { target: { files: [coverFile] } })
-
-    await waitFor(() => {
-      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
     expect(screen.getByTestId('submission-finalize')).toBeDisabled()
 
@@ -371,16 +360,6 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
     })
 
-    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
-    const coverFile = new File(['cover'], 'cover.docx', {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    })
-    fireEvent.change(coverInput, { target: { files: [coverFile] } })
-
-    await waitFor(() => {
-      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
-    })
-
     acceptRequiredDeclarations()
 
     await waitFor(() => {
@@ -402,7 +381,7 @@ describe('SubmissionForm Component', () => {
     })
   })
 
-  it('includes word manuscript and cover letter metadata in submission payload', async () => {
+  it('includes word manuscript metadata in submission payload', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
       access_token: 'token',
@@ -447,16 +426,6 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
-    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
-    const coverFile = new File(['cover'], 'cover.docx', {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    })
-    fireEvent.change(coverInput, { target: { files: [coverFile] } })
-
-    await waitFor(() => {
-      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
-    })
-
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     const wordFile = new File(['word'], 'paper.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -480,14 +449,12 @@ describe('SubmissionForm Component', () => {
       expect(body.manuscript_word_content_type).toBe(
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       )
-      expect(body.cover_letter_path).toContain('u1/cover-letters/')
-      expect(body.cover_letter_filename).toBe('cover.docx')
-      expect(body.cover_letter_content_type).toBe(
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      )
+      expect(body.cover_letter_path).toBeUndefined()
+      expect(body.cover_letter_filename).toBeUndefined()
+      expect(body.cover_letter_content_type).toBeUndefined()
     })
 
-    expect(storageUploadMock).toHaveBeenCalledTimes(3)
+    expect(storageUploadMock).toHaveBeenCalledTimes(2)
   })
 
   it('shows error when submission fails', async () => {
@@ -543,16 +510,6 @@ describe('SubmissionForm Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
-    })
-
-    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
-    const coverFile = new File(['cover'], 'cover.docx', {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    })
-    fireEvent.change(coverInput, { target: { files: [coverFile] } })
-
-    await waitFor(() => {
-      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
 
     acceptRequiredDeclarations()

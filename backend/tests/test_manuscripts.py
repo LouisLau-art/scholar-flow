@@ -39,6 +39,15 @@ def generate_test_token(user_id: str = "00000000-0000-0000-0000-000000000000"):
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
+
+def required_submission_files(user_id: str):
+    return {
+        "file_path": f"{user_id}/paper.pdf",
+        "manuscript_word_path": f"{user_id}/word-manuscripts/paper.docx",
+        "manuscript_word_filename": "paper.docx",
+        "manuscript_word_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+
 @pytest.mark.asyncio
 async def test_get_manuscripts_empty(client: AsyncClient, auth_token: str):
     """验证列表接口返回成功"""
@@ -76,12 +85,14 @@ async def test_create_manuscript_success(client: AsyncClient):
         "updated_at": "2026-01-28T00:00:00.000000+00:00"
     }
     mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
 
     # Generate valid JWT token
     mock_token = generate_test_token()
 
     with patch("app.lib.api_client.supabase", mock), \
-         patch("app.api.v1.manuscripts.supabase", mock):
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
         response = await client.post(
             "/api/v1/manuscripts",
             json={
@@ -89,7 +100,8 @@ async def test_create_manuscript_success(client: AsyncClient):
                 "abstract": "This is a sufficiently long abstract content for validation.",
                 "dataset_url": "https://example.com/dataset",
                 "source_code_url": "https://github.com/example/repo",
-                "author_id": "00000000-0000-0000-0000-000000000000"
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
@@ -144,18 +156,21 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
         "updated_at": "2026-01-28T00:00:00.000000+00:00"
     }
     mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
 
     # Generate valid JWT token for token_user_id
     mock_token = generate_test_token(user_id=token_user_id)
 
     with patch("app.lib.api_client.supabase", mock), \
-         patch("app.api.v1.manuscripts.supabase", mock):
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
         response = await client.post(
             "/api/v1/manuscripts",
             json={
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
-                "author_id": provided_author_id
+                "author_id": provided_author_id,
+                **required_submission_files(token_user_id),
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
@@ -201,6 +216,7 @@ async def test_create_manuscript_with_journal_binding(client: AsyncClient):
                 "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": token_user_id,
                 "journal_id": journal_id,
+                **required_submission_files(token_user_id),
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
@@ -228,6 +244,7 @@ async def test_create_manuscript_rejects_invalid_journal_id(client: AsyncClient)
                 "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": token_user_id,
                 "journal_id": str(uuid.uuid4()),
+                **required_submission_files(token_user_id),
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
@@ -238,7 +255,7 @@ async def test_create_manuscript_rejects_invalid_journal_id(client: AsyncClient)
 
 @pytest.mark.asyncio
 async def test_create_manuscript_with_cover_letter_persists_metadata(client: AsyncClient):
-    """验证作者提交 cover letter 后会写入 manuscript_files 元数据"""
+    """验证作者提交 Word 主稿 + cover letter 时会写入 manuscript_files 元数据"""
     token_user_id = "11111111-1111-1111-1111-111111111111"
     manuscript_id = str(uuid.uuid4())
     mock_data = {
@@ -263,6 +280,7 @@ async def test_create_manuscript_with_cover_letter_persists_metadata(client: Asy
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": token_user_id,
+                **required_submission_files(token_user_id),
                 "cover_letter_path": f"{token_user_id}/cover-letters/test_cover.docx",
                 "cover_letter_filename": "test_cover.docx",
                 "cover_letter_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -272,12 +290,17 @@ async def test_create_manuscript_with_cover_letter_persists_metadata(client: Asy
 
     assert response.status_code == 200
     insert_payload = mock.insert.call_args[0][0]
-    upsert_payload = admin_mock.upsert.call_args[0][0]
-    assert upsert_payload["manuscript_id"] == insert_payload["id"]
-    assert upsert_payload["file_type"] == "cover_letter"
-    assert upsert_payload["bucket"] == "manuscripts"
-    assert upsert_payload["path"].endswith("test_cover.docx")
-    assert upsert_payload["uploaded_by"] == token_user_id
+    upsert_payloads = [call.args[0] for call in admin_mock.upsert.call_args_list]
+    assert len(upsert_payloads) == 2
+    word_payload = next(item for item in upsert_payloads if item["file_type"] == "manuscript")
+    cover_payload = next(item for item in upsert_payloads if item["file_type"] == "cover_letter")
+    assert word_payload["manuscript_id"] == insert_payload["id"]
+    assert word_payload["path"].endswith("paper.docx")
+    assert word_payload["uploaded_by"] == token_user_id
+    assert cover_payload["manuscript_id"] == insert_payload["id"]
+    assert cover_payload["bucket"] == "manuscripts"
+    assert cover_payload["path"].endswith("test_cover.docx")
+    assert cover_payload["uploaded_by"] == token_user_id
 
 
 @pytest.mark.asyncio
@@ -295,6 +318,7 @@ async def test_create_manuscript_rejects_cover_letter_outside_user_scope(client:
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
                 "author_id": token_user_id,
+                **required_submission_files(token_user_id),
                 "cover_letter_path": "someone-else/cover-letters/test_cover.docx",
             },
             headers={"Authorization": f"Bearer {mock_token}"}
@@ -303,6 +327,30 @@ async def test_create_manuscript_rejects_cover_letter_outside_user_scope(client:
     assert response.status_code == 422
     payload = response.json()
     assert "cover_letter_path" in str(payload.get("detail", ""))
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_rejects_missing_word_manuscript(client: AsyncClient):
+    """验证 Word 主稿缺失时返回 422"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    mock = get_full_mock([])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Auth Bound Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "author_id": token_user_id,
+                "file_path": f"{token_user_id}/paper.pdf",
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
+    assert "manuscript_word_path" in str(response.json().get("detail", ""))
 
 @pytest.mark.asyncio
 async def test_get_manuscripts_list(client: AsyncClient, auth_token: str):
@@ -337,14 +385,17 @@ async def test_route_path_matching(client: AsyncClient):
     # 测试 POST 路由（使用相同的路径）
     mock_data = [{"id": str(uuid.uuid4()), "title": "Test"}]
     mock = get_full_mock(mock_data)
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
     with patch("app.lib.api_client.supabase", mock), \
-         patch("app.api.v1.manuscripts.supabase", mock):
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
         post_response = await client.post(
             "/api/v1/manuscripts",
             json={
                 "title": "Valid Title",
                 "abstract": "This is a sufficiently long abstract content for validation.",
-                "author_id": "00000000-0000-0000-0000-000000000000"
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
