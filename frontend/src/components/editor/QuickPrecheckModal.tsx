@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { EditorApi } from '@/services/editorApi'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import { withPromiseTimeout } from '@/lib/promise-timeout'
 
 export type QuickPrecheckDecision = 'approve' | 'revision'
 
@@ -51,11 +52,16 @@ export function QuickPrecheckModal({
   const [decision, setDecision] = useState<QuickPrecheckDecision>('approve')
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
+  const SUBMIT_TIMEOUT_MS = 20_000
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setSaving(false)
+      return
+    }
     setDecision('approve')
     setComment('')
+    setSaving(false)
   }, [open])
 
   const needsComment = decision === 'revision'
@@ -65,13 +71,18 @@ export function QuickPrecheckModal({
   }, [needsComment, comment])
 
   async function submit() {
+    if (saving) return
     const toastId = toast.loading('Saving...')
     try {
       setSaving(true)
-      const res = await EditorApi.quickPrecheck(manuscriptId, {
-        decision,
-        comment: comment.trim() || undefined,
-      })
+      const res = await withPromiseTimeout(
+        EditorApi.quickPrecheck(manuscriptId, {
+          decision,
+          comment: comment.trim() || undefined,
+        }),
+        SUBMIT_TIMEOUT_MS,
+        'Quick pre-check request timed out. Please retry.',
+      )
       if (!res?.success) {
         const detail = readDetail(res?.detail)
         throw new Error(normalizeQuickPrecheckError(detail || res?.message))
@@ -89,7 +100,13 @@ export function QuickPrecheckModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && saving) return
+        onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Quick Pre-check</DialogTitle>
@@ -124,7 +141,7 @@ export function QuickPrecheckModal({
 
           <div className="space-y-2">
             <Label className="text-sm">
-              Comment {needsComment ? <span className="text-red-600">*</span> : <span className="text-muted-foreground">(optional)</span>}
+              Comment {needsComment ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(optional)</span>}
             </Label>
             <Textarea
               placeholder={needsComment ? 'Required for revision…' : 'Optional note…'}

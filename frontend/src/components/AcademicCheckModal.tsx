@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { editorService } from '../services/editorService'
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { UI_COPY } from '@/lib/ui-copy'
+import { withPromiseTimeout } from '@/lib/promise-timeout'
 
 interface AcademicCheckModalProps {
   isOpen: boolean
@@ -26,16 +27,29 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
   const [comment, setComment] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string>('')
+  const SUBMIT_TIMEOUT_MS = 20_000
+
+  useEffect(() => {
+    if (!isOpen) return
+    setDecision('')
+    setComment('')
+    setError('')
+    setIsSubmitting(false)
+  }, [isOpen])
 
   const handleSubmit = async () => {
-    if (!decision) return
+    if (!decision || isSubmitting) return
     setIsSubmitting(true)
     setError('')
     try {
-      await editorService.submitAcademicCheck(
-        manuscriptId,
-        decision as 'review' | 'decision_phase',
-        comment || undefined
+      await withPromiseTimeout(
+        editorService.submitAcademicCheck(
+          manuscriptId,
+          decision as 'review' | 'decision_phase',
+          comment || undefined,
+        ),
+        SUBMIT_TIMEOUT_MS,
+        'Submit check request timed out. Please retry.',
       )
       onSuccess()
       onClose()
@@ -47,7 +61,12 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !isSubmitting) onClose()
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Academic Pre-check Decision</DialogTitle>
@@ -81,7 +100,7 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
               placeholder="Add context for review/decision route..."
               className="min-h-[96px]"
             />
-            {error ? <div className="text-xs text-red-600">{error}</div> : null}
+            {error ? <div className="text-xs text-destructive">{error}</div> : null}
           </div>
         </div>
 
