@@ -311,11 +311,8 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
-        </section>
-
-        <section className="relative z-10 -mt-2">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="relative z-10 mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+            <div className="grid gap-3 sm:grid-cols-3">
               {heroStats.map((item) => (
                 <div key={item.label} className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
                   <p className={cn(playfair.className, 'text-2xl font-semibold text-foreground')}>{item.value}</p>
