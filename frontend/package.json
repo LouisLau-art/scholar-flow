@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "audit:tailwind-readiness": "bash scripts/tailwind-readiness-audit.sh",
     "audit:ui-guidelines": "bash scripts/ui-guidelines-audit.sh",
     "audit:route-budgets": "node scripts/check-route-budgets.mjs",
