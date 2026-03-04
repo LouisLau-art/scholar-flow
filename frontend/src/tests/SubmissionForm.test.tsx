@@ -82,6 +82,11 @@ const JOURNAL_LIST_SUCCESS = {
   ],
 }
 
+function acceptRequiredDeclarations() {
+  fireEvent.click(screen.getByTestId('submission-policy-consent'))
+  fireEvent.click(screen.getByTestId('submission-ethics-consent'))
+}
+
 describe('SubmissionForm Component', () => {
   /**
    * 验证投稿表单核心交互
@@ -234,6 +239,79 @@ describe('SubmissionForm Component', () => {
     })
   })
 
+  it('keeps finalize disabled until Word manuscript and cover letter are uploaded', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const pdfInput = screen.getByTestId('submission-file') as HTMLInputElement
+    const pdfFile = new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })
+    fireEvent.change(pdfInput, { target: { files: [pdfFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('submission-finalize')).toBeDisabled()
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    const wordFile = new File(['word'], 'paper.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(wordInput, { target: { files: [wordFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('submission-finalize')).toBeDisabled()
+
+    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
+    const coverFile = new File(['cover'], 'cover.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(coverInput, { target: { files: [coverFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('submission-finalize')).toBeDisabled()
+
+    acceptRequiredDeclarations()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
+    })
+  })
+
   it('submits manuscript when authenticated', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
@@ -283,6 +361,28 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    const wordFile = new File(['docx'], 'paper.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(wordInput, { target: { files: [wordFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
+    const coverFile = new File(['cover'], 'cover.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(coverInput, { target: { files: [coverFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    acceptRequiredDeclarations()
+
     await waitFor(() => {
       expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
     })
@@ -302,7 +402,7 @@ describe('SubmissionForm Component', () => {
     })
   })
 
-  it('includes cover letter metadata in submission payload when uploaded', async () => {
+  it('includes word manuscript and cover letter metadata in submission payload', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
       access_token: 'token',
@@ -357,12 +457,29 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
 
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    const wordFile = new File(['word'], 'paper.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(wordInput, { target: { files: [wordFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    acceptRequiredDeclarations()
+
     fireEvent.click(screen.getByTestId('submission-finalize'))
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find((call) => call[0] === '/api/v1/manuscripts')
       expect(createCall).toBeTruthy()
       const body = JSON.parse(createCall?.[1]?.body as string)
+      expect(body.manuscript_word_path).toContain('u1/word-manuscripts/')
+      expect(body.manuscript_word_filename).toBe('paper.docx')
+      expect(body.manuscript_word_content_type).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
       expect(body.cover_letter_path).toContain('u1/cover-letters/')
       expect(body.cover_letter_filename).toBe('cover.docx')
       expect(body.cover_letter_content_type).toBe(
@@ -370,7 +487,7 @@ describe('SubmissionForm Component', () => {
       )
     })
 
-    expect(storageUploadMock).toHaveBeenCalledTimes(2)
+    expect(storageUploadMock).toHaveBeenCalledTimes(3)
   })
 
   it('shows error when submission fails', async () => {
@@ -417,6 +534,28 @@ describe('SubmissionForm Component', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    const wordFile = new File(['docx'], 'paper.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(wordInput, { target: { files: [wordFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
+    const coverFile = new File(['cover'], 'cover.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(coverInput, { target: { files: [coverFile] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    acceptRequiredDeclarations()
 
     await waitFor(() => {
       expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()

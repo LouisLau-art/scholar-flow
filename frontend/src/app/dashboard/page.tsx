@@ -27,7 +27,7 @@ async function fetchJsonWithToken(url: string, token: string): Promise<{ ok: boo
 }
 
 async function getDashboardInitialData(): Promise<DashboardInitialData> {
-  const token = getServerAccessToken()
+  const token = await getServerAccessToken()
   if (!token) {
     return {
       initialStats: null,

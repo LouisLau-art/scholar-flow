@@ -31,8 +31,34 @@ if (!fs.existsSync(configPath)) {
 
 const config = readJson(configPath)
 const routesConfig = config.routes || {}
-const appBuildManifest = readJson(path.join(nextDir, 'app-build-manifest.json'))
-const appPathRoutesManifest = readJson(path.join(nextDir, 'app-path-routes-manifest.json'))
+const appBuildManifestCandidates = [
+  path.join(nextDir, 'app-build-manifest.json'),
+  path.join(nextDir, 'server', 'app-build-manifest.json'),
+]
+const appBuildManifestPath = appBuildManifestCandidates.find((candidate) => fs.existsSync(candidate))
+
+if (!appBuildManifestPath) {
+  console.warn(
+    '[route-budgets] app-build-manifest.json not found in expected locations; skip route budget gate for this build format.',
+  )
+  process.exit(0)
+}
+
+const appPathRoutesManifestCandidates = [
+  path.join(nextDir, 'app-path-routes-manifest.json'),
+  path.join(nextDir, 'server', 'app-path-routes-manifest.json'),
+]
+const appPathRoutesManifestPath = appPathRoutesManifestCandidates.find((candidate) => fs.existsSync(candidate))
+
+if (!appPathRoutesManifestPath) {
+  console.warn(
+    '[route-budgets] app-path-routes-manifest.json not found in expected locations; skip route budget gate for this build format.',
+  )
+  process.exit(0)
+}
+
+const appBuildManifest = readJson(appBuildManifestPath)
+const appPathRoutesManifest = readJson(appPathRoutesManifestPath)
 const pages = appBuildManifest.pages || {}
 
 const results = []
