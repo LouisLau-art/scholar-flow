@@ -1,5 +1,6 @@
-import { Upload, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
+import { InlineNotice } from '@/components/ui/inline-notice'
 import { Input } from '@/components/ui/input'
 
 type SubmissionFileUploadCardProps = {
@@ -10,26 +11,31 @@ type SubmissionFileUploadCardProps = {
 
 export function SubmissionFileUploadCard(props: SubmissionFileUploadCardProps) {
   return (
-    <div
-      className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
-        props.fileName ? 'border-primary bg-primary/10' : 'border-border/80 hover:border-primary'
-      }`}
-    >
-      <div className="mb-3 text-sm font-semibold text-foreground">Upload Manuscript (PDF) (Required)</div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <label htmlFor="submission-pdf-file" className="mb-2 block text-sm font-semibold text-foreground">
+        Upload Manuscript (PDF) (Required)
+      </label>
       <Input
+        id="submission-pdf-file"
         type="file"
         accept=".pdf,application/pdf"
         onChange={props.onFileChange}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        className="block w-full rounded-md border border-border/80 bg-card px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1 file:text-sm file:font-medium file:text-foreground hover:file:bg-muted/70"
         disabled={props.isUploading}
         data-testid="submission-file"
       />
-      <Upload className={`mb-4 h-12 w-12 ${props.fileName ? 'text-primary' : 'text-muted-foreground'}`} />
-      <p className="text-lg font-medium text-foreground">
-        {props.fileName || 'Drag and drop your PDF here'}
-      </p>
-      <p className="mt-2 text-xs text-muted-foreground">This PDF is used for metadata extraction and reviewer/editor preview.</p>
-      {props.isUploading ? <Loader2 className="mt-2 h-6 w-6 animate-spin text-primary" /> : null}
+      <div className="mt-2 text-xs text-muted-foreground">Accepted format: `.pdf`.</div>
+      {props.isUploading ? (
+        <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Uploading manuscript PDF…
+        </div>
+      ) : null}
+      {!props.isUploading && props.fileName ? (
+        <InlineNotice tone="info" size="sm" className="mt-2">
+          Manuscript PDF uploaded: {props.fileName}
+        </InlineNotice>
+      ) : null}
     </div>
   )
 }
