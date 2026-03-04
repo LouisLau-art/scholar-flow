@@ -55,8 +55,8 @@ function extractUser(payload: unknown): SessionUser | null {
   }
 }
 
-function getSupabaseCookiePayloads(): unknown[] {
-  const store = cookies()
+async function getSupabaseCookiePayloads(): Promise<unknown[]> {
+  const store = await cookies()
   const sessionCookies = store
     .getAll()
     .filter((entry) => entry.name.startsWith('sb-') && entry.name.endsWith('-auth-token'))
@@ -70,8 +70,8 @@ function getSupabaseCookiePayloads(): unknown[] {
   return payloads
 }
 
-export function getServerAccessToken(): string | null {
-  const payloads = getSupabaseCookiePayloads()
+export async function getServerAccessToken(): Promise<string | null> {
+  const payloads = await getSupabaseCookiePayloads()
   for (const payload of payloads) {
     const token = extractAccessToken(payload)
     if (token) return token
@@ -79,8 +79,8 @@ export function getServerAccessToken(): string | null {
   return null
 }
 
-export function getServerSessionUser(): SessionUser | null {
-  const payloads = getSupabaseCookiePayloads()
+export async function getServerSessionUser(): Promise<SessionUser | null> {
+  const payloads = await getSupabaseCookiePayloads()
   for (const payload of payloads) {
     const user = extractUser(payload)
     if (user) return user
