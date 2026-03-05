@@ -1,17 +1,9 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { UserRole } from '@/types/user';
 import { Loader2, AlertTriangle, Mail, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,20 +30,17 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
     onClose();
   }, [onClose]);
 
-  const handleDialogOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) handleClose();
-    },
-    [handleClose]
-  );
-
-  const handleDialogDismiss = useCallback(
-    (event: { preventDefault: () => void }) => {
-      event.preventDefault();
-      handleClose();
-    },
-    [handleClose]
-  );
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleClose, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,19 +77,28 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
-      <DialogContent
-        className="max-w-md p-0 overflow-hidden"
-        showCloseButton={false}
-        onEscapeKeyDown={handleDialogDismiss}
-        onPointerDownOutside={handleDialogDismiss}
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Dismiss modal"
+        className="absolute inset-0 bg-black/70"
+        onClick={handleClose}
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Invite New Member"
+        className="relative z-[81] w-full max-w-md overflow-hidden rounded-lg border border-border bg-background shadow-lg"
       >
-        <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4">
-          <DialogTitle>Invite New Member</DialogTitle>
-          <DialogDescription>
+        <div className="border-b border-border bg-muted/50 px-6 py-4">
+          <h2 className="text-lg font-semibold leading-none tracking-tight">Invite New Member</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Create account and send login credentials to the user.
-          </DialogDescription>
+          </p>
           <Button
             type="button"
             variant="ghost"
@@ -111,7 +109,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
           >
             <X className="h-4 w-4" />
           </Button>
-        </DialogHeader>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-6">
           <div className="bg-primary/5 p-3 rounded-md border border-primary/10 mb-4 flex items-start gap-3">
@@ -177,7 +175,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             </div>
           )}
 
-          <DialogFooter className="pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-2">
             <Button
               type="button"
               variant="outline"
@@ -192,9 +190,9 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
               Send Invitation
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
