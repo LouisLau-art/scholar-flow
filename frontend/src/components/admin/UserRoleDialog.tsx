@@ -149,8 +149,8 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : null)}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit User Roles</DialogTitle>
           <DialogDescription>
@@ -160,7 +160,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="rounded-md border bg-muted/40 p-3">
-            <p className="text-sm text-foreground">
+            <p className="break-words text-sm text-foreground">
               <span className="font-semibold">User:</span> {user.full_name} ({user.email})
             </p>
           </div>
@@ -175,7 +175,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
                     key={role.value}
                     type="button"
                     variant={checked ? 'default' : 'outline'}
-                    className="h-auto justify-start px-3 py-2 text-left"
+                    className="h-auto items-start justify-start whitespace-normal break-words px-3 py-2 text-left"
                     onClick={() => toggleRole(role.value)}
                   >
                     <span className="block">
@@ -209,7 +209,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
                       selectedJournalIds.map((id) => {
                         const journal = journals.find((item) => item.id === id)
                         return (
-                          <Badge key={id} variant="secondary">
+                          <Badge key={id} variant="secondary" className="max-w-full whitespace-normal break-all">
                             {journal?.title || id}
                           </Badge>
                         )
@@ -225,7 +225,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
                           type="button"
                           size="sm"
                           variant={checked ? 'default' : 'outline'}
-                          className="justify-start"
+                          className="h-auto justify-start whitespace-normal break-words text-left"
                           onClick={() => toggleJournal(journal.id)}
                         >
                           {journal.title}
