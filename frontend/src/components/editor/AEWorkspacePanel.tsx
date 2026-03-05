@@ -232,7 +232,7 @@ export function AEWorkspacePanel() {
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
 
-  const dialogOpen = isSubmitDialogOpen
+  const dialogOpen = isSubmitDialogOpen && Boolean(activeMs?.id)
   const dialogManuscript = activeMs
 
   return (
@@ -363,12 +363,11 @@ export function AEWorkspacePanel() {
       <SafeDialog open={dialogOpen} onClose={closeDialog} closeDisabled={submitting}>
         <SafeDialogContent
           aria-label="Submit Technical Check"
-          aria-labelledby="ae-submit-check-title"
           data-testid="ae-submit-check-modal-v2"
           closeDisabled={submitting}
         >
           <DialogHeader className="pr-10 text-left">
-            <DialogTitle id="ae-submit-check-title">Submit Technical Check</DialogTitle>
+            <DialogTitle>Submit Technical Check</DialogTitle>
             <DialogDescription>
               稿件：{dialogManuscript?.title?.trim() || 'Untitled Manuscript'}。选择下一步：可直接发起外审、可选送 Academic
               预审，或技术退回作者。
