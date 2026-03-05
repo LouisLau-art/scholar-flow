@@ -100,13 +100,14 @@ export function AEWorkspacePanel() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
+  const [dialogSnapshot, setDialogSnapshot] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
-  const submitCheckGuard = useDialogReopenGuard(300)
+  const submitCheckGuard = useDialogReopenGuard(1200)
 
   useEffect(() => {
     manuscriptsRef.current = manuscripts
@@ -160,6 +161,15 @@ export function AEWorkspacePanel() {
     }
   }, [])
 
+  useEffect(() => {
+    const isOpen = Boolean(activeMs?.id)
+    if (isOpen) return
+    const timer = window.setTimeout(() => {
+      setDialogSnapshot(null)
+    }, 320)
+    return () => window.clearTimeout(timer)
+  }, [activeMs?.id])
+
   const resetDialogState = useCallback(() => {
     setTechnicalDecision('pass')
     setComment('')
@@ -175,6 +185,7 @@ export function AEWorkspacePanel() {
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     if (!submitCheckGuard.canOpen()) return
+    setDialogSnapshot(manuscript)
     setActiveMs(manuscript)
     resetDialogState()
   }, [resetDialogState, submitCheckGuard])
@@ -229,6 +240,7 @@ export function AEWorkspacePanel() {
   }, [manuscripts])
 
   const dialogOpen = Boolean(activeMs?.id)
+  const dialogManuscript = activeMs || dialogSnapshot
 
   return (
     <>
@@ -365,7 +377,7 @@ export function AEWorkspacePanel() {
           <DialogHeader className="pr-10 text-left">
             <DialogTitle id="ae-submit-check-title">Submit Technical Check</DialogTitle>
             <DialogDescription>
-              稿件：{activeMs?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
+              稿件：{dialogManuscript?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
             </DialogDescription>
           </DialogHeader>
 

@@ -46,7 +46,7 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
       fireEvent.click(submitCheckBtn)
       expect(screen.queryByText('Submit Technical Check')).not.toBeInTheDocument()
 
-      now += 301
+      now += 1201
       fireEvent.click(submitCheckBtn)
       expect(await screen.findByText('Submit Technical Check')).toBeInTheDocument()
     } finally {

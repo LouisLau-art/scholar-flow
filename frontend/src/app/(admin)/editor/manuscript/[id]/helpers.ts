@@ -76,8 +76,10 @@ export type AuthorResponseHistoryItem = {
 
 export type ReviewerInviteSummaryState = 'blank' | 'invited' | 'agree' | 'decline'
 
+type ReviewerInviteSummaryItem = NonNullable<ManuscriptDetail['reviewer_invites']>[number]
+
 export function resolveReviewerInviteSummaryState(
-  invite: ManuscriptDetail['reviewer_invites'] extends Array<infer T> ? T : never
+  invite: ReviewerInviteSummaryItem | null | undefined
 ): ReviewerInviteSummaryState {
   const statusRaw = String(invite?.status || '').trim().toLowerCase()
   const hasInvitedEvidence = Boolean(invite?.invited_at || invite?.opened_at)
