@@ -99,8 +99,8 @@ export function AEWorkspacePanel() {
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
-  const [dialogSnapshot, setDialogSnapshot] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
@@ -161,15 +161,6 @@ export function AEWorkspacePanel() {
     }
   }, [])
 
-  useEffect(() => {
-    const isOpen = Boolean(activeMs?.id)
-    if (isOpen) return
-    const timer = window.setTimeout(() => {
-      setDialogSnapshot(null)
-    }, 320)
-    return () => window.clearTimeout(timer)
-  }, [activeMs?.id])
-
   const resetDialogState = useCallback(() => {
     setTechnicalDecision('pass')
     setComment('')
@@ -179,16 +170,18 @@ export function AEWorkspacePanel() {
   const closeDialog = useCallback(() => {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
     submitCheckGuard.markClosed()
+    setIsSubmitDialogOpen(false)
     setActiveMs(null)
     resetDialogState()
   }, [resetDialogState, submitCheckGuard])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
+    if (submitting || isSubmitDialogOpen) return
     if (!submitCheckGuard.canOpen()) return
-    setDialogSnapshot(manuscript)
     setActiveMs(manuscript)
+    setIsSubmitDialogOpen(true)
     resetDialogState()
-  }, [resetDialogState, submitCheckGuard])
+  }, [isSubmitDialogOpen, resetDialogState, submitCheckGuard, submitting])
 
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -239,8 +232,8 @@ export function AEWorkspacePanel() {
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
 
-  const dialogOpen = Boolean(activeMs?.id)
-  const dialogManuscript = activeMs || dialogSnapshot
+  const dialogOpen = isSubmitDialogOpen
+  const dialogManuscript = activeMs
 
   return (
     <>
@@ -377,7 +370,8 @@ export function AEWorkspacePanel() {
           <DialogHeader className="pr-10 text-left">
             <DialogTitle id="ae-submit-check-title">Submit Technical Check</DialogTitle>
             <DialogDescription>
-              稿件：{dialogManuscript?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
+              稿件：{dialogManuscript?.title?.trim() || 'Untitled Manuscript'}。选择下一步：可直接发起外审、可选送 Academic
+              预审，或技术退回作者。
             </DialogDescription>
           </DialogHeader>
 
