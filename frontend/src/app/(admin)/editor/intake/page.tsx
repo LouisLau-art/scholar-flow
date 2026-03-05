@@ -405,7 +405,12 @@ export default function MEIntakePage() {
             />
           )}
 
-          <Dialog open={returnModalOpen} onOpenChange={(open) => (!open ? closeReturnModal() : setReturnModalOpen(true))}>
+          <Dialog
+            open={returnModalOpen}
+            onOpenChange={(open) => {
+              if (!open) closeReturnModal()
+            }}
+          >
             <DialogContent className="max-w-xl">
               <DialogHeader>
                 <DialogTitle>技术退回作者</DialogTitle>
