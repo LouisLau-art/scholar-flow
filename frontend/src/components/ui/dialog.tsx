@@ -10,17 +10,7 @@ const Dialog = DialogPrimitive.Root
 
 const DialogTrigger = DialogPrimitive.Trigger
 
-const DialogPortal = ({
-  ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) => {
-  const rootContainer =
-    typeof document !== "undefined"
-      ? document.getElementById("__next") ?? undefined
-      : undefined
-
-  return <DialogPrimitive.Portal {...props} container={props.container ?? rootContainer} />
-}
-DialogPortal.displayName = DialogPrimitive.Portal.displayName
+const DialogPortal = DialogPrimitive.Portal
 
 const DialogClose = DialogPrimitive.Close
 
@@ -55,7 +45,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {showCloseButton ? (
-        <DialogPrimitive.Close className="fixed right-4 top-4 z-[60] rounded-sm bg-background/80 opacity-80 backdrop-blur ring-offset-background transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground sm:right-6 sm:top-6">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-80 ring-offset-background transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
