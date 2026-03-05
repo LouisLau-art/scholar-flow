@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "audit:tailwind-readiness": "bash scripts/tailwind-readiness-audit.sh",
-    "audit:dialog-onopenchange": "bash scripts/dialog-open-change-audit.sh",
+    "audit:dialog-onopenchange": "node scripts/dialog-open-change-audit.mjs",
     "audit:ui-guidelines": "bash scripts/ui-guidelines-audit.sh",
     "audit:route-budgets": "node scripts/check-route-budgets.mjs",
     "test": "vitest",
