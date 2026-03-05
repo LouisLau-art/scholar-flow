@@ -18,6 +18,20 @@ describe('CreateUserDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('点击右上角 Close 可关闭弹窗', () => {
+    const onClose = vi.fn()
+    render(
+      <CreateUserDialog
+        isOpen
+        onClose={onClose}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('提交进行中仍允许关闭弹窗', async () => {
     const onClose = vi.fn()
     const onConfirm = vi.fn(

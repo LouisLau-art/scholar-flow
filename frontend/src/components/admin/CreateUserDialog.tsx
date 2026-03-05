@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { UserRole } from '@/types/user';
-import { Loader2, AlertTriangle, Mail } from 'lucide-react';
+import { Loader2, AlertTriangle, Mail, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -37,6 +37,21 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
     setError(null);
     onClose();
   }, [onClose]);
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) handleClose();
+    },
+    [handleClose]
+  );
+
+  const handleDialogDismiss = useCallback(
+    (event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      handleClose();
+    },
+    [handleClose]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,13 +89,28 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
+      <DialogContent
+        className="max-w-md p-0 overflow-hidden"
+        showCloseButton={false}
+        onEscapeKeyDown={handleDialogDismiss}
+        onPointerDownOutside={handleDialogDismiss}
+      >
         <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4">
           <DialogTitle>Invite New Member</DialogTitle>
           <DialogDescription>
             Create account and send login credentials to the user.
           </DialogDescription>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
+            aria-label="Close"
+            onClick={handleClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-6">
