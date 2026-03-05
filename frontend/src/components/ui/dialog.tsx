@@ -10,7 +10,17 @@ const Dialog = DialogPrimitive.Root
 
 const DialogTrigger = DialogPrimitive.Trigger
 
-const DialogPortal = DialogPrimitive.Portal
+const DialogPortal = ({
+  ...props
+}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) => {
+  const rootContainer =
+    typeof document !== "undefined"
+      ? document.getElementById("__next") ?? undefined
+      : undefined
+
+  return <DialogPrimitive.Portal {...props} container={props.container ?? rootContainer} />
+}
+DialogPortal.displayName = DialogPrimitive.Portal.displayName
 
 const DialogClose = DialogPrimitive.Close
 
