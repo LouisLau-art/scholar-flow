@@ -40,6 +40,7 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
       await waitFor(() => {
         expect(screen.queryByText('Submit Technical Check')).not.toBeInTheDocument()
+        expect(screen.queryByText(/稿件：—/)).not.toBeInTheDocument()
       })
 
       fireEvent.click(submitCheckBtn)
@@ -51,5 +52,30 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
     } finally {
       dateNowSpy.mockRestore()
     }
+  })
+
+  it('closes with top-right close button without leaving empty manuscript context visible', async () => {
+    ;(editorService.getAEWorkspace as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'ms-technical-2',
+        title: 'Behavioral Economics and Digital Markets',
+        status: 'pre_check',
+        pre_check_status: 'technical',
+        updated_at: '2026-03-05T00:00:00Z',
+      },
+    ])
+
+    render(<AEWorkspacePanel />)
+
+    const submitCheckBtn = await screen.findByRole('button', { name: 'Submit Check' })
+    fireEvent.click(submitCheckBtn)
+    expect(await screen.findByText('Submit Technical Check')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Submit Technical Check')).not.toBeInTheDocument()
+      expect(screen.queryByText(/稿件：—/)).not.toBeInTheDocument()
+    })
   })
 })

@@ -162,24 +162,31 @@ export function AEWorkspacePanel() {
     }
   }, [])
 
-  const resetDialog = useCallback(() => {
-    // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
-    reopenGuardUntilRef.current = Date.now() + 300
+  const resetDialogState = useCallback(() => {
     setTechnicalDecision('pass')
     setComment('')
     setError('')
-    setActiveMs(null)
+  }, [])
+
+  const closeDialog = useCallback(() => {
+    // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
+    reopenGuardUntilRef.current = Date.now() + 300
     setDialogOpen(false)
   }, [])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     if (Date.now() < reopenGuardUntilRef.current) return
-    setTechnicalDecision('pass')
     setActiveMs(manuscript)
-    setComment('')
-    setError('')
+    resetDialogState()
     setDialogOpen(true)
-  }, [])
+  }, [resetDialogState])
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      setActiveMs(null)
+      resetDialogState()
+    }
+  }, [dialogOpen, resetDialogState])
 
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -194,14 +201,14 @@ export function AEWorkspacePanel() {
         decision: technicalDecision,
         comment: comment.trim() || undefined,
       })
-      resetDialog()
+      closeDialog()
       await fetchWorkspace({ silent: true, forceRefresh: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : '提交技术审查失败')
     } finally {
       setSubmitting(false)
     }
-  }, [activeMs?.id, comment, fetchWorkspace, resetDialog, technicalDecision])
+  }, [activeMs?.id, closeDialog, comment, fetchWorkspace, technicalDecision])
 
   const groupedSections = useMemo(() => {
     const sorted = [...manuscripts].sort((a, b) => {
@@ -358,8 +365,7 @@ export function AEWorkspacePanel() {
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          if (!open) resetDialog()
-          else setDialogOpen(true)
+          if (!open) closeDialog()
         }}
       >
         <DialogContent>
@@ -404,7 +410,7 @@ export function AEWorkspacePanel() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={resetDialog} disabled={submitting}>
+            <Button variant="outline" onClick={closeDialog} disabled={submitting}>
               Cancel
             </Button>
             <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
