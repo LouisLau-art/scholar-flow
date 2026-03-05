@@ -21,6 +21,9 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitTokenRef = useRef(0);
+  const backdropRef = useRef<HTMLButtonElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const handleClose = useCallback(() => {
     // 允许在提交中主动关闭，避免请求挂起导致弹窗锁死。
@@ -40,6 +43,21 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleClose, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onNativeClose = (event: Event) => {
+      event.preventDefault();
+      handleClose();
+    };
+
+    const closeTargets = [backdropRef.current, closeBtnRef.current, cancelBtnRef.current];
+    closeTargets.forEach((element) => element?.addEventListener('click', onNativeClose));
+
+    return () => {
+      closeTargets.forEach((element) => element?.removeEventListener('click', onNativeClose));
+    };
   }, [handleClose, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,10 +100,10 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button
+        ref={backdropRef}
         type="button"
         aria-label="Dismiss modal"
         className="absolute inset-0 bg-black/70"
-        onClick={handleClose}
       />
 
       <div
@@ -100,12 +118,12 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             Create account and send login credentials to the user.
           </p>
           <Button
+            ref={closeBtnRef}
             type="button"
             variant="ghost"
             size="icon"
             className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
             aria-label="Close"
-            onClick={handleClose}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -177,9 +195,9 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-2">
             <Button
+              ref={cancelBtnRef}
               type="button"
               variant="outline"
-              onClick={handleClose}
             >
               Cancel
             </Button>
