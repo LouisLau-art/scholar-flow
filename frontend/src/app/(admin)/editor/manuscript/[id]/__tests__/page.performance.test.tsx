@@ -111,7 +111,7 @@ describe('Editor detail performance flow', () => {
         user_id: 'u-1',
         roles: ['assistant_editor'],
         normalized_roles: ['assistant_editor'],
-        allowed_actions: ['manuscript:view_detail'],
+        allowed_actions: ['manuscript:view_detail', 'review:view_assignments'],
         journal_scope: null,
       },
     })
@@ -185,5 +185,31 @@ describe('Editor detail performance flow', () => {
     }, { timeout: 4_000 })
 
     expect(screen.queryByTestId('cards-context-retry')).not.toBeInTheDocument()
+  })
+
+  it('auto-retries reviewer feedback when loading times out', async () => {
+    ;(EditorApi.getManuscriptReviews as unknown as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('Reviewer feedback loading timed out.'))
+      .mockResolvedValueOnce({
+        success: true,
+        data: [
+          {
+            id: 'rr-1',
+            reviewer_id: 'r-1',
+            reviewer_name: 'Reviewer A',
+            status: 'completed',
+            score: 4,
+            comments_for_author: 'Looks good',
+            created_at: '2026-02-25T08:00:00Z',
+          },
+        ],
+      })
+
+    render(<EditorManuscriptDetailPage />)
+    await screen.findByText('Performance Manuscript')
+
+    await waitFor(() => {
+      expect(EditorApi.getManuscriptReviews).toHaveBeenCalledTimes(2)
+    }, { timeout: 8_000 })
   })
 })

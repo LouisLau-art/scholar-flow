@@ -54,12 +54,14 @@ const FileHubCard = dynamic(
   { ssr: false }
 )
 
-const REVIEWER_FEEDBACK_TIMEOUT_MS = 10_000
+const REVIEWER_FEEDBACK_TIMEOUT_MS = 25_000
 const CARDS_CONTEXT_TIMEOUT_MS = 35_000
 const DEFERRED_DETAIL_TIMEOUT_MS = 35_000
 const AUTO_RETRY_BASE_DELAY_MS = 1_200
+const REVIEWER_AUTO_RETRY_MAX = 2
 const CARDS_AUTO_RETRY_MAX = 3
 const DEFERRED_AUTO_RETRY_MAX = 3
+const DEFERRED_PREFETCH_DELAY_MS = 900
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -99,6 +101,8 @@ export default function EditorManuscriptDetailPage() {
   const [reviewReports, setReviewReports] = useState<ReviewerFeedbackItem[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+  const reviewsRetryAttemptRef = useRef(0)
+  const reviewsRetryTimerRef = useRef<number | null>(null)
   const reviewCardRef = useRef<HTMLDivElement | null>(null)
   const [reviewsActivated, setReviewsActivated] = useState(false)
   const [reviewsLoadedOnce, setReviewsLoadedOnce] = useState(false)
@@ -198,13 +202,13 @@ export default function EditorManuscriptDetailPage() {
     }
   }, [])
 
-  const loadReviewReports = useCallback(async () => {
+  const loadReviewReports = useCallback(async (force = false) => {
     if (!id) return
     try {
       setReviewsLoading(true)
       setReviewsError(null)
       const reviewRes = await withTimeout(
-        EditorApi.getManuscriptReviews(id),
+        EditorApi.getManuscriptReviews(id, force ? { force: true } : undefined),
         REVIEWER_FEEDBACK_TIMEOUT_MS,
         'Reviewer feedback loading timed out.'
       )
@@ -212,10 +216,25 @@ export default function EditorManuscriptDetailPage() {
         throw new Error(reviewRes?.detail || reviewRes?.message || 'Failed to load reviewer feedback')
       }
       const rows = Array.isArray(reviewRes?.data) ? (reviewRes.data as ReviewerFeedbackItem[]) : []
+      reviewsRetryAttemptRef.current = 0
       setReviewReports(rows)
     } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load reviewer feedback'
+      const isTimeout = String(message).toLowerCase().includes('timed out')
+      if (isTimeout && reviewsRetryAttemptRef.current < REVIEWER_AUTO_RETRY_MAX) {
+        const attempt = reviewsRetryAttemptRef.current
+        reviewsRetryAttemptRef.current += 1
+        if (reviewsRetryTimerRef.current) {
+          window.clearTimeout(reviewsRetryTimerRef.current)
+        }
+        const delay = AUTO_RETRY_BASE_DELAY_MS * 2 ** attempt
+        reviewsRetryTimerRef.current = window.setTimeout(() => {
+          void loadReviewReports(true)
+        }, delay)
+        return
+      }
       setReviewReports([])
-      setReviewsError(e instanceof Error ? e.message : 'Failed to load reviewer feedback')
+      setReviewsError(message)
     } finally {
       setReviewsLoading(false)
     }
@@ -330,6 +349,11 @@ export default function EditorManuscriptDetailPage() {
       }
       const normalizedStatus = normalizeWorkflowStatus(String(detail?.status || ''))
       if (normalizedStatus === 'pre_check') {
+        reviewsRetryAttemptRef.current = 0
+        if (reviewsRetryTimerRef.current) {
+          window.clearTimeout(reviewsRetryTimerRef.current)
+          reviewsRetryTimerRef.current = null
+        }
         setReviewReports([])
         setReviewsError(null)
         setReviewsLoading(false)
@@ -369,6 +393,11 @@ export default function EditorManuscriptDetailPage() {
     setReviewsLoadedOnce(false)
     setCardsActivated(false)
     setDeferredError(null)
+    reviewsRetryAttemptRef.current = 0
+    if (reviewsRetryTimerRef.current) {
+      window.clearTimeout(reviewsRetryTimerRef.current)
+      reviewsRetryTimerRef.current = null
+    }
     cardsRetryAttemptRef.current = 0
     deferredRetryAttemptRef.current = 0
     if (cardsRetryTimerRef.current) {
@@ -385,6 +414,9 @@ export default function EditorManuscriptDetailPage() {
     return () => {
       if (cardsRetryTimerRef.current) {
         window.clearTimeout(cardsRetryTimerRef.current)
+      }
+      if (reviewsRetryTimerRef.current) {
+        window.clearTimeout(reviewsRetryTimerRef.current)
       }
       if (deferredRetryTimerRef.current) {
         window.clearTimeout(deferredRetryTimerRef.current)
@@ -415,7 +447,23 @@ export default function EditorManuscriptDetailPage() {
   }, [canViewReviewerFeedback, ms, reviewsActivated])
 
   useEffect(() => {
+    if (!id) return
+    if (!canViewReviewerFeedback || reviewsActivated) return
+    const normalizedStatus = normalizeWorkflowStatus(String(ms?.status || ''))
+    if (!normalizedStatus || normalizedStatus === 'pre_check') return
+    const timer = window.setTimeout(() => {
+      setReviewsActivated(true)
+    }, DEFERRED_PREFETCH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [canViewReviewerFeedback, id, ms?.status, reviewsActivated])
+
+  useEffect(() => {
     if (canViewReviewerFeedback) return
+    reviewsRetryAttemptRef.current = 0
+    if (reviewsRetryTimerRef.current) {
+      window.clearTimeout(reviewsRetryTimerRef.current)
+      reviewsRetryTimerRef.current = null
+    }
     setReviewsActivated(false)
     setReviewsLoadedOnce(false)
     setReviewReports([])
@@ -462,6 +510,14 @@ export default function EditorManuscriptDetailPage() {
     if (!cardsActivated || !id) return
     void loadCardsContext()
   }, [cardsActivated, id, loadCardsContext])
+
+  useEffect(() => {
+    if (!id || cardsActivated) return
+    const timer = window.setTimeout(() => {
+      setCardsActivated(true)
+    }, DEFERRED_PREFETCH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [cardsActivated, id])
 
   useEffect(() => {
     let mounted = true
@@ -590,9 +646,14 @@ export default function EditorManuscriptDetailPage() {
   }, [])
 
   const handleRetryReviews = useCallback(() => {
+    reviewsRetryAttemptRef.current = 0
+    if (reviewsRetryTimerRef.current) {
+      window.clearTimeout(reviewsRetryTimerRef.current)
+      reviewsRetryTimerRef.current = null
+    }
     setReviewsError(null)
-    setReviewsLoadedOnce(false)
-  }, [])
+    void loadReviewReports(true).finally(() => setReviewsLoadedOnce(true))
+  }, [loadReviewReports])
 
   const handleRetryCardsContext = useCallback(() => {
     cardsRetryAttemptRef.current = 0
