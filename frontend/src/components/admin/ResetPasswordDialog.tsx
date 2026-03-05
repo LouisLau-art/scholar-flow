@@ -39,7 +39,12 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose()
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Reset User Password</DialogTitle>

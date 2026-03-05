@@ -35,6 +35,7 @@ export default function UserManagementPage() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const roleDialogReopenGuardUntilRef = useRef(0);
+  const resetDialogReopenGuardUntilRef = useRef(0);
   
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -145,9 +146,16 @@ export default function UserManagementPage() {
   }, []);
 
   const handleResetPasswordClick = (user: User) => {
+    if (Date.now() < resetDialogReopenGuardUntilRef.current) return;
     setSelectedUser(user);
     setIsResetDialogOpen(true);
   };
+
+  const handleResetDialogClose = useCallback(() => {
+    // 防止关闭瞬间点击穿透到底层 Reset Password 按钮导致弹窗立刻重开。
+    resetDialogReopenGuardUntilRef.current = Date.now() + 300;
+    setIsResetDialogOpen(false);
+  }, []);
 
   const handleRoleUpdate = async (
     userId: string,
@@ -259,7 +267,7 @@ export default function UserManagementPage() {
 
         <ResetPasswordDialog
           isOpen={isResetDialogOpen}
-          onClose={() => setIsResetDialogOpen(false)}
+          onClose={handleResetDialogClose}
           onConfirm={handleResetPassword}
           user={selectedUser}
         />
