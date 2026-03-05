@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck, Loader2 } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, Loader2, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -109,6 +109,7 @@ export function AEWorkspacePanel() {
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
   const closeShieldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const deferredCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const submitCheckGuard = useDialogReopenGuard(1200)
 
   useEffect(() => {
@@ -164,6 +165,10 @@ export function AEWorkspacePanel() {
         clearTimeout(closeShieldTimerRef.current)
         closeShieldTimerRef.current = null
       }
+      if (deferredCloseTimerRef.current) {
+        clearTimeout(deferredCloseTimerRef.current)
+        deferredCloseTimerRef.current = null
+      }
     }
   }, [])
 
@@ -188,10 +193,26 @@ export function AEWorkspacePanel() {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
     submitCheckGuard.markClosed()
     armCloseShield()
-    setIsSubmitDialogOpen(false)
-    setActiveMs(null)
-    resetDialogState()
+    if (deferredCloseTimerRef.current) {
+      clearTimeout(deferredCloseTimerRef.current)
+    }
+    // 把真正的卸载延后到当前点击事件完成后，避免 click-through。
+    deferredCloseTimerRef.current = setTimeout(() => {
+      setIsSubmitDialogOpen(false)
+      setActiveMs(null)
+      resetDialogState()
+      deferredCloseTimerRef.current = null
+    }, 0)
   }, [armCloseShield, resetDialogState, submitCheckGuard])
+
+  const handleCloseButtonClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      closeDialog()
+    },
+    [closeDialog]
+  )
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     if (submitting || isSubmitDialogOpen) return
@@ -383,7 +404,18 @@ export function AEWorkspacePanel() {
           aria-label="Submit Technical Check"
           data-testid="ae-submit-check-modal-v2"
           closeDisabled={submitting}
+          showCloseButton={false}
         >
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute right-4 top-4 rounded-sm bg-background/80 p-1 opacity-80 backdrop-blur transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none sm:right-6 sm:top-6"
+            disabled={submitting}
+            onClick={handleCloseButtonClick}
+          >
+            <X className="h-4 w-4" />
+          </button>
+
           <DialogHeader className="pr-10 text-left">
             <DialogTitle>Submit Technical Check</DialogTitle>
             <DialogDescription>
@@ -427,7 +459,7 @@ export function AEWorkspacePanel() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog} disabled={submitting}>
+            <Button variant="outline" onClick={handleCloseButtonClick} disabled={submitting}>
               Cancel
             </Button>
             <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
