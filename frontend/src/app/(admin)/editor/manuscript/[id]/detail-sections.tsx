@@ -290,9 +290,15 @@ export function LatestAuthorResubmissionCard({
 
 type ReviewerInviteSummaryCardProps = {
   reviewerInvites: ManuscriptDetail['reviewer_invites']
+  deferredLoaded?: boolean
+  deferredLoading?: boolean
 }
 
-export function ReviewerInviteSummaryCard({ reviewerInvites }: ReviewerInviteSummaryCardProps) {
+export function ReviewerInviteSummaryCard({
+  reviewerInvites,
+  deferredLoaded = true,
+  deferredLoading = false,
+}: ReviewerInviteSummaryCardProps) {
   const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
 
   return (
@@ -301,7 +307,12 @@ export function ReviewerInviteSummaryCard({ reviewerInvites }: ReviewerInviteSum
         <CardTitle className="text-base">Review Summary</CardTitle>
       </CardHeader>
       <CardContent>
-        {rows.length === 0 ? (
+        {!deferredLoaded ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {deferredLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Reviewer summary loading...
+          </div>
+        ) : rows.length === 0 ? (
           <div className="text-sm text-muted-foreground">No reviewers assigned yet.</div>
         ) : (
           <div className="overflow-x-auto">

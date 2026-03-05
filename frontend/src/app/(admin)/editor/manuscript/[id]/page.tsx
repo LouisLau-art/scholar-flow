@@ -54,7 +54,10 @@ const FileHubCard = dynamic(
   { ssr: false }
 )
 
-const DEFERRED_BLOCK_TIMEOUT_MS = 8_000
+const REVIEWER_FEEDBACK_TIMEOUT_MS = 10_000
+const CARDS_CONTEXT_TIMEOUT_MS = 20_000
+const DEFERRED_DETAIL_TIMEOUT_MS = 20_000
+const DEFERRED_RETRY_DELAY_MS = 1_500
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -110,6 +113,11 @@ export default function EditorManuscriptDetailPage() {
   const [cardsActivated, setCardsActivated] = useState(false)
   const [cardsLoading, setCardsLoading] = useState(false)
   const [cardsError, setCardsError] = useState<string | null>(null)
+  const [deferredLoading, setDeferredLoading] = useState(false)
+  const cardsRetryDoneRef = useRef(false)
+  const deferredRetryDoneRef = useRef(false)
+  const cardsRetryTimerRef = useRef<number | null>(null)
+  const deferredRetryTimerRef = useRef<number | null>(null)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
   const canViewReviewerFeedback =
     capability.canManageReviewers || capability.canRecordFirstDecision || capability.canSubmitFinalDecision
@@ -194,7 +202,7 @@ export default function EditorManuscriptDetailPage() {
       setReviewsError(null)
       const reviewRes = await withTimeout(
         EditorApi.getManuscriptReviews(id),
-        DEFERRED_BLOCK_TIMEOUT_MS,
+        REVIEWER_FEEDBACK_TIMEOUT_MS,
         'Reviewer feedback loading timed out.'
       )
       if (!reviewRes?.success) {
@@ -218,7 +226,7 @@ export default function EditorManuscriptDetailPage() {
         setCardsError(null)
         const cardsRes = await withTimeout(
           EditorApi.getManuscriptCardsContext(id, { force }),
-          DEFERRED_BLOCK_TIMEOUT_MS,
+          CARDS_CONTEXT_TIMEOUT_MS,
           'Task/queue cards loading timed out.'
         )
         if (!cardsRes?.success || !cardsRes?.data) {
@@ -234,6 +242,17 @@ export default function EditorManuscriptDetailPage() {
         })
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Failed to load cards context'
+        const isTimeout = String(message).toLowerCase().includes('timed out')
+        if (isTimeout && !force && !cardsRetryDoneRef.current) {
+          cardsRetryDoneRef.current = true
+          if (cardsRetryTimerRef.current) {
+            window.clearTimeout(cardsRetryTimerRef.current)
+          }
+          cardsRetryTimerRef.current = window.setTimeout(() => {
+            void loadCardsContext(true)
+          }, DEFERRED_RETRY_DELAY_MS)
+          return
+        }
         setCardsError(message)
       } finally {
         setCardsLoading(false)
@@ -246,9 +265,10 @@ export default function EditorManuscriptDetailPage() {
     async (force = false) => {
       if (!id) return
       try {
+        setDeferredLoading(true)
         const detailRes = await withTimeout(
           EditorApi.getManuscriptDetail(id, { skipCards: true, includeHeavy: true, force }),
-          DEFERRED_BLOCK_TIMEOUT_MS,
+          DEFERRED_DETAIL_TIMEOUT_MS,
           'Deferred detail context loading timed out.'
         )
         if (!detailRes?.success || !detailRes?.data) {
@@ -256,7 +276,21 @@ export default function EditorManuscriptDetailPage() {
         }
         mergeDeferredDetailContext(detailRes.data as ManuscriptDetail)
       } catch (e) {
+        const message = e instanceof Error ? e.message : 'Deferred detail context loading timed out.'
+        const isTimeout = String(message).toLowerCase().includes('timed out')
+        if (isTimeout && !force && !deferredRetryDoneRef.current) {
+          deferredRetryDoneRef.current = true
+          if (deferredRetryTimerRef.current) {
+            window.clearTimeout(deferredRetryTimerRef.current)
+          }
+          deferredRetryTimerRef.current = window.setTimeout(() => {
+            void loadDeferredDetailContext(true)
+          }, DEFERRED_RETRY_DELAY_MS)
+          return
+        }
         console.warn('[EditorDetail] deferred detail context failed', e)
+      } finally {
+        setDeferredLoading(false)
       }
     },
     [id, mergeDeferredDetailContext]
@@ -323,7 +357,28 @@ export default function EditorManuscriptDetailPage() {
     setReviewsActivated(false)
     setReviewsLoadedOnce(false)
     setCardsActivated(false)
+    cardsRetryDoneRef.current = false
+    deferredRetryDoneRef.current = false
+    if (cardsRetryTimerRef.current) {
+      window.clearTimeout(cardsRetryTimerRef.current)
+      cardsRetryTimerRef.current = null
+    }
+    if (deferredRetryTimerRef.current) {
+      window.clearTimeout(deferredRetryTimerRef.current)
+      deferredRetryTimerRef.current = null
+    }
   }, [id])
+
+  useEffect(() => {
+    return () => {
+      if (cardsRetryTimerRef.current) {
+        window.clearTimeout(cardsRetryTimerRef.current)
+      }
+      if (deferredRetryTimerRef.current) {
+        window.clearTimeout(deferredRetryTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!canViewReviewerFeedback) return
@@ -627,7 +682,11 @@ export default function EditorManuscriptDetailPage() {
             historyCount={authorResponseHistory.length}
           />
 
-          <ReviewerInviteSummaryCard reviewerInvites={ms.reviewer_invites || []} />
+          <ReviewerInviteSummaryCard
+            reviewerInvites={ms.reviewer_invites || []}
+            deferredLoaded={Boolean(ms.is_deferred_context_loaded)}
+            deferredLoading={deferredLoading}
+          />
 
           <ReviewerFeedbackSummaryCard
             canViewReviewerFeedback={canViewReviewerFeedback}
