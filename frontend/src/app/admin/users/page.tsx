@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import SiteHeader from '@/components/layout/SiteHeader';
 import { Button } from '@/components/ui/button';
+import { useDialogReopenGuard } from '@/components/ui/safe-dialog';
 
 export default function UserManagementPage() {
   const router = useRouter();
@@ -34,8 +35,9 @@ export default function UserManagementPage() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const roleDialogReopenGuardUntilRef = useRef(0);
-  const resetDialogReopenGuardUntilRef = useRef(0);
+  const roleDialogGuard = useDialogReopenGuard(300);
+  const resetDialogGuard = useDialogReopenGuard(300);
+  const inviteDialogGuard = useDialogReopenGuard(300);
   
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -134,28 +136,38 @@ export default function UserManagementPage() {
   };
 
   const handleEditClick = (user: User) => {
-    if (Date.now() < roleDialogReopenGuardUntilRef.current) return;
+    if (!roleDialogGuard.canOpen()) return;
     setSelectedUser(user);
     setIsRoleDialogOpen(true);
   };
 
   const handleRoleDialogClose = useCallback(() => {
     // 防止关闭瞬间点击穿透到底层 Edit Role 按钮导致弹窗立刻重开。
-    roleDialogReopenGuardUntilRef.current = Date.now() + 300;
+    roleDialogGuard.markClosed();
     setIsRoleDialogOpen(false);
-  }, []);
+  }, [roleDialogGuard]);
 
   const handleResetPasswordClick = (user: User) => {
-    if (Date.now() < resetDialogReopenGuardUntilRef.current) return;
+    if (!resetDialogGuard.canOpen()) return;
     setSelectedUser(user);
     setIsResetDialogOpen(true);
   };
 
   const handleResetDialogClose = useCallback(() => {
     // 防止关闭瞬间点击穿透到底层 Reset Password 按钮导致弹窗立刻重开。
-    resetDialogReopenGuardUntilRef.current = Date.now() + 300;
+    resetDialogGuard.markClosed();
     setIsResetDialogOpen(false);
-  }, []);
+  }, [resetDialogGuard]);
+
+  const handleInviteDialogOpen = useCallback(() => {
+    if (!inviteDialogGuard.canOpen()) return;
+    setIsInviteDialogOpen(true);
+  }, [inviteDialogGuard]);
+
+  const handleInviteDialogClose = useCallback(() => {
+    inviteDialogGuard.markClosed();
+    setIsInviteDialogOpen(false);
+  }, [inviteDialogGuard]);
 
   const handleRoleUpdate = async (
     userId: string,
@@ -227,7 +239,7 @@ export default function UserManagementPage() {
               Manage user accounts, roles, and permissions.
             </p>
           </div>
-          <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <Button onClick={handleInviteDialogOpen}>
             Invite Member
           </Button>
         </div>
@@ -261,7 +273,7 @@ export default function UserManagementPage() {
 
         <CreateUserDialog
           isOpen={isInviteDialogOpen}
-          onClose={() => setIsInviteDialogOpen(false)}
+          onClose={handleInviteDialogClose}
           onConfirm={handleInviteUser}
         />
 

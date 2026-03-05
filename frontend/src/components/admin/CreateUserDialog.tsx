@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { UserRole } from '@/types/user';
-import { Loader2, AlertTriangle, Mail, X } from 'lucide-react';
+import { Loader2, AlertTriangle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog';
 
 interface CreateUserDialogProps {
   isOpen: boolean;
@@ -22,11 +24,8 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   const [error, setError] = useState<string | null>(null);
   const submitTokenRef = useRef(0);
   const closeHandledRef = useRef(false);
-  const backdropRef = useRef<HTMLButtonElement | null>(null);
-  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
-  const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (closeHandledRef.current) return;
     closeHandledRef.current = true;
     // 允许在提交中主动关闭，避免请求挂起导致弹窗锁死。
@@ -34,40 +33,13 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
     setIsSubmitting(false);
     setError(null);
     onClose();
-  }, [onClose]);
+  };
 
   useEffect(() => {
     if (isOpen) {
       closeHandledRef.current = false;
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleClose, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onNativeClose = (event: Event) => {
-      event.preventDefault();
-      handleClose();
-    };
-
-    const closeTargets = [backdropRef.current, closeBtnRef.current, cancelBtnRef.current];
-    closeTargets.forEach((element) => element?.addEventListener('click', onNativeClose));
-
-    return () => {
-      closeTargets.forEach((element) => element?.removeEventListener('click', onNativeClose));
-    };
-  }, [handleClose, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,38 +79,14 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <button
-        ref={backdropRef}
-        type="button"
-        aria-label="Dismiss modal"
-        className="absolute inset-0 bg-black/70"
-        onClick={handleClose}
-      />
-
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Invite New Member"
-        className="relative z-[81] w-full max-w-md overflow-hidden rounded-lg border border-border bg-background shadow-lg"
-      >
-        <div className="border-b border-border bg-muted/50 px-6 py-4">
-          <h2 className="text-lg font-semibold leading-none tracking-tight">Invite New Member</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+    <SafeDialog open={isOpen} onClose={handleClose}>
+      <SafeDialogContent aria-label="Invite New Member" className="max-w-md overflow-hidden p-0">
+        <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4 text-left">
+          <DialogTitle>Invite New Member</DialogTitle>
+          <DialogDescription className="mt-1">
             Create account and send login credentials to the user.
-          </p>
-          <Button
-            ref={closeBtnRef}
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
-            aria-label="Close"
-            onClick={handleClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 p-6">
           <div className="bg-primary/5 p-3 rounded-md border border-primary/10 mb-4 flex items-start gap-3">
@@ -206,7 +154,6 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-2">
             <Button
-              ref={cancelBtnRef}
               type="button"
               variant="outline"
               onClick={handleClose}
@@ -222,7 +169,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </SafeDialogContent>
+    </SafeDialog>
   );
 }

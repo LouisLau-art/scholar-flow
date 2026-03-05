@@ -4,13 +4,12 @@ import { useState } from 'react';
 import { Loader2, AlertTriangle, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -47,8 +46,8 @@ export function InviteReviewerDialog({ isOpen, onClose, onConfirm }: InviteRevie
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-w-md p-0 overflow-hidden">
+    <SafeDialog open={isOpen} onClose={onClose} closeDisabled={isSubmitting}>
+      <SafeDialogContent className="max-w-md overflow-hidden p-0" closeDisabled={isSubmitting}>
         <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4">
           <DialogTitle>Invite New Reviewer</DialogTitle>
           <DialogDescription>
@@ -96,7 +95,7 @@ export function InviteReviewerDialog({ isOpen, onClose, onConfirm }: InviteRevie
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SafeDialogContent>
+    </SafeDialog>
   );
 }

@@ -1,9 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { User } from '@/types/user'
 import { Button } from '@/components/ui/button'
+import {
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog'
 
 interface ResetPasswordDialogProps {
   isOpen: boolean
@@ -52,44 +58,19 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="Dismiss modal"
-        className="absolute inset-0 bg-black/70"
-        onClick={() => {
-          if (!submitting) onClose()
-        }}
-      />
-
-      <div
-        role="dialog"
-        aria-modal="true"
+    <SafeDialog open={isOpen} onClose={onClose} closeDisabled={submitting}>
+      <SafeDialogContent
         aria-label="Reset User Password"
         data-testid="reset-password-modal-v2"
-        className="relative z-[81] w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg"
-        onMouseDown={(event) => event.stopPropagation()}
+        className="max-w-lg"
+        closeDisabled={submitting}
       >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
-          aria-label="Close"
-          disabled={submitting}
-          onClick={() => {
-            if (!submitting) onClose()
-          }}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-
-        <div className="pr-10">
-          <h2 className="text-lg font-semibold leading-none tracking-tight">Reset User Password</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <DialogHeader className="pr-10">
+          <DialogTitle>Reset User Password</DialogTitle>
+          <DialogDescription className="mt-1">
             This will reset the user password to a system-generated temporary value.
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="mt-4 space-y-3 rounded-md border border-secondary-foreground/20 bg-secondary p-3">
           <div className="flex items-center gap-2 text-sm font-medium text-secondary-foreground">
@@ -119,7 +100,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             {submitting ? 'Resetting...' : 'Confirm Reset'}
           </Button>
         </div>
-      </div>
-    </div>
+      </SafeDialogContent>
+    </SafeDialog>
   )
 }

@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck, Loader2, X } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, Loader2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
+import {
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { SafeDialog, SafeDialogContent, useDialogReopenGuard } from '@/components/ui/safe-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
@@ -100,7 +107,7 @@ export function AEWorkspacePanel() {
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
-  const reopenGuardUntilRef = useRef(0)
+  const submitCheckGuard = useDialogReopenGuard(300)
 
   useEffect(() => {
     manuscriptsRef.current = manuscripts
@@ -162,16 +169,16 @@ export function AEWorkspacePanel() {
 
   const closeDialog = useCallback(() => {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
-    reopenGuardUntilRef.current = Date.now() + 300
+    submitCheckGuard.markClosed()
     setDialogOpen(false)
-  }, [])
+  }, [submitCheckGuard])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
-    if (Date.now() < reopenGuardUntilRef.current) return
+    if (!submitCheckGuard.canOpen()) return
     setActiveMs(manuscript)
     resetDialogState()
     setDialogOpen(true)
-  }, [resetDialogState])
+  }, [resetDialogState, submitCheckGuard])
 
   useEffect(() => {
     if (!dialogOpen) {
@@ -367,80 +374,64 @@ export function AEWorkspacePanel() {
         ))
       )}
 
-      {dialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onMouseDown={closeDialog}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ae-submit-check-title"
-            data-testid="ae-submit-check-modal-v2"
-            className="relative grid w-full max-w-lg max-h-[92vh] gap-4 overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-lg"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              aria-label="Close"
-              className="absolute right-4 top-4 rounded-sm bg-background/80 opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none"
-              onClick={closeDialog}
-              disabled={submitting}
-            >
-              <X className="h-4 w-4" />
-            </button>
+      <SafeDialog open={dialogOpen} onClose={closeDialog} closeDisabled={submitting}>
+        <SafeDialogContent
+          aria-label="Submit Technical Check"
+          aria-labelledby="ae-submit-check-title"
+          data-testid="ae-submit-check-modal-v2"
+          closeDisabled={submitting}
+        >
+          <DialogHeader className="pr-10 text-left">
+            <DialogTitle id="ae-submit-check-title">Submit Technical Check</DialogTitle>
+            <DialogDescription>
+              稿件：{activeMs?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="space-y-1.5 text-left">
-              <h2 id="ae-submit-check-title" className="text-lg font-semibold leading-none tracking-tight">
-                Submit Technical Check
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                稿件：{activeMs?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
-              </p>
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next Step</div>
+              <Select value={technicalDecision} onValueChange={(v) => setTechnicalDecision(v as TechnicalDecision)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择技术检查后的流转" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pass">发起外审（进入 under_review）</SelectItem>
+                  <SelectItem value="academic">送 Academic 预审（可选）</SelectItem>
+                  <SelectItem value="revision">技术退回作者（需填写说明）</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next Step</div>
-                <Select value={technicalDecision} onValueChange={(v) => setTechnicalDecision(v as TechnicalDecision)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择技术检查后的流转" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pass">发起外审（进入 under_review）</SelectItem>
-                    <SelectItem value="academic">送 Academic 预审（可选）</SelectItem>
-                    <SelectItem value="revision">技术退回作者（需填写说明）</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comment (optional)</div>
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={
-                    technicalDecision === 'revision'
-                      ? '必填：明确指出作者需要修复的问题（格式、伦理、缺件等）'
-                      : technicalDecision === 'academic'
-                        ? '可选：补充给 Academic 预审的背景说明'
-                        : '可选：补充给后续外审流程的技术备注'
-                  }
-                  className="min-h-[110px]"
-                />
-              </div>
-
-              {error ? <div className="text-xs text-destructive">{error}</div> : null}
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comment (optional)</div>
+              <Textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder={
+                  technicalDecision === 'revision'
+                    ? '必填：明确指出作者需要修复的问题（格式、伦理、缺件等）'
+                    : technicalDecision === 'academic'
+                      ? '可选：补充给 Academic 预审的背景说明'
+                      : '可选：补充给后续外审流程的技术备注'
+                }
+                className="min-h-[110px]"
+              />
             </div>
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-              <Button variant="outline" onClick={closeDialog} disabled={submitting}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
-                {submitting ? 'Submitting…' : 'Confirm'}
-              </Button>
-            </div>
+            {error ? <div className="text-xs text-destructive">{error}</div> : null}
           </div>
-        </div>
-      ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
+              {submitting ? 'Submitting…' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </SafeDialogContent>
+      </SafeDialog>
     </>
   )
 }
