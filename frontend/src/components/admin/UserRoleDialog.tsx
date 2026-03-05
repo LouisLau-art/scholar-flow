@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 
 import { User, UserRole } from '@/types/user'
@@ -46,6 +46,7 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = 
 const SCOPE_REQUIRED_ROLES = new Set<UserRole>(['managing_editor', 'editor_in_chief'])
 
 export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDialogProps) {
+  const [dialogOpen, setDialogOpen] = useState(isOpen)
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>(['author'])
   const [selectedJournalIds, setSelectedJournalIds] = useState<string[]>([])
   const [journals, setJournals] = useState<Journal[]>([])
@@ -58,6 +59,17 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
     () => selectedRoles.some((role) => SCOPE_REQUIRED_ROLES.has(role)),
     [selectedRoles]
   )
+
+  useEffect(() => {
+    setDialogOpen(isOpen)
+  }, [isOpen])
+
+  const handleRequestClose = useCallback(() => {
+    setDialogOpen(false)
+    setError(null)
+    setIsSubmitting(false)
+    onClose()
+  }, [onClose])
 
   useEffect(() => {
     if (!isOpen || !user) return
@@ -140,7 +152,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
         reason,
         scopeRequired ? selectedJournalIds : undefined
       )
-      onClose()
+      handleRequestClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update role')
     } finally {
@@ -149,7 +161,16 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <Dialog
+      open={dialogOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          handleRequestClose()
+        } else {
+          setDialogOpen(true)
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit User Roles</DialogTitle>
@@ -258,7 +279,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={handleRequestClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || loadingScopeData}>
