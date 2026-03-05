@@ -108,6 +108,7 @@ export function AEWorkspacePanel() {
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const reopenGuardUntilRef = useRef(0)
 
   useEffect(() => {
     manuscriptsRef.current = manuscripts
@@ -162,6 +163,8 @@ export function AEWorkspacePanel() {
   }, [])
 
   const resetDialog = useCallback(() => {
+    // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
+    reopenGuardUntilRef.current = Date.now() + 300
     setTechnicalDecision('pass')
     setComment('')
     setError('')
@@ -170,6 +173,7 @@ export function AEWorkspacePanel() {
   }, [])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
+    if (Date.now() < reopenGuardUntilRef.current) return
     setTechnicalDecision('pass')
     setActiveMs(manuscript)
     setComment('')
