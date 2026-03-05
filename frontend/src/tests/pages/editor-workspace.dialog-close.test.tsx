@@ -41,6 +41,7 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
       await waitFor(() => {
         expect(screen.queryByText('Submit Technical Check')).not.toBeInTheDocument()
         expect(screen.queryByText(/稿件：—/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Untitled Manuscript/)).not.toBeInTheDocument()
       })
 
       fireEvent.click(submitCheckBtn)
@@ -76,6 +77,7 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
     await waitFor(() => {
       expect(screen.queryByText('Submit Technical Check')).not.toBeInTheDocument()
       expect(screen.queryByText(/稿件：—/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Untitled Manuscript/)).not.toBeInTheDocument()
     })
   })
 })

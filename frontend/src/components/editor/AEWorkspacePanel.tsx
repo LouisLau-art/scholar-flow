@@ -100,6 +100,7 @@ export function AEWorkspacePanel() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false)
+  const [closeShieldActive, setCloseShieldActive] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
@@ -107,6 +108,7 @@ export function AEWorkspacePanel() {
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const closeShieldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const submitCheckGuard = useDialogReopenGuard(1200)
 
   useEffect(() => {
@@ -158,6 +160,10 @@ export function AEWorkspacePanel() {
   useEffect(() => {
     return () => {
       abortRef.current?.abort()
+      if (closeShieldTimerRef.current) {
+        clearTimeout(closeShieldTimerRef.current)
+        closeShieldTimerRef.current = null
+      }
     }
   }, [])
 
@@ -167,13 +173,25 @@ export function AEWorkspacePanel() {
     setError('')
   }, [])
 
+  const armCloseShield = useCallback(() => {
+    setCloseShieldActive(true)
+    if (closeShieldTimerRef.current) {
+      clearTimeout(closeShieldTimerRef.current)
+    }
+    closeShieldTimerRef.current = setTimeout(() => {
+      setCloseShieldActive(false)
+      closeShieldTimerRef.current = null
+    }, 300)
+  }, [])
+
   const closeDialog = useCallback(() => {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
     submitCheckGuard.markClosed()
+    armCloseShield()
     setIsSubmitDialogOpen(false)
     setActiveMs(null)
     resetDialogState()
-  }, [resetDialogState, submitCheckGuard])
+  }, [armCloseShield, resetDialogState, submitCheckGuard])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     if (submitting || isSubmitDialogOpen) return
@@ -418,6 +436,20 @@ export function AEWorkspacePanel() {
           </DialogFooter>
         </SafeDialogContent>
       </SafeDialog>
+      {closeShieldActive ? (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-[70]"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        />
+      ) : null}
     </>
   )
 }
