@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { getStatusLabel } from '@/lib/statusStyles'
+import { formatDateTimeLocal } from '@/lib/date-display'
 import type { EditorRbacContext } from '@/types/rbac'
 import { deriveEditorCapability } from '@/lib/rbac'
 import {
@@ -35,7 +36,7 @@ import {
   ReviewerFeedbackSummaryCard,
   TaskSlaSummaryCard,
 } from './detail-sections'
-import type { ReviewerFeedbackItem } from './types'
+import type { ReviewerFeedbackItem, ReviewerHistoryItem } from './types'
 
 const InternalNotebook = dynamic(
   () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
@@ -101,6 +102,13 @@ export default function EditorManuscriptDetailPage() {
   const [reviewReports, setReviewReports] = useState<ReviewerFeedbackItem[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+  const [sendingReviewerEmailAssignmentId, setSendingReviewerEmailAssignmentId] = useState<string | null>(null)
+  const [reviewerHistoryOpen, setReviewerHistoryOpen] = useState(false)
+  const [reviewerHistoryLoading, setReviewerHistoryLoading] = useState(false)
+  const [reviewerHistoryError, setReviewerHistoryError] = useState<string | null>(null)
+  const [reviewerHistoryRows, setReviewerHistoryRows] = useState<ReviewerHistoryItem[]>([])
+  const [reviewerHistoryReviewerId, setReviewerHistoryReviewerId] = useState<string>('')
+  const [reviewerHistoryReviewerLabel, setReviewerHistoryReviewerLabel] = useState<string>('')
   const reviewsRetryAttemptRef = useRef(0)
   const reviewsRetryTimerRef = useRef<number | null>(null)
   const reviewCardRef = useRef<HTMLDivElement | null>(null)
@@ -655,6 +663,63 @@ export default function EditorManuscriptDetailPage() {
     void loadReviewReports(true).finally(() => setReviewsLoadedOnce(true))
   }, [loadReviewReports])
 
+  const handleSendReviewerTemplateEmail = useCallback(
+    async (args: { assignmentId: string; reviewerId: string; template: 'invitation' | 'reminder' }) => {
+      const assignmentId = String(args.assignmentId || '').trim()
+      if (!assignmentId) return
+      setSendingReviewerEmailAssignmentId(assignmentId)
+      try {
+        const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, { template: args.template })
+        if (!res?.success) {
+          throw new Error(res?.detail || res?.message || 'Failed to send reviewer email')
+        }
+        toast.success(args.template === 'invitation' ? 'Invitation email queued.' : 'Reminder email queued.')
+        await refreshDetail({ force: true })
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to send reviewer email')
+      } finally {
+        setSendingReviewerEmailAssignmentId(null)
+      }
+    },
+    [refreshDetail]
+  )
+
+  const loadReviewerHistory = useCallback(
+    async (reviewerId: string, reviewerLabel: string, force = false) => {
+      const safeReviewerId = String(reviewerId || '').trim()
+      if (!safeReviewerId) return
+      setReviewerHistoryOpen(true)
+      setReviewerHistoryReviewerId(safeReviewerId)
+      setReviewerHistoryReviewerLabel(String(reviewerLabel || '').trim() || 'Reviewer')
+      setReviewerHistoryLoading(true)
+      setReviewerHistoryError(null)
+      try {
+        const historyRes = await EditorApi.getReviewerHistory(safeReviewerId, {
+          limit: 50,
+          force,
+        })
+        if (!historyRes?.success) {
+          throw new Error(historyRes?.detail || historyRes?.message || 'Failed to load reviewer history')
+        }
+        const rows = Array.isArray(historyRes?.data) ? (historyRes.data as ReviewerHistoryItem[]) : []
+        setReviewerHistoryRows(rows)
+      } catch (e) {
+        setReviewerHistoryRows([])
+        setReviewerHistoryError(e instanceof Error ? e.message : 'Failed to load reviewer history')
+      } finally {
+        setReviewerHistoryLoading(false)
+      }
+    },
+    []
+  )
+
+  const handleOpenReviewerHistory = useCallback(
+    (args: { reviewerId: string; reviewerLabel: string }) => {
+      void loadReviewerHistory(args.reviewerId, args.reviewerLabel, true)
+    },
+    [loadReviewerHistory]
+  )
+
   const handleRetryCardsContext = useCallback(() => {
     cardsRetryAttemptRef.current = 0
     setCardsError(null)
@@ -769,6 +834,10 @@ export default function EditorManuscriptDetailPage() {
             deferredLoading={deferredLoading}
             loadError={deferredError}
             onRetry={handleRetryDeferredContext}
+            canManageReviewerOutreach={capability.canManageReviewers}
+            sendingAssignmentId={sendingReviewerEmailAssignmentId}
+            onSendTemplateEmail={handleSendReviewerTemplateEmail}
+            onOpenHistory={handleOpenReviewerHistory}
           />
 
           <ReviewerFeedbackSummaryCard
@@ -910,6 +979,86 @@ export default function EditorManuscriptDetailPage() {
               Confirm
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reviewerHistoryOpen} onOpenChange={setReviewerHistoryOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Invitations History ({reviewerHistoryReviewerLabel || 'Reviewer'})</DialogTitle>
+            <DialogDescription>
+              Reviewer ID: {reviewerHistoryReviewerId || '—'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto rounded-md border border-border">
+            {reviewerHistoryLoading ? (
+              <div className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading reviewer history...
+              </div>
+            ) : reviewerHistoryError ? (
+              <div className="space-y-3 px-4 py-6">
+                <div className="text-sm text-destructive">{reviewerHistoryError}</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void loadReviewerHistory(reviewerHistoryReviewerId, reviewerHistoryReviewerLabel, true)}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : reviewerHistoryRows.length === 0 ? (
+              <div className="px-4 py-8 text-sm text-muted-foreground">No invitation history yet.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="px-3 py-2 text-left font-semibold">Manuscript</th>
+                    <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-left font-semibold">Added On</th>
+                    <th className="px-3 py-2 text-left font-semibold">Email Actions</th>
+                    <th className="px-3 py-2 text-left font-semibold">Score / Submitted</th>
+                    <th className="px-3 py-2 text-left font-semibold">Manuscript Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewerHistoryRows.map((row, idx) => {
+                    const rowKey = String(row.assignment_id || `history-${idx}`)
+                    const emailActions = [
+                      row.invited_at ? `Invited ${formatDateTimeLocal(row.invited_at)}` : '',
+                      row.last_reminded_at ? `Reminded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                    const scoreText =
+                      typeof row.report_score === 'number'
+                        ? `Score ${row.report_score}`
+                        : row.report_status
+                        ? String(row.report_status)
+                        : '—'
+                    return (
+                      <tr key={rowKey} className="border-b border-border/60 last:border-0 align-top">
+                        <td className="px-3 py-2.5">
+                          <div className="font-medium text-foreground">{row.manuscript_title || row.manuscript_id || '—'}</div>
+                          {row.manuscript_id ? <div className="text-xs text-muted-foreground">{row.manuscript_id}</div> : null}
+                        </td>
+                        <td className="px-3 py-2.5">{row.assignment_status || '—'}</td>
+                        <td className="px-3 py-2.5">{row.added_on ? formatDateTimeLocal(row.added_on) : '—'}</td>
+                        <td className="px-3 py-2.5">{emailActions || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <div>{scoreText}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.report_submitted_at ? formatDateTimeLocal(row.report_submitted_at) : '—'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">{row.manuscript_status || '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

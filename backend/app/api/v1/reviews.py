@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Response
+import os
+from datetime import datetime, timezone
+from urllib.parse import quote
+
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Response, Query
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -118,6 +122,50 @@ def _ensure_review_management_access(
         user_id=user_id,
         roles=roles,
     )
+
+
+def _resolve_journal_title_for_assignment(manuscript: dict[str, Any]) -> str:
+    journal_id = str(manuscript.get("journal_id") or "").strip()
+    if not journal_id:
+        return "ScholarFlow Journal"
+    try:
+        row = (
+            supabase_admin.table("journals")
+            .select("title")
+            .eq("id", journal_id)
+            .single()
+            .execute()
+        )
+        payload = getattr(row, "data", None) or {}
+        title = str(payload.get("title") or "").strip()
+        return title or "ScholarFlow Journal"
+    except Exception:
+        return "ScholarFlow Journal"
+
+
+def _safe_create_assignment_magic_link(
+    *,
+    reviewer_id: str,
+    manuscript_id: str,
+    assignment_id: str,
+) -> str | None:
+    try:
+        days = int((os.environ.get("MAGIC_LINK_EXPIRES_DAYS") or "14").strip())
+    except Exception:
+        days = 14
+    try:
+        return create_magic_link_jwt(
+            reviewer_id=UUID(reviewer_id),
+            manuscript_id=UUID(manuscript_id),
+            assignment_id=UUID(assignment_id),
+            expires_in_days=days,
+        )
+    except RuntimeError as exc:
+        if "not configured" in str(exc).lower():
+            return None
+        raise
+    except Exception:
+        return None
 
 
 @router.get("/reviewer/assignments/{assignment_id}/workspace")
@@ -404,6 +452,135 @@ async def unassign_reviewer(
     )
 
 
+@router.post("/reviews/assignments/{assignment_id}/send-email")
+async def send_assignment_email(
+    assignment_id: UUID,
+    background_tasks: BackgroundTasks,
+    template: str = Body("invitation", embed=True),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    手动发送审稿邮件（邀请/催促）。
+
+    中文注释:
+    - invitation: 发送邀请信，并回填 invited_at；
+    - reminder: 发送催促信，并回填 last_reminded_at。
+    """
+    template_key = str(template or "invitation").strip().lower()
+    if template_key not in {"invitation", "reminder"}:
+        raise HTTPException(status_code=422, detail="template must be invitation or reminder")
+
+    assignment_res = (
+        supabase_admin.table("review_assignments")
+        .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at")
+        .eq("id", str(assignment_id))
+        .single()
+        .execute()
+    )
+    assignment = getattr(assignment_res, "data", None) or {}
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if str(assignment.get("status") or "").strip().lower() == "cancelled":
+        raise HTTPException(status_code=409, detail="Assignment is cancelled")
+
+    manuscript_res = (
+        supabase_admin.table("manuscripts")
+        .select("id, title, journal_id, assistant_editor_id")
+        .eq("id", str(assignment.get("manuscript_id") or ""))
+        .single()
+        .execute()
+    )
+    manuscript = getattr(manuscript_res, "data", None) or {}
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    roles = set(normalize_roles(_parse_roles(profile)))
+    _ensure_review_management_access(
+        manuscript=manuscript,
+        user_id=str(current_user.get("id") or ""),
+        roles=roles,
+    )
+
+    reviewer_id = str(assignment.get("reviewer_id") or "").strip()
+    reviewer_profile_res = (
+        supabase_admin.table("user_profiles")
+        .select("email, full_name")
+        .eq("id", reviewer_id)
+        .single()
+        .execute()
+    )
+    reviewer_profile = getattr(reviewer_profile_res, "data", None) or {}
+    reviewer_email = str(reviewer_profile.get("email") or "").strip()
+    reviewer_name = str(reviewer_profile.get("full_name") or "").strip() or "Reviewer"
+    if not reviewer_email:
+        raise HTTPException(status_code=400, detail="Reviewer email is missing")
+
+    manuscript_id = str(manuscript.get("id") or "").strip()
+    manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
+    due_at = str(assignment.get("due_at") or "").strip()
+
+    token = _safe_create_assignment_magic_link(
+        reviewer_id=reviewer_id,
+        manuscript_id=manuscript_id,
+        assignment_id=str(assignment_id),
+    )
+    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
+    review_url = (
+        f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
+    )
+
+    if template_key == "invitation":
+        subject = "Invitation to Review"
+        template_name = "invitation.html"
+        context = {
+            "review_url": review_url,
+            "reviewer_name": reviewer_name,
+            "manuscript_title": manuscript_title,
+            "manuscript_id": manuscript_id,
+            "journal_title": _resolve_journal_title_for_assignment(manuscript),
+            "due_at": due_at,
+            "due_date": str(due_at).split("T")[0] if due_at else "",
+        }
+    else:
+        subject = "Friendly Reminder: Review Deadline Approaching"
+        template_name = "review_reminder.html"
+        context = {
+            "subject": subject,
+            "recipient_name": reviewer_name,
+            "manuscript_title": manuscript_title,
+            "manuscript_id": manuscript_id,
+            "due_at": due_at or "—",
+            "review_url": review_url,
+        }
+
+    background_tasks.add_task(
+        email_service.send_email_background,
+        to_email=reviewer_email,
+        subject=subject,
+        template_name=template_name,
+        context=context,
+    )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        patch: dict[str, Any] = {"invited_at": now_iso} if template_key == "invitation" else {"last_reminded_at": now_iso}
+        supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+    except Exception:
+        # 回填失败不影响主流程（邮件已入队）
+        pass
+
+    return {
+        "success": True,
+        "data": {
+            "assignment_id": str(assignment_id),
+            "template": template_key,
+            "recipient": reviewer_email,
+            "queued_at": now_iso,
+        },
+    }
+
+
 @router.get("/reviews/assignments/{manuscript_id}")
 async def get_manuscript_assignments(
     manuscript_id: UUID,
@@ -424,6 +601,118 @@ async def get_manuscript_assignments(
         normalize_roles_fn=normalize_roles,
         parse_roles_fn=_parse_roles,
     )
+
+
+@router.get("/reviews/reviewer-history/{reviewer_id}")
+async def get_reviewer_history(
+    reviewer_id: UUID,
+    manuscript_id: UUID | None = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    审稿人历史记录（编辑侧）。
+    """
+    roles = set(normalize_roles(_parse_roles(profile)))
+    reviewer_id_str = str(reviewer_id)
+
+    query = (
+        supabase_admin.table("review_assignments")
+        .select(
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, last_reminded_at, created_at, round_number"
+        )
+        .eq("reviewer_id", reviewer_id_str)
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
+    if manuscript_id is not None:
+        query = query.eq("manuscript_id", str(manuscript_id))
+    assignments_res = query.execute()
+    assignment_rows = getattr(assignments_res, "data", None) or []
+    if not assignment_rows:
+        return {"success": True, "data": []}
+
+    manuscript_ids = sorted(
+        {str(row.get("manuscript_id") or "").strip() for row in assignment_rows if str(row.get("manuscript_id") or "").strip()}
+    )
+    manuscript_map: dict[str, dict[str, Any]] = {}
+    if manuscript_ids:
+        ms_res = (
+            supabase_admin.table("manuscripts")
+            .select("id, title, status, journal_id, assistant_editor_id")
+            .in_("id", manuscript_ids)
+            .execute()
+        )
+        for row in (getattr(ms_res, "data", None) or []):
+            manuscript_map[str(row.get("id"))] = row
+
+    filtered_rows: list[dict[str, Any]] = []
+    for row in assignment_rows:
+        mid = str(row.get("manuscript_id") or "").strip()
+        manuscript = manuscript_map.get(mid)
+        if not manuscript:
+            continue
+        try:
+            _ensure_review_management_access(
+                manuscript=manuscript,
+                user_id=str(current_user.get("id") or ""),
+                roles=roles,
+            )
+        except HTTPException:
+            continue
+        filtered_rows.append(row)
+
+    if manuscript_id is not None and assignment_rows and not filtered_rows:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not filtered_rows:
+        return {"success": True, "data": []}
+
+    report_map: dict[str, dict[str, Any]] = {}
+    try:
+        rr_res = (
+            supabase_admin.table("review_reports")
+            .select("manuscript_id, reviewer_id, status, score, created_at")
+            .eq("reviewer_id", reviewer_id_str)
+            .in_("manuscript_id", manuscript_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        for row in (getattr(rr_res, "data", None) or []):
+            mid = str(row.get("manuscript_id") or "").strip()
+            if mid and mid not in report_map:
+                report_map[mid] = row
+    except Exception:
+        report_map = {}
+
+    out: list[dict[str, Any]] = []
+    for row in filtered_rows:
+        mid = str(row.get("manuscript_id") or "").strip()
+        manuscript = manuscript_map.get(mid) or {}
+        report = report_map.get(mid) or {}
+        out.append(
+            {
+                "assignment_id": row.get("id"),
+                "reviewer_id": reviewer_id_str,
+                "manuscript_id": mid,
+                "manuscript_title": manuscript.get("title"),
+                "manuscript_status": manuscript.get("status"),
+                "assignment_status": row.get("status"),
+                "round_number": row.get("round_number"),
+                "added_on": row.get("created_at"),
+                "invited_at": row.get("invited_at"),
+                "opened_at": row.get("opened_at"),
+                "accepted_at": row.get("accepted_at"),
+                "declined_at": row.get("declined_at"),
+                "last_reminded_at": row.get("last_reminded_at"),
+                "due_at": row.get("due_at"),
+                "report_status": report.get("status"),
+                "report_score": report.get("score"),
+                "report_submitted_at": report.get("created_at"),
+            }
+        )
+
+    return {"success": True, "data": out}
 
 
 # === 2. 获取我的审稿任务 (Reviewer Task) ===

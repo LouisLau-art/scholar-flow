@@ -39,6 +39,7 @@ export type ManuscriptDetail = {
   }> | null
   reviewer_invites?: Array<{
     id: string
+    reviewer_id?: string | null
     reviewer_name?: string | null
     reviewer_email?: string | null
     status: string

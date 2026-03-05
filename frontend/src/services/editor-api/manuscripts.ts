@@ -386,6 +386,30 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       return authedGetJsonCached(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/reviews`, options)
     },
 
+    async sendReviewerAssignmentEmail(
+      assignmentId: string,
+      payload: { template: 'invitation' | 'reminder' }
+    ) {
+      const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to send reviewer email' }))
+    },
+
+    async getReviewerHistory(
+      reviewerId: string,
+      options?: CachedGetOptions & { manuscriptId?: string; limit?: number }
+    ) {
+      const params = new URLSearchParams()
+      if (options?.manuscriptId) params.set('manuscript_id', options.manuscriptId)
+      if (typeof options?.limit === 'number' && options.limit > 0) params.set('limit', String(options.limit))
+      const qs = params.toString()
+      const url = `/api/v1/reviews/reviewer-history/${encodeURIComponent(reviewerId)}${qs ? `?${qs}` : ''}`
+      return authedGetJsonCached(url, options)
+    },
+
     invalidateAEWorkspaceCache() {
       aeWorkspaceCache.clear()
       aeWorkspaceInflight.clear()
