@@ -373,6 +373,7 @@ export function AEWorkspacePanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="ae-submit-check-title"
+            data-testid="ae-submit-check-modal-v2"
             className="relative grid w-full max-w-lg max-h-[92vh] gap-4 overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-lg"
             onMouseDown={(event) => event.stopPropagation()}
           >
