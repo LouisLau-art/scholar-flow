@@ -1,16 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, X } from 'lucide-react'
 import { User } from '@/types/user'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
 interface ResetPasswordDialogProps {
@@ -23,6 +15,25 @@ interface ResetPasswordDialogProps {
 export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetPasswordDialogProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isOpen) return
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || submitting) return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => {
+      window.removeEventListener('keydown', onEscape)
+    }
+  }, [isOpen, onClose, submitting])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSubmitting(false)
+      setError(null)
+    }
+  }, [isOpen])
 
   const handleConfirm = async () => {
     if (!user) return
@@ -38,22 +49,49 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
     }
   }
 
-  return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !submitting) onClose()
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Reset User Password</DialogTitle>
-          <DialogDescription>
-            This will reset the user password to a system-generated temporary value.
-          </DialogDescription>
-        </DialogHeader>
+  if (!isOpen) return null
 
-        <div className="space-y-3 rounded-md border border-secondary-foreground/20 bg-secondary p-3">
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Dismiss modal"
+        className="absolute inset-0 bg-black/70"
+        onClick={() => {
+          if (!submitting) onClose()
+        }}
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Reset User Password"
+        data-testid="reset-password-modal-v2"
+        className="relative z-[81] w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
+          aria-label="Close"
+          disabled={submitting}
+          onClick={() => {
+            if (!submitting) onClose()
+          }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
+        <div className="pr-10">
+          <h2 className="text-lg font-semibold leading-none tracking-tight">Reset User Password</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This will reset the user password to a system-generated temporary value.
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-3 rounded-md border border-secondary-foreground/20 bg-secondary p-3">
           <div className="flex items-center gap-2 text-sm font-medium text-secondary-foreground">
             <AlertTriangle className="h-4 w-4" />
             Sensitive operation
@@ -70,18 +108,18 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
         </div>
 
         {error ? (
-          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+          <div className="mt-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         ) : null}
 
-        <DialogFooter>
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
             {submitting ? 'Resetting...' : 'Confirm Reset'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   )
 }
