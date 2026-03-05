@@ -21,17 +21,26 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitTokenRef = useRef(0);
+  const closeHandledRef = useRef(false);
   const backdropRef = useRef<HTMLButtonElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const handleClose = useCallback(() => {
+    if (closeHandledRef.current) return;
+    closeHandledRef.current = true;
     // 允许在提交中主动关闭，避免请求挂起导致弹窗锁死。
     submitTokenRef.current += 1;
     setIsSubmitting(false);
     setError(null);
     onClose();
   }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      closeHandledRef.current = false;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -104,6 +113,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
         type="button"
         aria-label="Dismiss modal"
         className="absolute inset-0 bg-black/70"
+        onClick={handleClose}
       />
 
       <div
@@ -124,6 +134,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             size="icon"
             className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
             aria-label="Close"
+            onClick={handleClose}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -198,6 +209,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
               ref={cancelBtnRef}
               type="button"
               variant="outline"
+              onClick={handleClose}
             >
               Cancel
             </Button>
