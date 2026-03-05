@@ -143,7 +143,7 @@ async def get_editor_manuscript_detail_impl(
                 ra_resp = (
                     runtime.supabase_admin.table("review_assignments")
                     .select(
-                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,decline_reason,decline_note,created_at"
+                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at"
                     )
                     .eq("manuscript_id", id)
                     .order("created_at", desc=True)
@@ -538,6 +538,7 @@ async def get_editor_manuscript_detail_impl(
                 "opened_at": row.get("opened_at"),
                 "accepted_at": row.get("accepted_at"),
                 "declined_at": row.get("declined_at"),
+                "last_reminded_at": row.get("last_reminded_at"),
                 "submitted_at": submitted_map.get(rid),
                 "decline_reason": row.get("decline_reason"),
                 "decline_note": row.get("decline_note"),

@@ -48,6 +48,7 @@ export type ManuscriptDetail = {
     opened_at?: string | null
     accepted_at?: string | null
     declined_at?: string | null
+    last_reminded_at?: string | null
     submitted_at?: string | null
     decline_reason?: string | null
   }> | null

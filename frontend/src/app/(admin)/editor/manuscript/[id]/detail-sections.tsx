@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowRight, Calendar, DollarSign, History, Loader2, Mail, User } from 'lucide-react'
-import { useState, type RefObject } from 'react'
+import type { RefObject } from 'react'
 
 import { BindingAssistantEditorDropdown } from '@/components/editor/BindingAssistantEditorDropdown'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
@@ -8,7 +8,6 @@ import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignment
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDateLocal, formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 
@@ -317,7 +316,6 @@ export function ReviewerInviteSummaryCard({
   onOpenHistory,
 }: ReviewerInviteSummaryCardProps) {
   const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
-  const [templateByAssignment, setTemplateByAssignment] = useState<Record<string, 'invitation' | 'reminder'>>({})
 
   return (
     <Card className="shadow-sm border-border">
@@ -371,6 +369,8 @@ export function ReviewerInviteSummaryCard({
                           : null
                   const dueText = invite?.due_at ? ` (Due ${formatDateLocal(invite.due_at)})` : ''
                   const reasonText = state === 'decline' ? String(invite?.decline_reason || '').trim() : ''
+                  const invitedText = invite?.invited_at ? formatDateTimeLocal(invite.invited_at) : '—'
+                  const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
 
                   return (
                     <tr key={String(invite?.id || `row-${idx}`)} className="border-b border-border/60 last:border-0">
@@ -392,22 +392,13 @@ export function ReviewerInviteSummaryCard({
                           {dueText}
                         </div>
                         {reasonText ? <div className="mt-0.5 text-xs text-muted-foreground">{reasonText}</div> : null}
+                        {canManageReviewerOutreach ? (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            Email: invited {invitedText} · reminded {remindedText}
+                          </div>
+                        ) : null}
                         {canManageReviewerOutreach && assignmentId ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <Select
-                              value={templateByAssignment[assignmentId] || 'invitation'}
-                              onValueChange={(value: 'invitation' | 'reminder') =>
-                                setTemplateByAssignment((prev) => ({ ...prev, [assignmentId]: value }))
-                              }
-                            >
-                              <SelectTrigger className="h-8 w-[160px] text-xs">
-                                <SelectValue placeholder="Select template" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="invitation">Invitation</SelectItem>
-                                <SelectItem value="reminder">Reminder</SelectItem>
-                              </SelectContent>
-                            </Select>
                             <Button
                               size="sm"
                               variant="outline"
@@ -417,17 +408,38 @@ export function ReviewerInviteSummaryCard({
                                 onSendTemplateEmail?.({
                                   assignmentId,
                                   reviewerId,
-                                  template: templateByAssignment[assignmentId] || 'invitation',
+                                  template: 'invitation',
                                 })
                               }
-                              data-testid={`reviewer-send-email-${assignmentId}`}
+                              data-testid={`reviewer-send-invitation-${assignmentId}`}
                             >
                               {sendingAssignmentId === assignmentId ? (
                                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                               ) : (
                                 <Mail className="mr-1 h-3.5 w-3.5" />
                               )}
-                              Send
+                              Send Invitation
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5 text-xs"
+                              disabled={!reviewerId || sendingAssignmentId === assignmentId}
+                              onClick={() =>
+                                onSendTemplateEmail?.({
+                                  assignmentId,
+                                  reviewerId,
+                                  template: 'reminder',
+                                })
+                              }
+                              data-testid={`reviewer-send-reminder-${assignmentId}`}
+                            >
+                              {sendingAssignmentId === assignmentId ? (
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Mail className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Send Reminder
                             </Button>
                             <Button
                               size="sm"
