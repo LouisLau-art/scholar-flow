@@ -1,20 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, AlertTriangle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Loader2, AlertTriangle, X } from 'lucide-react'
 
 import { User, UserRole } from '@/types/user'
 import { Journal } from '@/types/journal'
 import { adminUserService } from '@/services/admin/userService'
 import { adminJournalService } from '@/services/admin/journalService'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -47,6 +39,9 @@ const SCOPE_REQUIRED_ROLES = new Set<UserRole>(['managing_editor', 'editor_in_ch
 
 export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDialogProps) {
   const [dialogOpen, setDialogOpen] = useState(isOpen)
+  const backdropRef = useRef<HTMLButtonElement | null>(null)
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null)
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null)
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>(['author'])
   const [selectedJournalIds, setSelectedJournalIds] = useState<string[]>([])
   const [journals, setJournals] = useState<Journal[]>([])
@@ -70,6 +65,33 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
     setIsSubmitting(false)
     onClose()
   }, [onClose])
+
+  useEffect(() => {
+    if (!dialogOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        handleRequestClose()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [dialogOpen, handleRequestClose])
+
+  useEffect(() => {
+    if (!dialogOpen) return
+    const onNativeClose = (event: Event) => {
+      event.preventDefault()
+      handleRequestClose()
+    }
+
+    const closeTargets = [backdropRef.current, closeBtnRef.current, cancelBtnRef.current]
+    closeTargets.forEach((element) => element?.addEventListener('click', onNativeClose))
+
+    return () => {
+      closeTargets.forEach((element) => element?.removeEventListener('click', onNativeClose))
+    }
+  }, [dialogOpen, handleRequestClose])
 
   useEffect(() => {
     if (!isOpen || !user) return
@@ -108,7 +130,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
     loadScopeData()
   }, [isOpen, user])
 
-  if (!user) return null
+  if (!user || !dialogOpen) return null
 
   const toggleRole = (role: UserRole) => {
     setSelectedRoles((prev) => {
@@ -161,25 +183,41 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
   }
 
   return (
-    <Dialog
-      open={dialogOpen}
-      onOpenChange={(open) => {
-        if (!open) {
-          handleRequestClose()
-        } else {
-          setDialogOpen(true)
-        }
-      }}
-    >
-      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit User Roles</DialogTitle>
-          <DialogDescription>
-            Admin can update roles and bind journal scopes for managing roles in one step.
-          </DialogDescription>
-        </DialogHeader>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <button
+        ref={backdropRef}
+        type="button"
+        aria-label="Dismiss modal"
+        className="absolute inset-0 bg-black/70"
+        onClick={handleRequestClose}
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit User Roles"
+        className="relative z-[81] w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-lg"
+      >
+        <Button
+          ref={closeBtnRef}
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
+          aria-label="Close"
+          onClick={handleRequestClose}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
+        <div className="pr-10">
+          <h2 className="text-lg font-semibold leading-none tracking-tight">Edit User Roles</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Admin can update roles and bind journal scopes for managing roles in one step.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="rounded-md border bg-muted/40 p-3">
             <p className="break-words text-sm text-foreground">
               <span className="font-semibold">User:</span> {user.full_name} ({user.email})
@@ -278,17 +316,23 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleRequestClose} disabled={isSubmitting}>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:space-x-2">
+            <Button
+              ref={cancelBtnRef}
+              type="button"
+              variant="outline"
+              onClick={handleRequestClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || loadingScopeData}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Confirm
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
 }
