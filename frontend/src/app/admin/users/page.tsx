@@ -34,6 +34,7 @@ export default function UserManagementPage() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const roleDialogReopenGuardUntilRef = useRef(0);
   
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -132,9 +133,16 @@ export default function UserManagementPage() {
   };
 
   const handleEditClick = (user: User) => {
+    if (Date.now() < roleDialogReopenGuardUntilRef.current) return;
     setSelectedUser(user);
     setIsRoleDialogOpen(true);
   };
+
+  const handleRoleDialogClose = useCallback(() => {
+    // 防止关闭瞬间点击穿透到底层 Edit Role 按钮导致弹窗立刻重开。
+    roleDialogReopenGuardUntilRef.current = Date.now() + 300;
+    setIsRoleDialogOpen(false);
+  }, []);
 
   const handleResetPasswordClick = (user: User) => {
     setSelectedUser(user);
@@ -238,7 +246,7 @@ export default function UserManagementPage() {
 
         <UserRoleDialog
           isOpen={isRoleDialogOpen}
-          onClose={() => setIsRoleDialogOpen(false)}
+          onClose={handleRoleDialogClose}
           onConfirm={handleRoleUpdate}
           user={selectedUser}
         />
