@@ -149,6 +149,145 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         )
         return updated
 
+    def revert_technical_check(
+        self,
+        manuscript_id: UUID,
+        actor_id: UUID | str,
+        *,
+        reason: str,
+        actor_roles: Iterable[str] | None = None,
+        source: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        受控回退：under_review -> pre_check(technical)
+
+        约束：
+        - 仅在 under_review 阶段；
+        - 最近一次进入 under_review 必须来自 precheck_technical_to_under_review；
+        - 不存在进行中的 review_assignments；
+        - assistant_editor 仅可操作自己分配的稿件；managing_editor/admin 可覆盖。
+        """
+        manuscript_id_str = str(manuscript_id)
+        actor_id_str = str(actor_id)
+        normalized_roles = set(normalize_roles(actor_roles))
+        reason_clean = str(reason or "").strip()
+        if len(reason_clean) < 10:
+            raise HTTPException(status_code=422, detail="reason must be at least 10 characters")
+
+        ms = self._get_manuscript(manuscript_id_str)
+        status = normalize_status(str(ms.get("status") or ""))
+        pre = self._normalize_precheck_status(ms.get("pre_check_status"))
+        owner_ae = str(ms.get("assistant_editor_id") or "")
+
+        if status == ManuscriptStatus.PRE_CHECK.value and pre == PreCheckStatus.TECHNICAL.value:
+            # 幂等兜底：已经回退成功时重复提交直接返回。
+            return self._map_precheck_row(ms)
+
+        if status != ManuscriptStatus.UNDER_REVIEW.value:
+            raise HTTPException(status_code=409, detail="Technical-check revert only allowed in under_review")
+
+        has_global_override = bool({"admin", "managing_editor"} & normalized_roles)
+        if not has_global_override and owner_ae != actor_id_str:
+            raise HTTPException(status_code=403, detail="Only assigned assistant editor can revert technical check")
+
+        # 约束1：最近一次进入 under_review 必须来自 precheck_technical_to_under_review。
+        try:
+            log_resp = (
+                self.client.table("status_transition_logs")
+                .select("id,created_at,payload")
+                .eq("manuscript_id", manuscript_id_str)
+                .eq("to_status", ManuscriptStatus.UNDER_REVIEW.value)
+                .order("created_at", desc=True)
+                .range(0, 0)
+                .execute()
+            )
+            log_rows = getattr(log_resp, "data", None) or []
+        except Exception as e:
+            logger.warning("[RevertTechnicalCheck] load status_transition_logs failed: %s", e)
+            raise HTTPException(status_code=409, detail="Cannot verify transition history for revert")
+
+        latest_log = log_rows[0] if log_rows else None
+        payload = latest_log.get("payload") if isinstance((latest_log or {}).get("payload"), dict) else {}
+        latest_action = str(payload.get("action") or "").strip().lower()
+        if latest_action != "precheck_technical_to_under_review":
+            raise HTTPException(
+                status_code=409,
+                detail="Technical-check revert blocked: latest under_review source is not technical submit-check",
+            )
+
+        # 约束2：外审尚未实质开始（仅允许空集，或全部 cancelled/declined）。
+        try:
+            ra_resp = (
+                self.client.table("review_assignments")
+                .select("id,status,accepted_at,submitted_at,declined_at")
+                .eq("manuscript_id", manuscript_id_str)
+                .execute()
+            )
+            ra_rows = getattr(ra_resp, "data", None) or []
+        except Exception as e:
+            logger.warning("[RevertTechnicalCheck] load review_assignments failed: %s", e)
+            raise HTTPException(status_code=409, detail="Cannot verify reviewer assignments for revert")
+
+        def _is_active_assignment(row: dict[str, Any]) -> bool:
+            status_raw = str(row.get("status") or "").strip().lower()
+            if status_raw in {"cancelled", "declined"}:
+                return False
+            if row.get("declined_at") and status_raw in {"", "pending", "invited", "opened"}:
+                return False
+            # accepted/submitted/completed/pending/invited/opened/unknown 全部视为“已开始或不可安全回退”
+            if row.get("accepted_at") or row.get("submitted_at"):
+                return True
+            return True
+
+        if any(_is_active_assignment(row) for row in ra_rows):
+            raise HTTPException(
+                status_code=409,
+                detail="Technical-check revert blocked: reviewer assignments already started",
+            )
+
+        now = self._now()
+        update_payload = {
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "updated_at": now,
+        }
+        q = (
+            self.client.table("manuscripts")
+            .update(update_payload)
+            .eq("id", manuscript_id_str)
+            .eq("status", ManuscriptStatus.UNDER_REVIEW.value)
+        )
+        if not has_global_override:
+            q = q.eq("assistant_editor_id", actor_id_str)
+        upd = q.execute()
+        rows = getattr(upd, "data", None) or []
+        if not rows:
+            latest = self._get_manuscript(manuscript_id_str)
+            latest_status = normalize_status(str(latest.get("status") or ""))
+            latest_pre = self._normalize_precheck_status(latest.get("pre_check_status"))
+            if latest_status == ManuscriptStatus.PRE_CHECK.value and latest_pre == PreCheckStatus.TECHNICAL.value:
+                return self._map_precheck_row(latest)
+            raise HTTPException(status_code=409, detail="Technical-check revert conflict: manuscript state changed")
+
+        self._safe_insert_transition_log(
+            manuscript_id=manuscript_id_str,
+            from_status=ManuscriptStatus.UNDER_REVIEW.value,
+            to_status=ManuscriptStatus.PRE_CHECK.value,
+            changed_by=actor_id_str,
+            comment=reason_clean,
+            payload={
+                "action": "precheck_technical_revert_from_under_review",
+                "reason": reason_clean,
+                "source": str(source or "ae_workspace"),
+                "assistant_editor_before": owner_ae or None,
+                "assistant_editor_after": owner_ae or None,
+                "idempotency_key": idempotency_key,
+            },
+            created_at=now,
+        )
+        return self._map_precheck_row(rows[0])
+
     def get_academic_queue(
         self,
         *,

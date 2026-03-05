@@ -108,6 +108,12 @@ class TechnicalCheckRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=64)
 
 
+class RevertTechnicalCheckRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=2000)
+    source: str | None = Field(default=None, max_length=100)
+    idempotency_key: str | None = Field(default=None, max_length=64)
+
+
 class AcademicCheckRequest(BaseModel):
     decision: Literal["review", "decision_phase"]
     comment: str | None = Field(default=None, max_length=2000)

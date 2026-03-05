@@ -23,6 +23,7 @@ export type {
   ProcessFetchOptions,
   ProductionCycleCreatePayload,
   ProductionCycleEditorsUpdatePayload,
+  RevertTechnicalCheckPayload,
   ReviewerLibrarySearchOptions,
   SubmitAcademicCheckPayload,
   SubmitIntakeRevisionPayload,

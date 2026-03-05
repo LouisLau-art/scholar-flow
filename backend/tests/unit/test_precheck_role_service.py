@@ -199,6 +199,185 @@ def test_submit_technical_check_pass_routes_to_under_review():
     assert kwargs["payload"]["action"] == "precheck_technical_to_under_review"
 
 
+def test_revert_technical_check_routes_back_to_precheck_technical():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+            "pre_check_status": None,
+            "assistant_editor_id": str(ae_id),
+        }
+    )
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "status_transition_logs",
+                "data": [
+                    {
+                        "id": "log-1",
+                        "payload": {"action": "precheck_technical_to_under_review"},
+                        "created_at": "2026-03-05T00:00:00Z",
+                    }
+                ],
+            },
+            {
+                "table": "review_assignments",
+                "data": [],
+            },
+            {
+                "table": "manuscripts",
+                "data": [
+                    {
+                        "id": str(manuscript_id),
+                        "status": ManuscriptStatus.PRE_CHECK.value,
+                        "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                        "assistant_editor_id": str(ae_id),
+                    }
+                ],
+            },
+        ]
+    )
+
+    out = svc.revert_technical_check(
+        manuscript_id=manuscript_id,
+        actor_id=ae_id,
+        actor_roles=["assistant_editor"],
+        reason="误触提交外审，回退到技术检查阶段",
+        source="ae_workspace",
+    )
+    assert out["status"] == ManuscriptStatus.PRE_CHECK.value
+    assert out["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+    kwargs = svc._safe_insert_transition_log.call_args.kwargs  # type: ignore[union-attr]
+    assert kwargs["from_status"] == ManuscriptStatus.UNDER_REVIEW.value
+    assert kwargs["to_status"] == ManuscriptStatus.PRE_CHECK.value
+    assert kwargs["payload"]["action"] == "precheck_technical_revert_from_under_review"
+
+
+def test_revert_technical_check_rejects_short_reason():
+    svc = _new_service()
+    with pytest.raises(HTTPException) as ei:
+        svc.revert_technical_check(
+            manuscript_id=uuid4(),
+            actor_id=uuid4(),
+            actor_roles=["assistant_editor"],
+            reason="太短",
+        )
+    assert ei.value.status_code == 422
+
+
+def test_revert_technical_check_rejects_non_owner_assistant_editor():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    assigned_ae = uuid4()
+    caller_ae = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+            "pre_check_status": None,
+            "assistant_editor_id": str(assigned_ae),
+        }
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.revert_technical_check(
+            manuscript_id=manuscript_id,
+            actor_id=caller_ae,
+            actor_roles=["assistant_editor"],
+            reason="误触提交外审，需要回退到技术检查",
+        )
+    assert ei.value.status_code == 403
+
+
+def test_revert_technical_check_rejects_when_latest_source_not_technical_submit():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+            "pre_check_status": None,
+            "assistant_editor_id": str(ae_id),
+        }
+    )
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "status_transition_logs",
+                "data": [
+                    {
+                        "id": "log-2",
+                        "payload": {"action": "precheck_academic_to_review"},
+                        "created_at": "2026-03-05T00:00:00Z",
+                    }
+                ],
+            }
+        ]
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.revert_technical_check(
+            manuscript_id=manuscript_id,
+            actor_id=ae_id,
+            actor_roles=["assistant_editor"],
+            reason="误触提交外审，需要撤回到技术检查",
+        )
+    assert ei.value.status_code == 409
+
+
+def test_revert_technical_check_rejects_when_review_assignments_started():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+            "pre_check_status": None,
+            "assistant_editor_id": str(ae_id),
+        }
+    )
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "status_transition_logs",
+                "data": [
+                    {
+                        "id": "log-3",
+                        "payload": {"action": "precheck_technical_to_under_review"},
+                        "created_at": "2026-03-05T00:00:00Z",
+                    }
+                ],
+            },
+            {
+                "table": "review_assignments",
+                "data": [
+                    {
+                        "id": "ra-1",
+                        "status": "invited",
+                        "accepted_at": None,
+                        "submitted_at": None,
+                        "declined_at": None,
+                    }
+                ],
+            },
+        ]
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.revert_technical_check(
+            manuscript_id=manuscript_id,
+            actor_id=ae_id,
+            actor_roles=["assistant_editor"],
+            reason="误触提交外审，外审尚未开始时回退技术检查",
+        )
+    assert ei.value.status_code == 409
+
+
 def test_request_intake_revision_requires_comment():
     svc = _new_service()
     with pytest.raises(HTTPException) as ei:

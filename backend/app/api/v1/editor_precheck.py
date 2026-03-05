@@ -9,6 +9,7 @@ from app.api.v1.editor_common import (
     AssignAERequest,
     IntakeRevisionRequest,
     QuickPrecheckPayload,
+    RevertTechnicalCheckRequest,
     TechnicalCheckRequest,
 )
 from app.core.auth_utils import get_current_user
@@ -287,6 +288,39 @@ async def submit_technical_check(
         raise
     except Exception as e:
         print(f"[SubmitCheck] failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/manuscripts/{id}/revert-technical-check")
+async def revert_technical_check(
+    id: UUID,
+    request: RevertTechnicalCheckRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["assistant_editor", "managing_editor", "admin"])),
+):
+    """
+    受控回退：under_review -> pre_check(technical)。
+    """
+    try:
+        ensure_manuscript_scope_access(
+            manuscript_id=str(id),
+            user_id=str(current_user.get("id") or ""),
+            roles=profile.get("roles") or [],
+            allow_admin_bypass=True,
+        )
+        updated = EditorService().revert_technical_check(
+            manuscript_id=id,
+            actor_id=current_user["id"],
+            actor_roles=profile.get("roles") or [],
+            reason=request.reason,
+            source=request.source,
+            idempotency_key=request.idempotency_key,
+        )
+        return {"message": "Technical check reverted", "data": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[RevertTechnicalCheck] failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

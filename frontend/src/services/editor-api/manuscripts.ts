@@ -5,6 +5,7 @@ import type {
   ManuscriptDetailGetOptions,
   ManuscriptsProcessFilters,
   ProcessFetchOptions,
+  RevertTechnicalCheckPayload,
   SubmitAcademicCheckPayload,
   SubmitIntakeRevisionPayload,
   SubmitTechnicalCheckPayload,
@@ -235,6 +236,20 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
 
     async submitTechnicalCheck(manuscriptId: string, payload: SubmitTechnicalCheckPayload) {
       const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/submit-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        invalidateProcessRowsCache()
+        invalidateManuscriptDetailCache(manuscriptId)
+      }
+      return json
+    },
+
+    async revertTechnicalCheck(manuscriptId: string, payload: RevertTechnicalCheckPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/revert-technical-check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -101,10 +101,11 @@ export function AEWorkspacePanel() {
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<'submit' | 'revert' | null>(null)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
+  const [revertReason, setRevertReason] = useState('')
   const [error, setError] = useState('')
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
@@ -168,9 +169,10 @@ export function AEWorkspacePanel() {
     reopenGuardUntilRef.current = Date.now() + DIALOG_REOPEN_GUARD_MS
     setTechnicalDecision('pass')
     setComment('')
+    setRevertReason('')
     setError('')
     setActiveMs(null)
-    setDialogOpen(false)
+    setDialogMode(null)
   }, [])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
@@ -180,14 +182,23 @@ export function AEWorkspacePanel() {
     setActiveMs(manuscript)
     setComment('')
     setError('')
-    setDialogOpen(true)
+    setDialogMode('submit')
+  }, [])
+
+  const openRevertCheckDialog = useCallback((manuscript: Manuscript) => {
+    if (!manuscript?.id) return
+    if (Date.now() < reopenGuardUntilRef.current) return
+    setActiveMs(manuscript)
+    setRevertReason('')
+    setError('')
+    setDialogMode('revert')
   }, [])
 
   useEffect(() => {
-    if (dialogOpen && !activeMs?.id) {
-      setDialogOpen(false)
+    if (dialogMode && !activeMs?.id) {
+      setDialogMode(null)
     }
-  }, [activeMs?.id, dialogOpen])
+  }, [activeMs?.id, dialogMode])
 
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -210,6 +221,29 @@ export function AEWorkspacePanel() {
       setSubmitting(false)
     }
   }, [activeMs?.id, comment, fetchWorkspace, resetDialog, technicalDecision])
+
+  const handleRevertCheck = useCallback(async () => {
+    if (!activeMs?.id) return
+    const reason = revertReason.trim()
+    setError('')
+    if (reason.length < 10) {
+      setError('请填写至少 10 个字的回退原因。')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await editorService.revertTechnicalCheck(activeMs.id, {
+        reason,
+        source: 'ae_workspace',
+      })
+      resetDialog()
+      await fetchWorkspace({ silent: true, forceRefresh: true })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '撤回外审发起失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [activeMs?.id, fetchWorkspace, resetDialog, revertReason])
 
   const groupedSections = useMemo(() => {
     const sorted = [...manuscripts].sort((a, b) => {
@@ -237,8 +271,6 @@ export function AEWorkspacePanel() {
       items: buckets[key],
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
-
-  const dialogVisible = dialogOpen && Boolean(activeMs?.id)
 
   return (
     <>
@@ -339,6 +371,11 @@ export function AEWorkspacePanel() {
                               Submit Check
                             </Button>
                           ) : null}
+                          {bucket === 'under_review' ? (
+                            <Button variant="outline" size="sm" onClick={() => openRevertCheckDialog(m)}>
+                              Undo Submit Check
+                            </Button>
+                          ) : null}
 
                           <Link
                             href={detailHref}
@@ -366,7 +403,7 @@ export function AEWorkspacePanel() {
       )}
 
       <Dialog
-        open={dialogVisible}
+        open={dialogMode === 'submit' && Boolean(activeMs?.id)}
         onOpenChange={(open) => {
           if (!open) resetDialog()
         }}
@@ -418,6 +455,45 @@ export function AEWorkspacePanel() {
               Cancel
             </Button>
             <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
+              {submitting ? 'Submitting…' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={dialogMode === 'revert' && Boolean(activeMs?.id)}
+        onOpenChange={(open) => {
+          if (!open) resetDialog()
+        }}
+      >
+        <DialogContent data-testid="ae-revert-check-modal-v1">
+          <DialogHeader>
+            <DialogTitle>Undo Submit Technical Check</DialogTitle>
+            <DialogDescription>
+              稿件：{activeMs?.title || ''}。将稿件从 under_review 回退到 pre_check（technical）。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reason (required)</div>
+              <Textarea
+                value={revertReason}
+                onChange={(e) => setRevertReason(e.target.value)}
+                placeholder="请说明回退原因（至少 10 个字）"
+                className="min-h-[110px]"
+              />
+            </div>
+
+            {error ? <div className="text-xs text-destructive">{error}</div> : null}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetDialog} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleRevertCheck} disabled={submitting || !activeMs?.id}>
               {submitting ? 'Submitting…' : 'Confirm'}
             </Button>
           </DialogFooter>

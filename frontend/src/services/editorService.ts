@@ -128,6 +128,17 @@ export const editorService = {
     return res
   },
 
+  revertTechnicalCheck: async (id: string, payload: { reason: string; source?: string }) => {
+    const res = await EditorApi.revertTechnicalCheck(id, {
+      reason: payload.reason,
+      source: payload.source,
+    })
+    if (!res?.message) {
+      throw new Error(res?.detail || res?.message || 'Failed to revert technical check')
+    }
+    return res
+  },
+
   getAcademicQueue: async (page = 1, pageSize = 20) => {
     const res = await EditorApi.getAcademicQueue(page, pageSize)
     if (!Array.isArray(res)) {

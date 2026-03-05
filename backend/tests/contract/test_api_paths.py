@@ -24,6 +24,7 @@ EXPECTED_ROUTES = {
     ("POST", "/api/v1/editor/manuscripts/{id}/assign-ae"),
     ("POST", "/api/v1/editor/manuscripts/{id}/intake-return"),
     ("POST", "/api/v1/editor/manuscripts/{id}/submit-check"),
+    ("POST", "/api/v1/editor/manuscripts/{id}/revert-technical-check"),
     ("POST", "/api/v1/editor/manuscripts/{id}/academic-check"),
     ("GET", "/api/v1/editor/manuscripts/{id}/tasks"),
     ("POST", "/api/v1/editor/manuscripts/{id}/tasks"),

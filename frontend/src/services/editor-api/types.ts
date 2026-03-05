@@ -72,6 +72,12 @@ export type SubmitTechnicalCheckPayload = {
   idempotency_key?: string
 }
 
+export type RevertTechnicalCheckPayload = {
+  reason: string
+  source?: string
+  idempotency_key?: string
+}
+
 export type SubmitAcademicCheckPayload = {
   decision: AcademicDecision
   comment?: string

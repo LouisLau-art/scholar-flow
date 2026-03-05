@@ -119,6 +119,32 @@ async def test_ae_check_flow(client, mocker):
     assert response.json()["message"] == "Technical check submitted"
 
 
+async def test_revert_technical_check_flow(client, mocker):
+    """
+    AE/ME 受控回退接口集成校验。
+    """
+    mocker.patch("app.core.auth_utils.get_current_user", return_value={"id": MOCK_AE_ID, "roles": ["assistant_editor"]})
+    mocker.patch(
+        "app.services.editor_service.EditorService.revert_technical_check",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": MOCK_AE_ID,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/revert-technical-check",
+        json={"reason": "误触提交外审，需要撤回到技术检查阶段"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["message"] == "Technical check reverted"
+    assert body["data"]["status"] == ManuscriptStatus.PRE_CHECK.value
+    assert body["data"]["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+
+
 async def test_me_workspace_flow(client, mocker):
     """
     Managing Editor Workspace 接口集成校验。
