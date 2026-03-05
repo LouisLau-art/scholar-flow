@@ -55,9 +55,11 @@ const FileHubCard = dynamic(
 )
 
 const REVIEWER_FEEDBACK_TIMEOUT_MS = 10_000
-const CARDS_CONTEXT_TIMEOUT_MS = 20_000
-const DEFERRED_DETAIL_TIMEOUT_MS = 20_000
-const DEFERRED_RETRY_DELAY_MS = 1_500
+const CARDS_CONTEXT_TIMEOUT_MS = 35_000
+const DEFERRED_DETAIL_TIMEOUT_MS = 35_000
+const AUTO_RETRY_BASE_DELAY_MS = 1_200
+const CARDS_AUTO_RETRY_MAX = 3
+const DEFERRED_AUTO_RETRY_MAX = 3
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -114,8 +116,9 @@ export default function EditorManuscriptDetailPage() {
   const [cardsLoading, setCardsLoading] = useState(false)
   const [cardsError, setCardsError] = useState<string | null>(null)
   const [deferredLoading, setDeferredLoading] = useState(false)
-  const cardsRetryDoneRef = useRef(false)
-  const deferredRetryDoneRef = useRef(false)
+  const [deferredError, setDeferredError] = useState<string | null>(null)
+  const cardsRetryAttemptRef = useRef(0)
+  const deferredRetryAttemptRef = useRef(0)
   const cardsRetryTimerRef = useRef<number | null>(null)
   const deferredRetryTimerRef = useRef<number | null>(null)
   const capability = useMemo(() => deriveEditorCapability(rbacContext), [rbacContext])
@@ -232,6 +235,7 @@ export default function EditorManuscriptDetailPage() {
         if (!cardsRes?.success || !cardsRes?.data) {
           throw new Error(cardsRes?.detail || cardsRes?.message || 'Failed to load cards context')
         }
+        cardsRetryAttemptRef.current = 0
         setMs((prev) => {
           if (!prev) return prev
           return {
@@ -243,14 +247,16 @@ export default function EditorManuscriptDetailPage() {
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Failed to load cards context'
         const isTimeout = String(message).toLowerCase().includes('timed out')
-        if (isTimeout && !force && !cardsRetryDoneRef.current) {
-          cardsRetryDoneRef.current = true
+        if (isTimeout && cardsRetryAttemptRef.current < CARDS_AUTO_RETRY_MAX) {
+          const attempt = cardsRetryAttemptRef.current
+          cardsRetryAttemptRef.current += 1
           if (cardsRetryTimerRef.current) {
             window.clearTimeout(cardsRetryTimerRef.current)
           }
+          const delay = AUTO_RETRY_BASE_DELAY_MS * 2 ** attempt
           cardsRetryTimerRef.current = window.setTimeout(() => {
             void loadCardsContext(true)
-          }, DEFERRED_RETRY_DELAY_MS)
+          }, delay)
           return
         }
         setCardsError(message)
@@ -266,6 +272,7 @@ export default function EditorManuscriptDetailPage() {
       if (!id) return
       try {
         setDeferredLoading(true)
+        setDeferredError(null)
         const detailRes = await withTimeout(
           EditorApi.getManuscriptDetail(id, { skipCards: true, includeHeavy: true, force }),
           DEFERRED_DETAIL_TIMEOUT_MS,
@@ -274,20 +281,24 @@ export default function EditorManuscriptDetailPage() {
         if (!detailRes?.success || !detailRes?.data) {
           throw new Error(detailRes?.detail || detailRes?.message || 'Failed to load deferred detail context')
         }
+        deferredRetryAttemptRef.current = 0
         mergeDeferredDetailContext(detailRes.data as ManuscriptDetail)
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Deferred detail context loading timed out.'
         const isTimeout = String(message).toLowerCase().includes('timed out')
-        if (isTimeout && !force && !deferredRetryDoneRef.current) {
-          deferredRetryDoneRef.current = true
+        if (isTimeout && deferredRetryAttemptRef.current < DEFERRED_AUTO_RETRY_MAX) {
+          const attempt = deferredRetryAttemptRef.current
+          deferredRetryAttemptRef.current += 1
           if (deferredRetryTimerRef.current) {
             window.clearTimeout(deferredRetryTimerRef.current)
           }
+          const delay = AUTO_RETRY_BASE_DELAY_MS * 2 ** attempt
           deferredRetryTimerRef.current = window.setTimeout(() => {
             void loadDeferredDetailContext(true)
-          }, DEFERRED_RETRY_DELAY_MS)
+          }, delay)
           return
         }
+        setDeferredError(message)
         console.warn('[EditorDetail] deferred detail context failed', e)
       } finally {
         setDeferredLoading(false)
@@ -357,8 +368,9 @@ export default function EditorManuscriptDetailPage() {
     setReviewsActivated(false)
     setReviewsLoadedOnce(false)
     setCardsActivated(false)
-    cardsRetryDoneRef.current = false
-    deferredRetryDoneRef.current = false
+    setDeferredError(null)
+    cardsRetryAttemptRef.current = 0
+    deferredRetryAttemptRef.current = 0
     if (cardsRetryTimerRef.current) {
       window.clearTimeout(cardsRetryTimerRef.current)
       cardsRetryTimerRef.current = null
@@ -583,8 +595,16 @@ export default function EditorManuscriptDetailPage() {
   }, [])
 
   const handleRetryCardsContext = useCallback(() => {
+    cardsRetryAttemptRef.current = 0
+    setCardsError(null)
     void loadCardsContext(true)
   }, [loadCardsContext])
+
+  const handleRetryDeferredContext = useCallback(() => {
+    deferredRetryAttemptRef.current = 0
+    setDeferredError(null)
+    void loadDeferredDetailContext(true)
+  }, [loadDeferredDetailContext])
 
 
   if (loading) {
@@ -686,6 +706,8 @@ export default function EditorManuscriptDetailPage() {
             reviewerInvites={ms.reviewer_invites || []}
             deferredLoaded={Boolean(ms.is_deferred_context_loaded)}
             deferredLoading={deferredLoading}
+            loadError={deferredError}
+            onRetry={handleRetryDeferredContext}
           />
 
           <ReviewerFeedbackSummaryCard

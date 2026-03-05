@@ -292,12 +292,16 @@ type ReviewerInviteSummaryCardProps = {
   reviewerInvites: ManuscriptDetail['reviewer_invites']
   deferredLoaded?: boolean
   deferredLoading?: boolean
+  loadError?: string | null
+  onRetry?: () => void
 }
 
 export function ReviewerInviteSummaryCard({
   reviewerInvites,
   deferredLoaded = true,
   deferredLoading = false,
+  loadError = null,
+  onRetry,
 }: ReviewerInviteSummaryCardProps) {
   const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
 
@@ -307,7 +311,16 @@ export function ReviewerInviteSummaryCard({
         <CardTitle className="text-base">Review Summary</CardTitle>
       </CardHeader>
       <CardContent>
-        {!deferredLoaded ? (
+        {loadError ? (
+          <div className="space-y-2">
+            <div className="text-sm text-destructive">{loadError}</div>
+            {onRetry ? (
+              <Button size="sm" variant="outline" onClick={onRetry} data-testid="reviewer-summary-retry">
+                Retry
+              </Button>
+            ) : null}
+          </div>
+        ) : !deferredLoaded ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {deferredLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Reviewer summary loading...

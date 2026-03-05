@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import EditorManuscriptDetailPage from '@/app/(admin)/editor/manuscript/[id]/page'
@@ -157,7 +157,7 @@ describe('Editor detail performance flow', () => {
     })
   })
 
-  it('shows retry entry when deferred cards loading times out', async () => {
+  it('auto-retries once when deferred cards loading times out', async () => {
     ;(EditorApi.getManuscriptCardsContext as unknown as ReturnType<typeof vi.fn>)
       .mockRejectedValueOnce(new Error('Task/queue cards loading timed out.'))
       .mockResolvedValueOnce({
@@ -180,11 +180,10 @@ describe('Editor detail performance flow', () => {
     render(<EditorManuscriptDetailPage />)
     await screen.findByText('Performance Manuscript')
 
-    const retryBtn = await screen.findByTestId('cards-context-retry')
-    fireEvent.click(retryBtn)
-
     await waitFor(() => {
       expect(EditorApi.getManuscriptCardsContext).toHaveBeenCalledTimes(2)
-    })
+    }, { timeout: 4_000 })
+
+    expect(screen.queryByTestId('cards-context-retry')).not.toBeInTheDocument()
   })
 })
