@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck, Loader2 } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, Loader2, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -44,6 +44,7 @@ type SectionMeta = {
 
 const SECTION_ORDER: WorkspaceBucket[] = ['technical', 'academic_pending', 'under_review', 'revision_followup', 'decision', 'other']
 const WORKSPACE_CACHE_TTL_MS = 20_000
+const DIALOG_REOPEN_GUARD_MS = 1_200
 
 let workspaceRowsCache: { rows: Manuscript[]; cachedAt: number } | null = null
 
@@ -164,7 +165,7 @@ export function AEWorkspacePanel() {
 
   const resetDialog = useCallback(() => {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
-    reopenGuardUntilRef.current = Date.now() + 300
+    reopenGuardUntilRef.current = Date.now() + DIALOG_REOPEN_GUARD_MS
     setTechnicalDecision('pass')
     setComment('')
     setError('')
@@ -173,6 +174,7 @@ export function AEWorkspacePanel() {
   }, [])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
+    if (!manuscript?.id) return
     if (Date.now() < reopenGuardUntilRef.current) return
     setTechnicalDecision('pass')
     setActiveMs(manuscript)
@@ -180,6 +182,21 @@ export function AEWorkspacePanel() {
     setError('')
     setDialogOpen(true)
   }, [])
+
+  const handleDialogDismiss = useCallback(
+    (event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+      event?.preventDefault?.()
+      event?.stopPropagation?.()
+      resetDialog()
+    },
+    [resetDialog]
+  )
+
+  useEffect(() => {
+    if (dialogOpen && !activeMs?.id) {
+      setDialogOpen(false)
+    }
+  }, [activeMs?.id, dialogOpen])
 
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -361,7 +378,16 @@ export function AEWorkspacePanel() {
           if (!open) resetDialog()
         }}
       >
-        <DialogContent data-testid="ae-submit-check-modal-v2">
+        <DialogContent data-testid="ae-submit-check-modal-v2" showCloseButton={false} className="relative">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute right-4 top-4 z-10 rounded-sm p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={handleDialogDismiss}
+            disabled={submitting}
+          >
+            <X className="h-4 w-4" />
+          </button>
           <DialogHeader>
             <DialogTitle>Submit Technical Check</DialogTitle>
             <DialogDescription>
@@ -404,7 +430,7 @@ export function AEWorkspacePanel() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={resetDialog} disabled={submitting}>
+            <Button variant="outline" onClick={handleDialogDismiss} disabled={submitting}>
               Cancel
             </Button>
             <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
