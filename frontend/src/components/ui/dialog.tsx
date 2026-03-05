@@ -21,7 +21,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 sf-motion-dialog-overlay",
+      "fixed inset-0 z-50 bg-black/80",
       className
     )}
     {...props}
@@ -32,15 +32,16 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { showCloseButton?: boolean }
->(({ className, children, showCloseButton = true, ...props }, ref) => (
+>(({ className, children, showCloseButton = true, style, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg max-h-[92vh] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg duration-200 sf-motion-dialog-panel sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg max-h-[92vh] gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
         className
       )}
+      style={{ ...style, transform: style?.transform ?? "translate(-50%, -50%)" }}
       {...props}
     >
       {children}

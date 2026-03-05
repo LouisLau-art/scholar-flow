@@ -247,6 +247,8 @@ export function AEWorkspacePanel() {
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
 
+  const dialogVisible = dialogOpen && Boolean(activeMs?.id)
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -373,7 +375,7 @@ export function AEWorkspacePanel() {
       )}
 
       <Dialog
-        open={dialogOpen}
+        open={dialogVisible}
         onOpenChange={(open) => {
           if (!open) resetDialog()
         }}
@@ -391,7 +393,7 @@ export function AEWorkspacePanel() {
           <DialogHeader>
             <DialogTitle>Submit Technical Check</DialogTitle>
             <DialogDescription>
-              稿件：{activeMs?.title || '—'}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
+              稿件：{activeMs?.title || ''}。选择下一步：可直接发起外审、可选送 Academic 预审，或技术退回作者。
             </DialogDescription>
           </DialogHeader>
 
