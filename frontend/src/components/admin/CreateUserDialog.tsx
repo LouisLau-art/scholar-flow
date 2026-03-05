@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { UserRole } from '@/types/user';
 import { Loader2, AlertTriangle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,15 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
   const [role, setRole] = useState<UserRole>('author');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitTokenRef = useRef(0);
+
+  const handleClose = useCallback(() => {
+    // 允许在提交中主动关闭，避免请求挂起导致弹窗锁死。
+    submitTokenRef.current += 1;
+    setIsSubmitting(false);
+    setError(null);
+    onClose();
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,23 +53,28 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
 
     setIsSubmitting(true);
     setError(null);
+    const submitToken = submitTokenRef.current + 1;
+    submitTokenRef.current = submitToken;
 
     try {
       await onConfirm(email, fullName, role);
+      if (submitTokenRef.current !== submitToken) return;
       // Reset form
       setEmail('');
       setFullName('');
       setRole('author');
-      onClose();
+      handleClose();
     } catch (err) {
+      if (submitTokenRef.current !== submitToken) return;
       setError(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
+      if (submitTokenRef.current !== submitToken) return;
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
         <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4">
           <DialogTitle>Invite New Member</DialogTitle>
@@ -137,8 +151,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
-              disabled={isSubmitting}
+              onClick={handleClose}
             >
               Cancel
             </Button>
