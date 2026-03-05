@@ -99,7 +99,6 @@ export function AEWorkspacePanel() {
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
   const [comment, setComment] = useState('')
@@ -170,35 +169,15 @@ export function AEWorkspacePanel() {
   const closeDialog = useCallback(() => {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
     submitCheckGuard.markClosed()
-    setDialogOpen(false)
-  }, [submitCheckGuard])
+    setActiveMs(null)
+    resetDialogState()
+  }, [resetDialogState, submitCheckGuard])
 
   const openSubmitCheckDialog = useCallback((manuscript: Manuscript) => {
     if (!submitCheckGuard.canOpen()) return
     setActiveMs(manuscript)
     resetDialogState()
-    setDialogOpen(true)
   }, [resetDialogState, submitCheckGuard])
-
-  useEffect(() => {
-    if (!dialogOpen) {
-      setActiveMs(null)
-      resetDialogState()
-    }
-  }, [dialogOpen, resetDialogState])
-
-  useEffect(() => {
-    if (!dialogOpen) return
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      closeDialog()
-    }
-    window.addEventListener('keydown', onEscape)
-    return () => {
-      window.removeEventListener('keydown', onEscape)
-    }
-  }, [closeDialog, dialogOpen])
 
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -248,6 +227,8 @@ export function AEWorkspacePanel() {
       items: buckets[key],
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
+
+  const dialogOpen = Boolean(activeMs?.id)
 
   return (
     <>
