@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck, Loader2, X } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, Loader2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -182,15 +182,6 @@ export function AEWorkspacePanel() {
     setError('')
     setDialogOpen(true)
   }, [])
-
-  const handleDialogDismiss = useCallback(
-    (event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
-      event?.preventDefault?.()
-      event?.stopPropagation?.()
-      resetDialog()
-    },
-    [resetDialog]
-  )
 
   useEffect(() => {
     if (dialogOpen && !activeMs?.id) {
@@ -380,16 +371,7 @@ export function AEWorkspacePanel() {
           if (!open) resetDialog()
         }}
       >
-        <DialogContent data-testid="ae-submit-check-modal-v2" showCloseButton={false} className="relative">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute right-4 top-4 z-10 rounded-sm p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={handleDialogDismiss}
-            disabled={submitting}
-          >
-            <X className="h-4 w-4" />
-          </button>
+        <DialogContent data-testid="ae-submit-check-modal-v2">
           <DialogHeader>
             <DialogTitle>Submit Technical Check</DialogTitle>
             <DialogDescription>
@@ -432,7 +414,7 @@ export function AEWorkspacePanel() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleDialogDismiss} disabled={submitting}>
+            <Button variant="outline" onClick={resetDialog} disabled={submitting}>
               Cancel
             </Button>
             <Button onClick={handleSubmitCheck} disabled={submitting || !activeMs?.id}>
