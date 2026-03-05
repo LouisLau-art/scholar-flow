@@ -31,6 +31,7 @@ import {
   MetadataStaffCard,
   NextActionCard,
   PrecheckRoleQueueCard,
+  ReviewerInviteSummaryCard,
   ReviewerFeedbackSummaryCard,
   TaskSlaSummaryCard,
 } from './detail-sections'
@@ -625,6 +626,8 @@ export default function EditorManuscriptDetailPage() {
             latestAuthorResponse={latestAuthorResponse}
             historyCount={authorResponseHistory.length}
           />
+
+          <ReviewerInviteSummaryCard reviewerInvites={ms.reviewer_invites || []} />
 
           <ReviewerFeedbackSummaryCard
             canViewReviewerFeedback={canViewReviewerFeedback}

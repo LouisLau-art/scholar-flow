@@ -11,7 +11,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateLocal, formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 
-import type { AuthorResponseHistoryItem, ManuscriptDetail } from './helpers'
+import {
+  resolveReviewerInviteSummaryState,
+  type AuthorResponseHistoryItem,
+  type ManuscriptDetail,
+} from './helpers'
 import type { ReviewerFeedbackItem } from './types'
 
 type DetailTopHeaderProps = {
@@ -278,6 +282,83 @@ export function LatestAuthorResubmissionCard({
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">No author resubmission comment yet.</div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+type ReviewerInviteSummaryCardProps = {
+  reviewerInvites: ManuscriptDetail['reviewer_invites']
+}
+
+export function ReviewerInviteSummaryCard({ reviewerInvites }: ReviewerInviteSummaryCardProps) {
+  const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
+
+  return (
+    <Card className="shadow-sm border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Review Summary</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No reviewers assigned yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-2 py-2 text-left font-semibold">Reviewer Name</th>
+                  <th className="px-2 py-2 text-left font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((invite, idx) => {
+                  const reviewerLabel =
+                    String(invite?.reviewer_name || '').trim() ||
+                    String(invite?.reviewer_email || '').trim() ||
+                    `Reviewer ${idx + 1}`
+                  const state = resolveReviewerInviteSummaryState(invite)
+                  const stateLabel =
+                    state === 'invited' ? 'Invited' : state === 'agree' ? 'Agree' : state === 'decline' ? 'Decline' : '—'
+                  const stateAt =
+                    state === 'invited'
+                      ? invite?.invited_at || invite?.opened_at || null
+                      : state === 'agree'
+                        ? invite?.accepted_at || invite?.submitted_at || null
+                        : state === 'decline'
+                          ? invite?.declined_at || null
+                          : null
+                  const dueText = invite?.due_at ? ` (Due ${formatDateLocal(invite.due_at)})` : ''
+                  const reasonText = state === 'decline' ? String(invite?.decline_reason || '').trim() : ''
+
+                  return (
+                    <tr key={String(invite?.id || `row-${idx}`)} className="border-b border-border/60 last:border-0">
+                      <td className="px-2 py-2.5 align-top">
+                        <div className="font-medium text-foreground">{reviewerLabel}</div>
+                      </td>
+                      <td className="px-2 py-2.5 align-top">
+                        <div
+                          className={
+                            state === 'decline'
+                              ? 'font-medium text-destructive'
+                              : state === 'blank'
+                                ? 'font-medium text-muted-foreground'
+                                : 'font-medium text-foreground'
+                          }
+                        >
+                          {stateLabel}
+                          {stateAt ? ` ${formatDateLocal(stateAt)}` : ''}
+                          {dueText}
+                        </div>
+                        {reasonText ? <div className="mt-0.5 text-xs text-muted-foreground">{reasonText}</div> : null}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </CardContent>
     </Card>

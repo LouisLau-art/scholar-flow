@@ -74,6 +74,41 @@ export type AuthorResponseHistoryItem = {
   round: number | null
 }
 
+export type ReviewerInviteSummaryState = 'blank' | 'invited' | 'agree' | 'decline'
+
+export function resolveReviewerInviteSummaryState(
+  invite: ManuscriptDetail['reviewer_invites'] extends Array<infer T> ? T : never
+): ReviewerInviteSummaryState {
+  const statusRaw = String(invite?.status || '').trim().toLowerCase()
+  const hasInvitedEvidence = Boolean(invite?.invited_at || invite?.opened_at)
+
+  if (statusRaw === 'declined' || statusRaw === 'decline' || invite?.declined_at) {
+    return 'decline'
+  }
+
+  if (
+    statusRaw === 'accepted' ||
+    statusRaw === 'agree' ||
+    statusRaw === 'agreed' ||
+    statusRaw === 'completed' ||
+    statusRaw === 'submitted' ||
+    invite?.accepted_at ||
+    invite?.submitted_at
+  ) {
+    return 'agree'
+  }
+
+  if (statusRaw === 'invited' || statusRaw === 'pending') {
+    return hasInvitedEvidence ? 'invited' : 'blank'
+  }
+
+  if (hasInvitedEvidence) {
+    return 'invited'
+  }
+
+  return 'blank'
+}
+
 export function normalizeResponseLetterText(raw: unknown): string {
   const source = String(raw || '').trim()
   if (!source) return ''
