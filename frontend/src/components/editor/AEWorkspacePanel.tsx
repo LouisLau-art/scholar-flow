@@ -359,7 +359,6 @@ export function AEWorkspacePanel() {
         open={dialogOpen}
         onOpenChange={(open) => {
           if (!open) resetDialog()
-          else setDialogOpen(true)
         }}
       >
         <DialogContent data-testid="ae-submit-check-modal-v2">
