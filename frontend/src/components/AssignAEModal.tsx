@@ -34,6 +34,7 @@ type SearchablePickerProps = {
   emptyText: string
   disabled?: boolean
   loading?: boolean
+  portalContainer?: HTMLElement | null
   onChange: (nextId: string) => void
 }
 
@@ -58,6 +59,12 @@ function SearchablePicker(props: SearchablePickerProps) {
     }
   }, [open])
 
+  React.useEffect(() => {
+    if (props.disabled && open) {
+      setOpen(false)
+    }
+  }, [props.disabled, open])
+
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground">{props.label}</label>
@@ -70,13 +77,6 @@ function SearchablePicker(props: SearchablePickerProps) {
             aria-expanded={open}
             disabled={props.disabled}
             className="w-full justify-between"
-            onPointerDown={(event) => {
-              // 中文注释：Dialog 内组合场景下，手动兜底“再次点击触发器即可收起”。
-              if (open) {
-                event.preventDefault()
-                setOpen(false)
-              }
-            }}
           >
             <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
               {selected?.label || props.placeholder}
@@ -85,9 +85,10 @@ function SearchablePicker(props: SearchablePickerProps) {
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-2"
+          container={props.portalContainer}
+          className="z-[90] w-[var(--radix-popover-trigger-width)] p-2"
           align="start"
-          side="top"
+          side="bottom"
           onEscapeKeyDown={() => setOpen(false)}
           onPointerDownOutside={() => setOpen(false)}
           onFocusOutside={() => setOpen(false)}
@@ -145,6 +146,7 @@ function SearchablePicker(props: SearchablePickerProps) {
 }
 
 export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, manuscriptId, onAssignSuccess }) => {
+  const dialogContentRef = React.useRef<HTMLDivElement | null>(null)
   const [selectedAE, setSelectedAE] = React.useState('')
   const [selectedOwner, setSelectedOwner] = React.useState('')
   const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -266,7 +268,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-w-md">
+      <DialogContent ref={dialogContentRef} className="max-w-md">
         <DialogHeader>
           <DialogTitle>通过并分配 AE</DialogTitle>
           <DialogDescription>
@@ -284,6 +286,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             emptyText="没有匹配的 AE"
             disabled={isSubmitting || isLoadingAEs}
             loading={isLoadingAEs}
+            portalContainer={dialogContentRef.current}
             onChange={setSelectedAE}
           />
 
@@ -299,6 +302,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
                 emptyText="没有匹配的 Owner"
                 disabled={isSubmitting || isLoadingOwners}
                 loading={isLoadingOwners}
+                portalContainer={dialogContentRef.current}
                 onChange={setSelectedOwner}
               />
               {selectedOwner ? (
