@@ -283,19 +283,21 @@ async def test_reset_password_success(client: AsyncClient, auth_token, mock_admi
     mock_admin_service.reset_user_password.return_value = {
         "id": user_id,
         "email": "target@example.com",
-        "temporary_password": "12345678",
         "must_change_password": True,
+        "reset_link_sent": True,
+        "delivery_status": "sent",
     }
 
     response = await client.post(
         f"/api/v1/admin/users/{user_id}/reset-password",
         headers={"Authorization": f"Bearer {auth_token}"},
-        json={"temporary_password": "12345678"},
+        json={},
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert data["temporary_password"] == "12345678"
+    assert data["reset_link_sent"] is True
+    assert data["delivery_status"] == "sent"
     assert data["must_change_password"] is True
 
 
@@ -307,7 +309,7 @@ async def test_reset_password_not_found(client: AsyncClient, auth_token, mock_ad
     response = await client.post(
         f"/api/v1/admin/users/{user_id}/reset-password",
         headers={"Authorization": f"Bearer {auth_token}"},
-        json={"temporary_password": "12345678"},
+        json={},
     )
 
     assert response.status_code == 404

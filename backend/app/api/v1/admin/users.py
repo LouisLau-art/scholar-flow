@@ -694,13 +694,13 @@ async def reset_user_password(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Admin 将指定用户密码重置为临时密码（默认由后端生成强随机密码）。
+    Admin 发送密码重置链接到指定用户邮箱。
     """
     try:
         return service.reset_user_password(
             target_user_id=user_id,
             changed_by=UUID(current_user["id"]),
-            temporary_password=request.temporary_password,
+            redirect_to=request.redirect_to,
         )
     except ValueError as e:
         msg = str(e)

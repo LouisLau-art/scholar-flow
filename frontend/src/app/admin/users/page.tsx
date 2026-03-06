@@ -203,7 +203,7 @@ export default function UserManagementPage() {
   const handleResetPassword = async (userId: string) => {
     try {
       await adminUserService.resetUserPassword(userId);
-      toast.success('Password reset successfully');
+      toast.success('Password reset link sent');
     } catch (error) {
       console.error('Reset password failed:', error);
       throw error;

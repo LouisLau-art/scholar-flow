@@ -3,18 +3,12 @@ import secrets
 import string
 import logging
 from datetime import datetime
+from urllib.parse import quote
 from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
 
-def _is_production_env() -> bool:
-    value = (
-        os.environ.get("GO_ENV")
-        or os.environ.get("ENVIRONMENT")
-        or os.environ.get("APP_ENV")
-        or ""
-    )
-    return str(value).strip().lower() in {"prod", "production"}
+from app.core.mail import email_service
 
 ALLOWED_USER_ROLES = {
     "author",
@@ -29,6 +23,62 @@ ALLOWED_USER_ROLES = {
 
 
 logger = logging.getLogger("scholarflow.user_management")
+
+_EMAIL_TEMPLATE_TABLE = "email_templates"
+_EMAIL_TEMPLATE_SCENE = "admin_user_management"
+_DEFAULT_EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "admin_internal_user_welcome": {
+        "template_key": "admin_internal_user_welcome",
+        "display_name": "内部账号开通通知",
+        "scene": _EMAIL_TEMPLATE_SCENE,
+        "subject_template": "[{{ journal_title }}] Your account is ready",
+        "body_html_template": (
+            "<p>Dear {{ recipient_name }},</p>"
+            "<p>Your account has been created in <strong>{{ journal_title }}</strong>.</p>"
+            "<p>Assigned role: <strong>{{ role_label }}</strong></p>"
+            "<p>Please activate your sign-in by opening this link: "
+            "<a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
+            "<p>Best regards,<br/>{{ journal_title }} Editorial Office</p>"
+        ),
+        "body_text_template": (
+            "Dear {{ recipient_name }}, your {{ journal_title }} account (role: {{ role_label }}) is ready. "
+            "Activate your sign-in here: {{ action_link }}"
+        ),
+    },
+    "admin_password_reset_link": {
+        "template_key": "admin_password_reset_link",
+        "display_name": "管理员重置密码通知",
+        "scene": _EMAIL_TEMPLATE_SCENE,
+        "subject_template": "[{{ journal_title }}] Password reset link",
+        "body_html_template": (
+            "<p>Dear {{ recipient_name }},</p>"
+            "<p>An administrator requested a password reset for your account in "
+            "<strong>{{ journal_title }}</strong>.</p>"
+            "<p>Please continue here: <a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
+            "<p>If you did not request this, please contact support immediately.</p>"
+        ),
+        "body_text_template": (
+            "A password reset was requested for your {{ journal_title }} account. "
+            "Use this link: {{ action_link }}"
+        ),
+    },
+    "admin_reviewer_invite": {
+        "template_key": "admin_reviewer_invite",
+        "display_name": "审稿人平台邀请",
+        "scene": _EMAIL_TEMPLATE_SCENE,
+        "subject_template": "[{{ journal_title }}] Reviewer account invitation",
+        "body_html_template": (
+            "<p>Dear {{ recipient_name }},</p>"
+            "<p>You have been invited as a reviewer on <strong>{{ journal_title }}</strong>.</p>"
+            "<p>Please activate your account via: <a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
+            "<p>After sign-in, you can access reviewer workflows in your dashboard.</p>"
+        ),
+        "body_text_template": (
+            "You are invited as a reviewer on {{ journal_title }}. "
+            "Activate your account: {{ action_link }}"
+        ),
+    },
+}
 
 
 def _mask_email(email: str | None) -> str:
@@ -68,6 +118,106 @@ class UserManagementService:
         """
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
         return "".join(secrets.choice(alphabet) for _ in range(length))
+
+    @staticmethod
+    def _get_frontend_base_url() -> str:
+        raw = (
+            os.environ.get("FRONTEND_BASE_URL")
+            or os.environ.get("FRONTEND_ORIGIN")
+            or "http://localhost:3000"
+        )
+        return str(raw).strip().rstrip("/")
+
+    @staticmethod
+    def _default_journal_title() -> str:
+        return (
+            os.environ.get("JOURNAL_TITLE")
+            or os.environ.get("SITE_NAME")
+            or "ScholarFlow Journal"
+        ).strip()
+
+    def _build_redirect_to(self, *, next_path: str, override: Optional[str] = None) -> str:
+        if override and str(override).strip():
+            return str(override).strip()
+        base = self._get_frontend_base_url()
+        normalized_next = str(next_path or "/settings").strip()
+        if not normalized_next.startswith("/"):
+            normalized_next = f"/{normalized_next}"
+        return f"{base}/auth/callback?next={quote(normalized_next, safe='/')}"
+
+    @staticmethod
+    def _extract_action_link(link_response: Any) -> Optional[str]:
+        props = getattr(link_response, "properties", None)
+        if isinstance(props, dict):
+            return str(props.get("action_link") or "").strip() or None
+        action_link = getattr(props, "action_link", None)
+        if action_link:
+            return str(action_link).strip() or None
+        return None
+
+    def _load_email_template(self, *, env_key: str, fallback_key: str) -> Dict[str, Any]:
+        configured_key = str(os.environ.get(env_key) or "").strip() or fallback_key
+        try:
+            res = (
+                self.admin_client.table(_EMAIL_TEMPLATE_TABLE)
+                .select(
+                    "template_key,display_name,scene,subject_template,body_html_template,body_text_template,is_active"
+                )
+                .eq("template_key", configured_key)
+                .eq("is_active", True)
+                .maybe_single()
+                .execute()
+            )
+            row = getattr(res, "data", None)
+            if row:
+                return row
+        except Exception as e:
+            # 中文注释：模板表缺失或查询失败时回退内置模板，避免主流程中断。
+            logger.warning("Failed to load email template '%s': %s", configured_key, e)
+        return dict(_DEFAULT_EMAIL_TEMPLATES.get(fallback_key) or {})
+
+    def _send_inline_email(
+        self,
+        *,
+        to_email: str,
+        template: Dict[str, Any],
+        context: Dict[str, Any],
+        idempotency_key: str,
+        tags: Optional[List[Dict[str, str]]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> tuple[bool, str]:
+        if not email_service.is_configured():
+            return False, "Email service is not configured"
+
+        subject_template = str(template.get("subject_template") or "").strip()
+        body_html_template = str(template.get("body_html_template") or "").strip()
+        body_text_template = str(template.get("body_text_template") or "").strip() or None
+        template_key = str(template.get("template_key") or "inline_template").strip()
+
+        if not subject_template or not body_html_template:
+            return False, f"Email template '{template_key}' is invalid"
+
+        try:
+            subject = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
+            html_body = email_service.render_inline_template(body_html_template, context)
+            text_body = (
+                email_service.render_inline_template(body_text_template, context)
+                if body_text_template
+                else email_service._build_plain_text_from_html(html_body)
+            )
+            ok = email_service.send_email(
+                to_email=to_email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+                idempotency_key=idempotency_key,
+                tags=tags,
+                headers=headers,
+            )
+            return ok, "" if ok else "Email provider returned failure"
+        except Exception as e:
+            logger.warning("Failed to send inline email to %s: %s", _mask_email(to_email), e)
+            return False, str(e)
 
     # --- T015: Implement audit logging helper functions ---
 
@@ -308,70 +458,106 @@ class UserManagementService:
         *,
         target_user_id: UUID,
         changed_by: UUID,
-        temporary_password: Optional[str] = None,
+        redirect_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Admin 重置用户密码。
-        - 若未显式传入临时密码，则自动生成强随机密码。
+        Admin 重置用户密码（发送 recovery link）。
         """
         target_id_str = str(target_user_id)
-        # 中文注释:
-        # - 开发/UAT 阶段为了提速与可复现，默认使用固定口令；
-        # - 生产环境必须使用强随机密码，避免弱口令风险。
-        if temporary_password is None:
-            pwd = "12345678" if not _is_production_env() else self._generate_temporary_password()
-        else:
-            pwd = str(temporary_password).strip()
-        if len(pwd) < 8:
-            raise ValueError("Temporary password must be at least 8 characters")
-
         profile_email: Optional[str] = None
+        profile_name: Optional[str] = None
         try:
             profile_resp = (
                 self.admin_client.table("user_profiles")
-                .select("id,email")
+                .select("id,email,full_name")
                 .eq("id", target_id_str)
                 .maybe_single()
                 .execute()
             )
             profile = getattr(profile_resp, "data", None) or {}
             profile_email = profile.get("email")
+            profile_name = profile.get("full_name")
         except Exception:
-            # user_profiles 读取失败不阻塞密码重置主流程
+            # user_profiles 读取失败不阻塞后续处理；若无 email 会在下方显式报错。
             profile_email = None
 
+        if not profile_email:
+            raise ValueError("User not found")
+
+        effective_redirect = self._build_redirect_to(next_path="/settings", override=redirect_to)
+
         try:
-            # 兼容现有登录流程：直接设置临时密码并打上 metadata 标记。
-            # 前端可据此提示用户尽快到设置页修改密码。
-            self.admin_client.auth.admin.update_user_by_id(
-                target_id_str,
+            link_res = self.admin_client.auth.admin.generate_link(
                 {
-                    "password": pwd,
-                    "user_metadata": {"must_change_password": True},
-                },
+                    "type": "recovery",
+                    "email": profile_email,
+                    "options": {"redirect_to": effective_redirect},
+                }
             )
+            action_link = self._extract_action_link(link_res)
+            if not action_link:
+                raise Exception("Supabase generate_link returned empty action_link")
         except Exception as e:
             msg = str(e)
             if "not found" in msg.lower() or "user not found" in msg.lower():
                 raise ValueError("User not found")
-            raise Exception(f"Failed to reset password: {msg}") from e
+            raise Exception(f"Failed to create password reset link: {msg}") from e
 
-        # 审计：复用邮件日志表记录一次密码重置行为（不发送真实邮件）。
         try:
+            # 中文注释：仅作为前端可选提示，不作为强制门禁。
+            self.admin_client.auth.admin.update_user_by_id(
+                target_id_str,
+                {"user_metadata": {"must_change_password": True}},
+            )
+        except Exception as e:
+            logger.warning("Failed to update must_change_password metadata: %s", e)
+
+        template = self._load_email_template(
+            env_key="ADMIN_PASSWORD_RESET_EMAIL_TEMPLATE_KEY",
+            fallback_key="admin_password_reset_link",
+        )
+        context = {
+            "recipient_name": str(profile_name or "").strip() or str(profile_email).split("@")[0],
+            "journal_title": self._default_journal_title(),
+            "action_link": action_link,
+            "user_email": profile_email,
+        }
+        timestamp = int(datetime.utcnow().timestamp())
+        sent, send_error = self._send_inline_email(
+            to_email=profile_email,
+            template=template,
+            context=context,
+            idempotency_key=f"admin-reset-password:{target_id_str}:{timestamp}",
+            tags=[
+                {"name": "scene", "value": _EMAIL_TEMPLATE_SCENE},
+                {"name": "event", "value": "admin_password_reset"},
+            ],
+            headers={
+                "X-SF-Event": "admin_password_reset",
+                "X-SF-User-ID": target_id_str,
+            },
+        )
+        if not sent:
             self.log_email_notification(
-                recipient_email=profile_email or f"user:{target_id_str}",
+                recipient_email=profile_email,
                 notification_type="admin_password_reset",
                 status="pending_retry",
-                error_message=f"Password reset by admin {changed_by}; delivery not implemented in this flow.",
+                error_message=send_error or "Failed to send reset link email",
             )
-        except Exception:
-            pass
+            raise Exception("Failed to deliver password reset email")
+
+        self.log_email_notification(
+            recipient_email=profile_email,
+            notification_type="admin_password_reset",
+            status="sent",
+        )
 
         return {
             "id": target_id_str,
             "email": profile_email,
-            "temporary_password": pwd,
             "must_change_password": True,
+            "reset_link_sent": True,
+            "delivery_status": "sent",
         }
 
     # --- T083, T084, T085, T086: Implement user creation logic ---
@@ -384,51 +570,40 @@ class UserManagementService:
         T086: Send notification.
         """
         try:
-            # 1. Check if user exists (by email) in public.user_profiles or auth.users
-            # Checking auth.users via admin API
             try:
-                # We can't search by email easily with admin client list_users unless we iterate.
-                # But we can try to create and catch error, or check user_profiles first.
                 existing = self.admin_client.table("user_profiles").select("id").eq("email", email).maybe_single().execute()
                 if existing.data:
                     raise ValueError("User with this email already exists")
             except Exception as e:
-                # If checking fails, proceed to create (it will fail if duplicate)
                 if "User with this email already exists" in str(e):
                     raise e
-            
-            # 2. Create user in Supabase Auth
-            # We generate a random password or rely on invite magic link?
-            # Spec US3: "Direct Invite... sends account notification & initial login credentials".
-            # Usually we set a temp password or use inviteUserByEmail.
-            # Supabase Python SDK: auth.admin.create_user or invite_user_by_email.
-            # invite_user_by_email sends the built-in Supabase invite.
-            # But the requirement says "trigger Feature 011 email system".
-            # So we might want `create_user` with `email_confirm=True` and a generated password, 
-            # then send our own email.
-            
-            # 中文注释: 同 reset password，开发/UAT 默认固定口令；生产使用强随机。
-            temp_password = "12345678" if not _is_production_env() else self._generate_temporary_password(16)
-            
-            # Note: auth.admin is accessed via self.admin_client.auth.admin
-            user_response = self.admin_client.auth.admin.create_user({
-                "email": email,
-                "password": temp_password,
-                "email_confirm": True, # Auto-confirm
-                "user_metadata": {"full_name": full_name}
-            })
+
+            user_response = self.admin_client.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": self._generate_temporary_password(20),
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": full_name},
+                }
+            )
             
             new_user = user_response.user
             if not new_user:
                 raise Exception("Failed to create user in Auth")
             
             user_id = new_user.id
-            
-            # 3. Create/Update user_profiles with role
-            # Note: T083 explicitly says "role forced to Editor" in spec input, 
-            # but T012 Request model allows role selection. 
-            # We'll use the passed role.
-            
+            redirect_to = self._build_redirect_to(next_path="/settings")
+            link_res = self.admin_client.auth.admin.generate_link(
+                {
+                    "type": "recovery",
+                    "email": email,
+                    "options": {"redirect_to": redirect_to},
+                }
+            )
+            action_link = self._extract_action_link(link_res)
+            if not action_link:
+                raise Exception("Failed to generate onboarding link")
+
             profile_data = {
                 "id": user_id,
                 "email": email,
@@ -440,26 +615,57 @@ class UserManagementService:
             
             self.admin_client.table("user_profiles").upsert(profile_data).execute()
             
-            # 4. Audit Log
             self.log_account_creation(
                 created_user_id=UUID(user_id),
                 created_by=created_by,
                 initial_role=role
             )
-            
-            # 5. Send Notification (T086)
+
             logger.info(
                 "[UserManagement] internal user created: email=%s role=%s",
                 _mask_email(email),
                 role,
             )
+            template = self._load_email_template(
+                env_key="ADMIN_INTERNAL_USER_EMAIL_TEMPLATE_KEY",
+                fallback_key="admin_internal_user_welcome",
+            )
+            context = {
+                "recipient_name": full_name,
+                "journal_title": self._default_journal_title(),
+                "action_link": action_link,
+                "role_label": role.replace("_", " ").title(),
+                "user_email": email,
+            }
+            timestamp = int(datetime.utcnow().timestamp())
+            sent, send_error = self._send_inline_email(
+                to_email=email,
+                template=template,
+                context=context,
+                idempotency_key=f"admin-create-user:{user_id}:{timestamp}",
+                tags=[
+                    {"name": "scene", "value": _EMAIL_TEMPLATE_SCENE},
+                    {"name": "event", "value": "admin_internal_user_created"},
+                ],
+                headers={
+                    "X-SF-Event": "admin_internal_user_created",
+                    "X-SF-User-ID": str(user_id),
+                    "X-SF-Role": role,
+                },
+            )
+            if not sent:
+                self.log_email_notification(
+                    recipient_email=email,
+                    notification_type="account_created",
+                    status="pending_retry",
+                    error_message=send_error or "Failed to send account creation email",
+                )
+                raise Exception("Internal user created, but welcome email delivery failed")
 
             self.log_email_notification(
                 recipient_email=email,
                 notification_type="account_created",
-                # 当前链路仅记录创建事件，未实际发送账号邮件，不应标记 sent。
-                status="pending_retry",
-                error_message="Account created; delivery not implemented in this flow.",
+                status="sent",
             )
             
             return {
@@ -481,10 +687,9 @@ class UserManagementService:
 
     def invite_reviewer(self, email: str, full_name: str, invited_by: UUID) -> Dict[str, Any]:
         """
-        T106: Invite reviewer via Magic Link.
+        T106: Invite reviewer and deliver onboarding email.
         """
         try:
-            # 1. Check existence
             try:
                 existing = self.admin_client.table("user_profiles").select("id").eq("email", email).maybe_single().execute()
                 if existing.data:
@@ -493,116 +698,84 @@ class UserManagementService:
                 if "User with this email already exists" in str(e):
                     raise e
 
-            # 2. Generate Invite Link
-            # We use generate_link with type="invite" (or "magiclink" if we want to bypass password setup)
-            # "invite" sends a link to set password. "magiclink" logs them in.
-            # Let's use "magiclink" for smoother onboarding.
-            
-            # Note: generate_link creates the user if not exists? No, user must exist usually.
-            # Wait, `invite_user_by_email` creates user. `generate_link` generates link for existing user.
-            # So we must create user first?
-            # `admin.generate_link` documentation says: "Generates a link... for a user."
-            # So user must exist.
-            
-            # Step 2a: Create user (shadow account)
-            user_id = None
-            try:
-                temp_password = "12345678" if not _is_production_env() else self._generate_temporary_password(16)
-                
-                user_response = self.admin_client.auth.admin.create_user({
+            user_response = self.admin_client.auth.admin.create_user(
+                {
                     "email": email,
-                    "password": temp_password,
+                    "password": self._generate_temporary_password(20),
                     "email_confirm": True,
-                    "user_metadata": {"full_name": full_name}
-                })
-
-                if not getattr(user_response, "user", None):
-                    # 中文注释: create_user 没抛异常但返回无 user，视为失败（避免误判为“已存在用户”）。
-                    raise Exception("Failed to create shadow user")
-
-                user_id = user_response.user.id
-            except Exception as create_err:
-                # Only treat as "already exists" when the error indicates duplication.
-                msg = str(create_err).lower()
-                if "already exists" not in msg and "already registered" not in msg:
-                    raise
-
-            if not user_id:
-                # Fallback 2: Use Auth Admin API to list users and find by email
-                # This is the most reliable way to get the ID of an existing user
-                try:
-                    # Supabase-py list_users() returns a list of users
-                    auth_users_res = self.admin_client.auth.admin.list_users()
-                    # auth_users_res is a list or contains a users attribute depending on version
-                    users_list = getattr(auth_users_res, "users", auth_users_res)
-                    if not isinstance(users_list, list):
-                        # Some versions return an object with a users list
-                        users_list = auth_users_res
-                    
-                    for u in users_list:
-                        if u.email.lower() == email.lower():
-                            user_id = u.id
-                            break
-                except Exception as list_err:
-                    logger.warning("Failed to list users for ID retrieval: %s", list_err)
-
-            if not user_id:
-                 # CRITICAL: If we still don't have user_id, we cannot return a valid UserResponse.
-                 # This happens if the user exists in Auth but we can't find them in the list.
-                 raise Exception(f"User '{email}' already exists but ID retrieval failed. Please check Auth dashboard.")
-
-            # Step 2b: Generate link (works for existing users too)
-            link_res = self.admin_client.auth.admin.generate_link({
-                "type": "magiclink",
-                "email": email
-            })
-            props = getattr(link_res, "properties", None)
-            if isinstance(props, dict):
-                magic_link = props.get("action_link")
-            else:
-                magic_link = getattr(props, "action_link", None)
-            
-            # 3. Create/Update user_profiles
-            if user_id:
-                # Also update Auth metadata to ensure consistency
-                try:
-                    self.admin_client.auth.admin.update_user_by_id(
-                        user_id, 
-                        {"user_metadata": {"full_name": full_name}}
-                    )
-                except Exception as meta_err:
-                    logger.warning("Failed to update auth metadata: %s", meta_err)
-
-                profile_data = {
-                    "id": user_id,
-                    "email": email,
-                    "full_name": full_name,
-                    "roles": ["reviewer"], # Default to reviewer
-                    "created_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat()
+                    "user_metadata": {"full_name": full_name},
                 }
-                self.admin_client.table("user_profiles").upsert(profile_data).execute()
-            
-                # 4. Audit Log
-                self.log_account_creation(
-                    created_user_id=UUID(user_id),
-                    created_by=invited_by,
-                    initial_role="reviewer"
-                )
-            
-            # 5. Send Notification (Email with Magic Link)
-            logger.info("[UserManagement] reviewer invite link generated for %s", _mask_email(email))
+            )
+            if not getattr(user_response, "user", None):
+                raise Exception("Failed to create reviewer user")
+            user_id = str(user_response.user.id)
 
-            try:
+            redirect_to = self._build_redirect_to(next_path="/dashboard")
+            link_res = self.admin_client.auth.admin.generate_link(
+                {
+                    "type": "recovery",
+                    "email": email,
+                    "options": {"redirect_to": redirect_to},
+                }
+            )
+            action_link = self._extract_action_link(link_res)
+            if not action_link:
+                raise Exception("Failed to generate reviewer onboarding link")
+            
+            profile_data = {
+                "id": user_id,
+                "email": email,
+                "full_name": full_name,
+                "roles": ["reviewer"],
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+            self.admin_client.table("user_profiles").upsert(profile_data).execute()
+            self.log_account_creation(
+                created_user_id=UUID(user_id),
+                created_by=invited_by,
+                initial_role="reviewer",
+            )
+            
+            logger.info("[UserManagement] reviewer invite link generated for %s", _mask_email(email))
+            template = self._load_email_template(
+                env_key="ADMIN_REVIEWER_INVITE_EMAIL_TEMPLATE_KEY",
+                fallback_key="admin_reviewer_invite",
+            )
+            context = {
+                "recipient_name": full_name,
+                "journal_title": self._default_journal_title(),
+                "action_link": action_link,
+                "reviewer_email": email,
+            }
+            timestamp = int(datetime.utcnow().timestamp())
+            sent, send_error = self._send_inline_email(
+                to_email=email,
+                template=template,
+                context=context,
+                idempotency_key=f"admin-invite-reviewer:{user_id}:{timestamp}",
+                tags=[
+                    {"name": "scene", "value": _EMAIL_TEMPLATE_SCENE},
+                    {"name": "event", "value": "admin_reviewer_invite"},
+                ],
+                headers={
+                    "X-SF-Event": "admin_reviewer_invite",
+                    "X-SF-User-ID": user_id,
+                },
+            )
+            if not sent:
                 self.log_email_notification(
                     recipient_email=email,
                     notification_type="reviewer_invite",
-                    # 当前链路仅生成链接且不写日志明文，不应标记 sent。
                     status="pending_retry",
-                    error_message="Magic link generated; delivery not implemented in this flow.",
+                    error_message=send_error or "Failed to send reviewer invite email",
                 )
-            except Exception as log_err:
-                logger.warning("Failed to log email notification: %s", log_err)
+                raise Exception("Reviewer created, but invitation email delivery failed")
+            self.log_email_notification(
+                recipient_email=email,
+                notification_type="reviewer_invite",
+                status="sent",
+            )
             
             return {
                 "id": user_id,
@@ -610,7 +783,7 @@ class UserManagementService:
                 "full_name": full_name,
                 "roles": ["reviewer"],
                 "created_at": datetime.utcnow().isoformat(),
-                "is_verified": False # Treated as pending until they click
+                "is_verified": False,
             }
 
         except Exception as e:

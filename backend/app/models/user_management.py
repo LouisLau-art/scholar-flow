@@ -153,12 +153,11 @@ class InviteReviewerRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     """
-    Admin 重置密码请求。
-    - 不传则由后端生成强随机临时密码。
-    - 仅在极少数排障场景允许显式传入（仍需满足长度约束）。
+    Admin 重置密码请求（链接模式）。
+    - 可选 redirect_to 允许指定邮件链接回跳地址。
     """
 
-    temporary_password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    redirect_to: Optional[str] = Field(default=None, max_length=2000)
 
 
 class ResetPasswordResponse(BaseModel):
@@ -168,5 +167,6 @@ class ResetPasswordResponse(BaseModel):
 
     id: UUID
     email: Optional[EmailStr] = None
-    temporary_password: str
     must_change_password: bool = True
+    reset_link_sent: bool
+    delivery_status: str

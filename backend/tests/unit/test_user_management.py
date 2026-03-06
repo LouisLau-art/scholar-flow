@@ -574,33 +574,67 @@ class TestResetUserPassword:
                 data={"id": "user-1", "email": "user@test.com"}
             )
             mock_client.table.return_value = mock_table
-            mock_client.auth.admin.update_user_by_id.return_value = MagicMock()
+            mock_link_response = MagicMock()
+            mock_link_response.properties = {"action_link": "https://example.com/reset"}
+            mock_client.auth.admin.generate_link.return_value = mock_link_response
             mock_create.return_value = mock_client
 
-            service = UserManagementService()
-            result = service.reset_user_password(
-                target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
-                changed_by=UUID("00000000-0000-0000-0000-000000000002"),
-                temporary_password="12345678",
-            )
-
-            assert result["temporary_password"] == "12345678"
-            assert result["must_change_password"] is True
-            mock_client.auth.admin.update_user_by_id.assert_called_once()
-
-    def test_reset_password_short_password(self, mock_env):
-        with patch("app.services.user_management.create_client") as mock_create:
-            mock_client = MagicMock()
-            mock_create.return_value = mock_client
-
-            service = UserManagementService()
-            with pytest.raises(ValueError) as exc_info:
-                service.reset_user_password(
+            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+                "app.services.user_management.email_service.send_email", return_value=True
+            ), patch(
+                "app.services.user_management.UserManagementService._load_email_template",
+                return_value={
+                    "template_key": "admin_password_reset_link",
+                    "subject_template": "Reset",
+                    "body_html_template": "<p>{{ action_link }}</p>",
+                    "body_text_template": "Reset {{ action_link }}",
+                },
+            ):
+                service = UserManagementService()
+                result = service.reset_user_password(
                     target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
                     changed_by=UUID("00000000-0000-0000-0000-000000000002"),
-                    temporary_password="123",
                 )
-            assert "at least 8 characters" in str(exc_info.value)
+
+            assert result["reset_link_sent"] is True
+            assert result["delivery_status"] == "sent"
+            assert result["must_change_password"] is True
+            mock_client.auth.admin.generate_link.assert_called_once()
+
+    def test_reset_password_delivery_failed(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.maybe_single.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(
+                data={"id": "user-1", "email": "user@test.com"}
+            )
+            mock_client.table.return_value = mock_table
+            mock_link_response = MagicMock()
+            mock_link_response.properties = {"action_link": "https://example.com/reset"}
+            mock_client.auth.admin.generate_link.return_value = mock_link_response
+            mock_create.return_value = mock_client
+
+            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+                "app.services.user_management.email_service.send_email", return_value=False
+            ), patch(
+                "app.services.user_management.UserManagementService._load_email_template",
+                return_value={
+                    "template_key": "admin_password_reset_link",
+                    "subject_template": "Reset",
+                    "body_html_template": "<p>{{ action_link }}</p>",
+                    "body_text_template": "Reset {{ action_link }}",
+                },
+            ):
+                service = UserManagementService()
+                with pytest.raises(Exception) as exc_info:
+                    service.reset_user_password(
+                        target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                        changed_by=UUID("00000000-0000-0000-0000-000000000002"),
+                    )
+                assert "Failed to deliver password reset email" in str(exc_info.value)
 
     def test_reset_password_user_not_found(self, mock_env):
         with patch("app.services.user_management.create_client") as mock_create:
@@ -611,7 +645,6 @@ class TestResetUserPassword:
             mock_table.maybe_single.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(data=None)
             mock_client.table.return_value = mock_table
-            mock_client.auth.admin.update_user_by_id.side_effect = Exception("User not found")
             mock_create.return_value = mock_client
 
             service = UserManagementService()
@@ -619,7 +652,6 @@ class TestResetUserPassword:
                 service.reset_user_password(
                     target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
                     changed_by=UUID("00000000-0000-0000-0000-000000000002"),
-                    temporary_password="12345678",
                 )
             assert "User not found" in str(exc_info.value)
 
@@ -692,6 +724,11 @@ class TestCreateInternalUser:
             mock_auth_response = MagicMock()
             mock_auth_response.user = mock_user
             mock_client.auth.admin.create_user.return_value = mock_auth_response
+            mock_link_response = MagicMock()
+            mock_link_response.properties = {
+                "action_link": "https://test.com/onboarding-link"
+            }
+            mock_client.auth.admin.generate_link.return_value = mock_link_response
 
             # Mock table operations
             mock_table = MagicMock()
@@ -707,13 +744,16 @@ class TestCreateInternalUser:
 
             mock_create.return_value = mock_client
 
-            service = UserManagementService()
-            result = service.create_internal_user(
-                email="newuser@test.com",
-                full_name="New User",
-                role="managing_editor",
-                created_by=UUID("00000000-0000-0000-0000-000000000001"),
-            )
+            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+                "app.services.user_management.email_service.send_email", return_value=True
+            ):
+                service = UserManagementService()
+                result = service.create_internal_user(
+                    email="newuser@test.com",
+                    full_name="New User",
+                    role="managing_editor",
+                    created_by=UUID("00000000-0000-0000-0000-000000000001"),
+                )
 
             assert result["email"] == "newuser@test.com"
             assert result["roles"] == ["managing_editor"]
@@ -817,12 +857,15 @@ class TestInviteReviewer:
 
             mock_create.return_value = mock_client
 
-            service = UserManagementService()
-            result = service.invite_reviewer(
-                email="reviewer@test.com",
-                full_name="New Reviewer",
-                invited_by=UUID("00000000-0000-0000-0000-000000000001"),
-            )
+            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+                "app.services.user_management.email_service.send_email", return_value=True
+            ):
+                service = UserManagementService()
+                result = service.invite_reviewer(
+                    email="reviewer@test.com",
+                    full_name="New Reviewer",
+                    invited_by=UUID("00000000-0000-0000-0000-000000000001"),
+                )
 
             assert result["email"] == "reviewer@test.com"
             assert result["roles"] == ["reviewer"]
@@ -883,6 +926,6 @@ class TestInviteReviewer:
                     invited_by=UUID("00000000-0000-0000-0000-000000000001"),
                 )
 
-            assert "Failed to create shadow user" in str(
+            assert "Failed to create reviewer user" in str(
                 exc_info.value
             ) or "Internal error" in str(exc_info.value)

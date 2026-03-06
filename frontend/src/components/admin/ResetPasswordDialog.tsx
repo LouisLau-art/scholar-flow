@@ -68,7 +68,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
         <DialogHeader className="pr-10">
           <DialogTitle>Reset User Password</DialogTitle>
           <DialogDescription className="mt-1">
-            This will reset the user password to a system-generated temporary value.
+            This will send a secure password reset link to the user email.
           </DialogDescription>
         </DialogHeader>
 
@@ -81,10 +81,10 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             Target user: <span className="font-semibold">{user?.full_name || user?.email || '-'}</span>
           </div>
           <div className="text-sm text-foreground">
-            The system will generate a random temporary password for this reset.
+            The user will receive a recovery link and can set a new password securely.
           </div>
           <div className="text-xs text-secondary-foreground">
-            Ask the user to log in and immediately change their password in Settings.
+            No temporary password will be shown in admin panel.
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
-            {submitting ? 'Resetting...' : 'Confirm Reset'}
+            {submitting ? 'Sending Link...' : 'Send Reset Link'}
           </Button>
         </div>
       </SafeDialogContent>

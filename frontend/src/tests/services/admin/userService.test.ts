@@ -164,8 +164,9 @@ describe('adminUserService', () => {
         ok: true,
         json: async () => ({
           id: '1',
-          temporary_password: '12345678',
           must_change_password: true,
+          reset_link_sent: true,
+          delivery_status: 'sent',
         }),
       });
 
@@ -179,7 +180,8 @@ describe('adminUserService', () => {
         })
       );
       expect(result.must_change_password).toBe(true);
-      expect(result.temporary_password).toBe('12345678');
+      expect(result.reset_link_sent).toBe(true);
+      expect(result.delivery_status).toBe('sent');
     });
 
     it('throws error when reset password fails', async () => {

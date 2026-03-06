@@ -70,14 +70,15 @@ export interface JournalScopeItem {
 }
 
 export interface ResetPasswordRequest {
-  temporary_password?: string;
+  redirect_to?: string;
 }
 
 export interface ResetPasswordResponse {
   id: string;
   email?: string | null;
-  temporary_password: string;
   must_change_password: boolean;
+  reset_link_sent: boolean;
+  delivery_status: 'sent' | 'pending_retry' | 'failed';
 }
 
 export interface InviteReviewerRequest {
