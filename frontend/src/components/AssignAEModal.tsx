@@ -1,5 +1,5 @@
 import React from 'react'
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
+import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react'
 
 import { editorService } from '../services/editorService'
 import { getAssistantEditors, peekAssistantEditorsCache, type AssistantEditorOption } from '@/services/assistantEditorsCache'
@@ -70,6 +70,13 @@ function SearchablePicker(props: SearchablePickerProps) {
             aria-expanded={open}
             disabled={props.disabled}
             className="w-full justify-between"
+            onPointerDown={(event) => {
+              // 中文注释：Dialog 内组合场景下，手动兜底“再次点击触发器即可收起”。
+              if (open) {
+                event.preventDefault()
+                setOpen(false)
+              }
+            }}
           >
             <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
               {selected?.label || props.placeholder}
@@ -77,15 +84,35 @@ function SearchablePicker(props: SearchablePickerProps) {
             {props.loading ? <Loader2 className="h-4 w-4 animate-spin opacity-60" /> : <ChevronsUpDown className="h-4 w-4 opacity-60" />}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={props.searchPlaceholder}
-            className="mb-2"
-            autoFocus
-          />
-          <div className="max-h-56 overflow-auto rounded-md border border-border/60">
+        <PopoverContent
+          className="w-[var(--radix-popover-trigger-width)] p-2"
+          align="start"
+          side="top"
+          onEscapeKeyDown={() => setOpen(false)}
+          onPointerDownOutside={() => setOpen(false)}
+          onFocusOutside={() => setOpen(false)}
+          onInteractOutside={() => setOpen(false)}
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={props.searchPlaceholder}
+              autoFocus
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              onClick={() => setOpen(false)}
+              aria-label="收起下拉"
+              title="收起"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="max-h-[min(16rem,var(--radix-popover-content-available-height))] overflow-auto rounded-md border border-border/60">
             {filtered.length === 0 ? (
               <div className="px-3 py-2 text-xs text-muted-foreground">{props.emptyText}</div>
             ) : (
