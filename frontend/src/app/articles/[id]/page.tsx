@@ -1,6 +1,7 @@
 import ArticleClient from './ArticleClient'
 import { getBackendOrigin } from '@/lib/backend-origin'
 import { generateCitationMetadata } from '@/lib/metadata/citation'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 import { Metadata } from 'next'
 import { cache } from 'react'
 
@@ -8,24 +9,18 @@ export const revalidate = 60
 
 // Helper to fetch article data on server
 const getArticle = cache(async (id: string) => {
-  try {
-    const origin = getBackendOrigin()
-    const res = await fetch(
-      `${origin}/api/v1/manuscripts/articles/${encodeURIComponent(id)}`,
-      {
-        next: {
-          revalidate,
-          tags: ['articles', `article:${id}`],
-        },
-      }
-    )
-    if (!res.ok) return null
-    const json = await res.json()
-    return json.success ? json.data : null
-  } catch (error) {
-    console.error("Error fetching article for metadata:", error)
-    return null
-  }
+  const result = await fetchBackendJson<{ success?: boolean; data?: any }>(
+    `/api/v1/manuscripts/articles/${encodeURIComponent(id)}`,
+    {
+      label: `article:${id}`,
+      next: {
+        revalidate,
+        tags: ['articles', `article:${id}`],
+      },
+    }
+  )
+  if (!result.ok || !result.data?.success) return null
+  return result.data.data ?? null
 })
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {

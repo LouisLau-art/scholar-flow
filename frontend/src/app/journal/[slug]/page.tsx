@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
-import { getBackendOrigin } from '@/lib/backend-origin'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 
 export const revalidate = 60
 
@@ -11,23 +11,18 @@ type PageData = {
 }
 
 async function fetchCmsPage(slug: string): Promise<PageData> {
-  try {
-    const origin = getBackendOrigin()
-    const res = await fetch(`${origin}/api/v1/cms/pages/${encodeURIComponent(slug)}`, {
+  const result = await fetchBackendJson<{ success?: boolean; data?: PageData }>(
+    `/api/v1/cms/pages/${encodeURIComponent(slug)}`,
+    {
+      label: `cms-page:${slug}`,
       next: { revalidate: 60 },
-    })
-    if (!res.ok) {
-      notFound()
     }
-    const body = await res.json()
-    if (!body?.success || !body?.data) {
-      notFound()
-    }
-    return body.data as PageData
-  } catch (error) {
-    console.error('Failed to load CMS page:', error)
+  )
+  if (!result.ok || !result.data?.success || !result.data?.data) {
     notFound()
   }
+
+  return result.data.data
 }
 
 export default async function JournalCmsPage({ params }: { params: { slug: string } }) {

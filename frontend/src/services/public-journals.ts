@@ -1,4 +1,4 @@
-import { getBackendOrigin } from '@/lib/backend-origin'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 
 export type PublicJournal = {
   id: string
@@ -41,57 +41,46 @@ export function getJournalImpactLabel(value: number | string | null | undefined)
 }
 
 export async function getPublicJournals(): Promise<PublicJournal[]> {
-  try {
-    const origin = getBackendOrigin()
-    const res = await fetch(`${origin}/api/v1/public/journals`, {
+  const result = await fetchBackendJson<{ success?: boolean; data?: PublicJournal[] }>(
+    '/api/v1/public/journals',
+    {
+      label: 'public-journals',
       next: {
         revalidate: JOURNALS_REVALIDATE_SECONDS,
         tags: ['public-journals'],
       },
-    })
-    if (!res.ok) return []
-    const payload = await res.json().catch(() => null)
-    if (!payload?.success || !Array.isArray(payload?.data)) return []
-    return payload.data as PublicJournal[]
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('Failed to load public journals:', error)
     }
-    return []
-  }
+  )
+  if (!result.ok || !result.data?.success || !Array.isArray(result.data?.data)) return []
+  return result.data.data
 }
 
 export async function getPublicJournalDetail(slug: string): Promise<PublicJournalDetail | null> {
   if (!slug.trim()) return null
 
-  try {
-    const origin = getBackendOrigin()
-    const res = await fetch(`${origin}/api/v1/manuscripts/journals/${encodeURIComponent(slug)}`, {
-      next: {
-        revalidate: JOURNALS_REVALIDATE_SECONDS,
-        tags: ['public-journals', `public-journal:${slug.toLowerCase()}`],
-      },
-    })
-    if (res.status === 404 || !res.ok) return null
+  const result = await fetchBackendJson<{
+    success?: boolean
+    journal?: PublicJournal
+    articles?: PublicJournalArticle[]
+  }>(`/api/v1/manuscripts/journals/${encodeURIComponent(slug)}`, {
+    label: `public-journal-detail:${slug}`,
+    next: {
+      revalidate: JOURNALS_REVALIDATE_SECONDS,
+      tags: ['public-journals', `public-journal:${slug.toLowerCase()}`],
+    },
+  })
+  if (result.status === 404 || !result.ok) return null
+  if (!result.data?.success || !result.data?.journal) return null
 
-    const payload = await res.json().catch(() => null)
-    if (!payload?.success || !payload?.journal) return null
+  const articles = Array.isArray(result.data?.articles) ? result.data.articles : []
+  const sortedArticles = [...articles].sort((a, b) => {
+    const aTs = new Date(a.published_at || a.created_at || 0).getTime()
+    const bTs = new Date(b.published_at || b.created_at || 0).getTime()
+    return bTs - aTs
+  })
 
-    const articles = Array.isArray(payload?.articles) ? (payload.articles as PublicJournalArticle[]) : []
-    const sortedArticles = [...articles].sort((a, b) => {
-      const aTs = new Date(a.published_at || a.created_at || 0).getTime()
-      const bTs = new Date(b.published_at || b.created_at || 0).getTime()
-      return bTs - aTs
-    })
-
-    return {
-      journal: payload.journal as PublicJournal,
-      articles: sortedArticles,
-    }
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('Failed to load public journal detail:', error)
-    }
-    return null
+  return {
+    journal: result.data.journal,
+    articles: sortedArticles,
   }
 }

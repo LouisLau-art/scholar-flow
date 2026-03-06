@@ -31,7 +31,7 @@ function hasSupabaseSessionCookie(req: NextRequest): boolean {
     .some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token') && Boolean(c.value))
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // 0.5) Reviewer Magic Link（Feature 039）
   // 中文注释:
   // - /review/invite?token=... 是审稿人“免登录”入口。
@@ -203,7 +203,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 6. 刷新 Session (重要)
-  // middleware 必须返回 res，以便写入刷新后的 cookie (如果有变化)
+  // proxy 必须返回 res，以便写入刷新后的 cookie (如果有变化)
   return res
 }
 

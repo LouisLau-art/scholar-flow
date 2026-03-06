@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, ExternalLink, Search as SearchIcon } from 'lucide-react'
 
 import SiteHeader from '@/components/layout/SiteHeader'
-import { getBackendOrigin } from '@/lib/backend-origin'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 import { demoJournals } from '@/lib/demo-journals'
 
 type SearchMode = 'articles' | 'journals'
@@ -63,34 +63,28 @@ function hasQueryPayload(params: SearchQueryParams): boolean {
 
 async function searchOnServer(paramsInput: SearchQueryParams): Promise<SearchResultItem[]> {
   if (!hasQueryPayload(paramsInput)) return []
-  try {
-    const origin = getBackendOrigin()
-    const params = new URLSearchParams()
-    params.set('mode', paramsInput.mode)
-    if (paramsInput.q) params.set('q', paramsInput.q)
-    if (paramsInput.title) params.set('title', paramsInput.title)
-    if (paramsInput.doi) params.set('doi', paramsInput.doi)
-    if (paramsInput.journal) params.set('journal', paramsInput.journal)
-    if (paramsInput.author) params.set('author', paramsInput.author)
-    if (paramsInput.yearFrom) params.set('year_from', paramsInput.yearFrom)
-    if (paramsInput.yearTo) params.set('year_to', paramsInput.yearTo)
-    if (paramsInput.sort) params.set('sort', paramsInput.sort)
-    const res = await fetch(`${origin}/api/v1/manuscripts/search?${params.toString()}`, {
+  const params = new URLSearchParams()
+  params.set('mode', paramsInput.mode)
+  if (paramsInput.q) params.set('q', paramsInput.q)
+  if (paramsInput.title) params.set('title', paramsInput.title)
+  if (paramsInput.doi) params.set('doi', paramsInput.doi)
+  if (paramsInput.journal) params.set('journal', paramsInput.journal)
+  if (paramsInput.author) params.set('author', paramsInput.author)
+  if (paramsInput.yearFrom) params.set('year_from', paramsInput.yearFrom)
+  if (paramsInput.yearTo) params.set('year_to', paramsInput.yearTo)
+  if (paramsInput.sort) params.set('sort', paramsInput.sort)
+  const result = await fetchBackendJson<{ success?: boolean; results?: SearchResultItem[] }>(
+    `/api/v1/manuscripts/search?${params.toString()}`,
+    {
+      label: `public-search:${paramsInput.mode}`,
       next: {
         revalidate: SEARCH_REVALIDATE_SECONDS,
         tags: ['search-results', `search-mode:${paramsInput.mode}`],
       },
-    })
-    if (!res.ok) return []
-    const payload = await res.json().catch(() => null)
-    if (!payload?.success || !Array.isArray(payload?.results)) return []
-    return payload.results as SearchResultItem[]
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('Search failed on server:', error)
     }
-    return []
-  }
+  )
+  if (!result.ok || !result.data?.success || !Array.isArray(result.data?.results)) return []
+  return result.data.results
 }
 
 function renderResult(res: SearchResultItem, mode: SearchMode, kind: 'primary' | 'fallback') {

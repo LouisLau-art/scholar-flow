@@ -6,9 +6,6 @@ const nextConfig = {
   // - 不对浏览器公开 sourcemap（避免 DevTools 一直 404 .map 的噪音）
   // - sourcemap 如需调试，请通过 Sentry 上传（需要配置 SENTRY_AUTH_TOKEN/ORG/PROJECT）
   productionBrowserSourceMaps: false,
-  experimental: {
-    instrumentationHook: true,
-  },
   images: {
     remotePatterns: [
       {

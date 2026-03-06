@@ -7,8 +7,8 @@ import SiteHeader from '@/components/layout/SiteHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { getBackendOrigin } from '@/lib/backend-origin'
 import { formatDateLocal } from '@/lib/date-display'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 import { cn } from '@/lib/utils'
 import type { PublicArticle } from '@/services/portal'
 import { getJournalImpactLabel, getPublicJournals, type PublicJournal } from '@/services/public-journals'
@@ -129,26 +129,21 @@ const HOME_LATEST_ARTICLES_LIMIT = 7
 const HOME_LATEST_ARTICLES_REVALIDATE_SECONDS = 3600
 
 async function getLatestArticlesServer(limit: number): Promise<PublicArticle[]> {
-  try {
-    const origin = getBackendOrigin()
-    const res = await fetch(`${origin}/api/v1/portal/articles/latest?limit=${limit}`, {
+  const result = await fetchBackendJson<PublicArticle[] | { success?: boolean; data?: PublicArticle[] }>(
+    `/api/v1/portal/articles/latest?limit=${limit}`,
+    {
+      label: 'portal-latest-articles',
       next: {
         revalidate: HOME_LATEST_ARTICLES_REVALIDATE_SECONDS,
         tags: ['portal-latest-articles'],
       },
-    })
-    if (!res.ok) return []
-
-    const payload = await res.json().catch(() => null)
-    if (Array.isArray(payload)) return payload as PublicArticle[]
-    if (payload?.success && Array.isArray(payload?.data)) return payload.data as PublicArticle[]
-    return []
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('Failed to load latest articles on server:', error)
     }
-    return []
-  }
+  )
+  if (!result.ok || !result.data) return []
+
+  if (Array.isArray(result.data)) return result.data
+  if (result.data?.success && Array.isArray(result.data?.data)) return result.data.data
+  return []
 }
 
 function OverlayImage({

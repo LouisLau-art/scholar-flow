@@ -1,5 +1,5 @@
 import SiteHeader from '@/components/layout/SiteHeader'
-import { getBackendOrigin } from '@/lib/backend-origin'
+import { fetchBackendJson } from '@/lib/server-backend-fetch'
 import { Stethoscope, Cpu, FlaskConical, Landmark, ArrowRight, Globe } from 'lucide-react'
 import Link from 'next/link'
 
@@ -22,22 +22,20 @@ const iconMap: Record<string, typeof Globe> = {
 }
 
 async function getTopicsServer(): Promise<TopicItem[]> {
-  try {
-    const origin = getBackendOrigin()
-    const response = await fetch(`${origin}/api/v1/public/topics`, {
+  const result = await fetchBackendJson<{ success?: boolean; data?: TopicItem[] }>(
+    '/api/v1/public/topics',
+    {
+      label: 'public-topics',
       next: {
         revalidate,
         tags: ['public-topics'],
       },
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.success || !Array.isArray(payload?.data)) {
-      return []
     }
-    return payload.data as TopicItem[]
-  } catch {
+  )
+  if (!result.ok || !result.data?.success || !Array.isArray(result.data?.data)) {
     return []
   }
+  return result.data.data
 }
 
 export default async function TopicsPage() {
