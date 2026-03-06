@@ -1,13 +1,11 @@
 import os
-import secrets
-import string
 import logging
 from datetime import datetime
-from urllib.parse import quote
 from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
 
+from app.core.default_password import get_default_bootstrap_password
 from app.core.mail import email_service
 
 ALLOWED_USER_ROLES = {
@@ -36,30 +34,30 @@ _DEFAULT_EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
             "<p>Dear {{ recipient_name }},</p>"
             "<p>Your account has been created in <strong>{{ journal_title }}</strong>.</p>"
             "<p>Assigned role: <strong>{{ role_label }}</strong></p>"
-            "<p>Please activate your sign-in by opening this link: "
-            "<a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
+            "<p>Sign in here: <a href=\"{{ login_url }}\">{{ login_url }}</a></p>"
+            "<p>Default password: <strong>{{ default_password }}</strong></p>"
             "<p>Best regards,<br/>{{ journal_title }} Editorial Office</p>"
         ),
         "body_text_template": (
             "Dear {{ recipient_name }}, your {{ journal_title }} account (role: {{ role_label }}) is ready. "
-            "Activate your sign-in here: {{ action_link }}"
+            "Sign in here: {{ login_url }}. Default password: {{ default_password }}"
         ),
     },
     "admin_password_reset_link": {
         "template_key": "admin_password_reset_link",
         "display_name": "管理员重置密码通知",
         "scene": _EMAIL_TEMPLATE_SCENE,
-        "subject_template": "[{{ journal_title }}] Password reset link",
+        "subject_template": "[{{ journal_title }}] Password reset completed",
         "body_html_template": (
             "<p>Dear {{ recipient_name }},</p>"
-            "<p>An administrator requested a password reset for your account in "
-            "<strong>{{ journal_title }}</strong>.</p>"
-            "<p>Please continue here: <a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
-            "<p>If you did not request this, please contact support immediately.</p>"
+            "<p>An administrator reset the password for your account in <strong>{{ journal_title }}</strong>.</p>"
+            "<p>Sign in here: <a href=\"{{ login_url }}\">{{ login_url }}</a></p>"
+            "<p>New password: <strong>{{ default_password }}</strong></p>"
+            "<p>If you did not expect this change, please contact support immediately.</p>"
         ),
         "body_text_template": (
-            "A password reset was requested for your {{ journal_title }} account. "
-            "Use this link: {{ action_link }}"
+            "Your {{ journal_title }} password has been reset. "
+            "Sign in here: {{ login_url }}. New password: {{ default_password }}"
         ),
     },
     "admin_reviewer_invite": {
@@ -70,12 +68,13 @@ _DEFAULT_EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "body_html_template": (
             "<p>Dear {{ recipient_name }},</p>"
             "<p>You have been invited as a reviewer on <strong>{{ journal_title }}</strong>.</p>"
-            "<p>Please activate your account via: <a href=\"{{ action_link }}\">{{ action_link }}</a></p>"
+            "<p>Sign in here: <a href=\"{{ login_url }}\">{{ login_url }}</a></p>"
+            "<p>Default password: <strong>{{ default_password }}</strong></p>"
             "<p>After sign-in, you can access reviewer workflows in your dashboard.</p>"
         ),
         "body_text_template": (
             "You are invited as a reviewer on {{ journal_title }}. "
-            "Activate your account: {{ action_link }}"
+            "Sign in here: {{ login_url }}. Default password: {{ default_password }}"
         ),
     },
 }
@@ -112,14 +111,6 @@ class UserManagementService:
         self.admin_client: Client = create_client(url, service_key)
 
     @staticmethod
-    def _generate_temporary_password(length: int = 16) -> str:
-        """
-        生成高熵临时密码（避免固定弱口令）。
-        """
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
-        return "".join(secrets.choice(alphabet) for _ in range(length))
-
-    @staticmethod
     def _get_frontend_base_url() -> str:
         raw = (
             os.environ.get("FRONTEND_BASE_URL")
@@ -136,24 +127,8 @@ class UserManagementService:
             or "ScholarFlow Journal"
         ).strip()
 
-    def _build_redirect_to(self, *, next_path: str, override: Optional[str] = None) -> str:
-        if override and str(override).strip():
-            return str(override).strip()
-        base = self._get_frontend_base_url()
-        normalized_next = str(next_path or "/settings").strip()
-        if not normalized_next.startswith("/"):
-            normalized_next = f"/{normalized_next}"
-        return f"{base}/auth/callback?next={quote(normalized_next, safe='/')}"
-
-    @staticmethod
-    def _extract_action_link(link_response: Any) -> Optional[str]:
-        props = getattr(link_response, "properties", None)
-        if isinstance(props, dict):
-            return str(props.get("action_link") or "").strip() or None
-        action_link = getattr(props, "action_link", None)
-        if action_link:
-            return str(action_link).strip() or None
-        return None
+    def _build_login_url(self) -> str:
+        return f"{self._get_frontend_base_url()}/login"
 
     def _load_email_template(self, *, env_key: str, fallback_key: str) -> Dict[str, Any]:
         configured_key = str(os.environ.get(env_key) or "").strip() or fallback_key
@@ -461,7 +436,7 @@ class UserManagementService:
         redirect_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Admin 重置用户密码（发送 recovery link）。
+        Admin 直接重置用户密码为开发阶段固定口令。
         """
         target_id_str = str(target_user_id)
         profile_email: Optional[str] = None
@@ -484,42 +459,45 @@ class UserManagementService:
         if not profile_email:
             raise ValueError("User not found")
 
-        effective_redirect = self._build_redirect_to(next_path="/settings", override=redirect_to)
+        try:
+            auth_res = self.admin_client.auth.admin.get_user_by_id(target_id_str)
+            auth_user = getattr(auth_res, "user", None)
+            auth_metadata = getattr(auth_user, "user_metadata", None) or {}
+            if not isinstance(auth_metadata, dict):
+                auth_metadata = {}
+        except Exception as e:
+            logger.warning("Failed to fetch auth metadata before password reset: %s", e)
+            auth_metadata = {}
 
         try:
-            link_res = self.admin_client.auth.admin.generate_link(
+            self.admin_client.auth.admin.update_user_by_id(
+                target_id_str,
                 {
-                    "type": "recovery",
-                    "email": profile_email,
-                    "options": {"redirect_to": effective_redirect},
-                }
+                    "password": get_default_bootstrap_password(),
+                    "user_metadata": {
+                        **auth_metadata,
+                        "must_change_password": False,
+                    },
+                },
             )
-            action_link = self._extract_action_link(link_res)
-            if not action_link:
-                raise Exception("Supabase generate_link returned empty action_link")
         except Exception as e:
             msg = str(e)
             if "not found" in msg.lower() or "user not found" in msg.lower():
                 raise ValueError("User not found")
-            raise Exception(f"Failed to create password reset link: {msg}") from e
-
-        try:
-            # 中文注释：仅作为前端可选提示，不作为强制门禁。
-            self.admin_client.auth.admin.update_user_by_id(
-                target_id_str,
-                {"user_metadata": {"must_change_password": True}},
-            )
-        except Exception as e:
-            logger.warning("Failed to update must_change_password metadata: %s", e)
+            raise Exception(f"Failed to reset password: {msg}") from e
 
         template = self._load_email_template(
             env_key="ADMIN_PASSWORD_RESET_EMAIL_TEMPLATE_KEY",
             fallback_key="admin_password_reset_link",
         )
+        login_url = self._build_login_url()
+        default_password = get_default_bootstrap_password()
         context = {
             "recipient_name": str(profile_name or "").strip() or str(profile_email).split("@")[0],
             "journal_title": self._default_journal_title(),
-            "action_link": action_link,
+            "action_link": login_url,
+            "login_url": login_url,
+            "default_password": default_password,
             "user_email": profile_email,
         }
         timestamp = int(datetime.utcnow().timestamp())
@@ -542,22 +520,22 @@ class UserManagementService:
                 recipient_email=profile_email,
                 notification_type="admin_password_reset",
                 status="pending_retry",
-                error_message=send_error or "Failed to send reset link email",
+                error_message=send_error or "Failed to send reset password email",
             )
-            raise Exception("Failed to deliver password reset email")
-
-        self.log_email_notification(
-            recipient_email=profile_email,
-            notification_type="admin_password_reset",
-            status="sent",
-        )
+        else:
+            self.log_email_notification(
+                recipient_email=profile_email,
+                notification_type="admin_password_reset",
+                status="sent",
+            )
 
         return {
             "id": target_id_str,
             "email": profile_email,
-            "must_change_password": True,
-            "reset_link_sent": True,
-            "delivery_status": "sent",
+            "must_change_password": False,
+            "reset_link_sent": False,
+            "delivery_status": "pending_retry" if not sent else "sent",
+            "temporary_password": default_password,
         }
 
     # --- T083, T084, T085, T086: Implement user creation logic ---
@@ -581,7 +559,7 @@ class UserManagementService:
             user_response = self.admin_client.auth.admin.create_user(
                 {
                     "email": email,
-                    "password": self._generate_temporary_password(20),
+                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
                     "user_metadata": {"full_name": full_name},
                 }
@@ -592,18 +570,6 @@ class UserManagementService:
                 raise Exception("Failed to create user in Auth")
             
             user_id = new_user.id
-            redirect_to = self._build_redirect_to(next_path="/settings")
-            link_res = self.admin_client.auth.admin.generate_link(
-                {
-                    "type": "recovery",
-                    "email": email,
-                    "options": {"redirect_to": redirect_to},
-                }
-            )
-            action_link = self._extract_action_link(link_res)
-            if not action_link:
-                raise Exception("Failed to generate onboarding link")
-
             profile_data = {
                 "id": user_id,
                 "email": email,
@@ -633,7 +599,9 @@ class UserManagementService:
             context = {
                 "recipient_name": full_name,
                 "journal_title": self._default_journal_title(),
-                "action_link": action_link,
+                "action_link": self._build_login_url(),
+                "login_url": self._build_login_url(),
+                "default_password": get_default_bootstrap_password(),
                 "role_label": role.replace("_", " ").title(),
                 "user_email": email,
             }
@@ -701,7 +669,7 @@ class UserManagementService:
             user_response = self.admin_client.auth.admin.create_user(
                 {
                     "email": email,
-                    "password": self._generate_temporary_password(20),
+                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
                     "user_metadata": {"full_name": full_name},
                 }
@@ -709,18 +677,6 @@ class UserManagementService:
             if not getattr(user_response, "user", None):
                 raise Exception("Failed to create reviewer user")
             user_id = str(user_response.user.id)
-
-            redirect_to = self._build_redirect_to(next_path="/dashboard")
-            link_res = self.admin_client.auth.admin.generate_link(
-                {
-                    "type": "recovery",
-                    "email": email,
-                    "options": {"redirect_to": redirect_to},
-                }
-            )
-            action_link = self._extract_action_link(link_res)
-            if not action_link:
-                raise Exception("Failed to generate reviewer onboarding link")
             
             profile_data = {
                 "id": user_id,
@@ -745,7 +701,9 @@ class UserManagementService:
             context = {
                 "recipient_name": full_name,
                 "journal_title": self._default_journal_title(),
-                "action_link": action_link,
+                "action_link": self._build_login_url(),
+                "login_url": self._build_login_url(),
+                "default_password": get_default_bootstrap_password(),
                 "reviewer_email": email,
             }
             timestamp = int(datetime.utcnow().timestamp())

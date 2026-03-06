@@ -68,7 +68,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
         <DialogHeader className="pr-10">
           <DialogTitle>Reset User Password</DialogTitle>
           <DialogDescription className="mt-1">
-            This will send a secure password reset link to the user email.
+            This will reset the user password to the default development password.
           </DialogDescription>
         </DialogHeader>
 
@@ -81,10 +81,10 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             Target user: <span className="font-semibold">{user?.full_name || user?.email || '-'}</span>
           </div>
           <div className="text-sm text-foreground">
-            The user will receive a recovery link and can set a new password securely.
+            The password will be reset immediately to <span className="font-semibold">12345678</span>.
           </div>
           <div className="text-xs text-secondary-foreground">
-            No temporary password will be shown in admin panel.
+            Use this only in development/UAT environments.
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export function ResetPasswordDialog({ isOpen, user, onClose, onConfirm }: ResetP
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={submitting}>
-            {submitting ? 'Sending Link...' : 'Send Reset Link'}
+            {submitting ? 'Resetting...' : 'Reset To 12345678'}
           </Button>
         </div>
       </SafeDialogContent>

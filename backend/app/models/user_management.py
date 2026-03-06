@@ -167,6 +167,7 @@ class ResetPasswordResponse(BaseModel):
 
     id: UUID
     email: Optional[EmailStr] = None
-    must_change_password: bool = True
+    must_change_password: bool = False
     reset_link_sent: bool
     delivery_status: str
+    temporary_password: str = "12345678"

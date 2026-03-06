@@ -694,7 +694,7 @@ async def reset_user_password(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Admin 发送密码重置链接到指定用户邮箱。
+    Admin 直接将指定用户密码重置为固定开发口令。
     """
     try:
         return service.reset_user_password(

@@ -9,9 +9,10 @@ import { Globe, ArrowRight, Loader2, Mail, Lock, UserPlus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
+const DEFAULT_SIGNUP_PASSWORD = '12345678'
+
 export default function SignupPage() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -23,7 +24,7 @@ export default function SignupPage() {
     try {
       const { error } = await supabase.auth.signUp({
         email,
-        password,
+        password: DEFAULT_SIGNUP_PASSWORD,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -31,7 +32,7 @@ export default function SignupPage() {
 
       if (error) throw error
 
-      toast.success('Registration successful! Please check your email for verification.', { id: toastId })
+      toast.success(`Registration successful. Default password: ${DEFAULT_SIGNUP_PASSWORD}`, { id: toastId })
       router.push('/login')
     } catch (error: any) {
       toast.error(error.message || 'Signup failed', { id: toastId })
@@ -85,12 +86,12 @@ export default function SignupPage() {
                   type="password"
                   autoComplete="new-password"
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={DEFAULT_SIGNUP_PASSWORD}
+                  readOnly
                   className="w-full rounded-xl border-0 py-3 pl-10 shadow-sm ring-1 ring-inset ring-border transition-[box-shadow,border-color] focus:ring-2 focus:ring-primary sm:text-sm"
                 />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">At least 8 characters with numbers and symbols.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Development/UAT default password: 12345678.</p>
             </div>
 
             <Button

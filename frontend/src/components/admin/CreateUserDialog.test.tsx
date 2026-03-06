@@ -50,7 +50,7 @@ describe('CreateUserDialog', () => {
       target: { value: 'Admin User' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send Invitation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
 
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledTimes(1)

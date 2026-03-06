@@ -192,7 +192,7 @@ export default function UserManagementPage() {
   const handleInviteUser = async (email: string, fullName: string, role: UserRole) => {
     try {
       await adminUserService.createUser({ email, full_name: fullName, role });
-      toast.success('Invitation sent successfully!');
+      toast.success('Account created. Default password: 12345678');
       fetchUsers(); 
     } catch (error) {
       console.error('Invite failed:', error);
@@ -203,7 +203,7 @@ export default function UserManagementPage() {
   const handleResetPassword = async (userId: string) => {
     try {
       await adminUserService.resetUserPassword(userId);
-      toast.success('Password reset link sent');
+      toast.success('Password reset to 12345678');
     } catch (error) {
       console.error('Reset password failed:', error);
       throw error;

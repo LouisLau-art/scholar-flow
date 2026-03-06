@@ -84,7 +84,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
         <DialogHeader className="border-b border-border bg-muted/50 px-6 py-4 text-left">
           <DialogTitle>Invite New Member</DialogTitle>
           <DialogDescription className="mt-1">
-            Create account and send login credentials to the user.
+            Create account with the default password 12345678.
           </DialogDescription>
         </DialogHeader>
 
@@ -92,7 +92,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
           <div className="bg-primary/5 p-3 rounded-md border border-primary/10 mb-4 flex items-start gap-3">
             <Mail className="h-5 w-5 text-primary mt-0.5" />
             <p className="text-sm text-primary/80">
-              An account will be created and an email notification with login credentials will be sent to the user.
+              An account will be created with password 12345678. The user can sign in immediately after account creation.
             </p>
           </div>
 
@@ -165,7 +165,7 @@ export function CreateUserDialog({ isOpen, onClose, onConfirm }: CreateUserDialo
               disabled={isSubmitting}
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Send Invitation
+              Create Account
             </Button>
           </div>
         </form>

@@ -79,6 +79,7 @@ export interface ResetPasswordResponse {
   must_change_password: boolean;
   reset_link_sent: boolean;
   delivery_status: 'sent' | 'pending_retry' | 'failed';
+  temporary_password: string;
 }
 
 export interface InviteReviewerRequest {

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import secrets
-import string
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from app.core.default_password import get_default_bootstrap_password
 from app.lib.api_client import supabase_admin
 from app.schemas.review import (
     InviteAcceptPayload,
@@ -240,10 +239,6 @@ class ReviewerService:
     - Profile update
     """
 
-    def _gen_temp_password(self, length: int = 14) -> str:
-        alphabet = string.ascii_letters + string.digits
-        return "".join(secrets.choice(alphabet) for _ in range(length))
-
     def _get_profile_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         e = (email or "").strip().lower()
         if not e:
@@ -305,11 +300,10 @@ class ReviewerService:
         # 2) Create auth user (no email) then create profile
         user_id: Optional[str] = None
         try:
-            temp_password = self._gen_temp_password()
             res = supabase_admin.auth.admin.create_user(
                 {
                     "email": email,
-                    "password": temp_password,
+                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
                     "user_metadata": {"full_name": payload.full_name},
                 }
