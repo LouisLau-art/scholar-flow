@@ -10,6 +10,7 @@ Revision Service: 处理稿件修订工作流的核心业务逻辑
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
 from app.lib.api_client import supabase_admin
+from app.core.storage_filename import sanitize_storage_filename
 from app.services.notification_service import NotificationService
 from app.models.manuscript import ManuscriptStatus, normalize_status
 
@@ -604,5 +605,9 @@ class RevisionService:
         """
         import os
 
-        name, ext = os.path.splitext(original_filename)
+        safe_filename = sanitize_storage_filename(
+            original_filename,
+            default_name="manuscript",
+        )
+        name, ext = os.path.splitext(safe_filename)
         return f"{manuscript_id}/v{version_number}_{name}{ext}"

@@ -8,6 +8,7 @@ from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.core.role_matrix import normalize_roles
+from app.core.storage_filename import sanitize_storage_filename
 from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
@@ -1035,7 +1036,7 @@ async def upload_review_attachment(
     if attachment is None:
         raise HTTPException(status_code=400, detail="attachment is required")
 
-    safe_name = (attachment.filename or "attachment").replace("/", "_")
+    safe_name = sanitize_storage_filename(attachment.filename, default_name="review_attachment")
     is_pdf = (attachment.content_type == "application/pdf") or safe_name.lower().endswith(".pdf")
     if not is_pdf:
         raise HTTPException(status_code=400, detail="Only PDF files are supported")

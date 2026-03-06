@@ -6,6 +6,7 @@ from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import can_perform_action
+from app.core.storage_filename import sanitize_storage_filename
 from datetime import datetime
 from app.models.revision import RevisionCreate, RevisionRequestResponse
 from datetime import timezone
@@ -148,7 +149,7 @@ async def upload_editor_review_attachment(
     if len(file_bytes) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 25MB)")
 
-    safe_name = filename.replace("/", "_")
+    safe_name = sanitize_storage_filename(filename, default_name="review_attachment")
     object_path = f"editor_review_files/{id}/{uuid4()}_{safe_name}"
     try:
         _ensure_bucket_exists("review-attachments", public=False)
@@ -233,7 +234,7 @@ async def upload_editor_cover_letter(
         raise HTTPException(status_code=413, detail="File too large (max 25MB)")
 
     uploader_id = str(current_user.get("id") or "").strip() or "editor"
-    safe_name = filename.replace("/", "_")
+    safe_name = sanitize_storage_filename(filename, default_name="cover_letter")
     object_path = f"{uploader_id}/cover-letters/{id}/{uuid4()}_{safe_name}"
     try:
         _ensure_bucket_exists("manuscripts", public=False)

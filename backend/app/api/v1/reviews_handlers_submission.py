@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 from postgrest.exceptions import APIError
+from app.core.storage_filename import sanitize_storage_filename
 
 async def submit_review_via_magic_link_impl(
     *,
@@ -29,7 +30,7 @@ async def submit_review_via_magic_link_impl(
     attachment_path = None
     if attachment is not None:
         file_bytes = await attachment.read()
-        safe_name = (attachment.filename or "attachment").replace("/", "_")
+        safe_name = sanitize_storage_filename(attachment.filename, default_name="review_attachment")
         attachment_path = f"review_reports/{payload.assignment_id}/{safe_name}"
         try:
             ensure_review_attachments_bucket_exists_fn()
@@ -284,7 +285,7 @@ async def submit_review_by_token_impl(
         attachment_path = None
         if attachment is not None:
             file_bytes = await attachment.read()
-            safe_name = (attachment.filename or "attachment").replace("/", "_")
+            safe_name = sanitize_storage_filename(attachment.filename, default_name="review_attachment")
             attachment_path = f"review_reports/{rr['id']}/{safe_name}"
             try:
                 ensure_review_attachments_bucket_exists_fn()

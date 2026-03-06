@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.models.manuscript import ManuscriptStatus
+from app.core.storage_filename import sanitize_storage_filename
 
 
 POST_ACCEPTANCE_ALLOWED = {
@@ -74,4 +75,4 @@ def is_missing_column_error(error: Exception, column_name: str) -> bool:
 
 
 def safe_filename(filename: str) -> str:
-    return str(filename or "proof.pdf").replace("/", "_").replace("\\", "_")
+    return sanitize_storage_filename(filename, default_name="proof")

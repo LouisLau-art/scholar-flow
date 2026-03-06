@@ -4,10 +4,11 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
+from app.core.storage_filename import sanitize_storage_filename
 
 
 def _safe_file_name(filename: str) -> str:
-    return filename.replace("/", "_").replace("\\", "_")
+    return sanitize_storage_filename(filename, default_name="decision_attachment")
 
 
 def _encode_attachment_ref(attachment_id: str, object_path: str) -> str:

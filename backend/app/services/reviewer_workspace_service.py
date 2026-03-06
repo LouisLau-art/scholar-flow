@@ -9,6 +9,7 @@ from uuid import UUID
 
 from postgrest.exceptions import APIError
 
+from app.core.storage_filename import sanitize_storage_filename
 from app.lib.api_client import supabase_admin
 from app.schemas.review import ReviewSubmission, WorkspaceData
 
@@ -469,7 +470,7 @@ class ReviewerWorkspaceService:
         content_type: str | None = None,
     ) -> str:
         self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
-        safe_name = (filename or "attachment").replace("/", "_")
+        safe_name = sanitize_storage_filename(filename, default_name="review_attachment")
         unique_prefix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(4)
         object_path = f"assignments/{assignment_id}/{unique_prefix}-{safe_name}"
         self.client.storage.from_("review-attachments").upload(

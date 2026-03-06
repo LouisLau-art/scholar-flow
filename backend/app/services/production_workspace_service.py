@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import ADMIN_ROLE
+from app.core.storage_filename import sanitize_storage_filename
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.models.production_workspace import (
@@ -88,7 +89,7 @@ def _is_missing_column_error(error: Exception, column_name: str) -> bool:
 
 
 def _safe_filename(filename: str) -> str:
-    return str(filename or "proof.pdf").replace("/", "_").replace("\\", "_")
+    return sanitize_storage_filename(filename, default_name="proof")
 
 
 class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWorkspacePublishGateMixin):
@@ -511,4 +512,3 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             title=title,
             content=content,
         )
-

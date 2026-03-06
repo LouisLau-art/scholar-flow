@@ -13,6 +13,7 @@ from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.docx_processor import extract_text_from_docx
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
+from app.core.storage_filename import sanitize_storage_filename
 from app.services.editorial_service import process_quality_check
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
@@ -518,7 +519,7 @@ async def upload_production_file(
             detail=f"Production file upload requires status in {sorted(allowed_statuses)}",
         )
 
-    safe_name = (file.filename or "final.pdf").replace("/", "_").replace("\\", "_")
+    safe_name = sanitize_storage_filename(file.filename, default_name="final")
     ts = int(time.time())
     path = f"production/{manuscript_id}/{ts}-{safe_name}"
 
