@@ -68,9 +68,9 @@ describe('InternalNotebook mentions', () => {
       })
     })
 
-    expect(screen.getByTestId('notebook-mentions')).toBeInTheDocument()
-    expect(screen.getByText('@Alice Editor')).toBeInTheDocument()
-    expect(screen.getByText('@Bob Editor')).toBeInTheDocument()
+    expect(await screen.findByTestId('notebook-mentions')).toBeInTheDocument()
+    expect(await screen.findByText('@Alice Editor')).toBeInTheDocument()
+    expect(await screen.findByText('@Bob Editor')).toBeInTheDocument()
   })
 
   it('triggers targeted refresh callback after posting comment', async () => {
