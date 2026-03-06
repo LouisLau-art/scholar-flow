@@ -157,11 +157,16 @@ async def test_happy_path_revision_loop(
                 headers={"Authorization": f"Bearer {author.token}"},
                 data={"response_letter": "I have addressed all comments point-by-point in this revision."},
                 files={
-                    "file": (
+                    "pdf_file": (
                         "revised.pdf",
                         b"%PDF-1.4\n% mocked pdf\n",
                         "application/pdf",
-                    )
+                    ),
+                    "word_file": (
+                        "revised.docx",
+                        b"PK\x03\x04 mocked docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
                 },
             )
         assert res2.status_code == 200, res2.text
@@ -376,11 +381,16 @@ async def test_rbac_enforcement(
             headers={"Authorization": f"Bearer {editor.token}"},
             data={"response_letter": "This should be rejected: editor is not author."},
             files={
-                "file": (
+                "pdf_file": (
                     "revised.pdf",
                     b"%PDF-1.4\n% mocked pdf\n",
                     "application/pdf",
-                )
+                ),
+                "word_file": (
+                    "revised.docx",
+                    b"PK\x03\x04 mocked docx",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
             },
         )
         assert res3.status_code == 403
@@ -442,11 +452,16 @@ async def test_file_safety(
                     "response_letter": "I have fixed all formatting issues and updated citations accordingly."
                 },
                 files={
-                    "file": (
+                    "pdf_file": (
                         "v2_test.pdf",
                         b"%PDF-1.4\n% mocked pdf\n",
                         "application/pdf",
-                    )
+                    ),
+                    "word_file": (
+                        "v2_test.docx",
+                        b"PK\x03\x04 mocked docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
                 },
             )
         assert res2.status_code == 200, res2.text

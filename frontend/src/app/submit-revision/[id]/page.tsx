@@ -8,8 +8,10 @@ import SiteHeader from '@/components/layout/SiteHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { InlineNotice } from '@/components/ui/inline-notice'
 import { toast } from 'sonner'
-import { Loader2, Upload, FileText, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { compressImage } from '@/lib/image-utils'
 
@@ -28,7 +30,8 @@ export default function SubmitRevisionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const [responseLetter, setResponseLetter] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [wordFile, setWordFile] = useState<File | null>(null)
   const [isEmbeddingImage, setIsEmbeddingImage] = useState(false)
 
   useEffect(() => {
@@ -91,7 +94,11 @@ export default function SubmitRevisionPage() {
   }, [manuscriptId, router])
   
   const handleSubmit = async () => {
-    if (!file) {
+    if (!wordFile) {
+      toast.error('Please upload your revised manuscript Word file.')
+      return
+    }
+    if (!pdfFile) {
       toast.error('Please upload your revised manuscript PDF.')
       return
     }
@@ -104,7 +111,8 @@ export default function SubmitRevisionPage() {
     try {
        const token = await authService.getAccessToken()
        const formData = new FormData()
-       formData.append('file', file)
+       formData.append('word_file', wordFile)
+       formData.append('pdf_file', pdfFile)
        formData.append('response_letter', responseLetter)
        
        const res = await fetch(`/api/v1/manuscripts/${manuscriptId}/revisions`, {
@@ -204,41 +212,47 @@ export default function SubmitRevisionPage() {
            <Card>
              <CardHeader>
                <CardTitle>Revision Details</CardTitle>
-               <CardDescription>Upload your revised manuscript and provide a response to the reviewers.</CardDescription>
+               <CardDescription>Upload revised Word + PDF files and provide a response to the reviewers.</CardDescription>
              </CardHeader>
-             <CardContent className="space-y-8">
-               
-               {/* File Upload */}
-               <div className="space-y-3">
-                 <Label className="text-base">Revised Manuscript (PDF)</Label>
-                 <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:bg-muted/50 transition-colors">
-                   <input 
-                     type="file" 
-                     accept="application/pdf"
-                     onChange={(e) => setFile(e.target.files?.[0] || null)}
-                     className="hidden" 
-                     id="file-upload"
-                   />
-                   <label htmlFor="file-upload" className="cursor-pointer block">
-                     {file ? (
-                       <div className="flex flex-col items-center gap-2 text-emerald-600">
-                         <CheckCircle2 className="h-10 w-10" />
-                         <span className="font-semibold text-lg">{file.name}</span>
-                         <span className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                         <Button variant="outline" size="sm" className="mt-2" onClick={(e) => {
-                           e.preventDefault()
-                           setFile(null)
-                         }}>Remove</Button>
-                       </div>
-                     ) : (
-                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                         <Upload className="h-10 w-10" />
-                         <span className="font-semibold text-lg">Click to upload PDF</span>
-                         <span className="text-sm">or drag and drop</span>
-                       </div>
-                     )}
-                   </label>
-                 </div>
+             <CardContent className="space-y-6">
+               <div className="rounded-lg border border-border/80 bg-card p-5">
+                 <Label htmlFor="revision-word-file" className="mb-2 block text-sm font-semibold text-foreground">
+                   Upload Revised Manuscript (Word) (Required)
+                 </Label>
+                 <Input
+                   id="revision-word-file"
+                   type="file"
+                   accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                   onChange={(e) => setWordFile(e.target.files?.[0] || null)}
+                   disabled={isSubmitting}
+                   className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                 />
+                 <div className="mt-2 text-xs text-foreground/75">Accepted formats: `.doc`, `.docx`.</div>
+                 {wordFile ? (
+                   <InlineNotice tone="info" size="sm" className="mt-2">
+                     Word manuscript selected: {wordFile.name}
+                   </InlineNotice>
+                 ) : null}
+               </div>
+
+               <div className="rounded-lg border border-border/80 bg-card p-5">
+                 <Label htmlFor="revision-pdf-file" className="mb-2 block text-sm font-semibold text-foreground">
+                   Upload Revised Manuscript (PDF) (Required)
+                 </Label>
+                 <Input
+                   id="revision-pdf-file"
+                   type="file"
+                   accept=".pdf,application/pdf"
+                   onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                   disabled={isSubmitting}
+                   className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                 />
+                 <div className="mt-2 text-xs text-foreground/75">Accepted format: `.pdf`.</div>
+                 {pdfFile ? (
+                   <InlineNotice tone="info" size="sm" className="mt-2">
+                     Manuscript PDF selected: {pdfFile.name}
+                   </InlineNotice>
+                 ) : null}
                </div>
                
                {/* Response Letter */}
@@ -264,7 +278,7 @@ export default function SubmitRevisionPage() {
                    size="lg" 
                    className="w-full" 
                    onClick={handleSubmit}
-                   disabled={isSubmitting || !file || !responseLetter}
+                   disabled={isSubmitting || !wordFile || !pdfFile || !responseLetter}
                  >
                    {isSubmitting ? (
                      <>

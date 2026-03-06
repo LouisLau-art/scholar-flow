@@ -249,7 +249,9 @@ test.describe('Revision workflow (mocked backend)', () => {
     await expect(page.getByText('Please update references and fix typos.')).toBeVisible()
 
     const pdfPath = path.join(__dirname, '..', 'fixtures', 'revised.pdf')
-    await page.locator('#file-upload').setInputFiles(pdfPath)
+    const wordPath = path.join(__dirname, '..', 'fixtures', 'revised.docx')
+    await page.locator('#revision-word-file').setInputFiles(wordPath)
+    await page.locator('#revision-pdf-file').setInputFiles(pdfPath)
 
     const editor = page.locator('.ProseMirror')
     await editor.click()

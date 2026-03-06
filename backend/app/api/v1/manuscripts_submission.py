@@ -210,14 +210,33 @@ async def submit_revision(
     manuscript_id: UUID,
     background_tasks: BackgroundTasks,
     response_letter: str = Form(...),
-    file: UploadFile = File(...),
+    word_file: UploadFile | None = File(None),
+    pdf_file: UploadFile | None = File(None),
+    file: UploadFile | None = File(None),  # 兼容旧客户端字段名（PDF）
     current_user: dict = Depends(get_current_user),
 ):
     """
     Author 提交修订稿 (Submit Revision)
     """
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="仅支持 PDF 格式文件")
+    # 中文注释:
+    # - 业务改为修回必须同时提交 Word + PDF：Word 供后续编辑，PDF 供外审/阅读。
+    # - 兼容旧客户端仅传 file=...（视作 PDF）。
+    normalized_pdf_file = pdf_file or file
+    if not normalized_pdf_file:
+        raise HTTPException(status_code=400, detail="Please upload revised manuscript PDF.")
+    if not word_file:
+        raise HTTPException(status_code=400, detail="Please upload revised manuscript Word file.")
+
+    pdf_filename = str(normalized_pdf_file.filename or "").strip()
+    word_filename = str(word_file.filename or "").strip()
+    if not pdf_filename:
+        raise HTTPException(status_code=400, detail="Revised manuscript PDF filename is empty.")
+    if not word_filename:
+        raise HTTPException(status_code=400, detail="Revised manuscript Word filename is empty.")
+    if not pdf_filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Revised manuscript PDF only supports .pdf")
+    if not (word_filename.lower().endswith(".doc") or word_filename.lower().endswith(".docx")):
+        raise HTTPException(status_code=400, detail="Revised manuscript Word only supports .doc/.docx")
 
     service = RevisionService()
 
@@ -242,57 +261,115 @@ async def submit_revision(
             precheck_resubmit_stage = derived_stage
 
     next_version = (manuscript.get("version", 1)) + 1
-    file_path = service.generate_versioned_file_path(
-        str(manuscript_id), file.filename, next_version
+    pdf_file_path = service.generate_versioned_file_path(
+        str(manuscript_id), pdf_filename, next_version
+    )
+    word_file_path = service.generate_versioned_file_path(
+        str(manuscript_id), word_filename, next_version
     )
 
-    uploaded_path: str | None = None
-    try:
-        file_content = await file.read()
-        if not file_content:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    def _is_duplicate_upload_error(error: Exception) -> bool:
+        lowered = str(error).lower()
+        return "duplicate" in lowered or "already exists" in lowered or "409" in lowered
 
+    def _upload_file_with_retry(path: str, content: bytes, content_type: str) -> str:
         try:
             _m().supabase_admin.storage.from_("manuscripts").upload(
-                file_path, file_content, {"content-type": "application/pdf"}
+                path, content, {"content-type": content_type}
             )
-            uploaded_path = file_path
+            return path
         except Exception as upload_error:
-            upload_error_text = str(upload_error).lower()
-            is_duplicate = (
-                "duplicate" in upload_error_text
-                or "already exists" in upload_error_text
-                or "409" in upload_error_text
-            )
-            if not is_duplicate:
+            if not _is_duplicate_upload_error(upload_error):
                 raise
-            base_path, ext = os.path.splitext(file_path)
+            base_path, ext = os.path.splitext(path)
             retry_path = f"{base_path}_{uuid4().hex[:8]}{ext}"
             _m().supabase_admin.storage.from_("manuscripts").upload(
-                retry_path, file_content, {"content-type": "application/pdf"}
+                retry_path, content, {"content-type": content_type}
             )
-            file_path = retry_path
-            uploaded_path = retry_path
+            return retry_path
+
+    uploaded_paths: list[str] = []
+    word_metadata_saved = False
+    uploaded_pdf_path: str | None = None
+    uploaded_word_path: str | None = None
+
+    try:
+        pdf_content = await normalized_pdf_file.read()
+        word_content = await word_file.read()
+        if not pdf_content:
+            raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
+        if not word_content:
+            raise HTTPException(status_code=400, detail="Uploaded Word file is empty")
+
+        pdf_content_type = str(normalized_pdf_file.content_type or "").strip() or "application/pdf"
+        word_content_type = str(word_file.content_type or "").strip()
+        if not word_content_type:
+            word_content_type = (
+                "application/msword"
+                if word_filename.lower().endswith(".doc")
+                else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+        uploaded_pdf_path = _upload_file_with_retry(pdf_file_path, pdf_content, pdf_content_type)
+        uploaded_paths.append(uploaded_pdf_path)
+        uploaded_word_path = _upload_file_with_retry(word_file_path, word_content, word_content_type)
+        uploaded_paths.append(uploaded_word_path)
+
+        try:
+            _m().supabase_admin.table("manuscript_files").upsert(
+                {
+                    "manuscript_id": str(manuscript_id),
+                    "file_type": "manuscript",
+                    "bucket": "manuscripts",
+                    "path": uploaded_word_path,
+                    "original_filename": word_filename,
+                    "content_type": word_content_type,
+                    "uploaded_by": str(current_user.get("id") or "").strip() or None,
+                },
+                on_conflict="bucket,path",
+            ).execute()
+            word_metadata_saved = True
+        except Exception as metadata_error:
+            if _m()._is_missing_table_error(str(metadata_error), "manuscript_files"):
+                raise HTTPException(status_code=500, detail="DB not migrated: manuscript_files table missing")
+            raise HTTPException(status_code=500, detail="Failed to save revised Word file metadata")
     except HTTPException:
+        if uploaded_paths:
+            try:
+                _m().supabase_admin.storage.from_("manuscripts").remove(uploaded_paths)
+            except Exception as cleanup_error:
+                print(f"[RevisionSubmit] upload rollback failed (ignored): {cleanup_error}")
         raise
     except Exception as e:
-        print(f"File upload failed: {e}")
+        if uploaded_paths:
+            try:
+                _m().supabase_admin.storage.from_("manuscripts").remove(uploaded_paths)
+            except Exception as cleanup_error:
+                print(f"[RevisionSubmit] upload rollback failed (ignored): {cleanup_error}")
+        print(f"Revision files upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
     result = service.submit_revision(
         manuscript_id=str(manuscript_id),
         author_id=str(current_user["id"]),
-        new_file_path=file_path,
+        new_file_path=str(uploaded_pdf_path or ""),
         response_letter=response_letter,
         precheck_resubmit_stage=precheck_resubmit_stage,
     )
 
     if not result["success"]:
-        if uploaded_path:
+        if uploaded_paths:
             try:
-                _m().supabase_admin.storage.from_("manuscripts").remove([uploaded_path])
+                _m().supabase_admin.storage.from_("manuscripts").remove(uploaded_paths)
             except Exception as cleanup_error:
                 print(f"[RevisionSubmit] cleanup failed (ignored): {cleanup_error}")
+        if word_metadata_saved and uploaded_word_path:
+            try:
+                _m().supabase_admin.table("manuscript_files").delete().eq("bucket", "manuscripts").eq(
+                    "path", uploaded_word_path
+                ).execute()
+            except Exception as cleanup_error:
+                print(f"[RevisionSubmit] word metadata rollback failed (ignored): {cleanup_error}")
         raise HTTPException(status_code=400, detail=result["error"])
 
     try:
