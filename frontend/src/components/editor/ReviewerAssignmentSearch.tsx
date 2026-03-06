@@ -37,7 +37,7 @@ export function ReviewerAssignmentSearch(props: {
   ) => {
     if (!manuscriptId) return false
     setSubmitting(true)
-    const toastId = toast.loading('Assigning reviewers...')
+    const toastId = toast.loading('Saving reviewer selection...')
     try {
       const token = await authService.getAccessToken()
       if (!token) throw new Error('Please sign in again.')
@@ -85,7 +85,9 @@ export function ReviewerAssignmentSearch(props: {
       }
 
       if (failures.length === 0) {
-        toast.success(`Assigned ${successCount} reviewer(s).`, { id: toastId })
+        toast.success(`Saved ${successCount} reviewer selection(s). Send invitations from manuscript detail.`, {
+          id: toastId,
+        })
         return {
           ok: true,
           assignedReviewerIds: successReviewerIds,
@@ -95,12 +97,12 @@ export function ReviewerAssignmentSearch(props: {
       }
 
       const sample = failures[0]
-      const summary = `Assigned ${successCount}, failed ${failures.length}.`
+      const summary = `Saved ${successCount}, failed ${failures.length}.`
       const detailText = `${sample.reviewerId}: ${sample.detail}`
       if (successCount > 0) {
         toast.warning(`${summary} ${detailText}`, { id: toastId })
       } else {
-        toast.error(sample.detail || 'Assign failed', { id: toastId })
+        toast.error(sample.detail || 'Saving reviewer selection failed', { id: toastId })
       }
       return {
         ok: false,
@@ -109,7 +111,7 @@ export function ReviewerAssignmentSearch(props: {
         keepOpen: true,
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Assign failed', { id: toastId })
+      toast.error(e instanceof Error ? e.message : 'Saving reviewer selection failed', { id: toastId })
       return {
         ok: false,
         assignedReviewerIds: [],

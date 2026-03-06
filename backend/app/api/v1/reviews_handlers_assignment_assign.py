@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import quote
-from uuid import UUID
 
 from fastapi import HTTPException
 from postgrest.exceptions import APIError
@@ -137,138 +134,19 @@ def _insert_review_assignment(
     reviewer_id: str,
     round_number: int,
     due_at: str,
-    invited_at: str,
 ) -> Any:
     payload = {
         "manuscript_id": manuscript_id,
         "reviewer_id": reviewer_id,
-        "status": "pending",
+        "status": "selected",
         "due_at": due_at,
-        "invited_at": invited_at,
         "round_number": round_number,
     }
-    try:
-        return supabase_admin_client.table("review_assignments").insert(payload).execute()
-    except Exception as insert_err:
-        if "invited_at" in str(insert_err).lower() and "column" in str(insert_err).lower():
-            payload.pop("invited_at", None)
-            return supabase_admin_client.table("review_assignments").insert(payload).execute()
-        raise
-
-
-def _load_reviewer_contact(
-    *,
-    supabase_admin_client: Any,
-    reviewer_id: str,
-) -> tuple[str | None, str]:
-    try:
-        profile_res = (
-            supabase_admin_client.table("user_profiles")
-            .select("email,full_name")
-            .eq("id", reviewer_id)
-            .single()
-            .execute()
-        )
-        profile = getattr(profile_res, "data", None) or {}
-        return profile.get("email"), profile.get("full_name") or "Reviewer"
-    except Exception:
-        return None, "Reviewer"
-
-
-def _resolve_journal_title(
-    *,
-    supabase_admin_client: Any,
-    manuscript: dict[str, Any],
-) -> str:
-    journal_title = "ScholarFlow Journal"
-    journal_id = str(manuscript.get("journal_id") or "").strip()
-    if not journal_id:
-        return journal_title
-
-    try:
-        journal_res = (
-            supabase_admin_client.table("journals")
-            .select("title")
-            .eq("id", journal_id)
-            .single()
-            .execute()
-        )
-        row = getattr(journal_res, "data", None) or {}
-        return str(row.get("title") or journal_title)
-    except Exception:
-        return journal_title
-
-
-def _build_magic_link_url(
-    *,
-    create_magic_link_jwt_fn,
-    reviewer_id: UUID,
-    manuscript_id: UUID,
-    assignment_row: dict[str, Any],
-) -> str | None:
-    assignment_id = assignment_row.get("id")
-    if not assignment_id:
-        return None
-    try:
-        expires_days = int((os.environ.get("MAGIC_LINK_EXPIRES_DAYS") or "14").strip())
-    except ValueError:
-        expires_days = 14
-    try:
-        assignment_uuid = UUID(str(assignment_id))
-    except Exception:
-        return None
-
-    try:
-        return create_magic_link_jwt_fn(
-            reviewer_id=reviewer_id,
-            manuscript_id=manuscript_id,
-            assignment_id=assignment_uuid,
-            expires_in_days=expires_days,
-        )
-    except RuntimeError as exc:
-        if "not configured" in str(exc).lower():
-            return None
-        raise
-    except Exception:
-        return None
-
-
-def _enqueue_invitation_email(
-    *,
-    background_tasks: Any,
-    email_service_obj: Any,
-    reviewer_email: str,
-    reviewer_name: str,
-    manuscript_title: str,
-    manuscript_id: str,
-    journal_title: str,
-    due_at: str,
-    token: str | None,
-) -> None:
-    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
-    review_url = (
-        f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
-    )
-    background_tasks.add_task(
-        email_service_obj.send_email_background,
-        to_email=reviewer_email,
-        subject="Invitation to Review",
-        template_name="invitation.html",
-        context={
-            "review_url": review_url,
-            "reviewer_name": reviewer_name,
-            "manuscript_title": manuscript_title,
-            "manuscript_id": manuscript_id,
-            "journal_title": journal_title,
-            "due_at": due_at,
-            "due_date": str(due_at).split("T")[0],
-        },
-    )
+    return supabase_admin_client.table("review_assignments").insert(payload).execute()
 
 
 async def assign_reviewer_impl(
     *,
-    background_tasks,
     current_user: dict[str, Any],
     profile: dict[str, Any],
     manuscript_id: UUID,
@@ -281,10 +159,6 @@ async def assign_reviewer_impl(
     parse_roles_fn,
     review_policy_service_cls,
     ensure_review_management_access_fn,
-    safe_insert_invite_policy_audit_fn,
-    notification_service_cls,
-    email_service_obj,
-    create_magic_link_jwt_fn,
     is_foreign_key_user_error_fn,
     is_missing_relation_error_fn,
 ) -> dict[str, Any]:
@@ -336,82 +210,26 @@ async def assign_reviewer_impl(
             requester_roles=requester_roles,
             override_cooldown=override_cooldown,
         )
+        _ = (override_role_set, override_applied)
 
         _min_days, _max_days, default_days = policy_service.due_window_days()
         due_at = (datetime.now(timezone.utc) + timedelta(days=default_days)).isoformat()
-        invited_at = datetime.now(timezone.utc).isoformat()
         insert_resp = _insert_review_assignment(
             supabase_admin_client=supabase_admin_client,
             manuscript_id=manuscript_id_str,
             reviewer_id=reviewer_id_str,
             round_number=current_version,
             due_at=due_at,
-            invited_at=invited_at,
         )
-        (
-            supabase_admin_client.table("manuscripts")
-            .update({"status": "under_review"})
-            .eq("id", manuscript_id_str)
-            .execute()
-        )
-
-        if policy.get("cooldown_active"):
-            safe_insert_invite_policy_audit_fn(
-                manuscript_id=manuscript_id_str,
-                from_status=str(manuscript.get("status") or ""),
-                to_status="under_review",
-                changed_by=current_user_id,
-                comment="reviewer_invite_cooldown_override",
-                payload={
-                    "action": "reviewer_invite_cooldown_override",
-                    "reviewer_id": reviewer_id_str,
-                    "manuscript_id": manuscript_id_str,
-                    "override_applied": bool(override_applied),
-                    "override_reason": str(override_reason or "").strip() or None,
-                    "cooldown_days": policy_service.cooldown_days(),
-                    "allowed_roles": sorted(override_role_set),
-                    "policy_hits": policy.get("hits") or [],
-                },
-            )
-
-        manuscript_title = manuscript.get("title") or "Manuscript"
-        notification_service_cls().create_notification(
-            user_id=reviewer_id_str,
-            manuscript_id=manuscript_id_str,
-            type="review_invite",
-            title="Review Invitation",
-            content=f"You have been invited to review '{manuscript_title}'.",
-        )
-
-        reviewer_email, reviewer_name = _load_reviewer_contact(
-            supabase_admin_client=supabase_admin_client,
-            reviewer_id=reviewer_id_str,
-        )
-        if reviewer_email:
-            row = (getattr(insert_resp, "data", None) or [{}])[0]
-            token = _build_magic_link_url(
-                create_magic_link_jwt_fn=create_magic_link_jwt_fn,
-                reviewer_id=reviewer_id,
-                manuscript_id=manuscript_id,
-                assignment_row=row,
-            )
-            _enqueue_invitation_email(
-                background_tasks=background_tasks,
-                email_service_obj=email_service_obj,
-                reviewer_email=reviewer_email,
-                reviewer_name=reviewer_name,
-                manuscript_title=manuscript_title,
-                manuscript_id=manuscript_id_str,
-                journal_title=_resolve_journal_title(
-                    supabase_admin_client=supabase_admin_client,
-                    manuscript=manuscript,
-                ),
-                due_at=due_at,
-                token=token,
-            )
 
         row = (getattr(insert_resp, "data", None) or [{}])[0]
-        return {"success": True, "data": row, "policy": policy}
+        return {
+            "success": True,
+            "data": row,
+            "policy": policy,
+            "message": "Reviewer added to selection list",
+            "next_step": "send_invitation_email",
+        }
     except HTTPException:
         raise
     except APIError as exc:

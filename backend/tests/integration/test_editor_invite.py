@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
 from uuid import UUID
 
 import pytest
 from httpx import AsyncClient
 from unittest.mock import MagicMock, patch
-
-from app.core.security import decode_magic_link_jwt
 
 
 class _Resp:
@@ -21,6 +18,9 @@ class _Table:
     def __init__(self, client: "_Client", name: str):
         self._client = client
         self._name = name
+        self._pending_insert_payload = None
+        self._pending_update_payload = None
+        self._pending_delete = False
 
     # Chainable query builder
     def select(self, *_args, **_kwargs):
@@ -41,22 +41,37 @@ class _Table:
     def single(self):
         return self
 
-    def insert(self, *_args, **_kwargs):
+    def insert(self, payload=None, *_args, **_kwargs):
+        self._pending_insert_payload = payload
         return self
 
-    def update(self, *_args, **_kwargs):
+    def update(self, payload=None, *_args, **_kwargs):
+        self._pending_update_payload = payload
         return self
 
     def delete(self, *_args, **_kwargs):
+        self._pending_delete = True
         return self
 
     def execute(self):
+        if self._pending_insert_payload is not None:
+            self._client._insert_calls.setdefault(self._name, []).append(self._pending_insert_payload)
+            self._pending_insert_payload = None
+        if self._pending_update_payload is not None:
+            self._client._update_calls.setdefault(self._name, []).append(self._pending_update_payload)
+            self._pending_update_payload = None
+        if self._pending_delete:
+            self._client._delete_calls[self._name] = self._client._delete_calls.get(self._name, 0) + 1
+            self._pending_delete = False
         return _Resp(self._client._pop(self._name))
 
 
 class _Client:
     def __init__(self, responses: dict[str, list[Any]]):
         self._responses = responses
+        self._insert_calls: dict[str, list[Any]] = {}
+        self._update_calls: dict[str, list[Any]] = {}
+        self._delete_calls: dict[str, int] = {}
 
     def table(self, name: str):
         return _Table(self, name)
@@ -69,7 +84,11 @@ class _Client:
 
 
 @pytest.mark.asyncio
-async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: str, monkeypatch: pytest.MonkeyPatch):
+async def test_editor_assign_creates_selected_assignment_without_sending_email(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
     monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
@@ -109,12 +128,9 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
                         "id": str(assignment_id),
                         "manuscript_id": str(manuscript_id),
                         "reviewer_id": str(reviewer_id),
-                        "status": "pending",
+                        "status": "selected",
                     }
                 ],  # insert
-            ],
-            "manuscripts": [
-                [{}],  # update under_review
             ],
             "user_profiles": [
                 {"email": "reviewer@example.com"},
@@ -134,28 +150,18 @@ async def test_editor_assign_sends_magic_link(client: AsyncClient, auth_token: s
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
         patch("app.api.v1.reviews.email_service.send_email_background", send_mock),
     ):
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
         assert resp.status_code == 200
         assert resp.json().get("success") is True
 
-    assert send_mock.call_count == 1
-    kwargs = send_mock.call_args.kwargs
-    context = kwargs.get("context") or {}
-    review_url = str(context.get("review_url") or "")
-    assert "/review/invite" in review_url
-
-    parsed = urlparse(review_url)
-    qs = parse_qs(parsed.query)
-    token = unquote((qs.get("token") or [""])[0])
-    assert token
-
-    payload = decode_magic_link_jwt(token)
-    assert payload.reviewer_id == reviewer_id
-    assert payload.manuscript_id == manuscript_id
-    assert payload.assignment_id == assignment_id
+    assert send_mock.call_count == 0
+    insert_payload = supabase_admin._insert_calls["review_assignments"][0]
+    assert insert_payload["status"] == "selected"
+    assert "invited_at" not in insert_payload
+    assert supabase_admin._update_calls.get("manuscripts") in (None, [])
+    assert supabase_admin._insert_calls.get("status_transition_logs") in (None, [])
 
 
 @pytest.mark.asyncio
@@ -225,7 +231,6 @@ async def test_editor_assign_blocked_by_cooldown_without_override(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
     ):
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
         assert resp.status_code == 409
@@ -289,17 +294,11 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
                         "id": str(assignment_id),
                         "manuscript_id": str(manuscript_id),
                         "reviewer_id": str(reviewer_id),
-                        "status": "pending",
+                        "status": "selected",
                     }
                 ],  # insert
             ],
-            "manuscripts": [
-                [{"id": cooldown_ms_id, "journal_id": "journal-1"}],  # policy manuscript map
-                [{}],  # update under_review
-            ],
-            "status_transition_logs": [
-                [{}],  # override audit insert
-            ],
+            "manuscripts": [[{"id": cooldown_ms_id, "journal_id": "journal-1"}]],  # policy manuscript map
             "user_profiles": [
                 {"email": "reviewer@example.com", "full_name": "Reviewer X"},
             ],
@@ -325,7 +324,6 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
         patch("app.api.v1.reviews.email_service.send_email_background", send_mock),
     ):
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
@@ -334,7 +332,100 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
         assert payload.get("success") is True
         assert payload.get("policy", {}).get("cooldown_active") is True
 
+    assert send_mock.call_count == 0
+    insert_payload = supabase_admin._insert_calls["review_assignments"][0]
+    assert insert_payload["status"] == "selected"
+    assert "invited_at" not in insert_payload
+    assert supabase_admin._update_calls.get("manuscripts") in (None, [])
+    assert supabase_admin._insert_calls.get("status_transition_logs") in (None, [])
+
+
+@pytest.mark.asyncio
+async def test_send_assignment_email_marks_invited_and_advances_manuscript(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccce")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbe")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": None,
+                    "last_reminded_at": None,
+                },
+                [{}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Selection First Workflow",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+                [{}],
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/send-email",
+            json={"template_key": "reviewer_invitation_standard"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    assert payload["data"]["event_type"] == "invitation"
     assert send_mock.call_count == 1
+
+    assignment_patch = supabase_admin._update_calls["review_assignments"][0]
+    assert assignment_patch["status"] == "invited"
+    assert assignment_patch["invited_at"]
+
+    manuscript_patch = supabase_admin._update_calls["manuscripts"][0]
+    assert manuscript_patch["status"] == "under_review"
 
 
 @pytest.mark.asyncio
@@ -387,7 +478,6 @@ async def test_editor_assign_requires_assistant_editor_ownership_for_assignment(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.NotificationService.create_notification", lambda *args, **kwargs: None),
     ):
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
         assert resp.status_code == 403

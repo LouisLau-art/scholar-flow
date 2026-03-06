@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import ReviewerAssignModal from '@/components/ReviewerAssignModal'
@@ -48,7 +48,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
             data: [
               {
                 id: 'a-1',
-                status: 'pending',
+                status: 'selected',
                 due_at: null,
                 round_number: 1,
                 reviewer_id: 'r-assigned',
@@ -240,7 +240,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     fireEvent.click(reviewerTwoRow)
 
     const assignBtn = await screen.findByTestId('reviewer-assign')
-    expect(assignBtn).toHaveTextContent('Assign 2 Reviewers')
+    expect(assignBtn).toHaveTextContent('Save Selection (2)')
 
     fireEvent.click(assignBtn)
 
@@ -249,7 +249,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     })
     await waitFor(() => {
       expect(onClose).not.toHaveBeenCalled()
-      expect(screen.getByTestId('reviewer-assign')).toHaveTextContent('Assign 1 Reviewer')
+      expect(screen.getByTestId('reviewer-assign')).toHaveTextContent('Save Selection (1)')
     })
   })
 
@@ -273,7 +273,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     // 置顶：第一个就是已分配 reviewer
     expect(firstRow.getAttribute('data-testid')).toBe('reviewer-row-r-assigned')
     expect(within(list).getByText('Assigned Reviewer')).toBeInTheDocument()
-    expect(within(list).getByText('Assigned')).toBeInTheDocument()
+    expect(within(list).getByText('Selected')).toBeInTheDocument()
   })
 
   it('submits cooldown override reason when selected reviewer requires override', async () => {
@@ -371,10 +371,11 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     })
 
     const searchInput = screen.getByTestId('reviewer-search')
-    fireEvent.change(searchInput, { target: { value: 'Man' } })
-    fireEvent.change(searchInput, { target: { value: 'Manual' } })
-
-    await new Promise((resolve) => setTimeout(resolve, 320))
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: 'Man' } })
+      fireEvent.change(searchInput, { target: { value: 'Manual' } })
+      await new Promise((resolve) => setTimeout(resolve, 320))
+    })
 
     await waitFor(() => {
       const reviewerCalls = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>

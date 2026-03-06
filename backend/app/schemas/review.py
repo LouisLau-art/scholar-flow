@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 
 Recommendation = Literal["accept", "minor_revision", "major_revision", "reject"]
+InviteStatus = Literal["selected", "invited", "opened", "accepted", "declined"]
+ReviewStatus = Literal["not_started", "in_progress", "submitted"]
 DeclineReason = Literal[
     "out_of_scope",
     "conflict_of_interest",
@@ -56,6 +58,8 @@ class WorkspaceReviewReport(BaseModel):
 class WorkspaceAssignment(BaseModel):
     id: UUID
     status: str
+    invite_status: InviteStatus | None = None
+    review_status: ReviewStatus | None = None
     due_at: datetime | None = None
     invited_at: datetime | None = None
     opened_at: datetime | None = None
@@ -105,6 +109,8 @@ class InviteAssignmentState(BaseModel):
     manuscript_id: UUID
     reviewer_id: UUID
     status: str
+    invite_status: InviteStatus | None = None
+    review_status: ReviewStatus | None = None
     due_at: datetime | None = None
     decline_reason: DeclineReason | None = None
     decline_note: str | None = None

@@ -366,18 +366,29 @@ export function ReviewerInviteSummaryCard({
                     String(invite?.reviewer_email || '').trim() ||
                     `Reviewer ${idx + 1}`
                   const state = resolveReviewerInviteSummaryState(invite)
-                  const stateLabel =
-                    state === 'invited' ? 'Invited' : state === 'agree' ? 'Agree' : state === 'decline' ? 'Decline' : '—'
+                  const stateLabelMap = {
+                    selected: 'Selected',
+                    invited: 'Invited',
+                    opened: 'Opened',
+                    accepted: 'Accepted',
+                    submitted: 'Submitted',
+                    declined: 'Declined',
+                  } as const
+                  const stateLabel = stateLabelMap[state]
                   const stateAt =
                     state === 'invited'
                       ? invite?.invited_at || invite?.opened_at || null
-                      : state === 'agree'
+                      : state === 'opened'
+                        ? invite?.opened_at || invite?.invited_at || null
+                        : state === 'accepted'
                         ? invite?.accepted_at || invite?.submitted_at || null
-                        : state === 'decline'
+                        : state === 'submitted'
+                          ? invite?.submitted_at || invite?.accepted_at || null
+                          : state === 'declined'
                           ? invite?.declined_at || null
                           : null
                   const dueText = invite?.due_at ? ` (Due ${formatDateLocal(invite.due_at)})` : ''
-                  const reasonText = state === 'decline' ? String(invite?.decline_reason || '').trim() : ''
+                  const reasonText = state === 'declined' ? String(invite?.decline_reason || '').trim() : ''
                   const invitedText = invite?.invited_at ? formatDateTimeLocal(invite.invited_at) : '—'
                   const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
 
@@ -389,9 +400,9 @@ export function ReviewerInviteSummaryCard({
                       <td className="px-2 py-2.5 align-top">
                         <div
                           className={
-                            state === 'decline'
+                            state === 'declined'
                               ? 'font-medium text-destructive'
-                              : state === 'blank'
+                              : state === 'selected'
                                 ? 'font-medium text-muted-foreground'
                                 : 'font-medium text-foreground'
                           }

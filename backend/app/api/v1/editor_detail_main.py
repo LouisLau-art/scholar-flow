@@ -517,14 +517,18 @@ async def get_editor_manuscript_detail_impl(
         rid = str(row.get("reviewer_id") or "").strip()
         prof = profiles_map.get(rid) or {}
         status_raw = str(row.get("status") or "").lower()
-        if status_raw == "completed":
+        if status_raw in {"completed", "submitted"} or submitted_map.get(rid):
             invite_state = "submitted"
-        elif status_raw == "declined" or row.get("declined_at"):
+        elif status_raw in {"declined", "decline"} or row.get("declined_at"):
             invite_state = "declined"
-        elif row.get("accepted_at"):
+        elif status_raw in {"accepted", "agree", "agreed"} or row.get("accepted_at"):
             invite_state = "accepted"
-        else:
+        elif status_raw == "opened" or row.get("opened_at"):
+            invite_state = "opened"
+        elif status_raw == "invited" or row.get("invited_at"):
             invite_state = "invited"
+        else:
+            invite_state = "selected"
 
         ms["reviewer_invites"].append(
             {
@@ -534,7 +538,7 @@ async def get_editor_manuscript_detail_impl(
                 "reviewer_email": prof.get("email"),
                 "status": invite_state,
                 "due_at": row.get("due_at"),
-                "invited_at": row.get("invited_at") or row.get("created_at"),
+                "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),
                 "accepted_at": row.get("accepted_at"),
                 "declined_at": row.get("declined_at"),

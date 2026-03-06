@@ -76,7 +76,13 @@ export type AuthorResponseHistoryItem = {
   round: number | null
 }
 
-export type ReviewerInviteSummaryState = 'blank' | 'invited' | 'agree' | 'decline'
+export type ReviewerInviteSummaryState =
+  | 'selected'
+  | 'invited'
+  | 'opened'
+  | 'accepted'
+  | 'submitted'
+  | 'declined'
 
 type ReviewerInviteSummaryItem = NonNullable<ManuscriptDetail['reviewer_invites']>[number]
 
@@ -84,33 +90,27 @@ export function resolveReviewerInviteSummaryState(
   invite: ReviewerInviteSummaryItem | null | undefined
 ): ReviewerInviteSummaryState {
   const statusRaw = String(invite?.status || '').trim().toLowerCase()
-  const hasInvitedEvidence = Boolean(invite?.invited_at || invite?.opened_at)
-
   if (statusRaw === 'declined' || statusRaw === 'decline' || invite?.declined_at) {
-    return 'decline'
+    return 'declined'
   }
 
-  if (
-    statusRaw === 'accepted' ||
-    statusRaw === 'agree' ||
-    statusRaw === 'agreed' ||
-    statusRaw === 'completed' ||
-    statusRaw === 'submitted' ||
-    invite?.accepted_at ||
-    invite?.submitted_at
-  ) {
-    return 'agree'
+  if (statusRaw === 'completed' || statusRaw === 'submitted' || invite?.submitted_at) {
+    return 'submitted'
   }
 
-  if (statusRaw === 'invited' || statusRaw === 'pending') {
-    return hasInvitedEvidence ? 'invited' : 'blank'
+  if (statusRaw === 'accepted' || statusRaw === 'agree' || statusRaw === 'agreed' || invite?.accepted_at) {
+    return 'accepted'
   }
 
-  if (hasInvitedEvidence) {
+  if (statusRaw === 'opened' || invite?.opened_at) {
+    return 'opened'
+  }
+
+  if (statusRaw === 'invited' || invite?.invited_at) {
     return 'invited'
   }
 
-  return 'blank'
+  return 'selected'
 }
 
 export function normalizeResponseLetterText(raw: unknown): string {

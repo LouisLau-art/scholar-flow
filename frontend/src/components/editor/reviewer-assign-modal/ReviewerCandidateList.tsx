@@ -109,7 +109,7 @@ export function ReviewerCandidateList(props: ReviewerCandidateListProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isAssigned && <span className="text-xs font-semibold bg-muted text-foreground px-2 py-1 rounded">Assigned</span>}
+              {isAssigned && <span className="text-xs font-semibold bg-muted text-foreground px-2 py-1 rounded">Selected</span>}
               {blockedByPolicy && <span className="text-xs font-semibold bg-rose-100 text-rose-700 px-2 py-1 rounded">Blocked</span>}
               {canOverride && <span className="text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-1 rounded">Override</span>}
               {showAsSelected && <Check className="h-5 w-5 text-primary" />}

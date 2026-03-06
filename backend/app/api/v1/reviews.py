@@ -9,7 +9,6 @@ from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.core.role_matrix import normalize_roles
 from app.core.storage_filename import sanitize_storage_filename
-from app.services.notification_service import NotificationService
 from uuid import UUID
 from typing import Any, Dict, Optional
 from postgrest.exceptions import APIError
@@ -30,7 +29,6 @@ from app.api.v1.reviews_common import (
     is_foreign_key_user_error,
     is_missing_relation_error,
     parse_roles,
-    safe_insert_invite_policy_audit,
 )
 from app.api.v1.reviews_heavy_handlers import (
     assign_reviewer_impl,
@@ -178,26 +176,6 @@ def _is_missing_relation_error(err: Exception, *, relation: str) -> bool:
 
 def _is_foreign_key_user_error(err: Exception, *, constraint: str) -> bool:
     return is_foreign_key_user_error(err, constraint=constraint)
-
-
-def _safe_insert_invite_policy_audit(
-    *,
-    manuscript_id: str,
-    from_status: str,
-    to_status: str,
-    changed_by: str | None,
-    comment: str | None,
-    payload: dict[str, Any],
-) -> None:
-    return safe_insert_invite_policy_audit(
-        supabase_admin_client=supabase_admin,
-        manuscript_id=manuscript_id,
-        from_status=from_status,
-        to_status=to_status,
-        changed_by=changed_by,
-        comment=comment,
-        payload=payload,
-    )
 
 
 def _parse_roles(profile: dict | None) -> list[str]:
@@ -456,7 +434,6 @@ async def submit_reviewer_workspace_review(
 # === 1. 分配审稿人 (Editor Task) ===
 @router.post("/reviews/assign")
 async def assign_reviewer(
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
     manuscript_id: UUID = Body(..., embed=True),
@@ -468,11 +445,10 @@ async def assign_reviewer(
     编辑分配审稿人
 
     中文注释:
-    1. 校验逻辑: 确保 reviewer_id 不是稿件的作者 (通过 manuscripts 表查询)。
-    2. 插入 review_assignments 表。
+    1. 仅把 reviewer 加入拟邀请名单（selected），不直接发邮件。
+    2. 真正的 invitation 由 `/reviews/assignments/{id}/send-email` 触发。
     """
     return await assign_reviewer_impl(
-        background_tasks=background_tasks,
         current_user=current_user,
         profile=profile,
         manuscript_id=manuscript_id,
@@ -485,10 +461,6 @@ async def assign_reviewer(
         parse_roles_fn=_parse_roles,
         review_policy_service_cls=ReviewPolicyService,
         ensure_review_management_access_fn=_ensure_review_management_access,
-        safe_insert_invite_policy_audit_fn=_safe_insert_invite_policy_audit,
-        notification_service_cls=NotificationService,
-        email_service_obj=email_service,
-        create_magic_link_jwt_fn=create_magic_link_jwt,
         is_foreign_key_user_error_fn=_is_foreign_key_user_error,
         is_missing_relation_error_fn=_is_missing_relation_error,
     )
@@ -700,7 +672,7 @@ async def send_assignment_email(
 
     manuscript_res = (
         supabase_admin.table("manuscripts")
-        .select("id, title, journal_id, assistant_editor_id")
+        .select("id, title, journal_id, assistant_editor_id, status")
         .eq("id", str(assignment.get("manuscript_id") or ""))
         .single()
         .execute()
@@ -800,12 +772,19 @@ async def send_assignment_email(
     now_iso = now_dt.isoformat()
     try:
         patch: dict[str, Any] = {}
+        assignment_status = str(assignment.get("status") or "").strip().lower()
         if event_type == "invitation":
             patch["invited_at"] = now_iso
+            if assignment_status in {"selected", "pending", "invited", "opened"}:
+                patch["status"] = "invited"
         elif event_type == "reminder":
             patch["last_reminded_at"] = now_iso
         if patch:
             supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+
+        manuscript_status = str(manuscript.get("status") or "").strip().lower()
+        if event_type == "invitation" and manuscript_status in {"pre_check", "resubmitted"}:
+            supabase_admin.table("manuscripts").update({"status": "under_review"}).eq("id", manuscript_id).execute()
     except Exception:
         # 回填失败不影响主流程（邮件已入队）
         pass

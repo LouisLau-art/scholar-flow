@@ -27,7 +27,7 @@ export default function EditorDashboard() {
       toast.error('Please select a manuscript first.')
       return false
     }
-    const toastId = toast.loading(`Assigning ${reviewerIds.length} reviewer${reviewerIds.length === 1 ? '' : 's'}...`)
+    const toastId = toast.loading(`Saving ${reviewerIds.length} reviewer selection${reviewerIds.length === 1 ? '' : 's'}...`)
     try {
       const token = await authService.getAccessToken()
       if (!token) {
@@ -73,11 +73,11 @@ export default function EditorDashboard() {
       const failureMessages = failures.map((item) => item.msg)
       const failuresCount = failures.length
       if (failuresCount === 0) {
-        toast.success('Reviewer assignment complete.', { id: toastId })
+        toast.success('Reviewer selection saved. Send invitations from manuscript detail.', { id: toastId })
       } else {
         const first = failureMessages[0] || ''
         toast.error(
-          first ? `Assigned with ${failuresCount} failure(s): ${first}` : `Assigned with ${failuresCount} failure(s).`,
+          first ? `Saved with ${failuresCount} failure(s): ${first}` : `Saved with ${failuresCount} failure(s).`,
           { id: toastId }
         )
       }
@@ -86,7 +86,7 @@ export default function EditorDashboard() {
       setPipelineRefresh((prev) => prev + 1)
       return failuresCount === 0
     } catch (error) {
-      toast.error('Assign failed. Please try again.', { id: toastId })
+      toast.error('Saving reviewer selection failed. Please try again.', { id: toastId })
       return false
     }
   }

@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { resolveReviewerInviteSummaryState } from '@/app/(admin)/editor/manuscript/[id]/helpers'
 
 describe('resolveReviewerInviteSummaryState', () => {
-  it('returns blank when invite evidence is empty', () => {
+  it('returns selected when invite evidence is empty', () => {
     expect(
       resolveReviewerInviteSummaryState({
         id: 'ra-1',
-        status: 'invited',
+        status: 'selected',
       })
-    ).toBe('blank')
+    ).toBe('selected')
   })
 
   it('returns invited when invited/opened evidence exists', () => {
@@ -22,28 +22,38 @@ describe('resolveReviewerInviteSummaryState', () => {
     ).toBe('invited')
   })
 
-  it('returns agree for accepted/submitted evidence', () => {
+  it('returns opened for opened evidence before acceptance', () => {
     expect(
       resolveReviewerInviteSummaryState({
         id: 'ra-3',
-        status: 'accepted',
+        status: 'opened',
+        opened_at: '2026-03-06T00:00:00Z',
       })
-    ).toBe('agree')
+    ).toBe('opened')
+  })
 
+  it('returns accepted/submitted separately', () => {
     expect(
       resolveReviewerInviteSummaryState({
         id: 'ra-4',
-        status: 'submitted',
+        status: 'accepted',
       })
-    ).toBe('agree')
-  })
+    ).toBe('accepted')
 
-  it('returns decline for declined evidence', () => {
     expect(
       resolveReviewerInviteSummaryState({
         id: 'ra-5',
+        status: 'submitted',
+      })
+    ).toBe('submitted')
+  })
+
+  it('returns declined for declined evidence', () => {
+    expect(
+      resolveReviewerInviteSummaryState({
+        id: 'ra-6',
         status: 'declined',
       })
-    ).toBe('decline')
+    ).toBe('declined')
   })
 })

@@ -20,11 +20,7 @@ export function AssignActionBar(props: AssignActionBarProps) {
         className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
         data-testid="reviewer-assign"
       >
-        {isSubmitting
-          ? 'Assigning…'
-          : `Assign ${selectedCount || ''} Reviewer${selectedCount === 1 ? '' : 's'}${
-              overrideCount ? ` (${overrideCount} override)` : ''
-            }`}
+        {isSubmitting ? 'Saving…' : `Save Selection (${selectedCount})${overrideCount ? ` · ${overrideCount} override` : ''}`}
       </button>
     </div>
   )

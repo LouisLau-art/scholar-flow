@@ -548,7 +548,12 @@ export default function ReviewerAssignModal({
           <div className="flex items-center justify-between p-6 border-b border-border">
             <div className="flex items-center gap-3">
               <Users className="h-6 w-6 text-primary" />
-              <h2 className="text-xl font-bold text-foreground">Assign Reviewer</h2>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Build Reviewer List</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Save a draft reviewer selection here. Send the actual invitation email from manuscript detail.
+                </p>
+              </div>
             </div>
             <DialogClose asChild>
               <Button
@@ -622,7 +627,7 @@ export default function ReviewerAssignModal({
             </div>
 
             <div className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Invite policy: cooldown {policyMeta.cooldown_days || 30} days (same journal) is blocked by default, conflict-of-interest is hard block, overdue risk is warning-only.
+              Selection policy hint: cooldown {policyMeta.cooldown_days || 30} days (same journal) is currently guarded here, conflict-of-interest is hard block, overdue risk is warning-only.
             </div>
 
             <ReviewerCandidateList
