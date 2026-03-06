@@ -12,9 +12,9 @@ import { getJournalImpactLabel, getPublicJournalDetail, type PublicJournalArticl
 export const revalidate = 300
 
 type JournalDetailPageProps = {
-  params: {
+  params: Promise<{
     slug: string
-  }
+  }>
 }
 
 function buildJournalDescription(raw?: string | null): string {
@@ -28,7 +28,8 @@ function articleTimeLabel(article: PublicJournalArticle): string {
 }
 
 export async function generateMetadata({ params }: JournalDetailPageProps): Promise<Metadata> {
-  const detail = await getPublicJournalDetail(params.slug)
+  const resolvedParams = await params
+  const detail = await getPublicJournalDetail(resolvedParams.slug)
   if (!detail) {
     return {
       title: 'Journal not found',
@@ -60,7 +61,8 @@ export async function generateMetadata({ params }: JournalDetailPageProps): Prom
 }
 
 export default async function JournalDetailPage({ params }: JournalDetailPageProps) {
-  const detail = await getPublicJournalDetail(params.slug)
+  const resolvedParams = await params
+  const detail = await getPublicJournalDetail(resolvedParams.slug)
   if (!detail) {
     notFound()
   }

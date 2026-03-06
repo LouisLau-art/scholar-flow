@@ -23,9 +23,9 @@ export const metadata: Metadata = {
 }
 
 type JournalsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string | string[]
-  }
+  }>
 }
 
 function pickFirst(value?: string | string[]): string {
@@ -72,7 +72,8 @@ function asFallbackJournals(): PublicJournal[] {
 }
 
 export default async function JournalsPage({ searchParams }: JournalsPageProps) {
-  const query = pickFirst(searchParams?.q).trim()
+  const resolvedSearchParams = (await searchParams) || {}
+  const query = pickFirst(resolvedSearchParams.q).trim()
   const remoteJournals = await getPublicJournals()
   const journals = remoteJournals.length > 0 ? remoteJournals : asFallbackJournals()
   const filtered = getFilteredJournals(journals, query)

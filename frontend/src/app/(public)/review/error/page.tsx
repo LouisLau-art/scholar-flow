@@ -1,9 +1,10 @@
-export default function ReviewLinkErrorPage({
+export default async function ReviewLinkErrorPage({
   searchParams,
 }: {
-  searchParams?: { reason?: string }
+  searchParams?: Promise<{ reason?: string }>
 }) {
-  const reason = (searchParams?.reason || '').toLowerCase()
+  const resolvedSearchParams = (await searchParams) || {}
+  const reason = String(resolvedSearchParams.reason || '').toLowerCase()
   const message =
     reason === 'expired'
       ? 'This invitation link has expired.'

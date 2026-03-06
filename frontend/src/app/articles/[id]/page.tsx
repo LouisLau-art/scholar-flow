@@ -23,8 +23,9 @@ const getArticle = cache(async (id: string) => {
   return result.data.data ?? null
 })
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const article = await getArticle(params.id)
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const resolvedParams = await params
+  const article = await getArticle(resolvedParams.id)
   
   if (!article) {
     return {
@@ -46,7 +47,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     journalTitle: article.journals?.title || 'Scholar Flow Journal',
     doi: article.doi || '',
     // 中文注释: 公开的 /pdf 入口会 302 到短期 signed URL，可用于 Scholar 抓取 citation_pdf_url。
-    pdfUrl: `${origin}/api/v1/manuscripts/articles/${encodeURIComponent(params.id)}/pdf`,
+    pdfUrl: `${origin}/api/v1/manuscripts/articles/${encodeURIComponent(resolvedParams.id)}/pdf`,
     abstract: article.abstract,
   }
 
@@ -75,7 +76,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   }
 }
 
-export default async function ArticlePage({ params }: { params: { id: string } }) {
-  const article = await getArticle(params.id)
+export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const article = await getArticle(resolvedParams.id)
   return <ArticleClient initialArticle={article} />
 }

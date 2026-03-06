@@ -95,7 +95,7 @@ Zeabur 支持 **Dockerfile** 和 **命令模式** 两种方式，推荐优先用
 
 > Zeabur 的 `Private` 地址仅供同项目内部服务通信，对外访问必须使用 `Public` 域名。
 
-## 2) 前端部署到 Vercel（Next.js 14 App Router）
+## 2) 前端部署到 Vercel（Next.js 16 App Router）
 
 ### A. Vercel 项目 Root Directory
 

@@ -25,8 +25,9 @@ async function fetchCmsPage(slug: string): Promise<PageData> {
   return result.data.data
 }
 
-export default async function JournalCmsPage({ params }: { params: { slug: string } }) {
-  const page = await fetchCmsPage(params.slug)
+export default async function JournalCmsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const resolvedParams = await params
+  const page = await fetchCmsPage(resolvedParams.slug)
 
   return (
     <div className="min-h-screen bg-muted/40 flex flex-col">

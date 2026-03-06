@@ -6,7 +6,7 @@
 [![Backend Status](https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/spaces/LouisShawn/scholarflow-api)
 [![Frontend Status](https://img.shields.io/badge/Frontend-Vercel-000000?logo=vercel)](https://scholarflow.vercel.app)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python)](https://www.python.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 
 **A Modern, AI-Powered Academic Publishing Workflow System**
 <br/>
@@ -39,7 +39,7 @@ Built with a "Glue Coding" philosophy, it leverages best-in-class open source co
 ## 🛠️ Tech Stack
 
 ### Frontend (User Interface)
-- **Framework**: [Next.js 14](https://nextjs.org/) (App Router, TypeScript)
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router, TypeScript, React 19)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [Shadcn UI](https://ui.shadcn.com/)
 - **State Management**: React Hooks + Server Actions
 - **Deployment**: Vercel

@@ -7,7 +7,7 @@
 本文档根据所有功能计划自动生成。最后更新时间：2026-01-31
 
 ## 当前技术栈
-- **前端**: TypeScript 5.x (Strict Mode), Next.js 14.2 (App Router), React 18.x, Tailwind CSS 3.4, Shadcn UI (017-super-admin-management)
+- **前端**: TypeScript 5.x (Strict Mode), Next.js 16.1.6 (App Router), React 19.x, Tailwind CSS 4.2, Shadcn UI (current main)
 - **后端**: Python 3.14+, FastAPI 0.115+, Pydantic v2, httpx (017-super-admin-management)
 - **数据库与认证**: Supabase (PostgreSQL), Supabase Auth, Supabase Storage, Supabase-js v2.x, Supabase-py v2.x (017-super-admin-management)
 - **测试**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)

@@ -21,7 +21,7 @@ type SearchResultItem = {
 }
 
 interface SearchPageProps {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string | string[]
     mode?: string | string[]
     title?: string | string[]
@@ -31,7 +31,7 @@ interface SearchPageProps {
     year_from?: string | string[]
     year_to?: string | string[]
     sort?: string | string[]
-  }
+  }>
 }
 
 function pickFirst(value?: string | string[]): string {
@@ -116,15 +116,16 @@ function renderResult(res: SearchResultItem, mode: SearchMode, kind: 'primary' |
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const query = pickFirst(searchParams?.q).trim()
-  const currentMode = normalizeMode(pickFirst(searchParams?.mode))
-  const title = pickFirst(searchParams?.title).trim()
-  const doi = pickFirst(searchParams?.doi).trim()
-  const journal = pickFirst(searchParams?.journal).trim()
-  const author = pickFirst(searchParams?.author).trim()
-  const yearFrom = pickFirst(searchParams?.year_from).trim()
-  const yearTo = pickFirst(searchParams?.year_to).trim()
-  const sort = pickFirst(searchParams?.sort).trim() || 'latest'
+  const resolvedSearchParams = (await searchParams) || {}
+  const query = pickFirst(resolvedSearchParams.q).trim()
+  const currentMode = normalizeMode(pickFirst(resolvedSearchParams.mode))
+  const title = pickFirst(resolvedSearchParams.title).trim()
+  const doi = pickFirst(resolvedSearchParams.doi).trim()
+  const journal = pickFirst(resolvedSearchParams.journal).trim()
+  const author = pickFirst(resolvedSearchParams.author).trim()
+  const yearFrom = pickFirst(resolvedSearchParams.year_from).trim()
+  const yearTo = pickFirst(resolvedSearchParams.year_to).trim()
+  const sort = pickFirst(resolvedSearchParams.sort).trim() || 'latest'
   const results = await searchOnServer({
     q: query,
     mode: currentMode,
