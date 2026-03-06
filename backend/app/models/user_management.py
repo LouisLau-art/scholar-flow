@@ -153,8 +153,8 @@ class InviteReviewerRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     """
-    Admin 重置密码请求（链接模式）。
-    - 可选 redirect_to 允许指定邮件链接回跳地址。
+    Admin 重置密码请求。
+    - `redirect_to` 仅为兼容历史调用保留，当前固定口令模式不会使用它。
     """
 
     redirect_to: Optional[str] = Field(default=None, max_length=2000)

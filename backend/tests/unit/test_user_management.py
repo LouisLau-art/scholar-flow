@@ -571,23 +571,24 @@ class TestResetUserPassword:
             mock_table.eq.return_value = mock_table
             mock_table.maybe_single.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(
-                data={"id": "user-1", "email": "user@test.com"}
+                data={"id": "user-1", "email": "user@test.com", "full_name": "Test User"}
             )
             mock_client.table.return_value = mock_table
-            mock_link_response = MagicMock()
-            mock_link_response.properties = {"action_link": "https://example.com/reset"}
-            mock_client.auth.admin.generate_link.return_value = mock_link_response
+            mock_client.auth.admin.get_user_by_id.return_value = MagicMock(
+                user=MagicMock(user_metadata={"must_change_password": True})
+            )
             mock_create.return_value = mock_client
 
-            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
-                "app.services.user_management.email_service.send_email", return_value=True
+            with patch(
+                "app.services.user_management.UserManagementService._send_inline_email",
+                return_value=(True, None),
             ), patch(
                 "app.services.user_management.UserManagementService._load_email_template",
                 return_value={
                     "template_key": "admin_password_reset_link",
                     "subject_template": "Reset",
-                    "body_html_template": "<p>{{ action_link }}</p>",
-                    "body_text_template": "Reset {{ action_link }}",
+                    "body_html_template": "<p>{{ default_password }}</p>",
+                    "body_text_template": "Reset {{ default_password }}",
                 },
             ):
                 service = UserManagementService()
@@ -596,10 +597,11 @@ class TestResetUserPassword:
                     changed_by=UUID("00000000-0000-0000-0000-000000000002"),
                 )
 
-            assert result["reset_link_sent"] is True
+            assert result["reset_link_sent"] is False
             assert result["delivery_status"] == "sent"
-            assert result["must_change_password"] is True
-            mock_client.auth.admin.generate_link.assert_called_once()
+            assert result["must_change_password"] is False
+            assert result["temporary_password"] == "12345678"
+            mock_client.auth.admin.update_user_by_id.assert_called_once()
 
     def test_reset_password_delivery_failed(self, mock_env):
         with patch("app.services.user_management.create_client") as mock_create:
@@ -609,32 +611,35 @@ class TestResetUserPassword:
             mock_table.eq.return_value = mock_table
             mock_table.maybe_single.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(
-                data={"id": "user-1", "email": "user@test.com"}
+                data={"id": "user-1", "email": "user@test.com", "full_name": "Test User"}
             )
             mock_client.table.return_value = mock_table
-            mock_link_response = MagicMock()
-            mock_link_response.properties = {"action_link": "https://example.com/reset"}
-            mock_client.auth.admin.generate_link.return_value = mock_link_response
+            mock_client.auth.admin.get_user_by_id.return_value = MagicMock(
+                user=MagicMock(user_metadata={})
+            )
             mock_create.return_value = mock_client
 
-            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
-                "app.services.user_management.email_service.send_email", return_value=False
+            with patch(
+                "app.services.user_management.UserManagementService._send_inline_email",
+                return_value=(False, "Resend domain is not verified"),
             ), patch(
                 "app.services.user_management.UserManagementService._load_email_template",
                 return_value={
                     "template_key": "admin_password_reset_link",
                     "subject_template": "Reset",
-                    "body_html_template": "<p>{{ action_link }}</p>",
-                    "body_text_template": "Reset {{ action_link }}",
+                    "body_html_template": "<p>{{ default_password }}</p>",
+                    "body_text_template": "Reset {{ default_password }}",
                 },
             ):
                 service = UserManagementService()
-                with pytest.raises(Exception) as exc_info:
-                    service.reset_user_password(
-                        target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
-                        changed_by=UUID("00000000-0000-0000-0000-000000000002"),
-                    )
-                assert "Failed to deliver password reset email" in str(exc_info.value)
+                result = service.reset_user_password(
+                    target_user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                    changed_by=UUID("00000000-0000-0000-0000-000000000002"),
+                )
+            assert result["reset_link_sent"] is False
+            assert result["delivery_status"] == "pending_retry"
+            assert result["temporary_password"] == "12345678"
+            mock_client.auth.admin.update_user_by_id.assert_called_once()
 
     def test_reset_password_user_not_found(self, mock_env):
         with patch("app.services.user_management.create_client") as mock_create:
