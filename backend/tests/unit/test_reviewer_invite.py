@@ -17,6 +17,7 @@ def _chain():
     for method in (
         "select",
         "eq",
+        "maybe_single",
         "single",
         "limit",
         "order",
@@ -165,3 +166,62 @@ def test_get_invite_view_includes_journal_title(supabase_admin):
 
     assert out.manuscript.title == "Test Manuscript"
     assert out.manuscript.journal_title == "Journal A"
+
+
+def test_accept_invitation_triggers_activation_follow_up_for_pending_reviewer(
+    supabase_admin,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("REVIEW_INVITE_DUE_MIN_DAYS", "1")
+    monkeypatch.setenv("REVIEW_INVITE_DUE_MAX_DAYS", "10")
+    svc = reviewer_service_module.ReviewerInviteService()
+
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.side_effect = [
+        _Resp(data=_assignment_row(status="opened", accepted_at=None, declined_at=None)),
+        _Resp(data=[{"id": "ok"}]),
+    ]
+
+    profiles = supabase_admin.table("user_profiles")
+    profiles.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000022",
+            "email": "reviewer@example.com",
+            "full_name": "Reviewer Example",
+        }
+    )
+
+    follow_up_calls: list[dict[str, str]] = []
+
+    def _fake_follow_up(*, reviewer_id, reviewer_email, reviewer_name):
+        follow_up_calls.append(
+            {
+                "reviewer_id": str(reviewer_id),
+                "reviewer_email": reviewer_email,
+                "reviewer_name": reviewer_name,
+            }
+        )
+        return {"status": "sent", "required": True}
+
+    monkeypatch.setattr(
+        reviewer_service_module,
+        "_send_reviewer_activation_follow_up",
+        _fake_follow_up,
+        raising=False,
+    )
+
+    out = svc.accept_invitation(
+        assignment_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001"),
+        reviewer_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000022"),
+        payload=InviteAcceptPayload(due_date=date.today() + timedelta(days=1)),
+    )
+
+    assert out["status"] == "accepted"
+    assert out["activation_follow_up"]["status"] == "sent"
+    assert follow_up_calls == [
+        {
+            "reviewer_id": "00000000-0000-0000-0000-000000000022",
+            "reviewer_email": "reviewer@example.com",
+            "reviewer_name": "Reviewer Example",
+        }
+    ]

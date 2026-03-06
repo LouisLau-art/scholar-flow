@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from app.core.default_password import get_default_bootstrap_password
 from app.lib.api_client import supabase_admin
 from app.schemas.review import (
     InviteAcceptPayload,
@@ -22,6 +21,22 @@ from app.services.reviewer_workspace_service import ReviewerWorkspaceService as 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _send_reviewer_activation_follow_up(
+    *,
+    reviewer_id: UUID,
+    reviewer_email: str,
+    reviewer_name: str,
+) -> dict[str, Any]:
+    from app.services.user_management import UserManagementService
+
+    return UserManagementService().send_reviewer_activation_email(
+        user_id=str(reviewer_id),
+        email=reviewer_email,
+        full_name=reviewer_name,
+        trigger="reviewer_invitation_acceptance",
+    )
 
 
 def _is_missing_column_error(err: Exception) -> bool:
@@ -303,9 +318,11 @@ class ReviewerService:
             res = supabase_admin.auth.admin.create_user(
                 {
                     "email": email,
-                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
-                    "user_metadata": {"full_name": payload.full_name},
+                    "user_metadata": {
+                        "full_name": payload.full_name,
+                        "sf_reviewer_activation_required": True,
+                    },
                 }
             )
             user = getattr(res, "user", None)
@@ -643,7 +660,34 @@ class ReviewerInviteService:
                 ).eq("id", str(assignment_id)).execute()
             else:
                 raise
-        return {"status": "accepted", "idempotent": False, "due_at": due_at_iso}
+        activation_follow_up: dict[str, Any] = {"required": False, "status": "not_required"}
+        try:
+            reviewer_profile_res = (
+                supabase_admin.table("user_profiles")
+                .select("id,email,full_name")
+                .eq("id", str(reviewer_id))
+                .maybe_single()
+                .execute()
+            )
+            reviewer_profile = getattr(reviewer_profile_res, "data", None) or {}
+            reviewer_email = str(reviewer_profile.get("email") or "").strip()
+            reviewer_name = str(reviewer_profile.get("full_name") or "").strip() or "Reviewer"
+            if reviewer_email:
+                activation_follow_up = _send_reviewer_activation_follow_up(
+                    reviewer_id=reviewer_id,
+                    reviewer_email=reviewer_email,
+                    reviewer_name=reviewer_name,
+                )
+            else:
+                activation_follow_up = {"required": False, "status": "skipped_missing_email"}
+        except Exception:
+            activation_follow_up = {"required": False, "status": "skipped"}
+        return {
+            "status": "accepted",
+            "idempotent": False,
+            "due_at": due_at_iso,
+            "activation_follow_up": activation_follow_up,
+        }
 
     def decline_invitation(
         self,

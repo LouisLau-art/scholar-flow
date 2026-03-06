@@ -852,6 +852,9 @@ class TestInviteReviewer:
             mock_auth_response = MagicMock()
             mock_auth_response.user = mock_user
             mock_client.auth.admin.create_user.return_value = mock_auth_response
+            mock_client.auth.admin.get_user_by_id.return_value = MagicMock(
+                user=MagicMock(user_metadata={"sf_reviewer_activation_required": True})
+            )
 
             # Mock generate_link
             mock_link_response = MagicMock()
@@ -864,7 +867,7 @@ class TestInviteReviewer:
 
             with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
                 "app.services.user_management.email_service.send_email", return_value=True
-            ):
+            ) as mock_send_email:
                 service = UserManagementService()
                 result = service.invite_reviewer(
                     email="reviewer@test.com",
@@ -874,10 +877,18 @@ class TestInviteReviewer:
 
             assert result["email"] == "reviewer@test.com"
             assert result["roles"] == ["reviewer"]
+            create_payload = mock_client.auth.admin.create_user.call_args.args[0]
+            assert "password" not in create_payload
+            assert create_payload["email_confirm"] is True
+            assert create_payload["user_metadata"]["sf_reviewer_activation_required"] is True
+            mock_client.auth.admin.generate_link.assert_called_once()
+            html_body = mock_send_email.call_args.kwargs["html_body"]
+            assert "Default password" not in html_body
+            assert "https://test.com/magic-link" in html_body
 
             captured = capsys.readouterr()
             combined = f"{caplog.text}\n{captured.out}\n{captured.err}".lower()
-            assert "reviewer invite link generated" in combined
+            assert "reviewer activation link generated" in combined
 
     def test_invite_reviewer_already_exists(self, mock_env):
         """Test invite when reviewer already exists"""

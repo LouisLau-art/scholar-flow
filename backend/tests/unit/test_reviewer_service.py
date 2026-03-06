@@ -104,6 +104,10 @@ def test_add_to_library_creates_auth_user_and_upserts_profile(supabase_admin):
     assert out["id"] == "new-id"
     assert out["email"] == "x@y.com"
     assert out["roles"] == ["reviewer"]
+    create_payload = supabase_admin.auth.admin.create_user.call_args.args[0]
+    assert "password" not in create_payload
+    assert create_payload["email_confirm"] is True
+    assert create_payload["user_metadata"]["sf_reviewer_activation_required"] is True
     assert profiles.upsert.called is True
 
 

@@ -1,6 +1,7 @@
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from urllib.parse import quote
 from uuid import UUID
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
@@ -24,6 +25,9 @@ logger = logging.getLogger("scholarflow.user_management")
 
 _EMAIL_TEMPLATE_TABLE = "email_templates"
 _EMAIL_TEMPLATE_SCENE = "admin_user_management"
+_REVIEWER_ACTIVATION_REQUIRED_KEY = "sf_reviewer_activation_required"
+_REVIEWER_ACTIVATION_EMAIL_SENT_AT_KEY = "sf_reviewer_activation_email_sent_at"
+_REVIEWER_ACTIVATION_TRIGGER_KEY = "sf_reviewer_activation_trigger"
 _DEFAULT_EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "admin_internal_user_welcome": {
         "template_key": "admin_internal_user_welcome",
@@ -75,6 +79,25 @@ _DEFAULT_EMAIL_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "body_text_template": (
             "You are invited as a reviewer on {{ journal_title }}. "
             "Sign in here: {{ login_url }}. Default password: {{ default_password }}"
+        ),
+    },
+    "admin_reviewer_activation": {
+        "template_key": "admin_reviewer_activation",
+        "display_name": "审稿人账号激活通知",
+        "scene": _EMAIL_TEMPLATE_SCENE,
+        "subject_template": "[{{ journal_title }}] Activate your reviewer account",
+        "body_html_template": (
+            "<p>Dear {{ recipient_name }},</p>"
+            "<p>Your reviewer account for <strong>{{ journal_title }}</strong> is ready.</p>"
+            "<p>Please activate your account and set a password here: "
+            "<a href=\"{{ activation_link }}\">{{ activation_link }}</a></p>"
+            "<p>After setting your password, you can sign in at <a href=\"{{ login_url }}\">{{ login_url }}</a>.</p>"
+            "<p>Best regards,<br/>{{ journal_title }} Editorial Office</p>"
+        ),
+        "body_text_template": (
+            "Your reviewer account for {{ journal_title }} is ready. "
+            "Activate it here: {{ activation_link }}. "
+            "After setting your password, sign in at {{ login_url }}."
         ),
     },
 }
@@ -129,6 +152,142 @@ class UserManagementService:
 
     def _build_login_url(self) -> str:
         return f"{self._get_frontend_base_url()}/login"
+
+    def _build_reviewer_activation_redirect_url(self) -> str:
+        next_path = quote("/auth/set-password?source=reviewer-activation", safe="")
+        return f"{self._get_frontend_base_url()}/auth/callback?next={next_path}"
+
+    @staticmethod
+    def _extract_auth_user(auth_response: Any) -> Any | None:
+        if auth_response is None:
+            return None
+        user = getattr(auth_response, "user", None)
+        if user is not None:
+            return user
+        if isinstance(auth_response, dict):
+            maybe_user = auth_response.get("user")
+            if maybe_user is not None:
+                return maybe_user
+        return auth_response
+
+    @staticmethod
+    def _extract_user_metadata(user: Any) -> Dict[str, Any]:
+        if user is None:
+            return {}
+        metadata = getattr(user, "user_metadata", None)
+        if isinstance(metadata, dict):
+            return dict(metadata)
+        if isinstance(user, dict):
+            raw = user.get("user_metadata")
+            if isinstance(raw, dict):
+                return dict(raw)
+        return {}
+
+    def send_reviewer_activation_email(
+        self,
+        *,
+        user_id: str,
+        email: str,
+        full_name: str,
+        trigger: str,
+    ) -> Dict[str, Any]:
+        auth_user = None
+        try:
+            auth_user = self._extract_auth_user(self.admin_client.auth.admin.get_user_by_id(user_id))
+        except Exception as e:
+            logger.warning("Failed to load auth user %s for reviewer activation: %s", user_id, e)
+
+        metadata = self._extract_user_metadata(auth_user)
+        if not bool(metadata.get(_REVIEWER_ACTIVATION_REQUIRED_KEY)):
+            return {"required": False, "status": "not_required"}
+
+        try:
+            link_res = self.admin_client.auth.admin.generate_link(
+                {
+                    "type": "recovery",
+                    "email": email,
+                    "options": {"redirect_to": self._build_reviewer_activation_redirect_url()},
+                }
+            )
+        except Exception as e:
+            self.log_email_notification(
+                recipient_email=email,
+                notification_type="reviewer_activation",
+                status="pending_retry",
+                error_message=f"Failed to generate activation link: {e}",
+            )
+            return {"required": True, "status": "pending_retry"}
+
+        props = getattr(link_res, "properties", None)
+        if isinstance(props, dict):
+            activation_link = props.get("action_link")
+        else:
+            activation_link = getattr(props, "action_link", None)
+        if not activation_link:
+            self.log_email_notification(
+                recipient_email=email,
+                notification_type="reviewer_activation",
+                status="pending_retry",
+                error_message="Missing action_link from generate_link response",
+            )
+            return {"required": True, "status": "pending_retry"}
+
+        logger.info("[UserManagement] reviewer activation link generated for %s", _mask_email(email))
+        template = self._load_email_template(
+            env_key="ADMIN_REVIEWER_ACTIVATION_EMAIL_TEMPLATE_KEY",
+            fallback_key="admin_reviewer_activation",
+        )
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        sent, send_error = self._send_inline_email(
+            to_email=email,
+            template=template,
+            context={
+                "recipient_name": full_name,
+                "journal_title": self._default_journal_title(),
+                "activation_link": activation_link,
+                "action_link": activation_link,
+                "login_url": self._build_login_url(),
+                "reviewer_email": email,
+            },
+            idempotency_key=f"reviewer-activation:{user_id}:{trigger}:{timestamp}",
+            tags=[
+                {"name": "scene", "value": _EMAIL_TEMPLATE_SCENE},
+                {"name": "event", "value": "reviewer_activation"},
+                {"name": "trigger", "value": trigger},
+            ],
+            headers={
+                "X-SF-Event": "reviewer_activation",
+                "X-SF-User-ID": str(user_id),
+                "X-SF-Trigger": trigger,
+            },
+        )
+        if not sent:
+            self.log_email_notification(
+                recipient_email=email,
+                notification_type="reviewer_activation",
+                status="pending_retry",
+                error_message=send_error or "Failed to send reviewer activation email",
+            )
+            return {"required": True, "status": "pending_retry"}
+
+        self.log_email_notification(
+            recipient_email=email,
+            notification_type="reviewer_activation",
+            status="sent",
+        )
+
+        merged_metadata = dict(metadata)
+        merged_metadata[_REVIEWER_ACTIVATION_REQUIRED_KEY] = False
+        merged_metadata[_REVIEWER_ACTIVATION_EMAIL_SENT_AT_KEY] = datetime.now(timezone.utc).isoformat()
+        merged_metadata[_REVIEWER_ACTIVATION_TRIGGER_KEY] = trigger
+        try:
+            self.admin_client.auth.admin.update_user_by_id(
+                str(user_id),
+                {"user_metadata": merged_metadata},
+            )
+        except Exception as e:
+            logger.warning("Failed to persist reviewer activation metadata for %s: %s", user_id, e)
+        return {"required": True, "status": "sent"}
 
     def _load_email_template(self, *, env_key: str, fallback_key: str) -> Dict[str, Any]:
         configured_key = str(os.environ.get(env_key) or "").strip() or fallback_key
@@ -669,9 +828,11 @@ class UserManagementService:
             user_response = self.admin_client.auth.admin.create_user(
                 {
                     "email": email,
-                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
-                    "user_metadata": {"full_name": full_name},
+                    "user_metadata": {
+                        "full_name": full_name,
+                        _REVIEWER_ACTIVATION_REQUIRED_KEY: True,
+                    },
                 }
             )
             if not getattr(user_response, "user", None):
@@ -693,47 +854,14 @@ class UserManagementService:
                 initial_role="reviewer",
             )
             
-            logger.info("[UserManagement] reviewer invite link generated for %s", _mask_email(email))
-            template = self._load_email_template(
-                env_key="ADMIN_REVIEWER_INVITE_EMAIL_TEMPLATE_KEY",
-                fallback_key="admin_reviewer_invite",
+            activation_result = self.send_reviewer_activation_email(
+                user_id=user_id,
+                email=email,
+                full_name=full_name,
+                trigger="admin_reviewer_invite",
             )
-            context = {
-                "recipient_name": full_name,
-                "journal_title": self._default_journal_title(),
-                "action_link": self._build_login_url(),
-                "login_url": self._build_login_url(),
-                "default_password": get_default_bootstrap_password(),
-                "reviewer_email": email,
-            }
-            timestamp = int(datetime.utcnow().timestamp())
-            sent, send_error = self._send_inline_email(
-                to_email=email,
-                template=template,
-                context=context,
-                idempotency_key=f"admin-invite-reviewer:{user_id}:{timestamp}",
-                tags=[
-                    {"name": "scene", "value": _EMAIL_TEMPLATE_SCENE},
-                    {"name": "event", "value": "admin_reviewer_invite"},
-                ],
-                headers={
-                    "X-SF-Event": "admin_reviewer_invite",
-                    "X-SF-User-ID": user_id,
-                },
-            )
-            if not sent:
-                self.log_email_notification(
-                    recipient_email=email,
-                    notification_type="reviewer_invite",
-                    status="pending_retry",
-                    error_message=send_error or "Failed to send reviewer invite email",
-                )
-                raise Exception("Reviewer created, but invitation email delivery failed")
-            self.log_email_notification(
-                recipient_email=email,
-                notification_type="reviewer_invite",
-                status="sent",
-            )
+            if activation_result.get("status") != "sent":
+                raise Exception("Reviewer created, but activation email delivery failed")
             
             return {
                 "id": user_id,
