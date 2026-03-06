@@ -19,6 +19,20 @@ const TiptapEditor = dynamic(() => import('@/components/cms/TiptapEditor'), {
   ssr: false,
 })
 
+function normalizeApiErrorMessage(payload: any, fallback: string) {
+  const detail = payload?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0]
+    const msg = String(first?.msg || '').trim()
+    const loc = Array.isArray(first?.loc) ? first.loc.join('.') : ''
+    if (msg && loc) return `${msg} (${loc})`
+    if (msg) return msg
+  }
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message
+  return fallback
+}
+
 export default function SubmitRevisionPage() {
   const params = useParams()
   const router = useRouter()
@@ -111,6 +125,8 @@ export default function SubmitRevisionPage() {
     try {
        const token = await authService.getAccessToken()
        const formData = new FormData()
+       // 兼容旧后端（仅接受 file）与新后端（接受 pdf_file + word_file）
+       formData.append('file', pdfFile)
        formData.append('word_file', wordFile)
        formData.append('pdf_file', pdfFile)
        formData.append('response_letter', responseLetter)
@@ -124,7 +140,9 @@ export default function SubmitRevisionPage() {
        })
        
        const result = await res.json()
-       if (!res.ok) throw new Error(result.detail || 'Submission failed')
+       if (!res.ok) {
+         throw new Error(normalizeApiErrorMessage(result, `Submission failed (HTTP ${res.status})`))
+       }
        
        toast.success('Revision submitted successfully!')
        router.push('/dashboard')
