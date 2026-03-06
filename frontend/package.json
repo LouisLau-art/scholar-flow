@@ -12,6 +12,7 @@
     "audit:dialog-onopenchange": "node scripts/dialog-open-change-audit.mjs",
     "audit:ui-guidelines": "bash scripts/ui-guidelines-audit.sh",
     "audit:route-budgets": "node scripts/check-route-budgets.mjs",
+    "audit:next-toolchain": "node scripts/check-next-toolchain.mjs",
     "email:build-templates": "bun run scripts/build-email-templates.ts",
     "test": "vitest",
     "test:run": "vitest run",

@@ -93,6 +93,9 @@ jobs:
     - name: Install Dependencies
       run: bun install --frozen-lockfile
 
+    - name: Next Toolchain Guard
+      run: bun run audit:next-toolchain
+
     - name: Lint
       run: bun run lint
 
