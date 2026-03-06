@@ -436,8 +436,16 @@ export default function ReviewerDashboard() {
         toast.error(normalizeApiErrorMessage(json, "Failed to open reviewer workspace."), { id: toastId })
         return
       }
-      toast.success("Workspace ready.", { id: toastId })
-      router.push(`/reviewer/workspace/${encodeURIComponent(assignmentId)}`)
+      const redirectUrl = typeof json?.data?.redirect_url === 'string' ? json.data.redirect_url.trim() : ''
+      if (!redirectUrl) {
+        toast.error("Failed to determine next reviewer step.", { id: toastId })
+        return
+      }
+      toast.success(
+        redirectUrl.startsWith('/review/invite') ? "Invitation page ready." : "Workspace ready.",
+        { id: toastId }
+      )
+      router.push(redirectUrl)
     } catch {
       toast.error("Failed to open reviewer workspace.", { id: toastId })
     } finally {

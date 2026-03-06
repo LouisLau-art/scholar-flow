@@ -37,12 +37,18 @@ def _derive_invite_state(assignment: Dict[str, Any]) -> str:
     status = str(assignment.get("status") or "").lower()
     if status == "completed":
         return "submitted"
-    if status == "accepted":
-        return "accepted"
     if status == "declined" or assignment.get("declined_at"):
         return "declined"
+    if status == "selected":
+        return "selected"
     if assignment.get("accepted_at"):
         return "accepted"
+    if status == "accepted":
+        return "accepted"
+    if status == "opened" or assignment.get("opened_at"):
+        return "opened"
+    if status == "invited" or assignment.get("invited_at"):
+        return "invited"
     return "invited"
 
 
@@ -87,55 +93,6 @@ class ReviewerWorkspaceService:
             raise ValueError("Assignment not found")
         if str(assignment.get("reviewer_id") or "") != str(reviewer_id):
             raise PermissionError("Assignment does not belong to current reviewer")
-        return assignment
-
-    def _ensure_invitation_accepted(
-        self,
-        *,
-        assignment_id: UUID,
-        assignment: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        中文注释:
-        - UAT/外部 reviewer 场景下，流程应尽量“点开就能开始 review”，避免被卡在 accept 页；
-        - 云端 schema 可能缺 invited_at/opened_at/accepted_at 等字段，更新失败时做多档降级；
-        - 若两档写入都失败，必须显式报错，避免出现“内存态 accepted、数据库仍 invited”的不一致。
-        """
-        state = _derive_invite_state(assignment)
-        if state != "invited":
-            return assignment
-
-        now_iso = _utc_now_iso()
-        first_error: Exception | None = None
-        # 1) 最完整写入：pending + accepted_at + opened_at
-        try:
-            self.client.table("review_assignments").update(
-                {"status": "pending", "accepted_at": now_iso, "opened_at": now_iso}
-            ).eq("id", str(assignment_id)).execute()
-            assignment["status"] = "pending"
-            assignment["accepted_at"] = now_iso
-            assignment["opened_at"] = assignment.get("opened_at") or now_iso
-            return assignment
-        except Exception as e:
-            first_error = e
-
-        # 2) 降级：仅写 status=accepted（兼容缺失时间戳列的环境）
-        try:
-            self.client.table("review_assignments").update({"status": "accepted"}).eq(
-                "id", str(assignment_id)
-            ).execute()
-        except Exception as e:
-            logger.error(
-                "[ReviewerWorkspace] failed to persist invitation acceptance (assignment_id=%s): first=%r, fallback=%r",
-                assignment_id,
-                first_error,
-                e,
-            )
-            raise RuntimeError("Failed to persist invitation acceptance") from e
-
-        assignment["status"] = "accepted"
-        assignment["accepted_at"] = assignment.get("accepted_at") or now_iso
-        assignment["opened_at"] = assignment.get("opened_at") or now_iso
         return assignment
 
     def _extract_signed_url(self, signed: Any) -> str | None:
@@ -370,12 +327,13 @@ class ReviewerWorkspaceService:
 
     def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
-        assignment = self._ensure_invitation_accepted(assignment_id=assignment_id, assignment=assignment)
         state = _derive_invite_state(assignment)
         if state == "declined":
             raise PermissionError("Invitation has been declined")
-        if state == "invited":
+        if state in {"invited", "opened"}:
             raise PermissionError("Please accept invitation first")
+        if state == "selected":
+            raise PermissionError("Invitation is not active yet")
         manuscript_id = str(assignment["manuscript_id"])
 
         manuscript = self._load_manuscript(manuscript_id=manuscript_id)
@@ -488,14 +446,15 @@ class ReviewerWorkspaceService:
         payload: ReviewSubmission,
     ) -> Dict[str, Any]:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
-        assignment = self._ensure_invitation_accepted(assignment_id=assignment_id, assignment=assignment)
         state = _derive_invite_state(assignment)
         if state == "submitted":
             raise ValueError("Review already submitted")
         if state == "declined":
             raise ValueError("Invitation already declined")
-        if state == "invited":
+        if state in {"invited", "opened"}:
             raise ValueError("Please accept invitation first")
+        if state == "selected":
+            raise ValueError("Invitation is not active yet")
 
         manuscript_id = str(assignment["manuscript_id"])
         attachment_path = payload.attachments[-1] if payload.attachments else None

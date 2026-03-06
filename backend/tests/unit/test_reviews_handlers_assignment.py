@@ -65,7 +65,37 @@ class _SupabaseStub:
 
 
 @pytest.mark.asyncio
-async def test_establish_workspace_session_falls_back_to_status_only_when_columns_missing() -> None:
+async def test_establish_workspace_session_redirects_unaccepted_assignment_to_invite() -> None:
+    reviewer_id = str(uuid4())
+    manuscript_id = str(uuid4())
+    assignment_id = uuid4()
+    stub = _SupabaseStub(
+        assignment={
+            "id": str(assignment_id),
+            "reviewer_id": reviewer_id,
+            "manuscript_id": manuscript_id,
+            "status": "invited",
+            "accepted_at": None,
+        },
+    )
+    response = Response()
+
+    out = await establish_reviewer_workspace_session_impl(
+        assignment_id=assignment_id,
+        response=response,
+        current_user={"id": reviewer_id},
+        supabase_admin_client=stub,
+        create_magic_link_jwt_fn=lambda **_kwargs: "mock-token",
+    )
+
+    assert out["success"] is True
+    assert out["data"]["redirect_url"] == f"/review/invite?assignment_id={assignment_id}"
+    assert stub.update_payloads == []
+    assert "sf_review_magic=mock-token" in (response.headers.get("set-cookie") or "")
+
+
+@pytest.mark.asyncio
+async def test_establish_workspace_session_uses_workspace_redirect_for_accepted_assignment() -> None:
     reviewer_id = str(uuid4())
     manuscript_id = str(uuid4())
     assignment_id = uuid4()
@@ -75,8 +105,8 @@ async def test_establish_workspace_session_falls_back_to_status_only_when_column
             "reviewer_id": reviewer_id,
             "manuscript_id": manuscript_id,
             "status": "pending",
+            "accepted_at": "2026-03-06T00:00:00Z",
         },
-        update_errors=[Exception("column accepted_at does not exist"), None],
     )
     response = Response()
 
@@ -90,37 +120,5 @@ async def test_establish_workspace_session_falls_back_to_status_only_when_column
 
     assert out["success"] is True
     assert out["data"]["redirect_url"] == f"/reviewer/workspace/{assignment_id}"
-    assert len(stub.update_payloads) == 2
-    assert stub.update_payloads[0].get("status") == "accepted"
-    assert "accepted_at" in stub.update_payloads[0]
-    assert "opened_at" in stub.update_payloads[0]
-    assert stub.update_payloads[1] == {"status": "accepted"}
+    assert stub.update_payloads == []
     assert "sf_review_magic=mock-token" in (response.headers.get("set-cookie") or "")
-
-
-@pytest.mark.asyncio
-async def test_establish_workspace_session_raises_when_assignment_accept_update_fails() -> None:
-    reviewer_id = str(uuid4())
-    manuscript_id = str(uuid4())
-    assignment_id = uuid4()
-    stub = _SupabaseStub(
-        assignment={
-            "id": str(assignment_id),
-            "reviewer_id": reviewer_id,
-            "manuscript_id": manuscript_id,
-            "status": "pending",
-        },
-        update_errors=[Exception("db timeout"), Exception("db timeout")],
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await establish_reviewer_workspace_session_impl(
-            assignment_id=assignment_id,
-            response=Response(),
-            current_user={"id": reviewer_id},
-            supabase_admin_client=stub,
-            create_magic_link_jwt_fn=lambda **_kwargs: "mock-token",
-        )
-
-    assert exc.value.status_code == 500
-    assert "activate reviewer assignment session" in str(exc.value.detail).lower()

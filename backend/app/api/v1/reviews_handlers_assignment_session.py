@@ -13,17 +13,25 @@ def _load_assignment(
     supabase_admin_client: Any,
     assignment_id: UUID,
 ) -> dict[str, Any]:
-    try:
-        resp = (
-            supabase_admin_client.table("review_assignments")
-            .select("id, reviewer_id, manuscript_id, status")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-        return getattr(resp, "data", None) or {}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load assignment: {exc}") from exc
+    select_variants = [
+        "id, reviewer_id, manuscript_id, status, invited_at, opened_at, accepted_at, declined_at",
+        "id, reviewer_id, manuscript_id, status, accepted_at, declined_at",
+        "id, reviewer_id, manuscript_id, status",
+    ]
+    last_error: Exception | None = None
+    for cols in select_variants:
+        try:
+            resp = (
+                supabase_admin_client.table("review_assignments")
+                .select(cols)
+                .eq("id", str(assignment_id))
+                .single()
+                .execute()
+            )
+            return getattr(resp, "data", None) or {}
+        except Exception as exc:
+            last_error = exc
+    raise HTTPException(status_code=500, detail=f"Failed to load assignment: {last_error}") from last_error
 
 
 def _assert_assignment_access(
@@ -39,44 +47,25 @@ def _assert_assignment_access(
         raise HTTPException(status_code=403, detail="Invitation revoked")
 
 
-def _activate_assignment_if_needed(
-    *,
-    supabase_admin_client: Any,
-    assignment_id: UUID,
-    status_raw: str,
-) -> None:
-    if status_raw in {"completed", "declined", "cancelled", "accepted"}:
-        return
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    update_candidates = [
-        {
-            "status": "accepted",
-            "accepted_at": now_iso,
-            "opened_at": now_iso,
-        },
-        {"status": "accepted"},
-    ]
-
-    last_error: Exception | None = None
-    for payload in update_candidates:
-        try:
-            (
-                supabase_admin_client.table("review_assignments")
-                .update(payload)
-                .eq("id", str(assignment_id))
-                .execute()
-            )
-            last_error = None
-            break
-        except Exception as exc:
-            last_error = exc
-
-    if last_error is not None:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to activate reviewer assignment session; please retry.",
-        ) from last_error
+def _derive_assignment_state(assignment: dict[str, Any]) -> str:
+    status_raw = str(assignment.get("status") or "").strip().lower()
+    if status_raw == "completed":
+        return "submitted"
+    if status_raw == "cancelled":
+        return "cancelled"
+    if status_raw == "declined" or assignment.get("declined_at"):
+        return "declined"
+    if status_raw == "selected":
+        return "selected"
+    if status_raw == "accepted" or assignment.get("accepted_at"):
+        return "accepted"
+    if status_raw == "opened" or assignment.get("opened_at"):
+        return "opened"
+    if status_raw == "invited" or assignment.get("invited_at"):
+        return "invited"
+    if status_raw == "pending":
+        return "accepted" if assignment.get("accepted_at") else "invited"
+    return "invited"
 
 
 def _create_session_token(
@@ -115,11 +104,13 @@ async def establish_reviewer_workspace_session_impl(
         assignment_id=assignment_id,
     )
     _assert_assignment_access(assignment=assignment, reviewer_id=reviewer_id)
-    _activate_assignment_if_needed(
-        supabase_admin_client=supabase_admin_client,
-        assignment_id=assignment_id,
-        status_raw=str(assignment.get("status") or "").strip().lower(),
-    )
+    assignment_state = _derive_assignment_state(assignment)
+    if assignment_state == "declined":
+        raise HTTPException(status_code=403, detail="Invitation has been declined")
+    if assignment_state == "selected":
+        raise HTTPException(status_code=403, detail="Invitation is not active yet")
+    if assignment_state == "cancelled":
+        raise HTTPException(status_code=403, detail="Invitation revoked")
 
     token = _create_session_token(
         assignment=assignment,
@@ -139,6 +130,10 @@ async def establish_reviewer_workspace_session_impl(
         "success": True,
         "data": {
             "assignment_id": str(assignment_id),
-            "redirect_url": f"/reviewer/workspace/{assignment_id}",
+            "redirect_url": (
+                f"/review/invite?assignment_id={assignment_id}"
+                if assignment_state in {"invited", "opened"}
+                else f"/reviewer/workspace/{assignment_id}"
+            ),
         },
     }

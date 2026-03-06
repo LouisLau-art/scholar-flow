@@ -42,6 +42,35 @@ async def test_workspace_submit_review_success(client, monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_workspace_get_returns_accept_required_error_code(client, monkeypatch: pytest.MonkeyPatch):
+    assignment_id = "00000000-0000-0000-0000-000000000123"
+
+    async def _allow(*, assignment_id, magic_token):
+        return SimpleNamespace(
+            assignment_id=UUID(str(assignment_id)),
+            reviewer_id=UUID("00000000-0000-0000-0000-000000000777"),
+            manuscript_id=UUID("00000000-0000-0000-0000-000000000888"),
+        )
+
+    class _Svc:
+        def get_workspace_data(self, *, assignment_id, reviewer_id):
+            raise PermissionError("Please accept invitation first")
+
+    monkeypatch.setattr("app.api.v1.reviews._require_magic_link_scope", _allow)
+    monkeypatch.setattr("app.api.v1.reviews.ReviewerWorkspaceService", lambda: _Svc())
+
+    res = await client.get(
+        f"/api/v1/reviewer/assignments/{assignment_id}/workspace",
+        cookies={"sf_review_magic": "token"},
+    )
+
+    assert res.status_code == 403
+    body = res.json()
+    assert body["detail"]["code"] == "INVITE_ACCEPT_REQUIRED"
+    assert body["detail"]["message"] == "Please accept invitation first"
+
+
+@pytest.mark.asyncio
 async def test_workspace_submit_review_forbidden(client, monkeypatch: pytest.MonkeyPatch):
     assignment_id = "00000000-0000-0000-0000-000000000123"
 

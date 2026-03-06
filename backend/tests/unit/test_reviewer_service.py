@@ -198,6 +198,29 @@ def test_workspace_loads_and_returns_permissions(supabase_admin):
     assert out.manuscript.pdf_url.startswith("https://example.com/")
 
 
+def test_workspace_requires_explicit_acceptance_before_loading(supabase_admin):
+    svc = reviewer_service_module.ReviewerWorkspaceService()
+
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.return_value = _Resp(
+        data={
+            "id": "a1",
+            "manuscript_id": "00000000-0000-0000-0000-000000000011",
+            "reviewer_id": "00000000-0000-0000-0000-000000000002",
+            "status": "invited",
+            "accepted_at": None,
+        }
+    )
+
+    with pytest.raises(PermissionError, match="accept invitation"):
+        svc.get_workspace_data(
+            assignment_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001"),
+            reviewer_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000002"),
+        )
+
+    assert assignments.update.called is False
+
+
 def test_submit_review_marks_assignment_completed(supabase_admin):
     svc = reviewer_service_module.ReviewerWorkspaceService()
     assignment_id = reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001")
@@ -233,6 +256,37 @@ def test_submit_review_marks_assignment_completed(supabase_admin):
     assert assignments.update.called is True
     assert reports.insert.called is True
     assert manuscripts.update.called is True
+
+
+def test_submit_review_requires_explicit_acceptance(supabase_admin):
+    svc = reviewer_service_module.ReviewerWorkspaceService()
+    assignment_id = reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001")
+    reviewer_id = reviewer_service_module.UUID("00000000-0000-0000-0000-000000000002")
+
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.return_value = _Resp(
+        data={
+            "id": str(assignment_id),
+            "manuscript_id": "00000000-0000-0000-0000-000000000011",
+            "reviewer_id": str(reviewer_id),
+            "status": "invited",
+            "accepted_at": None,
+        }
+    )
+    reports = supabase_admin.table("review_reports")
+
+    payload = ReviewSubmission(
+        comments_for_author="Looks good",
+        confidential_comments_to_editor="private",
+        recommendation="accept",
+        attachments=[],
+    )
+
+    with pytest.raises(ValueError, match="accept invitation"):
+        svc.submit_review(assignment_id=assignment_id, reviewer_id=reviewer_id, payload=payload)
+
+    assert assignments.update.called is False
+    assert reports.insert.called is False
 
 
 def test_review_policy_due_window_default_days(monkeypatch: pytest.MonkeyPatch, supabase_admin):

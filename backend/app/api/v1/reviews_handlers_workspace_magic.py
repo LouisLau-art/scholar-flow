@@ -7,6 +7,20 @@ from uuid import UUID
 from fastapi import HTTPException, UploadFile
 
 
+def _permission_error_detail(exc: PermissionError) -> dict[str, str]:
+    message = str(exc) or "Forbidden"
+    normalized = message.strip().lower()
+    if normalized == "please accept invitation first":
+        code = "INVITE_ACCEPT_REQUIRED"
+    elif normalized == "invitation has been declined":
+        code = "INVITE_DECLINED"
+    elif normalized == "invitation is not active yet":
+        code = "INVITE_NOT_ACTIVE"
+    else:
+        code = "FORBIDDEN"
+    return {"code": code, "message": message}
+
+
 async def get_reviewer_workspace_data_impl(
     *,
     assignment_id: UUID,
@@ -23,8 +37,8 @@ async def get_reviewer_workspace_data_impl(
             assignment_id=assignment_id,
             reviewer_id=payload.reviewer_id,
         )
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=_permission_error_detail(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

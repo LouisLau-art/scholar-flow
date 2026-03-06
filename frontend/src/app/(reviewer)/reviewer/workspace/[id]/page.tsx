@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +35,7 @@ function channelBadgeVariant(channel: string): 'secondary' | 'outline' | 'defaul
 }
 
 export default function ReviewerWorkspacePage() {
+  const router = useRouter()
   const params = useParams()
   const assignmentId = String((params as Record<string, string | string[]> | null)?.id || '')
   const [workspace, setWorkspace] = useState<WorkspaceData | null>(null)
@@ -58,7 +59,16 @@ export default function ReviewerWorkspacePage() {
         const res = await fetch(`/api/v1/reviewer/assignments/${encodeURIComponent(assignmentId)}/workspace`)
         const json = await res.json().catch(() => null)
         if (!res.ok || !json?.success || !json?.data) {
-          throw new Error(normalizeApiErrorMessage(json, 'Failed to load workspace'))
+          const detailCode =
+            json?.detail && typeof json.detail === 'object' && typeof json.detail.code === 'string'
+              ? json.detail.code.trim()
+              : ''
+          const detail = normalizeApiErrorMessage(json, 'Failed to load workspace')
+          if (detailCode === 'INVITE_ACCEPT_REQUIRED') {
+            router.replace(`/review/invite?assignment_id=${encodeURIComponent(assignmentId)}`)
+            return
+          }
+          throw new Error(detail)
         }
         if (mounted) setWorkspace(json.data as WorkspaceData)
       } catch (error) {
@@ -72,7 +82,7 @@ export default function ReviewerWorkspacePage() {
     return () => {
       mounted = false
     }
-  }, [assignmentId])
+  }, [assignmentId, router])
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {

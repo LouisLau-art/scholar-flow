@@ -118,7 +118,10 @@ describe('ReviewerDashboard', () => {
       if (String(url) === '/api/v1/reviewer/assignments/assign-from-assignment-id/session') {
         return {
           ok: true,
-          json: async () => ({ success: true }),
+          json: async () => ({
+            success: true,
+            data: { redirect_url: '/reviewer/workspace/assign-from-assignment-id' },
+          }),
         } as any
       }
 
@@ -144,5 +147,105 @@ describe('ReviewerDashboard', () => {
     })
 
     expect(pushMock).toHaveBeenCalledWith('/reviewer/workspace/assign-from-assignment-id')
+  })
+
+  it('uses backend redirect_url when reviewer must return to invite decision page', async () => {
+    globalThis.fetch = vi.fn(async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.url
+
+      if (String(url).startsWith('/api/v1/reviews/my-tasks')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                assignment_id: 'assign-needs-accept',
+                manuscript_id: 'ms-3',
+                manuscript_title: 'Needs Acceptance',
+                manuscript_abstract: 'Reviewer must accept first',
+                assignment_status: 'pending',
+                accepted_at: null,
+              },
+            ],
+          }),
+        } as any
+      }
+
+      if (String(url) === '/api/v1/reviewer/assignments/assign-needs-accept/session') {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { redirect_url: '/review/invite?assignment_id=assign-needs-accept' },
+          }),
+        } as any
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      } as any
+    }) as any
+
+    render(<ReviewerDashboard />)
+
+    const startButton = await screen.findByRole('button', { name: /start review/i })
+    fireEvent.click(startButton)
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/review/invite?assignment_id=assign-needs-accept')
+    })
+  })
+
+  it('does not navigate when session response omits redirect_url', async () => {
+    const { toast } = await import('sonner')
+
+    globalThis.fetch = vi.fn(async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.url
+
+      if (String(url).startsWith('/api/v1/reviews/my-tasks')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                assignment_id: 'assign-missing-redirect',
+                manuscript_id: 'ms-4',
+                manuscript_title: 'Missing Redirect',
+                manuscript_abstract: 'Backend must provide redirect_url',
+                assignment_status: 'pending',
+              },
+            ],
+          }),
+        } as any
+      }
+
+      if (String(url) === '/api/v1/reviewer/assignments/assign-missing-redirect/session') {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {},
+          }),
+        } as any
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      } as any
+    }) as any
+
+    render(<ReviewerDashboard />)
+
+    const startButton = await screen.findByRole('button', { name: /start review/i })
+    fireEvent.click(startButton)
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to determine next reviewer step.', { id: 'toast-id' })
+    })
+    expect(pushMock).not.toHaveBeenCalled()
   })
 })
