@@ -31,7 +31,7 @@ export function SubmissionFinalizePanel(props: SubmissionFinalizePanelProps) {
       <Button
         onClick={props.onFinalize}
         disabled={props.submitDisabled}
-        className="flex w-full items-center justify-center rounded-md bg-foreground py-3 font-semibold text-white shadow-md transition-all hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex w-full items-center justify-center rounded-md bg-primary py-3 font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-foreground/65 disabled:opacity-100"
         data-testid="submission-finalize"
       >
         {props.isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Finalize Submission'}

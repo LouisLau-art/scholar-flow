@@ -24,7 +24,7 @@ export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
         onChange={props.onWordFileChange}
         disabled={props.isUploadingWordFile}
         data-testid="submission-word-file"
-        className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/85"
+        className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
       />
       <div className="mt-2 text-xs text-foreground/75">Accepted formats: `.doc`, `.docx`.</div>
       {props.isUploadingWordFile ? (

@@ -20,7 +20,7 @@ export function SubmissionFileUploadCard(props: SubmissionFileUploadCardProps) {
         type="file"
         accept=".pdf,application/pdf"
         onChange={props.onFileChange}
-        className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/85"
+        className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
         disabled={props.isUploading}
         data-testid="submission-file"
       />
