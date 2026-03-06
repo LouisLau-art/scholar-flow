@@ -122,6 +122,15 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  /* Submit page readability tuning: dark mode helper/placeholder text contrast */
+  .dark .submission-contrast .text-muted-foreground {
+    color: hsl(var(--foreground) / 0.78);
+  }
+
+  .dark .submission-contrast ::placeholder {
+    color: hsl(var(--foreground) / 0.58);
+  }
 }
 
 @utility animate-in {

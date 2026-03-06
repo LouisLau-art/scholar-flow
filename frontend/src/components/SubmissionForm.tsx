@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 import {
+  SubmissionCoverLetterCard,
   SubmissionFileUploadCard,
   SubmissionFinalizePanel,
   SubmissionMetadataForm,
@@ -17,7 +18,7 @@ export default function SubmissionForm() {
   return (
     <div className="space-y-8">
       <div className="mb-4">
-        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link href="/" className="inline-flex items-center text-sm text-foreground/80 transition-colors hover:text-foreground">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
         </Link>
       </div>
@@ -62,6 +63,14 @@ export default function SubmissionForm() {
         wordFileName={form.wordFileName}
         wordFileUploadError={form.wordFileUploadError}
         onWordFileChange={form.handleWordFileUpload}
+      />
+
+      <SubmissionCoverLetterCard
+        isUploadingCoverLetter={form.isUploadingCoverLetter}
+        coverLetterPath={form.coverLetterPath}
+        coverLetterFileName={form.coverLetterFileName}
+        coverLetterUploadError={form.coverLetterUploadError}
+        onCoverLetterChange={form.handleCoverLetterUpload}
       />
 
       <SubmissionFileUploadCard

@@ -7,7 +7,7 @@ export default function SubmitPage() {
    * 遵循章程：大标题衬线体，配色锁定为 slate-900，原子化设计
    */
   return (
-    <div className="min-h-screen bg-muted/40">
+    <div className="min-h-screen bg-background">
       <SiteHeader />
       <div className="mx-auto max-w-4xl p-8">
         <header className="mb-12 border-b border-border pb-6">
@@ -19,7 +19,7 @@ export default function SubmitPage() {
           </p>
         </header>
 
-        <main className="rounded-lg bg-card p-8 shadow-sm ring-1 ring-border">
+        <main className="submission-contrast rounded-lg bg-card p-8 shadow-sm ring-1 ring-border/80">
           <SubmissionForm />
         </main>
       </div>

@@ -1,3 +1,4 @@
+export { SubmissionCoverLetterCard } from './SubmissionCoverLetterCard'
 export { SubmissionFileUploadCard } from './SubmissionFileUploadCard'
 export { SubmissionFinalizePanel } from './SubmissionFinalizePanel'
 export { SubmissionMetadataForm } from './SubmissionMetadataForm'

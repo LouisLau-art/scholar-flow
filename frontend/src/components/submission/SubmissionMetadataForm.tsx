@@ -65,7 +65,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
         >
           <SelectTrigger
             id="submission-journal-select"
-            className="w-full border-border/80 text-foreground"
+            className="w-full border-border/80 bg-background text-foreground data-[placeholder]:text-foreground/70"
             data-testid="submission-journal-select"
             onBlur={props.onJournalBlur}
           >
@@ -113,7 +113,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           type="text"
           value={props.specialIssue}
           onChange={(event) => props.onSpecialIssueChange(event.target.value)}
-          className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="e.g., AI for Healthcare 2026"
           data-testid="submission-special-issue"
         />
@@ -129,7 +129,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           value={props.metadata.title}
           onChange={(event) => props.onTitleChange(event.target.value)}
           onBlur={props.onTitleBlur}
-          className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="Parsed title will appear here..."
           data-testid="submission-title"
         />
@@ -150,7 +150,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           value={props.metadata.abstract}
           onChange={(event) => props.onAbstractChange(event.target.value)}
           onBlur={props.onAbstractBlur}
-          className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="Parsed abstract will appear here..."
           data-testid="submission-abstract"
         />
@@ -171,7 +171,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           value={props.datasetUrl}
           onChange={(event) => props.onDatasetUrlChange(event.target.value)}
           onBlur={props.onDatasetUrlBlur}
-          className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="https://example.com/dataset"
           data-testid="submission-dataset-url"
         />
@@ -192,7 +192,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           value={props.sourceCodeUrl}
           onChange={(event) => props.onSourceCodeUrlChange(event.target.value)}
           onBlur={props.onSourceCodeUrlBlur}
-          className="w-full rounded-md border border-border/80 bg-card px-4 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="https://github.com/org/repo"
           data-testid="submission-source-url"
         />
@@ -203,8 +203,8 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
         ) : null}
       </div>
 
-      <div className="space-y-3 rounded-md border border-border/70 bg-muted/30 p-3">
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+      <div className="space-y-3 rounded-md border border-border/70 bg-muted/45 p-3">
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground/90">
           <input
             type="checkbox"
             checked={props.policyConsent}
@@ -222,7 +222,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           </p>
         ) : null}
 
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground/90">
           <input
             type="checkbox"
             checked={props.ethicsConsent}

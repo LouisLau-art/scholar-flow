@@ -83,6 +83,11 @@ export function isSupportedWordDocument(file: File): boolean {
   return name.endsWith('.doc') || name.endsWith('.docx')
 }
 
+export function isSupportedCoverLetterDocument(file: File): boolean {
+  const name = String(file.name || '').toLowerCase()
+  return name.endsWith('.pdf') || name.endsWith('.doc') || name.endsWith('.docx')
+}
+
 export function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_')
 }

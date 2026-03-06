@@ -37,13 +37,13 @@ export function SubmissionFinalizePanel(props: SubmissionFinalizePanelProps) {
         {props.isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Finalize Submission'}
       </Button>
       {props.userEmail && props.showValidationHint ? (
-        <p className="text-center text-xs text-muted-foreground" data-testid="submission-validation-hint">
-          Complete journal + metadata + required confirmations, then upload required PDF/Word files.
+        <p className="text-center text-xs text-foreground/75" data-testid="submission-validation-hint">
+          Complete journal + metadata + required confirmations, then upload required PDF/Word/Cover Letter files.
           Optional URLs must start with http(s).
         </p>
       ) : null}
       {props.userEmail ? (
-        <p className="text-center text-xs text-muted-foreground" data-testid="submission-user">
+        <p className="text-center text-xs text-foreground/70" data-testid="submission-user">
           Logged in as: {props.userEmail}
         </p>
       ) : null}
