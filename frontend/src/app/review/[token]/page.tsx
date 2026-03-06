@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
+import { useParams } from 'next/navigation'
 import { FileText, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { FileUpload } from '@/components/FileUpload'
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { UI_COPY } from '@/lib/ui-copy'
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 function ReviewForm({
   token,
@@ -51,7 +53,7 @@ function ReviewForm({
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
-        toast.error(json?.detail || json?.message || 'Submission failed.', { id: toastId })
+        toast.error(normalizeApiErrorMessage(json, 'Submission failed.'), { id: toastId })
         return
       }
       toast.success('Review submitted. Thank you!', { id: toastId })
@@ -128,11 +130,13 @@ function ReviewForm({
   )
 }
 
-export default function ReviewerPage({ params }: { params: { token: string } }) {
+export default function ReviewerPage() {
   /**
    * 审稿人免登录落地页
    * 遵循章程：衬线体标题，slate-900 风格，优雅降级
    */
+  const params = useParams()
+  const token = String((params as Record<string, string | string[]> | null)?.token || '')
   const [isLoading, setIsLoading] = useState(true)
   const [manuscript, setManuscript] = useState<any>(null)
   const [reviewReport, setReviewReport] = useState<any>(null)
@@ -145,19 +149,23 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
 
   useEffect(() => {
     const loadData = async () => {
+      if (!token) {
+        setIsLoading(false)
+        return
+      }
       setPdfUrl(null)
       setPdfLoading(true)
       setAttachmentUrl(null)
       try {
         const [taskRes, pdfRes, attRes] = await Promise.all([
-          fetch(`/api/v1/reviews/token/${params.token}`),
-          fetch(`/api/v1/reviews/token/${params.token}/pdf-signed`),
-          fetch(`/api/v1/reviews/token/${params.token}/attachment-signed`),
+          fetch(`/api/v1/reviews/token/${encodeURIComponent(token)}`),
+          fetch(`/api/v1/reviews/token/${encodeURIComponent(token)}/pdf-signed`),
+          fetch(`/api/v1/reviews/token/${encodeURIComponent(token)}/attachment-signed`),
         ])
 
         const json = await taskRes.json().catch(() => null)
         if (!taskRes.ok || !json?.success) {
-          toast.error(json?.detail || json?.message || 'Failed to load review task.')
+          toast.error(normalizeApiErrorMessage(json, 'Failed to load review task.'))
           return
         }
         setReviewReport(json.data.review_report)
@@ -186,7 +194,7 @@ export default function ReviewerPage({ params }: { params: { token: string } }) 
       }
     }
     loadData()
-  }, [params.token, reloadKey])
+  }, [token, reloadKey])
 
   const sanitizedResponseLetter = useMemo(
     () => sanitizeRichHtml(String(latestRevision?.response_letter || '')),

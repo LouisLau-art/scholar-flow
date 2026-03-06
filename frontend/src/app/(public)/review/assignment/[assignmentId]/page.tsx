@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Loader2, Send } from 'lucide-react'
+import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { FileUpload } from '@/components/FileUpload'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { UI_COPY } from '@/lib/ui-copy'
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 function ReviewForm({
   assignmentId,
@@ -51,7 +53,7 @@ function ReviewForm({
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
-        toast.error(json?.detail || json?.message || 'Submission failed.', { id: toastId })
+        toast.error(normalizeApiErrorMessage(json, 'Submission failed.'), { id: toastId })
         return
       }
       toast.success('Review submitted. Thank you!', { id: toastId })
@@ -136,8 +138,9 @@ function ReviewForm({
   )
 }
 
-export default function ReviewAssignmentPage({ params }: { params: { assignmentId: string } }) {
-  const assignmentId = params.assignmentId
+export default function ReviewAssignmentPage() {
+  const params = useParams()
+  const assignmentId = String((params as Record<string, string | string[]> | null)?.assignmentId || '')
 
   const [isLoading, setIsLoading] = useState(true)
   const [manuscript, setManuscript] = useState<any>(null)
@@ -149,6 +152,10 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
 
   useEffect(() => {
     const loadData = async () => {
+      if (!assignmentId) {
+        setIsLoading(false)
+        return
+      }
       setPdfUrl(null)
       setAttachmentUrl(null)
       try {
@@ -160,7 +167,7 @@ export default function ReviewAssignmentPage({ params }: { params: { assignmentI
 
         const json = await taskRes.json().catch(() => null)
         if (!taskRes.ok || !json?.success) {
-          toast.error(json?.detail || json?.message || 'Failed to load review task.')
+          toast.error(normalizeApiErrorMessage(json, 'Failed to load review task.'))
           return
         }
         setReviewReport(json.data.review_report)

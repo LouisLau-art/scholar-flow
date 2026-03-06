@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import SiteHeader from '@/components/layout/SiteHeader'
 import { authService } from '@/services/auth'
 import { Loader2, FileText, ArrowLeft, Download, Clock3, Shield } from 'lucide-react'
@@ -10,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 type TimelineAttachment =
   | { type: 'review_attachment'; label: string; download_url: string }
@@ -55,25 +57,32 @@ type AuthorContextPayload = {
   timeline: TimelineEvent[]
 }
 
-export default function AuthorManuscriptReviewsPage({ params }: { params: { id: string } }) {
+export default function AuthorManuscriptReviewsPage() {
+  const params = useParams()
+  const manuscriptId = String((params as Record<string, string | string[]> | null)?.id || '')
   const [isLoading, setIsLoading] = useState(true)
   const [ctx, setCtx] = useState<AuthorContextPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
+      if (!manuscriptId) {
+        setError('Missing manuscript id.')
+        setIsLoading(false)
+        return
+      }
       try {
         const token = await authService.getAccessToken()
         if (!token) {
           setError('Please sign in again.')
           return
         }
-        const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(params.id)}/author-context`, {
+        const res = await fetch(`/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/author-context`, {
           headers: { Authorization: `Bearer ${token}` },
         })
         const json = await res.json().catch(() => null)
         if (!res.ok || !json?.success) {
-          setError(json?.detail || json?.message || 'Failed to load review feedback.')
+          setError(normalizeApiErrorMessage(json, 'Failed to load review feedback.'))
           return
         }
         setCtx((json.data || null) as AuthorContextPayload)
@@ -84,7 +93,7 @@ export default function AuthorManuscriptReviewsPage({ params }: { params: { id: 
       }
     }
     load()
-  }, [params.id])
+  }, [manuscriptId])
 
   const openSignedUrl = async (apiUrl: string) => {
     try {

@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
+import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { ActionPanel } from './action-panel'
 import { PDFViewer } from './pdf-viewer'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 import type { WorkspaceData } from '@/types/review'
 
 function formatDateTime(value?: string | null) {
@@ -32,8 +34,9 @@ function channelBadgeVariant(channel: string): 'secondary' | 'outline' | 'defaul
   return 'outline'
 }
 
-export default function ReviewerWorkspacePage({ params }: { params: { id: string } }) {
-  const assignmentId = params.id
+export default function ReviewerWorkspacePage() {
+  const params = useParams()
+  const assignmentId = String((params as Record<string, string | string[]> | null)?.id || '')
   const [workspace, setWorkspace] = useState<WorkspaceData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isDirty, setIsDirty] = useState(false)
@@ -43,12 +46,19 @@ export default function ReviewerWorkspacePage({ params }: { params: { id: string
   useEffect(() => {
     let mounted = true
     const load = async () => {
+      if (!assignmentId) {
+        if (mounted) {
+          setWorkspace(null)
+          setIsLoading(false)
+        }
+        return
+      }
       setIsLoading(true)
       try {
         const res = await fetch(`/api/v1/reviewer/assignments/${encodeURIComponent(assignmentId)}/workspace`)
         const json = await res.json().catch(() => null)
         if (!res.ok || !json?.success || !json?.data) {
-          throw new Error(json?.detail || json?.message || 'Failed to load workspace')
+          throw new Error(normalizeApiErrorMessage(json, 'Failed to load workspace'))
         }
         if (mounted) setWorkspace(json.data as WorkspaceData)
       } catch (error) {

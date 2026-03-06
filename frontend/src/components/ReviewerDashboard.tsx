@@ -12,15 +12,43 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { FileUpload } from "@/components/FileUpload"
 import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml"
+import { normalizeApiErrorMessage } from "@/lib/normalizeApiError"
 
 interface ReviewTask {
-  id: string
+  assignmentId: string
   manuscript_id: string
+  assignment_status?: string | null
+  manuscript_title?: string | null
+  manuscript_abstract?: string | null
   manuscripts?: {
     title: string
     abstract: string
     file_path?: string | null
   } | null
+}
+
+function normalizeReviewTask(row: any): ReviewTask | null {
+  const assignmentId = String(row?.assignment_id || row?.id || '').trim()
+  const manuscriptId = String(row?.manuscript_id || '').trim()
+  if (!assignmentId || !manuscriptId) return null
+
+  const nestedManuscript = row?.manuscripts && typeof row.manuscripts === 'object' ? row.manuscripts : null
+  const title = String(nestedManuscript?.title || row?.manuscript_title || '').trim()
+  const abstract = String(nestedManuscript?.abstract || row?.manuscript_abstract || '').trim()
+  const filePathRaw = nestedManuscript?.file_path
+
+  return {
+    assignmentId,
+    manuscript_id: manuscriptId,
+    assignment_status: typeof row?.assignment_status === 'string' ? row.assignment_status : null,
+    manuscript_title: title || null,
+    manuscript_abstract: abstract || null,
+    manuscripts: {
+      title,
+      abstract,
+      file_path: typeof filePathRaw === 'string' && filePathRaw.trim() ? filePathRaw : null,
+    },
+  }
 }
 
 type ReviewData = {
@@ -42,7 +70,7 @@ async function uploadReviewAttachment(taskId: string, token: string, file: File)
   })
   const uploadJson = await uploadRes.json().catch(() => null)
   if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.attachment_path) {
-    throw new Error(uploadJson?.detail || uploadJson?.message || "Attachment upload failed.")
+    throw new Error(normalizeApiErrorMessage(uploadJson, "Attachment upload failed."))
   }
   return String(uploadJson.data.attachment_path)
 }
@@ -70,7 +98,7 @@ async function submitStructuredReview(params: {
   })
   const result = await response.json().catch(() => null)
   if (!response.ok || !result?.success) {
-    throw new Error(result?.detail || result?.message || "Submit failed. Please try again.")
+    throw new Error(normalizeApiErrorMessage(result, "Submit failed. Please try again."))
   }
 }
 
@@ -152,11 +180,11 @@ function ReviewModal({
 
       let attachmentPath: string | null = null
       if (reviewData.attachment) {
-        attachmentPath = await uploadReviewAttachment(task.id, token, reviewData.attachment)
+        attachmentPath = await uploadReviewAttachment(task.assignmentId, token, reviewData.attachment)
       }
 
       await submitStructuredReview({
-        taskId: task.id,
+        taskId: task.assignmentId,
         token,
         reviewData,
         attachmentPath,
@@ -331,7 +359,8 @@ export default function ReviewerDashboard() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
       const data = await res.json()
-      setTasks(data.data || [])
+      const rows = Array.isArray(data?.data) ? data.data : []
+      setTasks(rows.map(normalizeReviewTask).filter((task): task is ReviewTask => Boolean(task)))
     } catch (e) {
       toast.error("Failed to load tasks.")
     } finally {
@@ -381,25 +410,30 @@ export default function ReviewerDashboard() {
   }
 
   const handleOpenReviewerWorkspace = async (task: ReviewTask) => {
+    const assignmentId = task.assignmentId
+    if (!assignmentId) {
+      toast.error("Missing reviewer assignment id.")
+      return
+    }
     const toastId = toast.loading("Opening reviewer workspace...")
-    setOpeningAssignmentId(task.id)
+    setOpeningAssignmentId(assignmentId)
     try {
       const token = await authService.getAccessToken()
       if (!token) {
         toast.error("Please sign in again.", { id: toastId })
         return
       }
-      const res = await fetch(`/api/v1/reviewer/assignments/${encodeURIComponent(task.id)}/session`, {
+      const res = await fetch(`/api/v1/reviewer/assignments/${encodeURIComponent(assignmentId)}/session`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
-        toast.error(json?.detail || json?.message || "Failed to open reviewer workspace.", { id: toastId })
+        toast.error(normalizeApiErrorMessage(json, "Failed to open reviewer workspace."), { id: toastId })
         return
       }
       toast.success("Workspace ready.", { id: toastId })
-      router.push(`/reviewer/workspace/${encodeURIComponent(task.id)}`)
+      router.push(`/reviewer/workspace/${encodeURIComponent(assignmentId)}`)
     } catch {
       toast.error("Failed to open reviewer workspace.", { id: toastId })
     } finally {
@@ -418,11 +452,11 @@ export default function ReviewerDashboard() {
       ) : (
         <div className="grid gap-4">
           {tasks.map((task) => (
-            <div key={task.id} className="rounded-2xl border border-border bg-card hover:shadow-md transition-shadow">
+            <div key={task.assignmentId} className="rounded-2xl border border-border bg-card hover:shadow-md transition-shadow">
             <div className="flex flex-row items-start justify-between space-y-0 p-6">
               <div className="space-y-1">
-                <h3 className="text-xl font-serif font-semibold">{task.manuscripts?.title}</h3>
-                <p className="line-clamp-2 italic text-sm text-muted-foreground">{task.manuscripts?.abstract}</p>
+                <h3 className="text-xl font-serif font-semibold">{task.manuscripts?.title || task.manuscript_title || "Untitled Manuscript"}</h3>
+                <p className="line-clamp-2 italic text-sm text-muted-foreground">{task.manuscripts?.abstract || task.manuscript_abstract || "No abstract available."}</p>
               </div>
               <span className="bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">PENDING REVIEW</span>
             </div>
@@ -441,9 +475,9 @@ export default function ReviewerDashboard() {
                 onClick={() => handleOpenReviewerWorkspace(task)}
                 size="sm"
                 className="gap-2"
-                disabled={openingAssignmentId === task.id}
+                disabled={openingAssignmentId === task.assignmentId}
               >
-                <Star className="h-4 w-4" /> {openingAssignmentId === task.id ? "Opening…" : "Start Review"}
+                <Star className="h-4 w-4" /> {openingAssignmentId === task.assignmentId ? "Opening…" : "Start Review"}
               </Button>
             </div>
             </div>
