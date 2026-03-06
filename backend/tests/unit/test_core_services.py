@@ -1,10 +1,11 @@
 import logging
+import zipfile
 from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
 
-from app.core import ai_engine, pdf_processor, plagiarism_worker, recommender
+from app.core import ai_engine, docx_processor, pdf_processor, plagiarism_worker, recommender
 from app.services import editorial_service, publishing_service
 
 
@@ -45,6 +46,36 @@ def test_extract_text_from_pdf_error(monkeypatch):
     monkeypatch.setattr(pdf_processor.pdfplumber, "open", raise_error)
 
     result = pdf_processor.extract_text_from_pdf("file.pdf")
+
+    assert result is None
+
+
+def test_extract_text_from_docx_success(tmp_path):
+    docx_path = tmp_path / "sample.docx"
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Docx Title</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Abstract</w:t></w:r></w:p>
+    <w:p><w:r><w:t>This is the abstract content.</w:t></w:r></w:p>
+  </w:body>
+</w:document>
+"""
+    with zipfile.ZipFile(docx_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", document_xml)
+
+    result = docx_processor.extract_text_from_docx(str(docx_path), max_paragraphs=10, max_chars=500)
+
+    assert result is not None
+    assert "Docx Title" in result
+    assert "This is the abstract content." in result
+
+
+def test_extract_text_from_docx_error(tmp_path):
+    broken_path = tmp_path / "broken.docx"
+    broken_path.write_bytes(b"not-a-zip")
+
+    result = docx_processor.extract_text_from_docx(str(broken_path))
 
     assert result is None
 

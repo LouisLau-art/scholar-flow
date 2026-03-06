@@ -10,6 +10,7 @@ from fastapi.responses import Response
 import httpx
 import logging
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
+from app.core.docx_processor import extract_text_from_docx
 from app.core.ai_engine import parse_manuscript_metadata
 from app.core.plagiarism_worker import plagiarism_check_worker
 from app.services.editorial_service import process_quality_check
@@ -48,6 +49,7 @@ router.include_router(manuscripts_submission_router)
 # - 实际路由实现已拆到子模块，但仍需在此模块保留符号导出。
 _MONKEYPATCH_COMPAT_EXPORTS = (
     extract_text_and_layout_from_pdf,
+    extract_text_from_docx,
     parse_manuscript_metadata,
     plagiarism_check_worker,
     process_quality_check,

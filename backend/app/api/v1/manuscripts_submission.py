@@ -35,10 +35,20 @@ async def upload_manuscript(
     background_tasks: BackgroundTasks, file: UploadFile = File(...)
 ):
     """稿件上传与 AI 解析"""
-    if not (file.filename or "").lower().endswith(".pdf"):
+    filename = (file.filename or "").strip()
+    lowered_name = filename.lower()
+    is_pdf = lowered_name.endswith(".pdf")
+    is_docx = lowered_name.endswith(".docx")
+    is_doc = lowered_name.endswith(".doc")
+
+    if not (is_pdf or is_docx or is_doc):
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "仅支持 PDF 格式文件", "data": {"title": "", "abstract": "", "authors": []}},
+            content={
+                "success": False,
+                "message": "仅支持 PDF / DOCX / DOC 格式文件",
+                "data": {"title": "", "abstract": "", "authors": []},
+            },
         )
 
     manuscript_id = uuid4()
@@ -46,7 +56,8 @@ async def upload_manuscript(
     start = time.monotonic()
     trace_id = str(manuscript_id)[:8]
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        suffix = ".pdf" if is_pdf else ".docx" if is_docx else ".doc"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             temp_path = tmp.name
             shutil.copyfileobj(file.file, tmp)
 
@@ -77,20 +88,61 @@ async def upload_manuscript(
             layout_skip_file_mb = 8
         layout_max_pages_override = 0 if (layout_skip_file_mb > 0 and file_size_mb > layout_skip_file_mb) else None
 
-        try:
-            text, layout_lines = await asyncio.wait_for(
-                asyncio.to_thread(
-                    _m().extract_text_and_layout_from_pdf,
-                    temp_path,
-                    max_pages=max_pages,
-                    max_chars=max_chars,
-                    layout_max_pages=layout_max_pages_override,
-                ),
-                timeout=timeout_sec,
-            )
-        except asyncio.TimeoutError:
+        parser_mode = "pdf" if is_pdf else "docx"
+
+        if is_pdf:
+            try:
+                text, layout_lines = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _m().extract_text_and_layout_from_pdf,
+                        temp_path,
+                        max_pages=max_pages,
+                        max_chars=max_chars,
+                        layout_max_pages=layout_max_pages_override,
+                    ),
+                    timeout=timeout_sec,
+                )
+            except asyncio.TimeoutError:
+                print(
+                    f"[UploadManuscript:{trace_id}] timeout in pdf extraction (> {timeout_sec:.1f}s), fallback manual fill",
+                    flush=True,
+                )
+                return {
+                    "success": True,
+                    "id": manuscript_id,
+                    "trace_id": trace_id,
+                    "data": {"title": "", "abstract": "", "authors": []},
+                    "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
+                }
+        elif is_docx:
+            try:
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _m().extract_text_from_docx,
+                        temp_path,
+                        max_chars=max_chars,
+                    ),
+                    timeout=timeout_sec,
+                )
+                layout_lines = []
+            except asyncio.TimeoutError:
+                print(
+                    f"[UploadManuscript:{trace_id}] timeout in docx extraction (> {timeout_sec:.1f}s), fallback manual fill",
+                    flush=True,
+                )
+                return {
+                    "success": True,
+                    "id": manuscript_id,
+                    "trace_id": trace_id,
+                    "data": {"title": "", "abstract": "", "authors": []},
+                    "message": f"DOCX 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
+                }
+        else:
+            # 中文注释：历史 .doc 二进制格式在无外部依赖条件下不做自动抽取，直接降级手填。
+            text = None
+            layout_lines = []
             print(
-                f"[UploadManuscript:{trace_id}] timeout in pdf extraction (> {timeout_sec:.1f}s), fallback manual fill",
+                f"[UploadManuscript:{trace_id}] legacy .doc uploaded, skip auto parsing",
                 flush=True,
             )
             return {
@@ -98,7 +150,7 @@ async def upload_manuscript(
                 "id": manuscript_id,
                 "trace_id": trace_id,
                 "data": {"title": "", "abstract": "", "authors": []},
-                "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
+                "message": "检测到 .doc（旧格式），暂不支持自动抽取，请手动填写标题与摘要。",
             }
 
         meta_start = time.monotonic()
@@ -121,7 +173,7 @@ async def upload_manuscript(
         meta_cost = time.monotonic() - meta_start
         total_cost = time.monotonic() - start
         print(
-            f"[UploadManuscript:{trace_id}] parsed: pdf_timeout={timeout_sec:.1f}s max_pages={max_pages} "
+            f"[UploadManuscript:{trace_id}] parsed: mode={parser_mode} parse_timeout={timeout_sec:.1f}s max_pages={max_pages} "
             f"max_chars={max_chars} layout_override={layout_max_pages_override} meta_time={meta_cost:.2f}s total={total_cost:.2f}s"
             f" text_len={len(text or '')} layout_lines={len(layout_lines or [])}",
             flush=True,

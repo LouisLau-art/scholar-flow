@@ -433,6 +433,47 @@ async def test_upload_success_returns_trace_id(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_upload_docx_success_returns_trace_id(client: AsyncClient):
+    """验证 DOCX 上传也可返回自动解析结果（用于预填标题/摘要）"""
+
+    async def fake_parse(_text: str, *, layout_lines=None):
+        return {"title": "DOCX Paper", "abstract": "DOCX abstract", "authors": ["Bob"]}
+
+    with patch(
+        "app.api.v1.manuscripts.extract_text_from_docx",
+        return_value="mocked docx text",
+    ), patch("app.api.v1.manuscripts.parse_manuscript_metadata", fake_parse):
+        files = {
+            "file": (
+                "paper.docx",
+                b"PK\x03\x04mocked-docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        response = await client.post("/api/v1/manuscripts/upload", files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["title"] == "DOCX Paper"
+    assert isinstance(payload.get("trace_id"), str)
+    assert re.fullmatch(r"[0-9a-f]{8}", payload["trace_id"]) is not None
+
+
+@pytest.mark.asyncio
+async def test_upload_doc_legacy_returns_manual_fill_hint(client: AsyncClient):
+    """验证 .doc（旧格式）走手动填写降级提示，而不是 500"""
+    files = {"file": ("paper.doc", b"legacy-binary", "application/msword")}
+    response = await client.post("/api/v1/manuscripts/upload", files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    assert payload.get("data") == {"title": "", "abstract": "", "authors": []}
+    assert ".doc" in str(payload.get("message", ""))
+
+
+@pytest.mark.asyncio
 async def test_quality_check_endpoint_calls_service(client: AsyncClient):
     """验证质检接口调用 service 并返回结果"""
     from uuid import uuid4

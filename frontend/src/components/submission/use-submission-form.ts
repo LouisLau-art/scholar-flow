@@ -33,6 +33,7 @@ export function useSubmissionForm() {
   const [wordFilePath, setWordFilePath] = useState<string | null>(null)
   const [isUploadingWordFile, setIsUploadingWordFile] = useState(false)
   const [wordFileUploadError, setWordFileUploadError] = useState<string | null>(null)
+  const [hasDocxAutoMetadata, setHasDocxAutoMetadata] = useState(false)
   const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null)
   const [coverLetterPath, setCoverLetterPath] = useState<string | null>(null)
   const [isUploadingCoverLetter, setIsUploadingCoverLetter] = useState(false)
@@ -128,6 +129,41 @@ export function useSubmissionForm() {
     setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }))
   }
 
+  const applyParsedMetadata = (payload: any, source: 'pdf' | 'docx') => {
+    const parsedTitle = String(payload?.title || '').trim()
+    const parsedAbstract = String(payload?.abstract || '').trim()
+    const parsedAuthors = Array.isArray(payload?.authors)
+      ? payload.authors.map((item: unknown) => String(item || '').trim()).filter(Boolean).slice(0, 20)
+      : []
+
+    setMetadata((prev) => {
+      const next = { ...prev }
+      if (source === 'docx') {
+        if (!touched.title && parsedTitle) {
+          next.title = parsedTitle
+        }
+        if (!touched.abstract && parsedAbstract) {
+          next.abstract = parsedAbstract
+        }
+      } else {
+        if (!hasDocxAutoMetadata && !touched.title && parsedTitle) {
+          next.title = parsedTitle
+        }
+        if (!hasDocxAutoMetadata && !touched.abstract && parsedAbstract) {
+          next.abstract = parsedAbstract
+        }
+      }
+      if (parsedAuthors.length > 0 && prev.authors.length === 0) {
+        next.authors = parsedAuthors
+      }
+      return next
+    })
+
+    if (source === 'docx' && (parsedTitle || parsedAbstract)) {
+      setHasDocxAutoMetadata(true)
+    }
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
@@ -189,7 +225,7 @@ export function useSubmissionForm() {
       }
 
       if (result.success) {
-        setMetadata(result.data)
+        applyParsedMetadata(result.data, 'pdf')
         if (result.message) {
           const info = parseTraceId ? `${result.message}（trace: ${parseTraceId}）` : result.message
           toast.success(info, { id: toastId })
@@ -272,7 +308,27 @@ export function useSubmissionForm() {
       }
 
       setWordFilePath(uploadPath)
-      toast.success('Word manuscript uploaded.', { id: toastId })
+
+      let successMessage = 'Word manuscript uploaded.'
+      try {
+        const { response, result, traceId: parseTraceId } = await parseManuscriptMetadataWithFallback(selectedFile)
+        if (response.ok && result?.success) {
+          applyParsedMetadata(result?.data || {}, 'docx')
+          const parsedTitle = String(result?.data?.title || '').trim()
+          const parsedAbstract = String(result?.data?.abstract || '').trim()
+          if (parsedTitle || parsedAbstract) {
+            successMessage = parseTraceId
+              ? `Word manuscript uploaded. Metadata parsed from DOCX（trace: ${parseTraceId}）`
+              : 'Word manuscript uploaded. Metadata parsed from DOCX.'
+          } else if (result?.message) {
+            successMessage = `Word manuscript uploaded. ${String(result.message)}`
+          }
+        }
+      } catch (parseError) {
+        console.warn('Word metadata parsing skipped:', parseError)
+      }
+
+      toast.success(successMessage, { id: toastId })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Word manuscript upload failed.'
       setWordFileUploadError(message.replace('Upload failed: ', ''))
