@@ -21,6 +21,7 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
   })
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormData({
       full_name: user.full_name || "",
       title: user.title || "",

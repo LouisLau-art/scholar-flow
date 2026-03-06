@@ -42,8 +42,13 @@ describe('EditorApi reviewer library cache', () => {
   })
 
   it('deduplicates inflight request and allows explicit invalidation', async () => {
-    let resolveFetch: ((value: unknown) => void) | null = null
-    const deferred = new Promise((resolve) => {
+    type SearchReviewerLibraryResponse = {
+      ok: boolean
+      json: () => Promise<{ success: true; data: Array<{ id: string }> }>
+    }
+
+    let resolveFetch!: (value: SearchReviewerLibraryResponse) => void
+    const deferred = new Promise<SearchReviewerLibraryResponse>((resolve) => {
       resolveFetch = resolve
     })
     ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValue(deferred)
@@ -55,7 +60,7 @@ describe('EditorApi reviewer library cache', () => {
       expect(globalThis.fetch).toHaveBeenCalledTimes(1)
     })
 
-    resolveFetch?.({
+    resolveFetch({
       ok: true,
       json: async () => ({ success: true, data: [{ id: 'r-9' }] }),
     })

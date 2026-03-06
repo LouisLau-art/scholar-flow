@@ -23,6 +23,7 @@ export function AcademicForm({ user, onSave, isSaving }: AcademicFormProps) {
   const [errors, setErrors] = useState<{ orcid_id?: string; google_scholar_url?: string }>({})
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormData({
       orcid_id: user.orcid_id || "",
       google_scholar_url: user.google_scholar_url || "",

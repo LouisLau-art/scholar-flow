@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { adminUserService } from '@/services/admin/userService';
 import { authService } from '@/services/auth';
+import type { CreateUserRequest } from '@/types/user';
 
 // Mock authService
 vi.mock('@/services/auth', () => ({
@@ -66,10 +67,9 @@ describe('adminUserService', () => {
   });
 
   describe('createUser', () => {
-    const mockUser = {
+    const mockUser: CreateUserRequest = {
       email: 'new@example.com',
       full_name: 'New User',
-      password: 'password123',
       role: 'editor'
     };
 

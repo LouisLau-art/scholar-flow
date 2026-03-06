@@ -136,7 +136,8 @@ export default function ReviewerPage() {
    * 遵循章程：衬线体标题，slate-900 风格，优雅降级
    */
   const params = useParams()
-  const token = String((params as Record<string, string | string[]> | null)?.token || '')
+  const tokenParam = (params as Record<string, string | string[]> | null)?.token
+  const token = Array.isArray(tokenParam) ? String(tokenParam[0] || '') : String(tokenParam || '')
   const [isLoading, setIsLoading] = useState(true)
   const [manuscript, setManuscript] = useState<any>(null)
   const [reviewReport, setReviewReport] = useState<any>(null)
@@ -297,7 +298,7 @@ export default function ReviewerPage() {
             <div className="lg:col-span-3">
               <ReviewForm
                 key={manuscript.id}
-                token={params.token}
+                token={token}
                 manuscriptId={manuscript.id}
                 onSubmitted={() => {
                   // 重新拉取，以刷新附件下载链接/状态
@@ -308,9 +309,9 @@ export default function ReviewerPage() {
           ) : (
             <div className="lg:col-span-3">
               <ReviewForm
-                key={params.token}
-                token={params.token}
-                manuscriptId={params.token}
+                key={token}
+                token={token}
+                manuscriptId={token}
                 onSubmitted={() => {
                   setReloadKey((k) => k + 1)
                 }}

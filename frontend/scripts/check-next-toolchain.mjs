@@ -8,6 +8,7 @@ const nextVersion = packageJson.dependencies?.next;
 const reactVersion = packageJson.dependencies?.react;
 const reactDomVersion = packageJson.dependencies?.["react-dom"];
 const eslintConfigNextVersion = packageJson.devDependencies?.["eslint-config-next"];
+const eslintVersion = packageJson.devDependencies?.eslint;
 
 function extractMajor(version, label) {
   if (!version || typeof version !== "string") {
@@ -27,6 +28,7 @@ const eslintConfigNextMajor = extractMajor(
   eslintConfigNextVersion,
   "eslint-config-next",
 );
+const eslintMajor = extractMajor(eslintVersion, "eslint");
 
 const errors = [];
 
@@ -46,6 +48,12 @@ if (nextMajor >= 15 && reactDomMajor < 19) {
   );
 }
 
+if (eslintConfigNextMajor >= 16 && eslintMajor < 9) {
+  errors.push(
+    `eslint-config-next ${eslintConfigNextVersion} 需要 eslint 9+，当前 eslint=${eslintVersion}`,
+  );
+}
+
 if (errors.length > 0) {
   console.error("Next toolchain 对齐检查失败:");
   for (const error of errors) {
@@ -59,3 +67,4 @@ console.log(`- next=${nextVersion}`);
 console.log(`- react=${reactVersion}`);
 console.log(`- react-dom=${reactDomVersion}`);
 console.log(`- eslint-config-next=${eslintConfigNextVersion}`);
+console.log(`- eslint=${eslintVersion}`);

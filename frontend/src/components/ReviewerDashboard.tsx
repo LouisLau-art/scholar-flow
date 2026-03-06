@@ -360,7 +360,11 @@ export default function ReviewerDashboard() {
       })
       const data = await res.json()
       const rows = Array.isArray(data?.data) ? data.data : []
-      setTasks(rows.map(normalizeReviewTask).filter((task): task is ReviewTask => Boolean(task)))
+      setTasks(
+        rows
+          .map(normalizeReviewTask)
+          .filter((task: ReviewTask | null): task is ReviewTask => Boolean(task))
+      )
     } catch (e) {
       toast.error("Failed to load tasks.")
     } finally {

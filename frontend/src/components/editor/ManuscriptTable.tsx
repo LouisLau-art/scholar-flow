@@ -65,6 +65,7 @@ export function ManuscriptTable({
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ROWS)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleCount(INITIAL_VISIBLE_ROWS)
   }, [rows.length])
 

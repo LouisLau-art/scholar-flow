@@ -127,7 +127,7 @@ export function InternalNotebook({ manuscriptId, currentUserId, currentUserEmail
 
   useEffect(() => {
     loadSessionUser()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useEffect(() => {

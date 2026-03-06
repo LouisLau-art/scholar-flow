@@ -45,7 +45,7 @@ export function ReviewerLibraryList() {
   useEffect(() => {
     const t = setTimeout(() => void refresh(query.trim()), 250)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [query])
 
   const rows = useMemo(() => items.filter((x) => (x as any).is_reviewer_active !== false), [items])

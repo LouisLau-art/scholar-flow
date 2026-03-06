@@ -472,9 +472,13 @@ describe('SubmissionForm Component', () => {
     fireEvent.click(screen.getByTestId('submission-finalize'))
 
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find((call) => call[0] === '/api/v1/manuscripts')
+      const createCall = fetchMock.mock.calls.find(
+        (call) => call[0] === '/api/v1/manuscripts'
+      ) as [unknown, RequestInit?] | undefined
       expect(createCall).toBeTruthy()
-      const body = JSON.parse(createCall?.[1]?.body as string)
+      const requestInit = createCall?.[1] as RequestInit | undefined
+      expect(requestInit).toBeTruthy()
+      const body = JSON.parse(String(requestInit?.body || ''))
       expect(body.manuscript_word_path).toContain('u1/word-manuscripts/')
       expect(body.manuscript_word_filename).toBe('paper.docx')
       expect(body.manuscript_word_content_type).toBe(

@@ -109,7 +109,7 @@ export default function EditorPipeline({ onAssign, onDecide, refreshKey }: Edito
 
   useEffect(() => {
     reloadPipeline({ preferCache: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [refreshKey])
 
   useEffect(() => {

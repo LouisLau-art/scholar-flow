@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import path from 'path'
 import { buildSession, fulfillJson, seedSession } from '../utils'
 
-type Roles = Array<'author' | 'editor' | 'reviewer' | 'admin'>
+type Roles = Array<'author' | 'editor' | 'reviewer' | 'admin' | 'managing_editor'>
 
 async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
   await page.context().setExtraHTTPHeaders({ 'x-scholarflow-e2e': '1' })

@@ -56,7 +56,7 @@ export function BindingAssistantEditorDropdown({
       alive = false
       window.clearTimeout(timer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open, q])
 
   const currentId = String(currentAssistantEditor?.id || '').trim()

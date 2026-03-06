@@ -225,7 +225,7 @@ export default function ArticleClient({ initialArticle }: { initialArticle?: any
     return () => {
       cancelled = true
     }
-  }, [articleId, initialArticle, identityResolved]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [articleId, initialArticle, identityResolved])  
 
   async function handleDownload(idForDownload: string) {
     try {

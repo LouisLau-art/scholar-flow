@@ -62,7 +62,7 @@ export default function CmsMenuPanel({ pages }: Props) {
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   const move = (items: MenuItemState[], index: number, delta: number) => {

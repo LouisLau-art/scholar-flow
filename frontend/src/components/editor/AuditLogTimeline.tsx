@@ -155,6 +155,7 @@ export function AuditLogTimeline({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActivated(false)
   }, [manuscriptId])
 
@@ -162,6 +163,7 @@ export function AuditLogTimeline({
     if (activated) return
     const node = rootRef.current
     if (!node || typeof IntersectionObserver === 'undefined') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActivated(true)
       return
     }
@@ -180,6 +182,7 @@ export function AuditLogTimeline({
 
   useEffect(() => {
     if (!activated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
       return
     }

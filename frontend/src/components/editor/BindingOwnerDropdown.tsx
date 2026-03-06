@@ -46,7 +46,7 @@ export function BindingOwnerDropdown({
       alive = false
       window.clearTimeout(timer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open, q])
 
   const currentOwnerId = currentOwner?.id || ''

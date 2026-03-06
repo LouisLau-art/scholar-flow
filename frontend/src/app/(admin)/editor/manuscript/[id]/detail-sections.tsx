@@ -502,7 +502,7 @@ export function ReviewerInviteSummaryCard({
 
 type ReviewerFeedbackSummaryCardProps = {
   canViewReviewerFeedback: boolean
-  reviewCardRef: RefObject<HTMLDivElement>
+  reviewCardRef: RefObject<HTMLDivElement | null>
   reviewsActivated: boolean
   reviewsLoading: boolean
   reviewsError: string | null
@@ -788,7 +788,7 @@ export function NextActionCard({ nextAction }: NextActionCardProps) {
 }
 
 type TaskSlaSummaryCardProps = {
-  cardsSectionRef: RefObject<HTMLDivElement>
+  cardsSectionRef: RefObject<HTMLDivElement | null>
   cardsActivated: boolean
   cardsLoading: boolean
   cardsError: string | null
