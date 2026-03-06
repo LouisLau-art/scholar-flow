@@ -1,16 +1,54 @@
-import resend
-from typing import Any, Dict, Optional
-from tenacity import retry, stop_after_attempt, wait_exponential
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from pathlib import Path
+import logging
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import unescape
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Sequence
+
+import resend
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from supabase import create_client, Client
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import SMTPConfig, app_config, ResendConfig
 from app.models.email_log import EmailStatus
+
+logger = logging.getLogger(__name__)
+_TAG_TOKEN_RE = re.compile(r"[^A-Za-z0-9_-]+")
+_IDEMPOTENCY_TOKEN_RE = re.compile(r"[^A-Za-z0-9_:/.\-]+")
+_SPACE_RE = re.compile(r"\s+")
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", flags=re.IGNORECASE | re.DOTALL)
+
+
+def _is_retryable_resend_exception(exc: Exception) -> bool:
+    """
+    中文注释:
+    - 仅对“可恢复”的异常重试：429 + 5xx + 网络抖动。
+    - 参数校验错误（如 400/422）不重试，避免无意义重复请求。
+    """
+    resend_exceptions = getattr(resend, "exceptions", None)
+    rate_limit_error = getattr(resend_exceptions, "RateLimitError", None)
+    application_error = getattr(resend_exceptions, "ApplicationError", None)
+
+    if rate_limit_error and isinstance(exc, rate_limit_error):
+        return True
+    if application_error and isinstance(exc, application_error):
+        # ApplicationError 常见于 5xx 场景；若无 code 也允许重试一次链路。
+        code = getattr(exc, "code", None)
+        if code is None:
+            return True
+
+    try:
+        code = int(getattr(exc, "code", 0) or 0)
+    except Exception:
+        code = 0
+    if code in {429, 500, 502, 503, 504}:
+        return True
+    return isinstance(exc, (TimeoutError, ConnectionError))
 
 
 class EmailService:
@@ -36,17 +74,17 @@ class EmailService:
 
         if self.resend_config:
             resend.api_key = self.resend_config.api_key
-        
+
         # Path to templates: backend/app/core/templates
         templates_dir = Path(__file__).resolve().parent / "templates"
         self._jinja = Environment(
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=select_autoescape(["html", "xml"]),
         )
-        
+
         # Use Supabase Service Key as secret for tokens (backend-only)
         self._serializer = URLSafeTimedSerializer(app_config.supabase_key or "dev-secret")
-        
+
         # Service Role Client for logging (Sync client) — 缺省允许为空（单测/CI 不必强依赖）
         if supabase_client is self._SENTINEL:
             try:
@@ -97,6 +135,46 @@ class EmailService:
     def render_inline_template(self, template_source: str, context: Dict[str, Any]) -> str:
         return self._jinja.from_string(template_source).render(**context)
 
+    def _normalize_idempotency_key(self, key: str | None) -> str | None:
+        raw = str(key or "").strip()
+        if not raw:
+            return None
+        normalized = _IDEMPOTENCY_TOKEN_RE.sub("-", raw).strip("-")[:256]
+        return normalized or None
+
+    def _normalize_tags(
+        self, tags: Sequence[Mapping[str, str]] | None
+    ) -> list[dict[str, str]] | None:
+        if not tags:
+            return None
+        normalized: list[dict[str, str]] = []
+        for item in tags:
+            name = _TAG_TOKEN_RE.sub("_", str((item or {}).get("name") or "").strip())[:256]
+            value = _TAG_TOKEN_RE.sub("_", str((item or {}).get("value") or "").strip())[:256]
+            if not name or not value:
+                continue
+            normalized.append({"name": name, "value": value})
+        return normalized or None
+
+    def _normalize_headers(self, headers: Mapping[str, str] | None) -> dict[str, str] | None:
+        if not headers:
+            return None
+        normalized: dict[str, str] = {}
+        for raw_key, raw_value in headers.items():
+            key = str(raw_key or "").strip()
+            value = str(raw_value or "").strip()
+            if not key or not value:
+                continue
+            normalized[key[:128]] = value[:1024]
+        return normalized or None
+
+    def _build_plain_text_from_html(self, html_body: str) -> str:
+        cleaned = _SCRIPT_STYLE_RE.sub(" ", str(html_body or ""))
+        cleaned = _HTML_TAG_RE.sub(" ", cleaned)
+        cleaned = unescape(cleaned)
+        cleaned = _SPACE_RE.sub(" ", cleaned).strip()
+        return cleaned[:10_000]
+
     # === Legacy-compatible API (tests + scheduler/worker) ===
     def render_html(self, template_name: str, context: Dict[str, Any]) -> str:
         return self.render_template(template_name, context)
@@ -108,6 +186,9 @@ class EmailService:
         subject: str,
         html_body: str,
         text_body: str | None = None,
+        idempotency_key: str | None = None,
+        tags: Sequence[Mapping[str, str]] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> bool:
         """
         发送邮件（同步）。
@@ -135,22 +216,25 @@ class EmailService:
                     server.sendmail(self.smtp_config.from_email, [to_email], msg.as_string())
                 return True
             except Exception as e:
-                print(f"[SMTP] send failed: {e}")
+                logger.warning("[SMTP] send failed: %s", e)
                 return False
 
-        if self.resend_config:
+        resend_cfg = self._effective_resend_config()
+        if resend_cfg:
             try:
-                resend.Emails.send(
-                    {
-                        "from": self.resend_config.sender,
-                        "to": [to_email],
-                        "subject": subject,
-                        "html": html_body,
-                    }
+                self._send_resend_message(
+                    to_email=to_email,
+                    subject=subject,
+                    html_body=html_body,
+                    text_body=text_body,
+                    sender=resend_cfg.sender,
+                    idempotency_key=idempotency_key,
+                    tags=tags,
+                    headers=headers,
                 )
                 return True
             except Exception as e:
-                print(f"[Resend] send failed: {e}")
+                logger.warning("[Resend] send failed: %s", e)
                 return False
 
         return False
@@ -167,12 +251,23 @@ class EmailService:
             return False
         try:
             html = self.render_html(template_name, context)
+            text = self._build_plain_text_from_html(html)
         except Exception as e:
-            print(f"[Email] template render failed: {e}")
+            logger.warning("[Email] template render failed: %s", e)
             return False
-        return self.send_email(to_email=to_email, subject=subject, html_body=html)
+        return self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
 
-    def send_email_background(self, to_email: str, subject: str, template_name: str, context: Dict[str, Any]):
+    def send_email_background(
+        self,
+        to_email: str,
+        subject: str,
+        template_name: str,
+        context: Dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+        tags: Sequence[Mapping[str, str]] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ):
         """
         Entry point for BackgroundTasks. Handles rendering, sending, retrying, and logging.
         Runs synchronously in a threadpool (FastAPI default for non-async tasks).
@@ -182,8 +277,9 @@ class EmailService:
 
         try:
             html = self.render_template(template_name, context)
+            text = self._build_plain_text_from_html(html)
         except Exception as e:
-            print(f"[Email] template render failed: {e}")
+            logger.warning("[Email] template render failed: %s", e)
             self._log_attempt(
                 to_email,
                 subject,
@@ -195,7 +291,7 @@ class EmailService:
 
         # 优先 SMTP；否则走 Resend（带重试），并记录 provider_id。
         if self.smtp_config:
-            ok = self.send_email(to_email=to_email, subject=subject, html_body=html)
+            ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
             if ok:
                 self._log_attempt(to_email, subject, template_name, EmailStatus.SENT)
             else:
@@ -212,9 +308,19 @@ class EmailService:
         if not resend_cfg:
             return
 
-        resend.api_key = resend_cfg.api_key
+        merged_tags = list(tags or [])
+        merged_tags.append({"name": "template", "value": template_name})
         try:
-            res = self._send_with_retry(to_email, subject, html, sender=resend_cfg.sender)
+            res = self._send_resend_message(
+                to_email=to_email,
+                subject=subject,
+                html_body=html,
+                text_body=text,
+                sender=resend_cfg.sender,
+                idempotency_key=idempotency_key,
+                tags=merged_tags,
+                headers=headers,
+            )
             provider_id = (res or {}).get("id") if isinstance(res, dict) else None
             self._log_attempt(
                 to_email,
@@ -224,7 +330,7 @@ class EmailService:
                 provider_id=provider_id,
             )
         except Exception as e:
-            print(f"[Resend] send failed: {e}")
+            logger.warning("[Resend] send failed: %s", e)
             self._log_attempt(
                 to_email,
                 subject,
@@ -242,6 +348,9 @@ class EmailService:
         body_html_template: str,
         context: Dict[str, Any],
         body_text_template: str | None = None,
+        idempotency_key: str | None = None,
+        tags: Sequence[Mapping[str, str]] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         """
         根据数据库模板字符串渲染并后台发送邮件。
@@ -259,12 +368,12 @@ class EmailService:
             text = (
                 self.render_inline_template(body_text_template, context)
                 if body_text_template and str(body_text_template).strip()
-                else None
+                else self._build_plain_text_from_html(html)
             )
             if not subject:
                 subject = "(no subject)"
         except Exception as e:
-            print(f"[Email] inline template render failed: {e}")
+            logger.warning("[Email] inline template render failed: %s", e)
             self._log_attempt(
                 to_email,
                 "(render failed)",
@@ -292,9 +401,19 @@ class EmailService:
         if not resend_cfg:
             return
 
-        resend.api_key = resend_cfg.api_key
+        merged_tags = list(tags or [])
+        merged_tags.append({"name": "template", "value": template_key})
         try:
-            res = self._send_with_retry(to_email, subject, html, sender=resend_cfg.sender)
+            res = self._send_resend_message(
+                to_email=to_email,
+                subject=subject,
+                html_body=html,
+                text_body=text,
+                sender=resend_cfg.sender,
+                idempotency_key=idempotency_key,
+                tags=merged_tags,
+                headers=headers,
+            )
             provider_id = (res or {}).get("id") if isinstance(res, dict) else None
             self._log_attempt(
                 to_email,
@@ -304,7 +423,7 @@ class EmailService:
                 provider_id=provider_id,
             )
         except Exception as e:
-            print(f"[Resend] send failed: {e}")
+            logger.warning("[Resend] send failed: %s", e)
             self._log_attempt(
                 to_email,
                 subject,
@@ -313,17 +432,63 @@ class EmailService:
                 error_message=str(e),
             )
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.1, min=0.1, max=1), reraise=True)
-    def _send_with_retry(self, to_email: str, subject: str, html_content: str, *, sender: str):
+    def _send_resend_message(
+        self,
+        *,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: str | None,
+        sender: str,
+        idempotency_key: str | None,
+        tags: Sequence[Mapping[str, str]] | None,
+        headers: Mapping[str, str] | None,
+    ) -> dict[str, Any]:
+        resend_cfg = self._effective_resend_config()
+        if not resend_cfg:
+            raise RuntimeError("Resend is not configured")
+        resend.api_key = resend_cfg.api_key
+
         params = {
             "from": sender or "ScholarFlow <no-reply@scholarflow.local>",
             "to": [to_email],
             "subject": subject,
-            "html": html_content,
+            "html": html_body,
         }
-        return resend.Emails.send(params)
+        if text_body:
+            params["text"] = text_body
+        normalized_headers = self._normalize_headers(headers)
+        if normalized_headers:
+            params["headers"] = normalized_headers
+        normalized_tags = self._normalize_tags(tags)
+        if normalized_tags:
+            params["tags"] = normalized_tags
 
-    def _log_attempt(self, recipient: str, subject: str, template_name: str, status: EmailStatus, provider_id: Optional[str] = None, error_message: Optional[str] = None):
+        options: dict[str, Any] | None = None
+        normalized_key = self._normalize_idempotency_key(idempotency_key)
+        if normalized_key:
+            options = {"idempotency_key": normalized_key}
+
+        return self._send_with_retry(params, options=options)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception(_is_retryable_resend_exception),
+        reraise=True,
+    )
+    def _send_with_retry(self, params: Dict[str, Any], *, options: Dict[str, Any] | None = None):
+        return resend.Emails.send(params, options)
+
+    def _log_attempt(
+        self,
+        recipient: str,
+        subject: str,
+        template_name: str,
+        status: EmailStatus,
+        provider_id: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ):
         try:
             if self._supabase is None:
                 return
@@ -335,11 +500,11 @@ class EmailService:
                 "provider_id": provider_id,
                 "error_message": error_message,
                 # Simple retry count tracking logic: if failed, we likely retried 2 more times (total 3).
-                "retry_count": 3 if status == EmailStatus.FAILED else 0 
+                "retry_count": 3 if status == EmailStatus.FAILED else 0
             }
             self._supabase.table("email_logs").insert(data).execute()
         except Exception as e:
-            print(f"[Email] Failed to log email attempt: {e}")
+            logger.warning("[Email] Failed to log email attempt: %s", e)
 
 # Global instance
 email_service = EmailService()

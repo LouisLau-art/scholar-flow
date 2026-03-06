@@ -1,6 +1,10 @@
+import json
+import logging
+import os
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+import resend
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.scheduler import ChaseScheduler
 from app.core.security import require_admin_key
@@ -14,6 +18,7 @@ from app.services.release_validation_service import ReleaseValidationService
 from app.services.doi_service import DOIService
 
 router = APIRouter(prefix="/internal", tags=["Internal"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/cron/chase-reviews")
@@ -51,6 +56,55 @@ async def sentry_test_error(_admin: None = Depends(require_admin_key)):
     - 目的：验证 Sentry 能捕获后端异常 + 堆栈。
     """
     raise RuntimeError("Sentry test error (backend)")
+
+
+@router.post("/webhooks/resend")
+async def receive_resend_webhook(request: Request):
+    """
+    Resend Webhook 接收入口（签名校验）。
+
+    中文注释:
+    - 该接口不走 ADMIN_API_KEY（Resend 外部回调无法携带内部 key）；
+    - 必须通过 svix header + RESEND_WEBHOOK_SECRET 校验签名；
+    - 当前阶段先做“验签 + 事件日志”，后续可扩展为投递状态回写。
+    """
+    webhook_secret = (os.environ.get("RESEND_WEBHOOK_SECRET") or "").strip()
+    if not webhook_secret:
+        raise HTTPException(status_code=503, detail="RESEND_WEBHOOK_SECRET is not configured")
+
+    payload_bytes = await request.body()
+    payload_text = payload_bytes.decode("utf-8")
+    headers = {
+        "id": request.headers.get("svix-id"),
+        "timestamp": request.headers.get("svix-timestamp"),
+        "signature": request.headers.get("svix-signature"),
+    }
+    if not headers["id"] or not headers["timestamp"] or not headers["signature"]:
+        raise HTTPException(status_code=400, detail="Missing required webhook signature headers")
+
+    try:
+        resend.Webhooks.verify(
+            {
+                "payload": payload_text,
+                "headers": headers,
+                "webhook_secret": webhook_secret,
+            }
+        )
+    except Exception as e:
+        logger.warning("[ResendWebhook] invalid signature: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid webhook signature") from e
+
+    try:
+        event = json.loads(payload_text)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload JSON") from e
+
+    event_type = str(event.get("type") or "").strip().lower()
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    provider_id = str((data or {}).get("email_id") or (data or {}).get("id") or "").strip()
+
+    logger.info("[ResendWebhook] type=%s provider_id=%s", event_type or "unknown", provider_id or "-")
+    return {"success": True}
 
 
 @router.post("/release-validation/runs", status_code=201)

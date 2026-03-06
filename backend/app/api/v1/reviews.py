@@ -110,6 +110,46 @@ _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES: dict[str, dict[str, Any]] = {
     },
 }
 
+
+def _build_assignment_email_idempotency_key(
+    *,
+    assignment_id: str,
+    template_key: str,
+    event_type: str,
+    now: datetime,
+) -> str:
+    """
+    中文注释:
+    - invitation：固定 key，防止重复点击产生多封邀请。
+    - reminder：按小时去重，避免短时间重复触发；跨小时可再次发送。
+    - none/其他：按分钟去重，兼顾防抖与可重复发送。
+    """
+    event = str(event_type or "none").strip().lower()
+    if event == "invitation":
+        return f"reviewer-invitation/{assignment_id}"
+    if event == "reminder":
+        return f"reviewer-reminder/{assignment_id}/{now.strftime('%Y%m%d%H')}"
+    return f"reviewer-email/{assignment_id}/{template_key}/{now.strftime('%Y%m%d%H%M')}"
+
+
+def _build_assignment_email_tags(
+    *,
+    assignment_id: str,
+    manuscript_id: str,
+    template_key: str,
+    event_type: str,
+    journal_title: str,
+) -> list[dict[str, str]]:
+    return [
+        {"name": "scene", "value": "reviewer_assignment"},
+        {"name": "event", "value": str(event_type or "none")},
+        {"name": "template", "value": template_key},
+        {"name": "assignment_id", "value": assignment_id},
+        {"name": "manuscript_id", "value": manuscript_id},
+        {"name": "journal", "value": journal_title},
+    ]
+
+
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
     return get_signed_url_for_manuscripts_bucket(
         file_path=file_path,
@@ -722,6 +762,26 @@ async def send_assignment_email(
     event_type = str(template_row.get("event_type") or "none").strip().lower()
     if event_type not in {"none", "invitation", "reminder"}:
         event_type = "none"
+    now_dt = datetime.now(timezone.utc)
+    idempotency_key = str(body.get("idempotency_key") or "").strip() or _build_assignment_email_idempotency_key(
+        assignment_id=str(assignment_id),
+        template_key=template_key,
+        event_type=event_type,
+        now=now_dt,
+    )
+    email_tags = _build_assignment_email_tags(
+        assignment_id=str(assignment_id),
+        manuscript_id=manuscript_id,
+        template_key=template_key,
+        event_type=event_type,
+        journal_title=journal_title,
+    )
+    email_headers = {
+        "X-SF-Assignment-ID": str(assignment_id),
+        "X-SF-Manuscript-ID": manuscript_id,
+        "X-SF-Template-Key": template_key,
+        "X-SF-Event-Type": event_type,
+    }
 
     background_tasks.add_task(
         email_service.send_inline_email_background,
@@ -731,9 +791,12 @@ async def send_assignment_email(
         body_html_template=body_html_template,
         body_text_template=body_text_template,
         context=context,
+        idempotency_key=idempotency_key,
+        tags=email_tags,
+        headers=email_headers,
     )
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = now_dt.isoformat()
     try:
         patch: dict[str, Any] = {}
         if event_type == "invitation":
@@ -755,6 +818,7 @@ async def send_assignment_email(
             "event_type": event_type,
             "recipient": reviewer_email,
             "journal_title": journal_title,
+            "idempotency_key": idempotency_key,
             "queued_at": now_iso,
         },
     }

@@ -1,4 +1,5 @@
 import pytest
+import resend
 from unittest.mock import patch, MagicMock
 from app.core.mail import email_service
 from app.models.email_log import EmailStatus
@@ -36,25 +37,39 @@ def test_send_email_background_success():
             "user@test.com", "Subject", "test.html", EmailStatus.SENT, provider_id="re_mock_id"
         )
 
-def test_send_email_retry_failure():
-    """Test retry logic on failure"""
+def test_send_email_retry_on_rate_limit_error():
+    """429 应重试（最多 3 次）"""
     email_service.config = MagicMock(api_key="re_123", sender="test@test.com")
-    
-    # We mock wait_exponential to be 0 to speed up test
-    with patch("app.core.mail.resend.Emails.send", side_effect=Exception("Network Error")) as mock_send, \
+
+    err = resend.exceptions.RateLimitError("Too many requests", "rate_limit_exceeded", 429)
+    with patch("app.core.mail.resend.Emails.send", side_effect=err) as mock_send, \
          patch.object(email_service, "_log_attempt") as mock_log, \
-         patch.object(email_service, "render_template", return_value="<html></html>"), \
-         patch("app.core.mail.wait_exponential", return_value=0): # This might not work with decorator.
-         # Decorator is evaluated at import time. We can't easily patch the wait time dynamically without deeper hacking.
-         # But tenacity retry is fast enough for 3 attempts if we don't block.
-         # Actually wait_exponential defaults min=2, so it will wait 2s, 4s. Test will take 6s. Acceptable.
-         
-         email_service.send_email_background(
+         patch.object(email_service, "render_template", return_value="<html></html>"):
+
+        email_service.send_email_background(
+           "user@test.com", "Subject", "test.html", {}
+        )
+
+        assert mock_send.call_count == 3
+        mock_log.assert_called_with(
+            "user@test.com", "Subject", "test.html", EmailStatus.FAILED, error_message="Too many requests"
+        )
+
+
+def test_send_email_no_retry_on_validation_error():
+    """422/ValidationError 不应重试"""
+    email_service.config = MagicMock(api_key="re_123", sender="test@test.com")
+
+    err = resend.exceptions.ValidationError("Invalid payload", "validation_error", 422)
+    with patch("app.core.mail.resend.Emails.send", side_effect=err) as mock_send, \
+         patch.object(email_service, "_log_attempt") as mock_log, \
+         patch.object(email_service, "render_template", return_value="<html></html>"):
+
+        email_service.send_email_background(
             "user@test.com", "Subject", "test.html", {}
-         )
-         
-         # Should be called 3 times due to retry
-         assert mock_send.call_count == 3
-         mock_log.assert_called_with(
-             "user@test.com", "Subject", "test.html", EmailStatus.FAILED, error_message="Network Error"
-         )
+        )
+
+        assert mock_send.call_count == 1
+        mock_log.assert_called_with(
+            "user@test.com", "Subject", "test.html", EmailStatus.FAILED, error_message="Invalid payload"
+        )
