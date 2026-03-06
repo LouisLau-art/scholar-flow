@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 type InternalStaffOption = { id: string; email?: string | null; full_name?: string | null; roles?: string[] | null }
 
@@ -26,129 +25,166 @@ interface AssignAEModalProps {
 }
 
 type SearchablePickerProps = {
+  pickerId: string
   label: string
   value: string
   options: PickerOption[]
   placeholder: string
   searchPlaceholder: string
   emptyText: string
+  isOpen: boolean
   disabled?: boolean
   loading?: boolean
-  portalContainer?: HTMLElement | null
+  onOpenChange: (open: boolean) => void
   onChange: (nextId: string) => void
 }
 
 function SearchablePicker(props: SearchablePickerProps) {
-  const [open, setOpen] = React.useState(false)
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
   const [query, setQuery] = React.useState('')
+  const {
+    pickerId,
+    label,
+    value,
+    options,
+    placeholder,
+    searchPlaceholder,
+    emptyText,
+    isOpen,
+    disabled,
+    loading,
+    onOpenChange,
+    onChange,
+  } = props
 
   const selected = React.useMemo(
-    () => props.options.find((option) => option.id === props.value) || null,
-    [props.options, props.value]
+    () => options.find((option) => option.id === value) || null,
+    [options, value]
   )
 
   const filtered = React.useMemo(() => {
     const keyword = query.trim().toLowerCase()
-    if (!keyword) return props.options
-    return props.options.filter((option) => option.searchText.includes(keyword))
-  }, [props.options, query])
+    if (!keyword) return options
+    return options.filter((option) => option.searchText.includes(keyword))
+  }, [options, query])
 
   React.useEffect(() => {
-    if (!open) {
+    if (!isOpen) {
       setQuery('')
     }
-  }, [open])
+  }, [isOpen])
 
   React.useEffect(() => {
-    if (props.disabled && open) {
-      setOpen(false)
+    if (disabled && isOpen) {
+      onOpenChange(false)
     }
-  }, [props.disabled, open])
+  }, [disabled, isOpen, onOpenChange])
+
+  React.useEffect(() => {
+    if (!isOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (rootRef.current && target && !rootRef.current.contains(target)) {
+        onOpenChange(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onOpenChange(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onOpenChange])
 
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-foreground">{props.label}</label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            disabled={props.disabled}
-            className="w-full justify-between"
-          >
-            <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
-              {selected?.label || props.placeholder}
-            </span>
-            {props.loading ? <Loader2 className="h-4 w-4 animate-spin opacity-60" /> : <ChevronsUpDown className="h-4 w-4 opacity-60" />}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          container={props.portalContainer}
-          className="z-[90] w-[var(--radix-popover-trigger-width)] p-2"
-          align="start"
-          side="bottom"
-          onEscapeKeyDown={() => setOpen(false)}
-          onPointerDownOutside={() => setOpen(false)}
-          onFocusOutside={() => setOpen(false)}
-          onInteractOutside={() => setOpen(false)}
+    <div className="space-y-2" ref={rootRef}>
+      <label className="text-sm font-medium text-foreground">{label}</label>
+      <div className="relative">
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={`assign-picker-panel-${pickerId}`}
+          disabled={disabled}
+          className="w-full justify-between"
+          onClick={() => onOpenChange(!isOpen)}
         >
-          <div className="mb-2 flex items-center gap-2">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={props.searchPlaceholder}
-              autoFocus
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0"
-              onClick={() => setOpen(false)}
-              aria-label="收起下拉"
-              title="收起"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
+            {selected?.label || placeholder}
+          </span>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin opacity-60" /> : <ChevronsUpDown className="h-4 w-4 opacity-60" />}
+        </Button>
+
+        {isOpen ? (
+          <div
+            id={`assign-picker-panel-${pickerId}`}
+            className="absolute left-0 right-0 top-full z-[80] mt-2 rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                autoFocus
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                onClick={() => onOpenChange(false)}
+                aria-label="收起下拉"
+                title="收起"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="max-h-56 overflow-auto rounded-md border border-border/60">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">{emptyText}</div>
+              ) : (
+                filtered.map((option) => {
+                  const active = option.id === value
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted',
+                        active && 'bg-muted/70 font-medium'
+                      )}
+                      onClick={() => {
+                        onChange(option.id)
+                        onOpenChange(false)
+                      }}
+                    >
+                      <span className="truncate">{option.label}</span>
+                      <Check className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-0')} />
+                    </button>
+                  )
+                })
+              )}
+            </div>
           </div>
-          <div className="max-h-[min(16rem,var(--radix-popover-content-available-height))] overflow-auto rounded-md border border-border/60">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">{props.emptyText}</div>
-            ) : (
-              filtered.map((option) => {
-                const active = option.id === props.value
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted',
-                      active && 'bg-muted/70 font-medium'
-                    )}
-                    onClick={() => {
-                      props.onChange(option.id)
-                      setOpen(false)
-                    }}
-                  >
-                    <span className="truncate">{option.label}</span>
-                    <Check className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-0')} />
-                  </button>
-                )
-              })
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+        ) : null}
+      </div>
     </div>
   )
 }
 
 export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, manuscriptId, onAssignSuccess }) => {
-  const dialogContentRef = React.useRef<HTMLDivElement | null>(null)
   const [selectedAE, setSelectedAE] = React.useState('')
   const [selectedOwner, setSelectedOwner] = React.useState('')
+  const [openPickerId, setOpenPickerId] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isLoadingAEs, setIsLoadingAEs] = React.useState(false)
   const [aes, setAes] = React.useState<AssistantEditorOption[]>([])
@@ -161,6 +197,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
     if (!isOpen) {
       setSelectedAE('')
       setSelectedOwner('')
+      setOpenPickerId(null)
       setError('')
       return () => {
         mounted = false
@@ -268,7 +305,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent ref={dialogContentRef} className="max-w-md">
+      <DialogContent className="max-w-md overflow-visible">
         <DialogHeader>
           <DialogTitle>通过并分配 AE</DialogTitle>
           <DialogDescription>
@@ -278,15 +315,17 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
 
         <div className="space-y-4">
           <SearchablePicker
+            pickerId="ae"
             label="Assistant Editor（必填）"
             value={selectedAE}
             options={aeOptions}
             placeholder={isLoadingAEs && aeOptions.length === 0 ? '加载 AE 中…' : '请选择 AE'}
             searchPlaceholder="搜索 AE：姓名 / 邮箱 / ID"
             emptyText="没有匹配的 AE"
+            isOpen={openPickerId === 'ae'}
             disabled={isSubmitting || isLoadingAEs}
             loading={isLoadingAEs}
-            portalContainer={dialogContentRef.current}
+            onOpenChange={(open) => setOpenPickerId(open ? 'ae' : null)}
             onChange={setSelectedAE}
           />
 
@@ -294,15 +333,17 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             <summary className="cursor-pointer text-sm font-medium text-foreground">高级选项：Owner（可选）</summary>
             <div className="mt-3">
               <SearchablePicker
+                pickerId="owner"
                 label="Owner（可选）"
                 value={selectedOwner}
                 options={ownerOptions}
                 placeholder={isLoadingOwners && ownerOptions.length === 0 ? '加载 Owner 中…' : '不指定 Owner'}
                 searchPlaceholder="搜索 Owner：姓名 / 邮箱 / ID"
                 emptyText="没有匹配的 Owner"
+                isOpen={openPickerId === 'owner'}
                 disabled={isSubmitting || isLoadingOwners}
                 loading={isLoadingOwners}
-                portalContainer={dialogContentRef.current}
+                onOpenChange={(open) => setOpenPickerId(open ? 'owner' : null)}
                 onChange={setSelectedOwner}
               />
               {selectedOwner ? (
