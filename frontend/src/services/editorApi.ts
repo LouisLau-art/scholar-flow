@@ -24,6 +24,7 @@ export type {
   ProductionCycleCreatePayload,
   ProductionCycleEditorsUpdatePayload,
   RevertTechnicalCheckPayload,
+  ReviewEmailTemplateListResponse,
   ReviewerLibrarySearchOptions,
   SubmitAcademicCheckPayload,
   SubmitIntakeRevisionPayload,

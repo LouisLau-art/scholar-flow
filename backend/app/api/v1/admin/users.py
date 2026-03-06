@@ -114,9 +114,110 @@ class JournalResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class EmailTemplateCreateRequest(BaseModel):
+    template_key: str = Field(..., min_length=2, max_length=64)
+    display_name: str = Field(..., min_length=2, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    scene: str = Field(default="general", min_length=2, max_length=64)
+    event_type: Literal["none", "invitation", "reminder"] = "none"
+    subject_template: str = Field(..., min_length=1, max_length=500)
+    body_html_template: str = Field(..., min_length=1, max_length=50000)
+    body_text_template: Optional[str] = Field(default=None, max_length=50000)
+    is_active: bool = True
+
+    @field_validator("template_key")
+    @classmethod
+    def _normalize_template_key(cls, value: str) -> str:
+        return _normalize_email_template_key(value)
+
+    @field_validator("scene")
+    @classmethod
+    def _normalize_scene(cls, value: str) -> str:
+        return _normalize_email_template_scene(value)
+
+    @field_validator("display_name", "subject_template", "body_html_template")
+    @classmethod
+    def _normalize_required_text(cls, value: str) -> str:
+        trimmed = str(value or "").strip()
+        if not trimmed:
+            raise ValueError("field cannot be empty")
+        return trimmed
+
+    @field_validator("description", "body_text_template")
+    @classmethod
+    def _normalize_optional_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        trimmed = str(value).strip()
+        return trimmed or None
+
+
+class EmailTemplateUpdateRequest(BaseModel):
+    template_key: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    display_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    scene: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    event_type: Optional[Literal["none", "invitation", "reminder"]] = None
+    subject_template: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    body_html_template: Optional[str] = Field(default=None, min_length=1, max_length=50000)
+    body_text_template: Optional[str] = Field(default=None, max_length=50000)
+    is_active: Optional[bool] = None
+
+    @field_validator("template_key")
+    @classmethod
+    def _normalize_template_key(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _normalize_email_template_key(value)
+
+    @field_validator("scene")
+    @classmethod
+    def _normalize_scene(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return _normalize_email_template_scene(value)
+
+    @field_validator("display_name", "subject_template", "body_html_template")
+    @classmethod
+    def _normalize_required_patch_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        trimmed = str(value).strip()
+        if not trimmed:
+            raise ValueError("field cannot be empty")
+        return trimmed
+
+    @field_validator("description", "body_text_template")
+    @classmethod
+    def _normalize_optional_patch_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        trimmed = str(value).strip()
+        return trimmed or None
+
+
+class EmailTemplateResponse(BaseModel):
+    id: UUID
+    template_key: str
+    display_name: str
+    description: Optional[str] = None
+    scene: str
+    event_type: str
+    subject_template: str
+    body_html_template: str
+    body_text_template: Optional[str] = None
+    is_active: bool = True
+    updated_by: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 _JOURNAL_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_EMAIL_TEMPLATE_KEY_RE = re.compile(r"^[a-z0-9_]{2,64}$")
+_EMAIL_TEMPLATE_SCENE_RE = re.compile(r"^[a-z0-9_]{2,64}$")
 _SCOPE_REQUIRED_ROLES = {"managing_editor", "editor_in_chief"}
 _SCOPE_TABLE = "journal_role_scopes"
+_EMAIL_TEMPLATE_TABLE = "email_templates"
 
 
 def _normalize_journal_slug(raw_slug: str) -> str:
@@ -126,6 +227,24 @@ def _normalize_journal_slug(raw_slug: str) -> str:
     if not slug or not _JOURNAL_SLUG_RE.match(slug):
         raise ValueError("slug must contain only lowercase letters, numbers, and hyphen")
     return slug
+
+
+def _normalize_email_template_key(raw_key: str) -> str:
+    key = str(raw_key or "").strip().lower()
+    key = re.sub(r"[^a-z0-9_]+", "_", key)
+    key = re.sub(r"_{2,}", "_", key).strip("_")
+    if not key or not _EMAIL_TEMPLATE_KEY_RE.match(key):
+        raise ValueError("template_key must contain only lowercase letters, numbers, and underscore")
+    return key
+
+
+def _normalize_email_template_scene(raw_scene: str) -> str:
+    scene = str(raw_scene or "").strip().lower()
+    scene = re.sub(r"[^a-z0-9_]+", "_", scene)
+    scene = re.sub(r"_{2,}", "_", scene).strip("_")
+    if not scene or not _EMAIL_TEMPLATE_SCENE_RE.match(scene):
+        raise ValueError("scene must contain only lowercase letters, numbers, and underscore")
+    return scene
 
 
 def _is_missing_column_error(error_text: str, column_name: str) -> bool:
@@ -793,3 +912,156 @@ async def deactivate_admin_journal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=text,
         )
+
+
+@router.get("/admin/email-templates", response_model=List[EmailTemplateResponse])
+async def list_admin_email_templates(
+    include_inactive: bool = Query(False),
+    scene: Optional[str] = Query(default=None),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    Email Template Management: 获取模板列表（admin only）。
+    """
+    normalized_scene: Optional[str] = None
+    if scene is not None:
+        try:
+            normalized_scene = _normalize_email_template_scene(scene)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    try:
+        query = supabase_admin.table(_EMAIL_TEMPLATE_TABLE).select(
+            "id,template_key,display_name,description,scene,event_type,subject_template,body_html_template,body_text_template,is_active,updated_by,created_at,updated_at"
+        )
+        if not include_inactive:
+            query = query.eq("is_active", True)
+        if normalized_scene:
+            query = query.eq("scene", normalized_scene)
+        resp = query.order("scene", desc=False).order("display_name", desc=False).execute()
+        return getattr(resp, "data", None) or []
+    except Exception as e:
+        if _is_missing_table_error(str(e), _EMAIL_TEMPLATE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_EMAIL_TEMPLATE_TABLE} table missing") from e
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/admin/email-templates", response_model=EmailTemplateResponse, status_code=status.HTTP_201_CREATED)
+async def create_admin_email_template(
+    request: EmailTemplateCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    Email Template Management: 创建模板（admin only）。
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload: dict[str, Any] = {
+        "template_key": request.template_key,
+        "display_name": request.display_name,
+        "description": request.description,
+        "scene": request.scene,
+        "event_type": request.event_type,
+        "subject_template": request.subject_template,
+        "body_html_template": request.body_html_template,
+        "body_text_template": request.body_text_template,
+        "is_active": bool(request.is_active),
+        "updated_by": str(current_user.get("id") or "") or None,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    try:
+        resp = supabase_admin.table(_EMAIL_TEMPLATE_TABLE).insert(payload).execute()
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=500, detail="Failed to create email template")
+        return rows[0]
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        text = str(e)
+        if _is_missing_table_error(text, _EMAIL_TEMPLATE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_EMAIL_TEMPLATE_TABLE} table missing") from e
+        if _is_duplicate_error(text):
+            raise HTTPException(status_code=409, detail="template_key already exists") from e
+        raise HTTPException(status_code=500, detail=text) from e
+
+
+@router.put("/admin/email-templates/{template_id}", response_model=EmailTemplateResponse)
+async def update_admin_email_template(
+    template_id: UUID,
+    request: EmailTemplateUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    Email Template Management: 更新模板（admin only）。
+    """
+    raw_patch = request.model_dump(exclude_unset=True)
+    patch: dict[str, Any] = dict(raw_patch)
+    if "is_active" in patch:
+        patch["is_active"] = bool(patch["is_active"])
+    patch["updated_by"] = str(current_user.get("id") or "") or None
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    if len(patch) <= 2:
+        raise HTTPException(status_code=422, detail="No fields to update")
+
+    try:
+        resp = (
+            supabase_admin.table(_EMAIL_TEMPLATE_TABLE)
+            .update(patch)
+            .eq("id", str(template_id))
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Email template not found")
+        return rows[0]
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        text = str(e)
+        if _is_missing_table_error(text, _EMAIL_TEMPLATE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_EMAIL_TEMPLATE_TABLE} table missing") from e
+        if _is_duplicate_error(text):
+            raise HTTPException(status_code=409, detail="template_key already exists") from e
+        raise HTTPException(status_code=500, detail=text) from e
+
+
+@router.delete("/admin/email-templates/{template_id}", response_model=EmailTemplateResponse)
+async def deactivate_admin_email_template(
+    template_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _admin: dict = Depends(admin_only),
+):
+    """
+    Email Template Management: 停用模板（软删除，admin only）。
+    """
+    patch = {
+        "is_active": False,
+        "updated_by": str(current_user.get("id") or "") or None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        resp = (
+            supabase_admin.table(_EMAIL_TEMPLATE_TABLE)
+            .update(patch)
+            .eq("id", str(template_id))
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Email template not found")
+        return rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        text = str(e)
+        if _is_missing_table_error(text, _EMAIL_TEMPLATE_TABLE):
+            raise HTTPException(status_code=500, detail=f"DB not migrated: {_EMAIL_TEMPLATE_TABLE} table missing") from e
+        raise HTTPException(status_code=500, detail=text) from e

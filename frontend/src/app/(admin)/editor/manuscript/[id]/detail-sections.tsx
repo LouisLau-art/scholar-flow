@@ -8,8 +8,10 @@ import { ReviewerAssignmentSearch } from '@/components/editor/ReviewerAssignment
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDateLocal, formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
+import type { ReviewEmailTemplateOption } from '@/types/email-template'
 
 import {
   resolveReviewerInviteSummaryState,
@@ -296,10 +298,13 @@ type ReviewerInviteSummaryCardProps = {
   onRetry?: () => void
   canManageReviewerOutreach?: boolean
   sendingAssignmentId?: string | null
+  emailTemplateOptions?: ReviewEmailTemplateOption[]
+  selectedTemplateByAssignment?: Record<string, string>
+  onTemplateChange?: (args: { assignmentId: string; templateKey: string }) => void
   onSendTemplateEmail?: (args: {
     assignmentId: string
     reviewerId: string
-    template: 'invitation' | 'reminder'
+    templateKey: string
   }) => void
   onOpenHistory?: (args: { reviewerId: string; reviewerLabel: string }) => void
 }
@@ -312,10 +317,14 @@ export function ReviewerInviteSummaryCard({
   onRetry,
   canManageReviewerOutreach = false,
   sendingAssignmentId = null,
+  emailTemplateOptions = [],
+  selectedTemplateByAssignment = {},
+  onTemplateChange,
   onSendTemplateEmail,
   onOpenHistory,
 }: ReviewerInviteSummaryCardProps) {
   const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
+  const hasTemplateOptions = emailTemplateOptions.length > 0
 
   return (
     <Card className="shadow-sm border-border">
@@ -399,47 +408,66 @@ export function ReviewerInviteSummaryCard({
                         ) : null}
                         {canManageReviewerOutreach && assignmentId ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {hasTemplateOptions ? (
+                              <Select
+                                value={
+                                  selectedTemplateByAssignment[assignmentId] ||
+                                  emailTemplateOptions[0]?.template_key ||
+                                  '__empty'
+                                }
+                                onValueChange={(value) => {
+                                  if (!value || value === '__empty') return
+                                  onTemplateChange?.({ assignmentId, templateKey: value })
+                                }}
+                              >
+                                <SelectTrigger className="h-8 w-[220px] text-xs">
+                                  <SelectValue placeholder="Select email template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {emailTemplateOptions.map((template) => (
+                                    <SelectItem
+                                      key={template.template_key}
+                                      value={template.template_key}
+                                      className="text-xs"
+                                    >
+                                      {template.display_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">No active email templates.</div>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-8 px-2.5 text-xs"
-                              disabled={!reviewerId || sendingAssignmentId === assignmentId}
+                              disabled={
+                                !reviewerId ||
+                                sendingAssignmentId === assignmentId ||
+                                !(
+                                  selectedTemplateByAssignment[assignmentId] ||
+                                  emailTemplateOptions[0]?.template_key
+                                )
+                              }
                               onClick={() =>
                                 onSendTemplateEmail?.({
                                   assignmentId,
                                   reviewerId,
-                                  template: 'invitation',
+                                  templateKey:
+                                    selectedTemplateByAssignment[assignmentId] ||
+                                    emailTemplateOptions[0]?.template_key ||
+                                    '',
                                 })
                               }
-                              data-testid={`reviewer-send-invitation-${assignmentId}`}
+                              data-testid={`reviewer-send-template-${assignmentId}`}
                             >
                               {sendingAssignmentId === assignmentId ? (
                                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                               ) : (
                                 <Mail className="mr-1 h-3.5 w-3.5" />
                               )}
-                              Send Invitation
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 px-2.5 text-xs"
-                              disabled={!reviewerId || sendingAssignmentId === assignmentId}
-                              onClick={() =>
-                                onSendTemplateEmail?.({
-                                  assignmentId,
-                                  reviewerId,
-                                  template: 'reminder',
-                                })
-                              }
-                              data-testid={`reviewer-send-reminder-${assignmentId}`}
-                            >
-                              {sendingAssignmentId === assignmentId ? (
-                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Mail className="mr-1 h-3.5 w-3.5" />
-                              )}
-                              Send Reminder
+                              Send Email
                             </Button>
                             <Button
                               size="sm"

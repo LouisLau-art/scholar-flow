@@ -94,6 +94,9 @@ class EmailService:
     def render_template(self, template_name: str, context: Dict[str, Any]) -> str:
         return self._jinja.get_template(template_name).render(**context)
 
+    def render_inline_template(self, template_source: str, context: Dict[str, Any]) -> str:
+        return self._jinja.from_string(template_source).render(**context)
+
     # === Legacy-compatible API (tests + scheduler/worker) ===
     def render_html(self, template_name: str, context: Dict[str, Any]) -> str:
         return self.render_template(template_name, context)
@@ -226,6 +229,86 @@ class EmailService:
                 to_email,
                 subject,
                 template_name,
+                EmailStatus.FAILED,
+                error_message=str(e),
+            )
+
+    def send_inline_email_background(
+        self,
+        *,
+        to_email: str,
+        template_key: str,
+        subject_template: str,
+        body_html_template: str,
+        context: Dict[str, Any],
+        body_text_template: str | None = None,
+    ) -> None:
+        """
+        根据数据库模板字符串渲染并后台发送邮件。
+
+        中文注释:
+        - 用于 Admin 可配置模板（subject/html/text 均可为 Jinja 模板字符串）。
+        - template_key 作为日志里的 template_name 持久化，便于追踪。
+        """
+        if not self.is_configured():
+            return
+
+        try:
+            subject = self.render_inline_template(subject_template, context).strip()
+            html = self.render_inline_template(body_html_template, context)
+            text = (
+                self.render_inline_template(body_text_template, context)
+                if body_text_template and str(body_text_template).strip()
+                else None
+            )
+            if not subject:
+                subject = "(no subject)"
+        except Exception as e:
+            print(f"[Email] inline template render failed: {e}")
+            self._log_attempt(
+                to_email,
+                "(render failed)",
+                template_key,
+                EmailStatus.FAILED,
+                error_message=str(e),
+            )
+            return
+
+        if self.smtp_config:
+            ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
+            if ok:
+                self._log_attempt(to_email, subject, template_key, EmailStatus.SENT)
+            else:
+                self._log_attempt(
+                    to_email,
+                    subject,
+                    template_key,
+                    EmailStatus.FAILED,
+                    error_message="send failed",
+                )
+            return
+
+        resend_cfg = self._effective_resend_config()
+        if not resend_cfg:
+            return
+
+        resend.api_key = resend_cfg.api_key
+        try:
+            res = self._send_with_retry(to_email, subject, html, sender=resend_cfg.sender)
+            provider_id = (res or {}).get("id") if isinstance(res, dict) else None
+            self._log_attempt(
+                to_email,
+                subject,
+                template_key,
+                EmailStatus.SENT,
+                provider_id=provider_id,
+            )
+        except Exception as e:
+            print(f"[Resend] send failed: {e}")
+            self._log_attempt(
+                to_email,
+                subject,
+                template_key,
                 EmailStatus.FAILED,
                 error_message=str(e),
             )

@@ -31,3 +31,11 @@ export type ReviewerHistoryItem = {
   report_score?: number | null
   report_submitted_at?: string | null
 }
+
+export type ReviewEmailTemplateOption = {
+  template_key: string
+  display_name: string
+  description?: string | null
+  scene: string
+  event_type: 'none' | 'invitation' | 'reminder'
+}

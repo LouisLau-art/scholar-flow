@@ -5,6 +5,7 @@ import type {
   FinanceStatusFilter,
 } from '@/types/finance'
 import type { EditorRbacContext } from '@/types/rbac'
+import type { ReviewEmailTemplateOption } from '@/types/email-template'
 
 export type ManuscriptsProcessFilters = {
   q?: string
@@ -112,4 +113,11 @@ export type ProcessFetchOptions = CachedGetOptions & {
 export type ManuscriptDetailGetOptions = CachedGetOptions & {
   skipCards?: boolean
   includeHeavy?: boolean
+}
+
+export type ReviewEmailTemplateListResponse = {
+  success: boolean
+  data?: ReviewEmailTemplateOption[]
+  detail?: string
+  message?: string
 }

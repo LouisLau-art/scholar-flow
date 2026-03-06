@@ -36,7 +36,7 @@ import {
   ReviewerFeedbackSummaryCard,
   TaskSlaSummaryCard,
 } from './detail-sections'
-import type { ReviewerFeedbackItem, ReviewerHistoryItem } from './types'
+import type { ReviewerFeedbackItem, ReviewerHistoryItem, ReviewEmailTemplateOption } from './types'
 
 const InternalNotebook = dynamic(
   () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
@@ -103,6 +103,10 @@ export default function EditorManuscriptDetailPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
   const [sendingReviewerEmailAssignmentId, setSendingReviewerEmailAssignmentId] = useState<string | null>(null)
+  const [reviewerEmailTemplates, setReviewerEmailTemplates] = useState<ReviewEmailTemplateOption[]>([])
+  const [selectedReviewerTemplateByAssignment, setSelectedReviewerTemplateByAssignment] = useState<
+    Record<string, string>
+  >({})
   const [reviewerHistoryOpen, setReviewerHistoryOpen] = useState(false)
   const [reviewerHistoryLoading, setReviewerHistoryLoading] = useState(false)
   const [reviewerHistoryError, setReviewerHistoryError] = useState<string | null>(null)
@@ -207,6 +211,21 @@ export default function EditorManuscriptDetailPage() {
       setRbacContext(rbacRes.data)
     } else {
       setRbacContext(null)
+    }
+  }, [])
+
+  const loadReviewerEmailTemplates = useCallback(async () => {
+    try {
+      const response = await EditorApi.getReviewEmailTemplates('reviewer_assignment', { ttlMs: 30_000 })
+      if (!response?.success) {
+        throw new Error(response?.detail || response?.message || 'Failed to load email templates')
+      }
+      const rows = Array.isArray(response?.data) ? (response.data as ReviewEmailTemplateOption[]) : []
+      setReviewerEmailTemplates(rows)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load email templates'
+      toast.error(message)
+      setReviewerEmailTemplates([])
     }
   }, [])
 
@@ -397,10 +416,19 @@ export default function EditorManuscriptDetailPage() {
   }, [id])
 
   useEffect(() => {
+    if (!capability.canManageReviewers) {
+      setReviewerEmailTemplates([])
+      return
+    }
+    void loadReviewerEmailTemplates()
+  }, [capability.canManageReviewers, loadReviewerEmailTemplates])
+
+  useEffect(() => {
     setReviewsActivated(false)
     setReviewsLoadedOnce(false)
     setCardsActivated(false)
     setDeferredError(null)
+    setSelectedReviewerTemplateByAssignment({})
     reviewsRetryAttemptRef.current = 0
     if (reviewsRetryTimerRef.current) {
       window.clearTimeout(reviewsRetryTimerRef.current)
@@ -417,6 +445,22 @@ export default function EditorManuscriptDetailPage() {
       deferredRetryTimerRef.current = null
     }
   }, [id])
+
+  useEffect(() => {
+    if (!Array.isArray(ms?.reviewer_invites) || ms.reviewer_invites.length === 0) return
+    if (!reviewerEmailTemplates.length) return
+    const defaultTemplateKey = String(reviewerEmailTemplates[0]?.template_key || '').trim()
+    if (!defaultTemplateKey) return
+    setSelectedReviewerTemplateByAssignment((prev) => {
+      const next = { ...prev }
+      for (const invite of ms.reviewer_invites || []) {
+        const assignmentId = String(invite?.id || '').trim()
+        if (!assignmentId) continue
+        if (!next[assignmentId]) next[assignmentId] = defaultTemplateKey
+      }
+      return next
+    })
+  }, [ms?.reviewer_invites, reviewerEmailTemplates])
 
   useEffect(() => {
     return () => {
@@ -664,16 +708,21 @@ export default function EditorManuscriptDetailPage() {
   }, [loadReviewReports])
 
   const handleSendReviewerTemplateEmail = useCallback(
-    async (args: { assignmentId: string; reviewerId: string; template: 'invitation' | 'reminder' }) => {
+    async (args: { assignmentId: string; reviewerId: string; templateKey: string }) => {
       const assignmentId = String(args.assignmentId || '').trim()
+      const templateKey = String(args.templateKey || '').trim()
       if (!assignmentId) return
+      if (!templateKey) {
+        toast.error('Please select an email template.')
+        return
+      }
       setSendingReviewerEmailAssignmentId(assignmentId)
       try {
-        const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, { template: args.template })
+        const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, { template_key: templateKey })
         if (!res?.success) {
           throw new Error(res?.detail || res?.message || 'Failed to send reviewer email')
         }
-        toast.success(args.template === 'invitation' ? 'Invitation email queued.' : 'Reminder email queued.')
+        toast.success(`Template "${res?.data?.template_display_name || templateKey}" queued.`)
         await refreshDetail({ force: true })
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Failed to send reviewer email')
@@ -683,6 +732,13 @@ export default function EditorManuscriptDetailPage() {
     },
     [refreshDetail]
   )
+
+  const handleReviewerTemplateChange = useCallback((args: { assignmentId: string; templateKey: string }) => {
+    const assignmentId = String(args.assignmentId || '').trim()
+    const templateKey = String(args.templateKey || '').trim()
+    if (!assignmentId || !templateKey) return
+    setSelectedReviewerTemplateByAssignment((prev) => ({ ...prev, [assignmentId]: templateKey }))
+  }, [])
 
   const loadReviewerHistory = useCallback(
     async (reviewerId: string, reviewerLabel: string, force = false) => {
@@ -836,6 +892,9 @@ export default function EditorManuscriptDetailPage() {
             onRetry={handleRetryDeferredContext}
             canManageReviewerOutreach={capability.canManageReviewers}
             sendingAssignmentId={sendingReviewerEmailAssignmentId}
+            emailTemplateOptions={reviewerEmailTemplates}
+            selectedTemplateByAssignment={selectedReviewerTemplateByAssignment}
+            onTemplateChange={handleReviewerTemplateChange}
             onSendTemplateEmail={handleSendReviewerTemplateEmail}
             onOpenHistory={handleOpenReviewerHistory}
           />

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Users, Settings, Shield, Library } from 'lucide-react'
+import { Users, Settings, Shield, Library, Mail } from 'lucide-react'
 
 export default function AdminDashboard() {
   return (
@@ -42,6 +42,20 @@ export default function AdminDashboard() {
           </div>
         </Link>
 
+        <Link href="/admin/email-templates" className="group block">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:border-primary hover:shadow-md">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="rounded-xl bg-primary/10 p-3 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                <Mail className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground">Email Templates</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Manage global reusable email templates for reviewer/author/editor communication.
+            </p>
+          </div>
+        </Link>
+
         {/* Placeholder for System Settings */}
         <div className="cursor-not-allowed rounded-2xl border border-border bg-card p-6 opacity-60 shadow-sm">
           <div className="flex items-center gap-4 mb-4">
@@ -51,7 +65,7 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-bold text-foreground">System Settings</h3>
           </div>
           <p className="text-sm text-muted-foreground">
-            Global configuration, email templates, and integrations. (Coming Soon)
+            Global configuration and integrations. (Coming Soon)
           </p>
         </div>
 

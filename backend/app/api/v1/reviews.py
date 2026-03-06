@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -57,6 +58,57 @@ from app.api.v1.reviews_handlers_workspace_magic import (
 )
 
 router = APIRouter(tags=["Reviews"])
+
+_EMAIL_TEMPLATE_KEY_RE = re.compile(r"^[a-z0-9_]{2,64}$")
+_EMAIL_TEMPLATE_SCENE_RE = re.compile(r"^[a-z0-9_]{2,64}$")
+_EMAIL_TEMPLATE_TABLE = "email_templates"
+_REVIEW_ASSIGNMENT_SCENE = "reviewer_assignment"
+_REVIEW_TEMPLATE_KEY_ALIASES = {
+    "invitation": "reviewer_invitation_standard",
+    "reminder": "reviewer_reminder_polite",
+}
+
+_DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES: dict[str, dict[str, Any]] = {
+    "reviewer_invitation_standard": {
+        "template_key": "reviewer_invitation_standard",
+        "display_name": "审稿邀请信（标准）",
+        "description": "默认审稿邀请模板",
+        "scene": _REVIEW_ASSIGNMENT_SCENE,
+        "event_type": "invitation",
+        "subject_template": "Invitation to Review - {{ journal_title }}",
+        "body_html_template": (
+            "<p>Dear {{ reviewer_name }},</p>"
+            "<p>You are invited to review <strong>{{ manuscript_title }}</strong> for <strong>{{ journal_title }}</strong>.</p>"
+            "<p>Due date: {{ due_date or due_at or '-' }}</p>"
+            "<p>Invitation link: <a href=\"{{ review_url }}\">{{ review_url }}</a></p>"
+        ),
+        "body_text_template": (
+            "Dear {{ reviewer_name }}, you are invited to review "
+            "\"{{ manuscript_title }}\" for {{ journal_title }}. Due {{ due_date or due_at or '-' }}. "
+            "Link: {{ review_url }}"
+        ),
+        "is_active": True,
+    },
+    "reviewer_reminder_polite": {
+        "template_key": "reviewer_reminder_polite",
+        "display_name": "审稿催促信（礼貌）",
+        "description": "默认审稿催促模板",
+        "scene": _REVIEW_ASSIGNMENT_SCENE,
+        "event_type": "reminder",
+        "subject_template": "Friendly Reminder - {{ journal_title }}",
+        "body_html_template": (
+            "<p>Dear {{ reviewer_name }},</p>"
+            "<p>This is a reminder for your review of <strong>{{ manuscript_title }}</strong> in <strong>{{ journal_title }}</strong>.</p>"
+            "<p>Current due date: {{ due_date or due_at or '-' }}</p>"
+            "<p>Continue here: <a href=\"{{ review_url }}\">{{ review_url }}</a></p>"
+        ),
+        "body_text_template": (
+            "Reminder for {{ manuscript_title }} ({{ journal_title }}). "
+            "Due {{ due_date or due_at or '-' }}. Link: {{ review_url }}"
+        ),
+        "is_active": True,
+    },
+}
 
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
     return get_signed_url_for_manuscripts_bucket(
@@ -141,6 +193,111 @@ def _resolve_journal_title_for_assignment(manuscript: dict[str, Any]) -> str:
         return title or "ScholarFlow Journal"
     except Exception:
         return "ScholarFlow Journal"
+
+
+def _normalize_template_key(raw_key: str) -> str:
+    key = str(raw_key or "").strip().lower()
+    key = re.sub(r"[^a-z0-9_]+", "_", key)
+    key = re.sub(r"_{2,}", "_", key).strip("_")
+    if not key or not _EMAIL_TEMPLATE_KEY_RE.match(key):
+        raise HTTPException(status_code=422, detail="template_key must contain only lowercase letters, numbers, and underscore")
+    return key
+
+
+def _normalize_template_scene(raw_scene: str) -> str:
+    scene = str(raw_scene or "").strip().lower()
+    scene = re.sub(r"[^a-z0-9_]+", "_", scene)
+    scene = re.sub(r"_{2,}", "_", scene).strip("_")
+    if not scene or not _EMAIL_TEMPLATE_SCENE_RE.match(scene):
+        raise HTTPException(status_code=422, detail="scene must contain only lowercase letters, numbers, and underscore")
+    return scene
+
+
+def _is_missing_table_error(error_text: str, table_name: str) -> bool:
+    lowered = str(error_text or "").lower()
+    needle = str(table_name or "").strip().lower()
+    if not needle:
+        return False
+    return needle in lowered and ("does not exist" in lowered or "schema cache" in lowered)
+
+
+def _load_review_assignment_template(template_key: str) -> dict[str, Any] | None:
+    normalized = _normalize_template_key(template_key)
+    alias_key = _REVIEW_TEMPLATE_KEY_ALIASES.get(normalized)
+    lookup_keys = [alias_key, normalized] if alias_key else [normalized]
+    lookup_keys = [key for key in lookup_keys if key]
+
+    for key in lookup_keys:
+        try:
+            resp = (
+                supabase_admin.table(_EMAIL_TEMPLATE_TABLE)
+                .select(
+                    "template_key,display_name,description,scene,event_type,subject_template,body_html_template,body_text_template,is_active"
+                )
+                .eq("template_key", key)
+                .eq("is_active", True)
+                .single()
+                .execute()
+            )
+            row = getattr(resp, "data", None) or {}
+            if not row:
+                continue
+            scene = str(row.get("scene") or "").strip().lower()
+            if scene != _REVIEW_ASSIGNMENT_SCENE:
+                raise HTTPException(status_code=422, detail=f"Template scene mismatch: expected {_REVIEW_ASSIGNMENT_SCENE}")
+            return row
+        except HTTPException:
+            raise
+        except APIError as e:
+            text = str(e)
+            if "PGRST116" in text or "0 rows" in text or "single json object" in text:
+                continue
+            if _is_missing_table_error(text, _EMAIL_TEMPLATE_TABLE):
+                break
+            raise HTTPException(status_code=500, detail=f"Failed to load email template: {e}") from e
+        except Exception as e:
+            text = str(e)
+            if _is_missing_table_error(text, _EMAIL_TEMPLATE_TABLE):
+                break
+            raise HTTPException(status_code=500, detail=f"Failed to load email template: {e}") from e
+
+    for key in lookup_keys:
+        fallback = _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES.get(key)
+        if fallback:
+            return fallback
+    return None
+
+
+def _list_active_review_assignment_templates(scene: str) -> list[dict[str, Any]]:
+    normalized_scene = _normalize_template_scene(scene)
+    fallback_rows = [
+        {
+            "template_key": row.get("template_key"),
+            "display_name": row.get("display_name"),
+            "description": row.get("description"),
+            "scene": row.get("scene"),
+            "event_type": row.get("event_type"),
+        }
+        for row in _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES.values()
+        if str(row.get("scene") or "") == normalized_scene
+    ]
+    try:
+        resp = (
+            supabase_admin.table(_EMAIL_TEMPLATE_TABLE)
+            .select("template_key,display_name,description,scene,event_type")
+            .eq("scene", normalized_scene)
+            .eq("is_active", True)
+            .order("display_name", desc=False)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if rows:
+            return rows
+        return fallback_rows
+    except Exception as e:
+        if _is_missing_table_error(str(e), _EMAIL_TEMPLATE_TABLE):
+            return fallback_rows
+        raise HTTPException(status_code=500, detail=f"Failed to list email templates: {e}") from e
 
 
 def _safe_create_assignment_magic_link(
@@ -452,11 +609,24 @@ async def unassign_reviewer(
     )
 
 
+@router.get("/reviews/email-templates")
+async def list_review_email_templates(
+    scene: str = Query(default=_REVIEW_ASSIGNMENT_SCENE),
+    _current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    编辑侧可用邮件模板列表（按 scene 过滤，默认 reviewer_assignment）。
+    """
+    rows = _list_active_review_assignment_templates(scene)
+    return {"success": True, "data": rows}
+
+
 @router.post("/reviews/assignments/{assignment_id}/send-email")
 async def send_assignment_email(
     assignment_id: UUID,
     background_tasks: BackgroundTasks,
-    template: str = Body("invitation", embed=True),
+    payload: dict[str, Any] | None = Body(default=None),
     current_user: dict = Depends(get_current_user),
     profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
 ):
@@ -464,12 +634,15 @@ async def send_assignment_email(
     手动发送审稿邮件（邀请/催促）。
 
     中文注释:
-    - invitation: 发送邀请信，并回填 invited_at；
-    - reminder: 发送催促信，并回填 last_reminded_at。
+    - 根据 template_key 从 email_templates 表读取模板；
+    - 自动注入 manuscript/reviewer/journal 变量；
+    - 按模板 event_type 回填 invited_at 或 last_reminded_at。
     """
-    template_key = str(template or "invitation").strip().lower()
-    if template_key not in {"invitation", "reminder"}:
-        raise HTTPException(status_code=422, detail="template must be invitation or reminder")
+    body = payload or {}
+    template_key_raw = body.get("template_key") or body.get("template") or "reviewer_invitation_standard"
+    template_row = _load_review_assignment_template(str(template_key_raw))
+    if not template_row:
+        raise HTTPException(status_code=404, detail=f"Email template not found: {template_key_raw}")
 
     assignment_res = (
         supabase_admin.table("review_assignments")
@@ -529,43 +702,46 @@ async def send_assignment_email(
     review_url = (
         f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
     )
-
-    if template_key == "invitation":
-        subject = "Invitation to Review"
-        template_name = "invitation.html"
-        context = {
-            "review_url": review_url,
-            "reviewer_name": reviewer_name,
-            "manuscript_title": manuscript_title,
-            "manuscript_id": manuscript_id,
-            "journal_title": _resolve_journal_title_for_assignment(manuscript),
-            "due_at": due_at,
-            "due_date": str(due_at).split("T")[0] if due_at else "",
-        }
-    else:
-        subject = "Friendly Reminder: Review Deadline Approaching"
-        template_name = "review_reminder.html"
-        context = {
-            "subject": subject,
-            "recipient_name": reviewer_name,
-            "manuscript_title": manuscript_title,
-            "manuscript_id": manuscript_id,
-            "due_at": due_at or "—",
-            "review_url": review_url,
-        }
+    journal_title = _resolve_journal_title_for_assignment(manuscript)
+    context = {
+        "review_url": review_url,
+        "reviewer_name": reviewer_name,
+        "recipient_name": reviewer_name,
+        "manuscript_title": manuscript_title,
+        "manuscript_id": manuscript_id,
+        "journal_title": journal_title,
+        "due_at": due_at or "",
+        "due_date": str(due_at).split("T")[0] if due_at else "",
+    }
+    template_key = str(template_row.get("template_key") or "").strip() or _normalize_template_key(str(template_key_raw))
+    subject_template = str(template_row.get("subject_template") or "").strip()
+    body_html_template = str(template_row.get("body_html_template") or "").strip()
+    body_text_template = str(template_row.get("body_text_template") or "").strip() or None
+    if not subject_template or not body_html_template:
+        raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
+    event_type = str(template_row.get("event_type") or "none").strip().lower()
+    if event_type not in {"none", "invitation", "reminder"}:
+        event_type = "none"
 
     background_tasks.add_task(
-        email_service.send_email_background,
+        email_service.send_inline_email_background,
         to_email=reviewer_email,
-        subject=subject,
-        template_name=template_name,
+        template_key=template_key,
+        subject_template=subject_template,
+        body_html_template=body_html_template,
+        body_text_template=body_text_template,
         context=context,
     )
 
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
-        patch: dict[str, Any] = {"invited_at": now_iso} if template_key == "invitation" else {"last_reminded_at": now_iso}
-        supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+        patch: dict[str, Any] = {}
+        if event_type == "invitation":
+            patch["invited_at"] = now_iso
+        elif event_type == "reminder":
+            patch["last_reminded_at"] = now_iso
+        if patch:
+            supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
     except Exception:
         # 回填失败不影响主流程（邮件已入队）
         pass
@@ -574,8 +750,11 @@ async def send_assignment_email(
         "success": True,
         "data": {
             "assignment_id": str(assignment_id),
-            "template": template_key,
+            "template_key": template_key,
+            "template_display_name": template_row.get("display_name"),
+            "event_type": event_type,
             "recipient": reviewer_email,
+            "journal_title": journal_title,
             "queued_at": now_iso,
         },
     }
