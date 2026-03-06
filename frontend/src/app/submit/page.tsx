@@ -19,7 +19,7 @@ export default function SubmitPage() {
           </p>
         </header>
 
-        <main className="submission-contrast rounded-lg bg-card p-8 shadow-sm ring-1 ring-border/80">
+        <main data-testid="submission-page-shell" className="submission-contrast rounded-lg bg-card p-8 shadow-sm ring-1 ring-border/80">
           <SubmissionForm />
         </main>
       </div>

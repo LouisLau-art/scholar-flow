@@ -51,6 +51,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.50.0",
     "@react-email/components": "^1.0.8",
     "@react-email/render": "^2.0.4",
