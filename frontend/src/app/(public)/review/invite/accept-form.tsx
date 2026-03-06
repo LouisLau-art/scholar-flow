@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 type AcceptFormProps = {
   assignmentId: string
@@ -35,7 +36,7 @@ export function AcceptForm({
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
-        throw new Error(json?.detail || json?.message || 'Failed to accept invitation')
+        throw new Error(normalizeApiErrorMessage(json, 'Failed to accept invitation'))
       }
       onAccepted()
     } catch (e) {
@@ -48,7 +49,7 @@ export function AcceptForm({
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <h2 className="text-base font-semibold text-foreground">Accept Invitation</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Pick a due date before entering the review workspace.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Confirm you can review this manuscript and choose a due date before entering the reviewer workspace.</p>
       <Label className="mt-4 block text-sm font-medium text-foreground">Due date</Label>
       <DatePicker value={dueDate} minDate={minDueDate} maxDate={maxDueDate} onChange={setDueDate} className="mt-1" />
       <p className="mt-1 text-xs text-muted-foreground">

@@ -458,12 +458,16 @@ class ReviewerInviteService:
         status = str(assignment.get("status") or "").lower()
         if status == "completed":
             return "submitted"
+        if status == "selected":
+            return "selected"
         if status == "accepted":
             return "accepted"
         if status == "declined" or assignment.get("declined_at"):
             return "declined"
         if assignment.get("accepted_at"):
             return "accepted"
+        if status == "opened" or assignment.get("opened_at"):
+            return "opened"
         return "invited"
 
     def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
@@ -517,6 +521,24 @@ class ReviewerInviteService:
         except Exception:
             return None
 
+    def _get_journal_title(self, *, journal_id: str | None) -> str | None:
+        target_id = str(journal_id or "").strip()
+        if not target_id:
+            return None
+        try:
+            resp = (
+                supabase_admin.table("journals")
+                .select("id,title")
+                .eq("id", target_id)
+                .single()
+                .execute()
+            )
+            row = getattr(resp, "data", None) or {}
+        except Exception:
+            return None
+        title = str(row.get("title") or "").strip()
+        return title or None
+
     def get_invite_view(self, *, assignment_id: UUID, reviewer_id: UUID) -> InviteViewData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
         opened_at = assignment.get("opened_at")
@@ -533,7 +555,7 @@ class ReviewerInviteService:
         manuscript_id = str(assignment.get("manuscript_id") or "")
         ms_resp = (
             supabase_admin.table("manuscripts")
-            .select("id,title,abstract")
+            .select("id,title,abstract,journal_id")
             .eq("id", manuscript_id)
             .single()
             .execute()
@@ -541,6 +563,7 @@ class ReviewerInviteService:
         manuscript = getattr(ms_resp, "data", None) or {}
         if not manuscript:
             raise ValueError("Manuscript not found")
+        journal_title = self._get_journal_title(journal_id=manuscript.get("journal_id"))
 
         state = self._derive_invite_state(assignment)
         submitted_at = self._get_submitted_at(manuscript_id=manuscript_id, reviewer_id=str(reviewer_id))
@@ -568,6 +591,7 @@ class ReviewerInviteService:
                 id=UUID(str(manuscript["id"])),
                 title=str(manuscript.get("title") or "Untitled Manuscript"),
                 abstract=manuscript.get("abstract"),
+                journal_title=journal_title,
             ),
             window=window,
             can_open_workspace=state in {"accepted", "submitted"},

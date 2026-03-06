@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 const DECLINE_REASONS = [
-  { value: 'out_of_scope', label: 'Out of scope' },
+  { value: 'out_of_scope', label: 'Outside my field' },
   { value: 'conflict_of_interest', label: 'Conflict of interest' },
-  { value: 'too_busy', label: 'Too busy' },
+  { value: 'too_busy', label: 'Too busy to review on time' },
   { value: 'insufficient_expertise', label: 'Insufficient expertise' },
   { value: 'other', label: 'Other' },
 ]
@@ -34,7 +35,7 @@ export function DeclineForm({ assignmentId, onDeclined }: DeclineFormProps) {
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
-        throw new Error(json?.detail || json?.message || 'Failed to decline invitation')
+        throw new Error(normalizeApiErrorMessage(json, 'Failed to decline invitation'))
       }
       onDeclined()
     } catch (e) {
@@ -47,7 +48,7 @@ export function DeclineForm({ assignmentId, onDeclined }: DeclineFormProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <h2 className="text-base font-semibold text-foreground">Decline Invitation</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Declining is final for this invitation.</p>
+      <p className="mt-1 text-sm text-muted-foreground">If you cannot review this manuscript, record the reason here for the editorial team.</p>
       <label className="mt-4 block text-sm font-medium text-foreground" htmlFor="decline_reason">
         Reason
       </label>

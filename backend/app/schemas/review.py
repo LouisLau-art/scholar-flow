@@ -121,6 +121,7 @@ class InviteManuscriptPreview(BaseModel):
     id: UUID
     title: str
     abstract: str | None = None
+    journal_title: str | None = None
 
 
 class InviteViewData(BaseModel):

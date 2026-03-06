@@ -130,3 +130,38 @@ def test_decline_invitation_idempotent_when_already_declined(supabase_admin):
     assert out["status"] == "declined"
     assert out["idempotent"] is True
     assert assignments.update.called is False
+
+
+def test_get_invite_view_includes_journal_title(supabase_admin):
+    svc = reviewer_service_module.ReviewerInviteService()
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.side_effect = [
+        _Resp(data=_assignment_row(status="invited", accepted_at=None, declined_at=None)),
+        _Resp(data=[{"id": "ok"}]),
+    ]
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000011",
+            "title": "Test Manuscript",
+            "abstract": "Abstract text",
+            "journal_id": "00000000-0000-0000-0000-000000000099",
+        }
+    )
+    journals = supabase_admin.table("journals")
+    journals.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000099",
+            "title": "Journal A",
+        }
+    )
+    review_reports = supabase_admin.table("review_reports")
+    review_reports.execute.return_value = _Resp(data=[])
+
+    out = svc.get_invite_view(
+        assignment_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001"),
+        reviewer_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000022"),
+    )
+
+    assert out.manuscript.title == "Test Manuscript"
+    assert out.manuscript.journal_title == "Journal A"
