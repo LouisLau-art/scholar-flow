@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.api.v1.reviews_handlers_assignment_assign import assign_reviewer_impl
 from app.api.v1.reviews_handlers_assignment_manage import (
+    cancel_reviewer_impl,
     get_manuscript_assignments_impl,
     unassign_reviewer_impl,
 )
@@ -11,6 +12,7 @@ from app.api.v1.reviews_handlers_assignment_session import (
 
 __all__ = [
     "assign_reviewer_impl",
+    "cancel_reviewer_impl",
     "establish_reviewer_workspace_session_impl",
     "unassign_reviewer_impl",
     "get_manuscript_assignments_impl",

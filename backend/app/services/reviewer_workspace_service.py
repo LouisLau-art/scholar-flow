@@ -37,6 +37,8 @@ def _derive_invite_state(assignment: Dict[str, Any]) -> str:
     status = str(assignment.get("status") or "").lower()
     if status == "completed":
         return "submitted"
+    if status == "cancelled" or assignment.get("cancelled_at"):
+        return "cancelled"
     if status == "declined" or assignment.get("declined_at"):
         return "declined"
     if status == "selected":
@@ -65,9 +67,9 @@ class ReviewerWorkspaceService:
 
     def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
         select_variants = [
-            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, submitted_at, decline_reason",
-            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason",
-            "id, manuscript_id, reviewer_id, status, due_at, accepted_at, declined_at",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, submitted_at, decline_reason, cancelled_at",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, cancelled_at",
+            "id, manuscript_id, reviewer_id, status, due_at, accepted_at, declined_at, cancelled_at",
             "id, manuscript_id, reviewer_id, status, due_at",
         ]
         last_error: Exception | None = None
@@ -328,6 +330,8 @@ class ReviewerWorkspaceService:
     def get_workspace_data(self, *, assignment_id: UUID, reviewer_id: UUID) -> WorkspaceData:
         assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
         state = _derive_invite_state(assignment)
+        if state == "cancelled":
+            raise PermissionError("Invitation revoked")
         if state == "declined":
             raise PermissionError("Invitation has been declined")
         if state in {"invited", "opened"}:
@@ -427,7 +431,9 @@ class ReviewerWorkspaceService:
         content: bytes,
         content_type: str | None = None,
     ) -> str:
-        self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        assignment = self._get_assignment_for_reviewer(assignment_id=assignment_id, reviewer_id=reviewer_id)
+        if _derive_invite_state(assignment) == "cancelled":
+            raise PermissionError("Invitation revoked")
         safe_name = sanitize_storage_filename(filename, default_name="review_attachment")
         unique_prefix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(4)
         object_path = f"assignments/{assignment_id}/{unique_prefix}-{safe_name}"
@@ -449,6 +455,8 @@ class ReviewerWorkspaceService:
         state = _derive_invite_state(assignment)
         if state == "submitted":
             raise ValueError("Review already submitted")
+        if state == "cancelled":
+            raise ValueError("Invitation revoked")
         if state == "declined":
             raise ValueError("Invitation already declined")
         if state in {"invited", "opened"}:

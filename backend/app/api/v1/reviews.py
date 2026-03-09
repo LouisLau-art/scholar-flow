@@ -18,6 +18,7 @@ from fastapi import Cookie
 from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
 from app.models.email_log import EmailStatus
 from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, ReviewSubmission
+from app.schemas.review import AssignmentCancelPayload
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
 from app.services.reviewer_service import ReviewPolicyService, ReviewerInviteService, ReviewerWorkspaceService
@@ -33,6 +34,7 @@ from app.api.v1.reviews_common import (
 )
 from app.api.v1.reviews_heavy_handlers import (
     assign_reviewer_impl,
+    cancel_reviewer_impl,
     establish_reviewer_workspace_session_impl,
     get_review_by_token_impl,
     get_manuscript_assignments_impl,
@@ -122,6 +124,10 @@ def _is_missing_assignment_audit_column_error(error: Exception | str) -> bool:
                 "selected_via",
                 "invited_by",
                 "invited_via",
+                "cancelled_at",
+                "cancelled_by",
+                "cancel_reason",
+                "cancel_via",
             )
         )
     )
@@ -826,6 +832,30 @@ async def unassign_reviewer(
     )
 
 
+@router.post("/reviews/assignments/{assignment_id}/cancel")
+async def cancel_reviewer_assignment(
+    assignment_id: UUID,
+    body: AssignmentCancelPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    正式取消 reviewer assignment，保留审计与后续 history。
+    """
+    return await cancel_reviewer_impl(
+        assignment_id=assignment_id,
+        reason=body.reason,
+        via=body.via,
+        send_email=body.send_email,
+        current_user=current_user,
+        profile=profile,
+        supabase_admin_client=supabase_admin,
+        ensure_review_management_access_fn=_ensure_review_management_access,
+        normalize_roles_fn=normalize_roles,
+        parse_roles_fn=_parse_roles,
+    )
+
+
 @router.get("/reviews/email-templates")
 async def list_review_email_templates(
     scene: str = Query(default=_REVIEW_ASSIGNMENT_SCENE),
@@ -1101,7 +1131,7 @@ async def get_reviewer_history(
         query = (
             supabase_admin.table("review_assignments")
             .select(
-                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number, selected_by, selected_via, invited_by, invited_via"
+                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number, selected_by, selected_via, invited_by, invited_via, cancelled_at, cancelled_by, cancel_reason, cancel_via"
             )
             .eq("reviewer_id", reviewer_id_str)
             .order("created_at", desc=True)
@@ -1177,6 +1207,11 @@ async def get_reviewer_history(
             for row in filtered_rows
             if str(row.get("invited_by") or "").strip()
         }
+        | {
+            str(row.get("cancelled_by") or "").strip()
+            for row in filtered_rows
+            if str(row.get("cancelled_by") or "").strip()
+        }
     )
     actor_profiles: dict[str, dict[str, Any]] = {}
     if actor_ids:
@@ -1228,8 +1263,10 @@ async def get_reviewer_history(
         latest_email = email_events[0] if email_events else {}
         added_by_id = str(row.get("selected_by") or "").strip()
         invited_by_id = str(row.get("invited_by") or "").strip()
+        cancelled_by_id = str(row.get("cancelled_by") or "").strip()
         added_by_profile = actor_profiles.get(added_by_id) or {}
         invited_by_profile = actor_profiles.get(invited_by_id) or {}
+        cancelled_by_profile = actor_profiles.get(cancelled_by_id) or {}
         out.append(
             {
                 "assignment_id": assignment_id_value or row.get("id"),
@@ -1260,6 +1297,18 @@ async def get_reviewer_history(
                     else None
                 ),
                 "invited_via": row.get("invited_via"),
+                "cancelled_by": (
+                    {
+                        "id": cancelled_by_id or None,
+                        "full_name": cancelled_by_profile.get("full_name"),
+                        "email": cancelled_by_profile.get("email"),
+                    }
+                    if cancelled_by_id or cancelled_by_profile
+                    else None
+                ),
+                "cancelled_at": row.get("cancelled_at"),
+                "cancel_reason": row.get("cancel_reason"),
+                "cancel_via": row.get("cancel_via"),
                 "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),
                 "accepted_at": row.get("accepted_at"),
@@ -1366,7 +1415,7 @@ async def upload_review_attachment(
     try:
         assignment_res = (
             supabase_admin.table("review_assignments")
-            .select("id, reviewer_id")
+            .select("id, reviewer_id, status")
             .eq("id", str(assignment_id))
             .single()
             .execute()
@@ -1374,6 +1423,8 @@ async def upload_review_attachment(
         assignment = getattr(assignment_res, "data", None) or {}
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
+        if str(assignment.get("status") or "").strip().lower() == "cancelled":
+            raise HTTPException(status_code=403, detail="Invitation revoked")
 
         is_admin = "admin" in (profile.get("roles") or [])
         if not is_admin and str(assignment.get("reviewer_id") or "") != str(current_user.get("id") or ""):

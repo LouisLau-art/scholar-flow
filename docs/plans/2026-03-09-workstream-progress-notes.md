@@ -61,6 +61,21 @@
   - 稿件详情页 `Reviewer Feedback Summary` 不再显示 `Score`
   - reviewer history modal 不再把 `report_score` 作为主展示文案
   - `DecisionPanel` 与 `ReviewReportComparison` 已移除 reviewer score 展示，改为仅基于提交状态与评论内容汇总
+- reviewer cancel 生命周期第二阶段第一批已落地：
+  - 已新增 migration：`supabase/migrations/20260309183000_review_assignment_cancel_audit.sql`
+  - `review_assignments` 新增/预留：
+    - `cancelled_at`
+    - `cancelled_by`
+    - `cancel_reason`
+    - `cancel_via`
+  - 已新增显式接口：
+    - `POST /api/v1/reviews/assignments/{assignment_id}/cancel`
+  - 行为收敛：
+    - `invited/opened/accepted` 现在走 `cancel`，不再复用 `delete-unassign`
+    - `DELETE /api/v1/reviews/assign/{assignment_id}` 仅允许 `selected` 早期移除
+    - 稿件详情页 `Reviewer Management` 已返回 cancel 审计字段
+    - reviewer history 已返回 cancel 审计字段
+    - `cancelled` assignment 会立即失去 reviewer 会话访问资格
 
 ## 已写计划与说明文档
 

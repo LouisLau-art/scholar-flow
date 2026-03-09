@@ -52,7 +52,16 @@ class _ReviewAssignmentsCompatQuery(_FakeQuery):
     def execute(self):
         if self.table == "review_assignments" and any(
             column in self.select_clause
-            for column in ("selected_by", "selected_via", "invited_by", "invited_via")
+            for column in (
+                "selected_by",
+                "selected_via",
+                "invited_by",
+                "invited_via",
+                "cancelled_at",
+                "cancelled_by",
+                "cancel_reason",
+                "cancel_via",
+            )
         ):
             raise RuntimeError("PGRST204: column review_assignments.selected_by does not exist")
         return super().execute()
@@ -169,6 +178,81 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
     assert invites[0]["latest_email_status"] == "sent"
     assert invites[0]["latest_email_at"] == "2026-02-01T00:00:12Z"
     assert [event["status"] for event in invites[0]["email_events"]] == ["sent", "queued"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_editor_detail_returns_cancel_audit_for_cancelled_assignment(
+    client,
+    auth_token,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setattr(editor_detail_api, "_get_signed_url", lambda *_args, **_kwargs: "https://example.com/signed")
+
+    fake_db = _FakeSupabase(
+        {
+            "manuscripts": [
+                {
+                    "id": "ms-cancelled",
+                    "title": "Cancelled Reviewer Manuscript",
+                    "status": "under_review",
+                    "owner_id": "owner-1",
+                    "editor_id": "editor-1",
+                    "file_path": "manuscripts/ms-cancelled/v1.pdf",
+                    "created_at": "2026-02-01T00:00:00Z",
+                    "updated_at": "2026-02-02T00:00:00Z",
+                    "journals": {"title": "Journal"},
+                }
+            ],
+            "invoices": [],
+            "manuscript_files": [],
+            "review_assignments": [
+                {
+                    "id": "ra-cancelled",
+                    "reviewer_id": "reviewer-1",
+                    "status": "cancelled",
+                    "due_at": "2026-03-20T00:00:00Z",
+                    "invited_at": "2026-03-09T12:00:00Z",
+                    "opened_at": "2026-03-09T12:10:00Z",
+                    "accepted_at": "2026-03-09T12:20:00Z",
+                    "declined_at": None,
+                    "decline_reason": None,
+                    "decline_note": None,
+                    "cancelled_at": "2026-03-09T13:00:00Z",
+                    "cancelled_by": "editor-2",
+                    "cancel_reason": "Enough reviews received",
+                    "cancel_via": "post_acceptance_cleanup",
+                    "created_at": "2026-03-09T12:00:00Z",
+                    "round_number": 2,
+                }
+            ],
+            "review_reports": [],
+            "email_logs": [],
+            "user_profiles": [
+                {"id": "owner-1", "full_name": "Owner User", "email": "owner@example.com"},
+                {"id": "editor-1", "full_name": "Editor User", "email": "editor@example.com"},
+                {"id": "editor-2", "full_name": "Cancelling Editor", "email": "cancel@example.com"},
+                {"id": "reviewer-1", "full_name": "Reviewer User", "email": "reviewer@example.com"},
+            ],
+        }
+    )
+    monkeypatch.setattr(editor_detail_api, "supabase_admin", fake_db)
+
+    res = await client.get(
+        "/api/v1/editor/manuscripts/ms-cancelled?skip_cards=true&include_heavy=true",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    invites = payload["data"].get("reviewer_invites") or []
+    assert len(invites) == 1
+    assert invites[0]["status"] == "cancelled"
+    assert invites[0]["cancelled_at"] == "2026-03-09T13:00:00Z"
+    assert invites[0]["cancel_reason"] == "Enough reviews received"
+    assert invites[0]["cancel_via"] == "post_acceptance_cleanup"
+    assert invites[0]["cancelled_by_name"] == "Cancelling Editor"
 
 
 @pytest.mark.integration

@@ -55,7 +55,7 @@ def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, lis
 
 def _load_reviewer_assignments_for_detail(manuscript_id: str) -> list[dict[str, Any]]:
     select_variants = (
-        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number,selected_by,selected_via,invited_by,invited_via",
+        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number,selected_by,selected_via,invited_by,invited_via,cancelled_at,cancelled_by,cancel_reason,cancel_via",
         "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number",
         "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,created_at,round_number",
         "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,created_at",
@@ -337,6 +337,9 @@ async def get_editor_manuscript_detail_impl(
         invited_by = str(row.get("invited_by") or "").strip()
         if invited_by:
             profile_ids.add(invited_by)
+        cancelled_by = str(row.get("cancelled_by") or "").strip()
+        if cancelled_by:
+            profile_ids.add(cancelled_by)
 
     profiles_map: dict[str, dict] = {}
     t0 = perf_counter()
@@ -619,11 +622,15 @@ async def get_editor_manuscript_detail_impl(
         latest_email = email_events[0] if email_events else {}
         selected_by_id = str(row.get("selected_by") or "").strip()
         invited_by_id = str(row.get("invited_by") or "").strip()
+        cancelled_by_id = str(row.get("cancelled_by") or "").strip()
         selected_by_profile = profiles_map.get(selected_by_id) or {}
         invited_by_profile = profiles_map.get(invited_by_id) or {}
+        cancelled_by_profile = profiles_map.get(cancelled_by_id) or {}
         status_raw = str(row.get("status") or "").lower()
         if status_raw in {"completed", "submitted"} or submitted_map.get(rid):
             invite_state = "submitted"
+        elif status_raw == "cancelled" or row.get("cancelled_at"):
+            invite_state = "cancelled"
         elif status_raw in {"declined", "decline"} or row.get("declined_at"):
             invite_state = "declined"
         elif status_raw in {"accepted", "agree", "agreed"} or row.get("accepted_at"):
@@ -651,6 +658,12 @@ async def get_editor_manuscript_detail_impl(
                 "invited_by_name": invited_by_profile.get("full_name"),
                 "invited_by_email": invited_by_profile.get("email"),
                 "invited_via": row.get("invited_via"),
+                "cancelled_by_id": cancelled_by_id or None,
+                "cancelled_by_name": cancelled_by_profile.get("full_name"),
+                "cancelled_by_email": cancelled_by_profile.get("email"),
+                "cancelled_at": row.get("cancelled_at"),
+                "cancel_reason": row.get("cancel_reason"),
+                "cancel_via": row.get("cancel_via"),
                 "due_at": row.get("due_at"),
                 "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),

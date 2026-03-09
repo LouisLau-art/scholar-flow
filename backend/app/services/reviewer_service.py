@@ -475,6 +475,8 @@ class ReviewerInviteService:
         status = str(assignment.get("status") or "").lower()
         if status == "completed":
             return "submitted"
+        if status == "cancelled" or assignment.get("cancelled_at"):
+            return "cancelled"
         if status == "selected":
             return "selected"
         if status == "accepted":
@@ -492,7 +494,7 @@ class ReviewerInviteService:
             resp = (
                 supabase_admin.table("review_assignments")
                 .select(
-                    "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note"
+                    "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, cancelled_at, cancelled_by, cancel_reason, cancel_via"
                 )
                 .eq("id", str(assignment_id))
                 .single()
@@ -504,6 +506,7 @@ class ReviewerInviteService:
                 "invited_at" in str(e).lower()
                 or "accepted_at" in str(e).lower()
                 or "declined_at" in str(e).lower()
+                or "cancelled_at" in str(e).lower()
             ):
                 resp = (
                     supabase_admin.table("review_assignments")
@@ -583,6 +586,8 @@ class ReviewerInviteService:
         journal_title = self._get_journal_title(journal_id=manuscript.get("journal_id"))
 
         state = self._derive_invite_state(assignment)
+        if state == "cancelled":
+            raise ValueError("Invitation revoked")
         submitted_at = self._get_submitted_at(manuscript_id=manuscript_id, reviewer_id=str(reviewer_id))
         timeline = InviteTimeline(
             invited_at=assignment.get("invited_at"),

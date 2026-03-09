@@ -17,6 +17,12 @@ DeclineReason = Literal[
     "insufficient_expertise",
     "other",
 ]
+CancelVia = Literal[
+    "auto_stage_exit",
+    "editor_manual_cancel",
+    "post_acceptance_cleanup",
+    "legacy",
+]
 
 
 class ReviewSubmission(BaseModel):
@@ -138,3 +144,9 @@ class InviteAcceptPayload(BaseModel):
 class InviteDeclinePayload(BaseModel):
     reason: DeclineReason
     note: str = Field(default="", max_length=1000)
+
+
+class AssignmentCancelPayload(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+    via: CancelVia = "editor_manual_cancel"
+    send_email: bool = False

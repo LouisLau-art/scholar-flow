@@ -127,3 +127,30 @@ async def test_reviewer_workspace_session_forbidden_on_mismatch(client: AsyncCli
             headers=headers,
         )
         assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_reviewer_workspace_session_forbidden_when_assignment_cancelled(
+    client: AsyncClient, auth_token: str, monkeypatch
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    assignment_id = "11111111-1111-1111-1111-111111111112"
+    mock = _mock_supabase_with_data(
+        {
+            "id": assignment_id,
+            "reviewer_id": "00000000-0000-0000-0000-000000000000",
+            "manuscript_id": "22222222-2222-2222-2222-222222222222",
+            "status": "cancelled",
+        }
+    )
+    mock.single.return_value = mock
+
+    with patch("app.api.v1.reviews.supabase_admin", mock):
+        resp = await client.post(
+            f"/api/v1/reviewer/assignments/{assignment_id}/session",
+            headers=headers,
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Invitation revoked"
