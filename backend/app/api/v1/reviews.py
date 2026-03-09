@@ -127,6 +127,139 @@ def _is_missing_assignment_audit_column_error(error: Exception | str) -> bool:
     )
 
 
+def _is_missing_review_assignment_column_error(error: Exception | str, *columns: str) -> bool:
+    text = str(error or "").lower()
+    return ("pgrst204" in text or "column" in text or "does not exist" in text) and any(
+        str(column or "").strip().lower() in text for column in columns
+    )
+
+
+def _load_assignment_for_send_email(assignment_id: str) -> dict[str, Any]:
+    select_variants = (
+        "id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, invited_by, invited_via, round_number, selected_by, selected_via, declined_at, decline_reason, decline_note",
+        "id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, round_number, declined_at, decline_reason, decline_note",
+        "id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, round_number, declined_at",
+        "id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, round_number",
+        "id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at",
+    )
+    last_exc: Exception | None = None
+    for select_clause in select_variants:
+        try:
+            res = (
+                supabase_admin.table("review_assignments")
+                .select(select_clause)
+                .eq("id", assignment_id)
+                .single()
+                .execute()
+            )
+            return getattr(res, "data", None) or {}
+        except Exception as exc:
+            last_exc = exc
+            if not _is_missing_review_assignment_column_error(
+                exc,
+                "selected_by",
+                "selected_via",
+                "invited_by",
+                "invited_via",
+                "round_number",
+                "declined_at",
+                "decline_reason",
+                "decline_note",
+            ):
+                raise
+    if last_exc:
+        raise last_exc
+    return {}
+
+
+def _insert_reinvite_assignment_attempt(
+    *,
+    assignment: dict[str, Any],
+    current_user_id: str,
+    invited_at_iso: str,
+) -> dict[str, Any]:
+    base_payload: dict[str, Any] = {
+        "manuscript_id": str(assignment.get("manuscript_id") or "").strip(),
+        "reviewer_id": str(assignment.get("reviewer_id") or "").strip(),
+        "status": "invited",
+        "due_at": assignment.get("due_at"),
+        "invited_at": invited_at_iso,
+        "last_reminded_at": None,
+        "opened_at": None,
+        "accepted_at": None,
+        "declined_at": None,
+        "decline_reason": None,
+        "decline_note": None,
+    }
+    round_number = assignment.get("round_number")
+    if round_number is not None:
+        base_payload["round_number"] = round_number
+    if current_user_id:
+        base_payload["selected_by"] = current_user_id
+        base_payload["invited_by"] = current_user_id
+    base_payload["selected_via"] = "system_reinvite"
+    base_payload["invited_via"] = "template_invitation"
+
+    payload_variants: list[dict[str, Any]] = [
+        dict(base_payload),
+        {
+            key: value
+            for key, value in base_payload.items()
+            if key not in {"selected_by", "selected_via", "invited_by", "invited_via"}
+        },
+        {
+            key: value
+            for key, value in base_payload.items()
+            if key
+            not in {
+                "selected_by",
+                "selected_via",
+                "invited_by",
+                "invited_via",
+                "opened_at",
+                "accepted_at",
+                "declined_at",
+                "decline_reason",
+                "decline_note",
+                "last_reminded_at",
+            }
+        },
+    ]
+    last_exc: Exception | None = None
+    for payload in payload_variants:
+        try:
+            res = supabase_admin.table("review_assignments").insert(payload).execute()
+            data = getattr(res, "data", None) or []
+            if isinstance(data, list) and data:
+                row = dict(data[0])
+            elif isinstance(data, dict) and data:
+                row = dict(data)
+            else:
+                row = {}
+            if not str(row.get("id") or "").strip():
+                raise HTTPException(status_code=500, detail="Failed to fetch reviewer re-invite assignment id")
+            return row
+        except Exception as exc:
+            last_exc = exc
+            if not _is_missing_review_assignment_column_error(
+                exc,
+                "selected_by",
+                "selected_via",
+                "invited_by",
+                "invited_via",
+                "opened_at",
+                "accepted_at",
+                "declined_at",
+                "decline_reason",
+                "decline_note",
+                "last_reminded_at",
+            ):
+                raise
+    if last_exc:
+        raise last_exc
+    raise HTTPException(status_code=500, detail="Failed to create reviewer re-invite attempt")
+
+
 def _build_assignment_email_idempotency_key(
     *,
     assignment_id: str,
@@ -729,25 +862,7 @@ async def send_assignment_email(
     if not template_row:
         raise HTTPException(status_code=404, detail=f"Email template not found: {template_key_raw}")
 
-    try:
-        assignment_res = (
-            supabase_admin.table("review_assignments")
-            .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, invited_by, invited_via")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-    except Exception as exc:
-        if not _is_missing_assignment_audit_column_error(exc):
-            raise
-        assignment_res = (
-            supabase_admin.table("review_assignments")
-            .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at")
-            .eq("id", str(assignment_id))
-            .single()
-            .execute()
-        )
-    assignment = getattr(assignment_res, "data", None) or {}
+    assignment = _load_assignment_for_send_email(str(assignment_id))
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     if str(assignment.get("status") or "").strip().lower() == "cancelled":
@@ -771,6 +886,26 @@ async def send_assignment_email(
         roles=roles,
     )
 
+    template_key = str(template_row.get("template_key") or "").strip() or _normalize_template_key(str(template_key_raw))
+    subject_template = str(template_row.get("subject_template") or "").strip()
+    body_html_template = str(template_row.get("body_html_template") or "").strip()
+    body_text_template = str(template_row.get("body_text_template") or "").strip() or None
+    if not subject_template or not body_html_template:
+        raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
+    event_type = str(template_row.get("event_type") or "none").strip().lower()
+    if event_type not in {"none", "invitation", "reminder"}:
+        event_type = "none"
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    current_user_id = str(current_user.get("id") or "").strip()
+    assignment_status = str(assignment.get("status") or "").strip().lower()
+    assignment_is_declined = assignment_status == "declined" or bool(assignment.get("declined_at"))
+    effective_assignment = assignment
+    if assignment_is_declined:
+        if event_type == "reminder":
+            raise HTTPException(status_code=409, detail="Cannot send reminder for declined assignment")
+
     reviewer_id = str(assignment.get("reviewer_id") or "").strip()
     reviewer_profile_res = (
         supabase_admin.table("user_profiles")
@@ -788,19 +923,16 @@ async def send_assignment_email(
     manuscript_id = str(manuscript.get("id") or "").strip()
     manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
     due_at = str(assignment.get("due_at") or "").strip()
+    if assignment_is_declined and event_type == "invitation":
+        effective_assignment = _insert_reinvite_assignment_attempt(
+            assignment=assignment,
+            current_user_id=current_user_id,
+            invited_at_iso=now_iso,
+        )
 
-    token = _safe_create_assignment_magic_link(
-        reviewer_id=reviewer_id,
-        manuscript_id=manuscript_id,
-        assignment_id=str(assignment_id),
-    )
-    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
-    review_url = (
-        f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
-    )
     journal_title = _resolve_journal_title_for_assignment(manuscript)
     context = {
-        "review_url": review_url,
+        "review_url": "",
         "reviewer_name": reviewer_name,
         "recipient_name": reviewer_name,
         "manuscript_title": manuscript_title,
@@ -809,41 +941,48 @@ async def send_assignment_email(
         "due_at": due_at or "",
         "due_date": str(due_at).split("T")[0] if due_at else "",
     }
-    template_key = str(template_row.get("template_key") or "").strip() or _normalize_template_key(str(template_key_raw))
-    subject_template = str(template_row.get("subject_template") or "").strip()
-    body_html_template = str(template_row.get("body_html_template") or "").strip()
-    body_text_template = str(template_row.get("body_text_template") or "").strip() or None
-    if not subject_template or not body_html_template:
-        raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
-    event_type = str(template_row.get("event_type") or "none").strip().lower()
-    if event_type not in {"none", "invitation", "reminder"}:
-        event_type = "none"
-    now_dt = datetime.now(timezone.utc)
+    effective_assignment_id = str(effective_assignment.get("id") or assignment_id).strip()
+    if not effective_assignment_id:
+        raise HTTPException(status_code=500, detail="Failed to resolve assignment id for reviewer email")
+    effective_due_at = str(effective_assignment.get("due_at") or due_at).strip()
     idempotency_key = str(body.get("idempotency_key") or "").strip() or _build_assignment_email_idempotency_key(
-        assignment_id=str(assignment_id),
+        assignment_id=effective_assignment_id,
         template_key=template_key,
         event_type=event_type,
         now=now_dt,
     )
     email_tags = _build_assignment_email_tags(
-        assignment_id=str(assignment_id),
+        assignment_id=effective_assignment_id,
         manuscript_id=manuscript_id,
         template_key=template_key,
         event_type=event_type,
         journal_title=journal_title,
     )
     email_headers = {
-        "X-SF-Assignment-ID": str(assignment_id),
+        "X-SF-Assignment-ID": effective_assignment_id,
         "X-SF-Manuscript-ID": manuscript_id,
         "X-SF-Template-Key": template_key,
         "X-SF-Event-Type": event_type,
     }
     audit_context = _build_assignment_email_audit_context(
-        assignment_id=str(assignment_id),
+        assignment_id=effective_assignment_id,
         manuscript_id=manuscript_id,
         event_type=event_type,
         idempotency_key=idempotency_key,
     )
+
+    token = _safe_create_assignment_magic_link(
+        reviewer_id=reviewer_id,
+        manuscript_id=manuscript_id,
+        assignment_id=effective_assignment_id,
+    )
+    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
+    review_url = (
+        f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
+    )
+    context["review_url"] = review_url
+    context["due_at"] = effective_due_at or ""
+    context["due_date"] = str(effective_due_at).split("T")[0] if effective_due_at else ""
     try:
         subject_preview = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
     except Exception:
@@ -856,7 +995,7 @@ async def send_assignment_email(
                 "subject": subject_preview,
                 "template_name": template_key,
                 "status": EmailStatus.QUEUED.value,
-                "assignment_id": str(assignment_id),
+                "assignment_id": effective_assignment_id,
                 "manuscript_id": manuscript_id,
                 "idempotency_key": idempotency_key,
                 "scene": _REVIEW_ASSIGNMENT_SCENE,
@@ -881,30 +1020,28 @@ async def send_assignment_email(
         audit_context=audit_context,
     )
 
-    now_iso = now_dt.isoformat()
     try:
         patch: dict[str, Any] = {}
-        assignment_status = str(assignment.get("status") or "").strip().lower()
-        current_user_id = str(current_user.get("id") or "").strip()
         if event_type == "invitation":
-            patch["invited_at"] = now_iso
-            if assignment_status in {"selected", "pending", "invited", "opened"}:
-                patch["status"] = "invited"
-            if current_user_id and not str(assignment.get("invited_by") or "").strip():
-                patch["invited_by"] = current_user_id
-            if not str(assignment.get("invited_via") or "").strip():
-                patch["invited_via"] = "template_invitation"
+            if not assignment_is_declined:
+                patch["invited_at"] = now_iso
+                if assignment_status in {"selected", "pending", "invited", "opened"}:
+                    patch["status"] = "invited"
+                if current_user_id and not str(assignment.get("invited_by") or "").strip():
+                    patch["invited_by"] = current_user_id
+                if not str(assignment.get("invited_via") or "").strip():
+                    patch["invited_via"] = "template_invitation"
         elif event_type == "reminder":
             patch["last_reminded_at"] = now_iso
         if patch:
             try:
-                supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+                supabase_admin.table("review_assignments").update(patch).eq("id", effective_assignment_id).execute()
             except Exception as exc:
                 if not _is_missing_assignment_audit_column_error(exc):
                     raise
                 fallback_patch = {key: value for key, value in patch.items() if key not in {"invited_by", "invited_via"}}
                 if fallback_patch:
-                    supabase_admin.table("review_assignments").update(fallback_patch).eq("id", str(assignment_id)).execute()
+                    supabase_admin.table("review_assignments").update(fallback_patch).eq("id", effective_assignment_id).execute()
 
         manuscript_status = str(manuscript.get("status") or "").strip().lower()
         if event_type == "invitation" and manuscript_status in {"pre_check", "resubmitted"}:
@@ -916,7 +1053,7 @@ async def send_assignment_email(
     return {
         "success": True,
         "data": {
-            "assignment_id": str(assignment_id),
+            "assignment_id": effective_assignment_id,
             "template_key": template_key,
             "template_display_name": template_row.get("display_name"),
             "event_type": event_type,

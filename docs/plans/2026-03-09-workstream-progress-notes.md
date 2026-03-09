@@ -36,6 +36,17 @@
 - reviewer 主链路 E2E 已新增两条跨浏览器回归：
   - 未接受邀请时，`/reviewer/workspace/[id]` 必须挡回 `/review/invite`
   - 编辑侧稿件详情页必须展示 reviewer delivery 状态，并可在 history modal 中看到 `sent / queued` 事件
+- decline 后重新邀请语义已完成第二阶段收敛：
+  - 对 `declined` assignment 再发 `invitation` 时，不再复用旧记录
+  - 后端会新建 fresh assignment attempt，并继承 `manuscript_id / reviewer_id / due_at / round_number`
+  - 新 attempt 会写入：
+    - `selected_by=当前编辑`
+    - `selected_via=system_reinvite`
+    - `invited_by=当前编辑`
+    - `invited_via=template_invitation`
+  - 新邀请邮件、magic link、`email_logs.assignment_id` 全部绑定 fresh assignment
+  - 旧 declined 记录保持终态，仅用于审计与 history 展示
+  - 对 `declined` assignment 发送 `reminder` 现在会被 409 阻断，避免把提醒发到终态记录
 
 ## 已写计划与说明文档
 
@@ -64,9 +75,8 @@
 
 ### P2
 
-2. re-invite / decline 后重新邀请语义进一步收敛
-3. manuscript detail 中 reviewer history 展示继续增强
-4. reviewer invitation history 继续向参考图靠拢：
+2. manuscript detail 中 reviewer history 展示继续增强
+3. reviewer invitation history 继续向参考图靠拢：
    - `added via` 友好文案
    - `invited by / reminder by` 更细粒度展示
    - 如需要，再补独立事件表而不是继续堆字段
@@ -91,6 +101,6 @@
 
 ## 下一步顺序
 
-1. 继续 reviewer invitation history / email evidence 链路
-2. 补 reviewer 主链路 E2E
-3. 视需要把相同的 roles 归一化防御收敛到其他依赖 `/api/v1/user/profile` 的页面
+1. 继续 reviewer invitation history / email evidence 展示细化
+2. 视需要把相同的 roles 归一化防御收敛到其他依赖 `/api/v1/user/profile` 的页面
+3. reviewer 功能收尾后，再评估是否需要独立 reviewer assignment events 表

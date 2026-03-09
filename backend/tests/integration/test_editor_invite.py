@@ -441,6 +441,277 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
 
 
 @pytest.mark.asyncio
+async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_attempt(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
+    declined_assignment_id = UUID("dddddddd-dddd-dddd-dddd-ddddddddddde")
+    fresh_assignment_id = UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaba")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbba")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(declined_assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "declined",
+                    "due_at": "2026-03-21T00:00:00+00:00",
+                    "invited_at": "2026-03-10T00:00:00+00:00",
+                    "last_reminded_at": None,
+                    "invited_by": editor_id,
+                    "invited_via": "template_invitation",
+                    "round_number": 1,
+                    "selected_by": editor_id,
+                    "selected_via": "editor_selection",
+                    "declined_at": "2026-03-11T00:00:00+00:00",
+                },
+                [
+                    {
+                        "id": str(fresh_assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "status": "invited",
+                    }
+                ],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Declined Reinvite Workflow",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+                [{}],
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
+            json={"template_key": "reviewer_invitation_standard"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    assert payload["data"]["event_type"] == "invitation"
+    assert payload["data"]["assignment_id"] == str(fresh_assignment_id)
+    assert send_mock.call_count == 1
+
+    reinsert_payload = supabase_admin._insert_calls["review_assignments"][0]
+    assert reinsert_payload["status"] == "invited"
+    assert reinsert_payload["manuscript_id"] == str(manuscript_id)
+    assert reinsert_payload["reviewer_id"] == str(reviewer_id)
+    assert reinsert_payload["selected_by"] == editor_id
+    assert reinsert_payload["selected_via"] == "system_reinvite"
+    assert reinsert_payload["invited_by"] == editor_id
+    assert reinsert_payload["invited_via"] == "template_invitation"
+    assert reinsert_payload["declined_at"] is None
+    assert reinsert_payload["decline_reason"] is None
+
+    email_log_payload = supabase_admin._insert_calls["email_logs"][0]
+    assert email_log_payload["assignment_id"] == str(fresh_assignment_id)
+    assert email_log_payload["manuscript_id"] == str(manuscript_id)
+    assert supabase_admin._update_calls.get("review_assignments") in (None, [])
+    manuscript_patch = supabase_admin._update_calls["manuscripts"][0]
+    assert manuscript_patch["status"] == "under_review"
+
+
+@pytest.mark.asyncio
+async def test_send_assignment_email_blocks_reminder_for_declined_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    declined_assignment_id = UUID("dddddddd-dddd-dddd-dddd-dddddddddddf")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaabb")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(declined_assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "declined",
+                    "due_at": "2026-03-21T00:00:00+00:00",
+                    "invited_at": "2026-03-10T00:00:00+00:00",
+                    "last_reminded_at": None,
+                    "invited_by": editor_id,
+                    "invited_via": "template_invitation",
+                    "round_number": 1,
+                    "selected_by": editor_id,
+                    "selected_via": "editor_selection",
+                    "declined_at": "2026-03-11T00:00:00+00:00",
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Declined Reminder Block",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                },
+            ],
+        }
+    )
+
+    send_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
+            json={"template_key": "reviewer_reminder_polite"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 409
+    assert "declined" in str(resp.json().get("detail", "")).lower()
+    assert send_mock.call_count == 0
+    assert supabase_admin._insert_calls.get("email_logs") in (None, [])
+    assert supabase_admin._insert_calls.get("review_assignments") in (None, [])
+
+
+@pytest.mark.asyncio
+async def test_send_assignment_email_declined_invitation_does_not_create_fresh_attempt_when_reviewer_email_missing(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    declined_assignment_id = UUID("dddddddd-dddd-dddd-dddd-ddddddddddda")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaabc")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(declined_assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "declined",
+                    "due_at": "2026-03-21T00:00:00+00:00",
+                    "invited_at": "2026-03-10T00:00:00+00:00",
+                    "last_reminded_at": None,
+                    "invited_by": editor_id,
+                    "invited_via": "template_invitation",
+                    "round_number": 1,
+                    "selected_by": editor_id,
+                    "selected_via": "editor_selection",
+                    "declined_at": "2026-03-11T00:00:00+00:00",
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Declined Missing Reviewer Email",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+            ],
+            "user_profiles": [
+                {"email": "", "full_name": "Reviewer Missing Email"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
+            json={"template_key": "reviewer_invitation_standard"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 400
+    assert "email" in str(resp.json().get("detail", "")).lower()
+    assert send_mock.call_count == 0
+    assert supabase_admin._insert_calls.get("review_assignments") in (None, [])
+    assert supabase_admin._insert_calls.get("email_logs") in (None, [])
+
+
+@pytest.mark.asyncio
 async def test_editor_assign_requires_assistant_editor_ownership_for_assignment(
     client: AsyncClient,
     auth_token: str,
