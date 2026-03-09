@@ -47,6 +47,10 @@
   - 新邀请邮件、magic link、`email_logs.assignment_id` 全部绑定 fresh assignment
   - 旧 declined 记录保持终态，仅用于审计与 history 展示
   - 对 `declined` assignment 发送 `reminder` 现在会被 409 阻断，避免把提醒发到终态记录
+- reviewer invitation history 展示已做一轮 UX 收敛：
+  - `added_via / invited_via` 不再直接显示底层 token，统一转成业务文案
+  - `Email Actions` 不再拼接原始字符串，改为按 `Invitation sent / Reminder failed` 这类可读事件展示
+  - declined reason 也已做人类可读映射，避免直接暴露内部枚举值
 
 ## 已写计划与说明文档
 
@@ -77,7 +81,6 @@
 
 2. manuscript detail 中 reviewer history 展示继续增强
 3. reviewer invitation history 继续向参考图靠拢：
-   - `added via` 友好文案
    - `invited by / reminder by` 更细粒度展示
    - 如需要，再补独立事件表而不是继续堆字段
 

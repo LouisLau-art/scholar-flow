@@ -20,6 +20,9 @@ import {
   allowedNext,
   buildAuthorResponseHistory,
   buildFileHubProps,
+  formatReviewerAuditVia,
+  formatReviewerDeclineReason,
+  formatReviewerEmailEventLabel,
   getNextActionCard,
   normalizeWorkflowStatus,
   type ManuscriptDetail,
@@ -1102,23 +1105,24 @@ export default function EditorManuscriptDetailPage() {
                       '—'
                     const invitedByLabel =
                       String(row.invited_by?.full_name || '').trim() || String(row.invited_by?.email || '').trim()
-                    const emailActions = (
+                    const addedViaLabel = formatReviewerAuditVia(row.added_via)
+                    const invitedViaLabel = formatReviewerAuditVia(row.invited_via)
+                    const emailActionLines =
                       emailEvents.length > 0
                         ? emailEvents.map((event) => {
-                            const status = String(event?.status || '').trim() || 'unknown'
-                            const eventType = String(event?.event_type || '').trim()
                             const createdAt = event?.created_at ? formatDateTimeLocal(event.created_at) : '—'
                             const error = String(event?.error_message || '').trim()
-                            return `${status}${eventType ? ` ${eventType}` : ''} ${createdAt}${error ? ` · ${error}` : ''}`
+                            return `${formatReviewerEmailEventLabel(event)} · ${createdAt}${error ? ` · ${error}` : ''}`
                           })
                         : [
                             invitedByLabel
-                              ? `Invited by ${invitedByLabel}${row.invited_via ? ` via ${row.invited_via}` : ''}`
-                              : '',
-                            row.invited_at ? `Invited ${formatDateTimeLocal(row.invited_at)}` : '',
-                            row.last_reminded_at ? `Reminded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
+                              ? `Invited by ${invitedByLabel}${invitedViaLabel ? ` via ${invitedViaLabel}` : ''}`
+                              : invitedViaLabel
+                                ? `Invited via ${invitedViaLabel}`
+                                : '',
+                            row.invited_at ? `Invitation recorded ${formatDateTimeLocal(row.invited_at)}` : '',
+                            row.last_reminded_at ? `Reminder recorded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
                           ].filter(Boolean)
-                    ).join(' · ')
                     const roundText =
                       typeof row.round_number === 'number'
                         ? `Round ${row.round_number}`
@@ -1134,7 +1138,9 @@ export default function EditorManuscriptDetailPage() {
                         : '—'
                     const decisionText =
                       row.assignment_status === 'declined'
-                        ? `${row.decline_reason || 'Declined'}${row.decline_note ? ` · ${row.decline_note}` : ''}`
+                        ? `${formatReviewerDeclineReason(row.decline_reason) || 'Declined'}${
+                            row.decline_note ? ` · ${row.decline_note}` : ''
+                          }`
                         : scoreText
                     return (
                       <tr key={rowKey} className="border-b border-border/60 last:border-0 align-top">
@@ -1149,8 +1155,18 @@ export default function EditorManuscriptDetailPage() {
                         </td>
                         <td className="px-3 py-2.5">{row.added_on ? formatDateTimeLocal(row.added_on) : '—'}</td>
                         <td className="px-3 py-2.5">{addedByLabel}</td>
-                        <td className="px-3 py-2.5">{row.added_via || '—'}</td>
-                        <td className="px-3 py-2.5">{emailActions || '—'}</td>
+                        <td className="px-3 py-2.5">{addedViaLabel || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {emailActionLines.length > 0 ? (
+                            <div className="space-y-1">
+                              {emailActionLines.map((line, lineIdx) => (
+                                <div key={`${rowKey}-email-line-${lineIdx}`}>{line}</div>
+                              ))}
+                            </div>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="px-3 py-2.5">
                           <div>{decisionText}</div>
                           <div className="text-xs text-muted-foreground">

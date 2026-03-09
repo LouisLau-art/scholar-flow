@@ -137,6 +137,72 @@ export function resolveReviewerInviteSummaryState(
   return 'selected'
 }
 
+function humanizeReviewerToken(raw: unknown): string | null {
+  const value = String(raw || '').trim()
+  if (!value) return null
+  return value
+    .split(/[_-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+export function formatReviewerAuditVia(raw: unknown): string | null {
+  const value = String(raw || '').trim().toLowerCase()
+  if (!value) return null
+  const mapping: Record<string, string> = {
+    editor_selection: 'Editor shortlist',
+    system_reinvite: 'Re-invite after decline',
+    manual_email: 'Manual email',
+    template_invitation: 'Invitation template',
+    template_reminder: 'Reminder template',
+    legacy: 'Legacy record',
+  }
+  return mapping[value] || humanizeReviewerToken(value)
+}
+
+export function formatReviewerDeclineReason(raw: unknown): string | null {
+  const value = String(raw || '').trim().toLowerCase()
+  if (!value) return null
+  const mapping: Record<string, string> = {
+    too_busy: 'Too busy',
+    out_of_scope: 'Out of scope',
+    conflict_of_interest: 'Conflict of interest',
+    cannot_meet_deadline: 'Cannot meet deadline',
+    other: 'Other',
+  }
+  return mapping[value] || humanizeReviewerToken(value)
+}
+
+export function formatReviewerEmailEventLabel(event: {
+  status?: string | null
+  event_type?: string | null
+} | null | undefined): string {
+  const status = String(event?.status || '').trim().toLowerCase()
+  const eventType = String(event?.event_type || '').trim().toLowerCase()
+  const eventLabel =
+    eventType === 'invitation'
+      ? 'Invitation'
+      : eventType === 'reminder'
+        ? 'Reminder'
+        : eventType
+          ? humanizeReviewerToken(eventType) || 'Email'
+          : 'Email'
+  const statusLabel =
+    status === 'queued'
+      ? 'queued'
+      : status === 'sent'
+        ? 'sent'
+        : status === 'failed'
+          ? 'failed'
+          : status === 'pending_retry'
+            ? 'pending retry'
+            : status
+              ? humanizeReviewerToken(status)?.toLowerCase() || 'updated'
+              : 'updated'
+  return `${eventLabel} ${statusLabel}`.trim()
+}
+
 export function normalizeResponseLetterText(raw: unknown): string {
   const source = String(raw || '').trim()
   if (!source) return ''

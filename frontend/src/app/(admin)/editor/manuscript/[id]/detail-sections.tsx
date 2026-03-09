@@ -15,6 +15,9 @@ import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 import type { ReviewEmailTemplateOption } from '@/types/email-template'
 
 import {
+  formatReviewerAuditVia,
+  formatReviewerDeclineReason,
+  formatReviewerEmailEventLabel,
   resolveReviewerInviteSummaryState,
   type AuthorResponseHistoryItem,
   type ManuscriptDetail,
@@ -440,7 +443,7 @@ function formatAuditActorLine(args: {
   via?: string | null
 }) {
   const actorLabel = String(args.actorName || '').trim() || String(args.actorEmail || '').trim()
-  const viaLabel = String(args.via || '').trim()
+  const viaLabel = formatReviewerAuditVia(args.via)
   if (actorLabel && viaLabel) return `${args.label} by ${actorLabel} via ${viaLabel}`
   if (actorLabel) return `${args.label} by ${actorLabel}`
   if (viaLabel) return `${args.label} via ${viaLabel}`
@@ -550,7 +553,7 @@ export function ReviewerManagementCard({
                         ) : null}
                         {inviteMeta.state === 'declined' && (invite?.decline_reason || invite?.decline_note) ? (
                           <div className="mt-1 text-xs text-muted-foreground">
-                            {String(invite?.decline_reason || '').trim() || 'declined'}
+                            {formatReviewerDeclineReason(invite?.decline_reason) || 'Declined'}
                             {invite?.decline_note ? ` · ${invite.decline_note}` : ''}
                           </div>
                         ) : null}
@@ -577,6 +580,19 @@ export function ReviewerManagementCard({
                           <div>Reminded: {remindedText}</div>
                           {selectedAudit ? <div>{selectedAudit}</div> : null}
                           {invitedAudit ? <div>{invitedAudit}</div> : null}
+                          {Array.isArray(invite?.email_events) && invite.email_events.length > 0 ? (
+                            <div className="pt-1 space-y-1 border-t border-border/60">
+                              {invite.email_events.slice(0, 2).map((event, eventIdx) => {
+                                const eventLabel = formatReviewerEmailEventLabel(event)
+                                const eventAt = event?.created_at ? formatDateTimeLocal(event.created_at) : '—'
+                                return (
+                                  <div key={`${assignmentId || idx}-event-${eventIdx}`}>
+                                    {eventLabel} · {eventAt}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : null}
                           {deliveryMeta.error ? <div className="text-destructive">Error: {deliveryMeta.error}</div> : null}
                         </div>
                       </TableCell>
