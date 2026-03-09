@@ -116,10 +116,50 @@ jobs:
           poll_interval_sec = int(os.environ.get("HF_RUNTIME_POLL_INTERVAL_SEC", "10"))
           restart_after_sec = int(os.environ.get("HF_RUNTIME_RESTART_AFTER_SEC", "240"))
           deploy_sha = os.environ.get("DEPLOY_SHA", "").strip()
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
 
           api = HfApi(token=os.environ["HF_TOKEN"])
           start = time.time()
           restart_attempted = False
+          last_stage = "-"
+          last_error_message = "-"
+          last_repo_sha = "-"
+          last_runtime_sha = "-"
+          last_health_status = "-"
+          last_health_body = "-"
+
+          def write_summary(status: str, detail: str) -> None:
+            if not summary_path:
+              return
+            lines = [
+              "## Hugging Face Deploy Gate",
+              "",
+              f"- Status: **{status}**",
+              f"- Space: `{repo_id}`",
+              f"- Deploy SHA: `{deploy_sha or '-'}`",
+              f"- Repo SHA: `{last_repo_sha}`",
+              f"- Runtime SHA: `{last_runtime_sha}`",
+              f"- Runtime Stage: `{last_stage}`",
+              f"- Restart Attempted: `{restart_attempted}`",
+              f"- Healthcheck URL: `{healthcheck_url}`",
+              f"- Healthcheck Status: `{last_health_status}`",
+              f"- Last Error: `{last_error_message}`",
+              "",
+              "### Detail",
+              "",
+              detail,
+            ]
+            if last_health_body and last_health_body != "-":
+              lines.extend([
+                "",
+                "### Healthcheck Body",
+                "",
+                "```text",
+                last_health_body[:500],
+                "```",
+              ])
+            with open(summary_path, "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
 
           def fetch_healthcheck(url: str) -> tuple[int | None, str]:
             try:
@@ -141,6 +181,10 @@ jobs:
             repo_sha = str(getattr(info, "sha", "") or "").strip()
             runtime_sha = str(raw.get("sha") or raw.get("raw", {}).get("sha") or "").strip()
             elapsed = int(time.time() - start)
+            last_stage = str(stage or "-")
+            last_error_message = error_message or "-"
+            last_repo_sha = repo_sha or "-"
+            last_runtime_sha = runtime_sha or "-"
 
             print(
               f"[deploy-hf] elapsed={elapsed}s stage={stage} repo_sha={repo_sha or '-'} "
@@ -148,6 +192,10 @@ jobs:
             )
 
             if stage in {"CONFIG_ERROR", "BUILD_ERROR", "RUNTIME_ERROR"}:
+              write_summary(
+                "failure",
+                f"HF runtime entered unrecoverable stage `{stage}`.",
+              )
               print(
                 f"[deploy-hf] unrecoverable runtime stage={stage} error={error_message or '-'}",
                 file=sys.stderr,
@@ -156,8 +204,14 @@ jobs:
 
             if stage == "RUNNING" and repo_sha and runtime_sha == repo_sha:
               status_code, body = fetch_healthcheck(healthcheck_url)
+              last_health_status = str(status_code) if status_code is not None else "-"
+              last_health_body = body or "-"
               print(f"[deploy-hf] healthcheck status={status_code} body={body[:200]}")
               if status_code == 200:
+                write_summary(
+                  "success",
+                  "HF runtime SHA converged to repo SHA and healthcheck returned `200`.",
+                )
                 print("[deploy-hf] runtime and healthcheck are ready")
                 sys.exit(0)
 
@@ -167,6 +221,10 @@ jobs:
               restart_attempted = True
 
             if elapsed >= timeout_sec:
+              write_summary(
+                "failure",
+                "Timed out while waiting for HF runtime to converge to repo SHA.",
+              )
               print("[deploy-hf] timeout waiting for HF runtime to converge", file=sys.stderr)
               sys.exit(1)
 
