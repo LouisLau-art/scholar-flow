@@ -43,6 +43,7 @@ export type ManuscriptDetail = {
     reviewer_name?: string | null
     reviewer_email?: string | null
     status: string
+    round_number?: number | null
     due_at?: string | null
     invited_at?: string | null
     opened_at?: string | null
@@ -51,6 +52,7 @@ export type ManuscriptDetail = {
     last_reminded_at?: string | null
     submitted_at?: string | null
     decline_reason?: string | null
+    decline_note?: string | null
   }> | null
   task_summary?: {
     open_tasks_count?: number

@@ -32,6 +32,7 @@ import {
   MetadataStaffCard,
   NextActionCard,
   PrecheckRoleQueueCard,
+  ReviewerManagementCard,
   ReviewerInviteSummaryCard,
   ReviewerFeedbackSummaryCard,
   TaskSlaSummaryCard,
@@ -862,6 +863,21 @@ export default function EditorManuscriptDetailPage() {
             onUploadCoverLetter={() => void refreshDetail({ force: true })}
           />
 
+          <ReviewerManagementCard
+            reviewerInvites={ms.reviewer_invites || []}
+            deferredLoaded={Boolean(ms.is_deferred_context_loaded)}
+            deferredLoading={deferredLoading}
+            loadError={deferredError}
+            onRetry={handleRetryDeferredContext}
+            canManageReviewerOutreach={capability.canManageReviewers}
+            sendingAssignmentId={sendingReviewerEmailAssignmentId}
+            emailTemplateOptions={reviewerEmailTemplates}
+            selectedTemplateByAssignment={selectedReviewerTemplateByAssignment}
+            onTemplateChange={handleReviewerTemplateChange}
+            onSendTemplateEmail={handleSendReviewerTemplateEmail}
+            onOpenHistory={handleOpenReviewerHistory}
+          />
+
           <AuthorResubmissionHistoryCard authorResponseHistory={authorResponseHistory} />
 
           <div className="h-[620px]">
@@ -890,13 +906,6 @@ export default function EditorManuscriptDetailPage() {
             deferredLoading={deferredLoading}
             loadError={deferredError}
             onRetry={handleRetryDeferredContext}
-            canManageReviewerOutreach={capability.canManageReviewers}
-            sendingAssignmentId={sendingReviewerEmailAssignmentId}
-            emailTemplateOptions={reviewerEmailTemplates}
-            selectedTemplateByAssignment={selectedReviewerTemplateByAssignment}
-            onTemplateChange={handleReviewerTemplateChange}
-            onSendTemplateEmail={handleSendReviewerTemplateEmail}
-            onOpenHistory={handleOpenReviewerHistory}
           />
 
           <ReviewerFeedbackSummaryCard
@@ -1074,9 +1083,10 @@ export default function EditorManuscriptDetailPage() {
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-3 py-2 text-left font-semibold">Manuscript</th>
                     <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-left font-semibold">Round / Due</th>
                     <th className="px-3 py-2 text-left font-semibold">Added On</th>
                     <th className="px-3 py-2 text-left font-semibold">Email Actions</th>
-                    <th className="px-3 py-2 text-left font-semibold">Score / Submitted</th>
+                    <th className="px-3 py-2 text-left font-semibold">Decision / Submitted</th>
                     <th className="px-3 py-2 text-left font-semibold">Manuscript Status</th>
                   </tr>
                 </thead>
@@ -1089,12 +1099,23 @@ export default function EditorManuscriptDetailPage() {
                     ]
                       .filter(Boolean)
                       .join(' · ')
+                    const roundText =
+                      typeof row.round_number === 'number'
+                        ? `Round ${row.round_number}`
+                        : row.round_number != null && Number.isFinite(Number(row.round_number))
+                          ? `Round ${Number(row.round_number)}`
+                          : '—'
+                    const dueText = row.due_at ? formatDateTimeLocal(row.due_at) : '—'
                     const scoreText =
                       typeof row.report_score === 'number'
                         ? `Score ${row.report_score}`
                         : row.report_status
                         ? String(row.report_status)
                         : '—'
+                    const decisionText =
+                      row.assignment_status === 'declined'
+                        ? `${row.decline_reason || 'Declined'}${row.decline_note ? ` · ${row.decline_note}` : ''}`
+                        : scoreText
                     return (
                       <tr key={rowKey} className="border-b border-border/60 last:border-0 align-top">
                         <td className="px-3 py-2.5">
@@ -1102,10 +1123,14 @@ export default function EditorManuscriptDetailPage() {
                           {row.manuscript_id ? <div className="text-xs text-muted-foreground">{row.manuscript_id}</div> : null}
                         </td>
                         <td className="px-3 py-2.5">{row.assignment_status || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <div>{roundText}</div>
+                          <div className="text-xs text-muted-foreground">Due {dueText}</div>
+                        </td>
                         <td className="px-3 py-2.5">{row.added_on ? formatDateTimeLocal(row.added_on) : '—'}</td>
                         <td className="px-3 py-2.5">{emailActions || '—'}</td>
                         <td className="px-3 py-2.5">
-                          <div>{scoreText}</div>
+                          <div>{decisionText}</div>
                           <div className="text-xs text-muted-foreground">
                             {row.report_submitted_at ? formatDateTimeLocal(row.report_submitted_at) : '—'}
                           </div>

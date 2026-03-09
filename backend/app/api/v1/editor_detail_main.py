@@ -420,12 +420,28 @@ async def get_editor_manuscript_detail_impl(
     # 从同一份 review_reports 行中同时构建:
     # - reviewer report 附件列表
     # - reviewer 提交时间 submitted_map（用于 Reviewer Invite Timeline）
+    reviewer_assignment_counts: dict[str, int] = {}
+    for row in ra_rows:
+        rid = str(row.get("reviewer_id") or "").strip()
+        if not rid:
+            continue
+        reviewer_assignment_counts[rid] = reviewer_assignment_counts.get(rid, 0) + 1
+
     submitted_map: dict[str, str] = {}
     for row in rr_rows:
         rid = str(row.get("reviewer_id") or "").strip()
         status_raw = str(row.get("status") or "").lower()
         created_at = str(row.get("created_at") or "")
-        if rid and status_raw == "completed" and rid not in submitted_map and created_at:
+        # 中文注释: review_reports 当前没有 assignment_id。
+        # 当同一 reviewer 在同一稿件存在多轮 assignment 时，无法安全判断这份报告属于哪一轮，
+        # 宁可不在详情页伪装成某一轮已提交，也不要把 submitted_at 错贴到所有轮次上。
+        if (
+            rid
+            and reviewer_assignment_counts.get(rid, 0) == 1
+            and status_raw == "completed"
+            and rid not in submitted_map
+            and created_at
+        ):
             submitted_map[rid] = created_at
 
     for row in rr_rows:
@@ -537,6 +553,7 @@ async def get_editor_manuscript_detail_impl(
                 "reviewer_name": prof.get("full_name"),
                 "reviewer_email": prof.get("email"),
                 "status": invite_state,
+                "round_number": row.get("round_number"),
                 "due_at": row.get("due_at"),
                 "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),

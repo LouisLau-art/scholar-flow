@@ -25,6 +25,8 @@ export type ReviewerHistoryItem = {
   opened_at?: string | null
   accepted_at?: string | null
   declined_at?: string | null
+  decline_reason?: string | null
+  decline_note?: string | null
   last_reminded_at?: string | null
   due_at?: string | null
   report_status?: string | null

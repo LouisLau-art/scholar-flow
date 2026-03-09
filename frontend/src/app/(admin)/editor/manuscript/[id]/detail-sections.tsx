@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDateLocal, formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 import type { ReviewEmailTemplateOption } from '@/types/email-template'
@@ -309,7 +310,76 @@ type ReviewerInviteSummaryCardProps = {
   onOpenHistory?: (args: { reviewerId: string; reviewerLabel: string }) => void
 }
 
-export function ReviewerInviteSummaryCard({
+type ReviewerInviteRow = NonNullable<ManuscriptDetail['reviewer_invites']>[number]
+
+const REVIEWER_STATE_LABELS = {
+  selected: 'Selected',
+  invited: 'Invited',
+  opened: 'Opened',
+  accepted: 'Accepted',
+  submitted: 'Submitted',
+  declined: 'Declined',
+} as const
+
+function resolveInviteStateMeta(invite: ReviewerInviteRow | null | undefined) {
+  const state = resolveReviewerInviteSummaryState(invite)
+  const stateAt =
+    state === 'invited'
+      ? invite?.invited_at || invite?.opened_at || null
+      : state === 'opened'
+        ? invite?.opened_at || invite?.invited_at || null
+        : state === 'accepted'
+          ? invite?.accepted_at || null
+          : state === 'submitted'
+            ? invite?.accepted_at || invite?.submitted_at || null
+            : state === 'declined'
+              ? invite?.declined_at || null
+              : null
+
+  return {
+    state,
+    label: REVIEWER_STATE_LABELS[state],
+    stateAt,
+    className:
+      state === 'declined'
+        ? 'font-medium text-destructive'
+        : state === 'selected'
+          ? 'font-medium text-muted-foreground'
+          : 'font-medium text-foreground',
+  }
+}
+
+function resolveReviewProgressMeta(invite: ReviewerInviteRow | null | undefined) {
+  const state = resolveReviewerInviteSummaryState(invite)
+  if (state === 'submitted') {
+    return {
+      label: 'Submitted',
+      at: invite?.submitted_at || null,
+      className: 'font-medium text-foreground',
+    }
+  }
+  if (state === 'accepted') {
+    return {
+      label: 'Not started',
+      at: invite?.accepted_at || null,
+      className: 'font-medium text-muted-foreground',
+    }
+  }
+  if (state === 'declined') {
+    return {
+      label: 'Declined',
+      at: invite?.declined_at || null,
+      className: 'font-medium text-destructive',
+    }
+  }
+  return {
+    label: 'Pending response',
+    at: invite?.opened_at || invite?.invited_at || null,
+    className: 'font-medium text-muted-foreground',
+  }
+}
+
+export function ReviewerManagementCard({
   reviewerInvites,
   deferredLoaded = true,
   deferredLoading = false,
@@ -329,35 +399,34 @@ export function ReviewerInviteSummaryCard({
   return (
     <Card className="shadow-sm border-border">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Review Summary</CardTitle>
+        <CardTitle className="text-base">Reviewer Management</CardTitle>
       </CardHeader>
       <CardContent>
         {loadError ? (
           <div className="space-y-2">
             <div className="text-sm text-destructive">{loadError}</div>
-            {onRetry ? (
-              <Button size="sm" variant="outline" onClick={onRetry} data-testid="reviewer-summary-retry">
-                Retry
-              </Button>
-            ) : null}
+            {onRetry ? <Button size="sm" variant="outline" onClick={onRetry} data-testid="reviewer-management-retry">Retry</Button> : null}
           </div>
         ) : !deferredLoaded ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {deferredLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Reviewer summary loading...
+            Reviewer management loading...
           </div>
         ) : rows.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No reviewers assigned yet.</div>
+          <div className="text-sm text-muted-foreground">No reviewers selected yet.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[360px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-2 py-2 text-left font-semibold">Reviewer Name</th>
-                  <th className="px-2 py-2 text-left font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="overflow-hidden rounded-md border border-border/70">
+            <Table className="min-w-[980px]">
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead>Reviewer</TableHead>
+                  <TableHead>Invite Status</TableHead>
+                  <TableHead>Review Status</TableHead>
+                  <TableHead>Timeline</TableHead>
+                  <TableHead className="w-[320px]">Outreach</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map((invite, idx) => {
                   const assignmentId = String(invite?.id || '').trim()
                   const reviewerId = String(invite?.reviewer_id || '').trim()
@@ -365,60 +434,67 @@ export function ReviewerInviteSummaryCard({
                     String(invite?.reviewer_name || '').trim() ||
                     String(invite?.reviewer_email || '').trim() ||
                     `Reviewer ${idx + 1}`
-                  const state = resolveReviewerInviteSummaryState(invite)
-                  const stateLabelMap = {
-                    selected: 'Selected',
-                    invited: 'Invited',
-                    opened: 'Opened',
-                    accepted: 'Accepted',
-                    submitted: 'Submitted',
-                    declined: 'Declined',
-                  } as const
-                  const stateLabel = stateLabelMap[state]
-                  const stateAt =
-                    state === 'invited'
-                      ? invite?.invited_at || invite?.opened_at || null
-                      : state === 'opened'
-                        ? invite?.opened_at || invite?.invited_at || null
-                        : state === 'accepted'
-                        ? invite?.accepted_at || invite?.submitted_at || null
-                        : state === 'submitted'
-                          ? invite?.submitted_at || invite?.accepted_at || null
-                          : state === 'declined'
-                          ? invite?.declined_at || null
-                          : null
-                  const dueText = invite?.due_at ? ` (Due ${formatDateLocal(invite.due_at)})` : ''
-                  const reasonText = state === 'declined' ? String(invite?.decline_reason || '').trim() : ''
+                  const inviteMeta = resolveInviteStateMeta(invite)
+                  const reviewMeta = resolveReviewProgressMeta(invite)
                   const invitedText = invite?.invited_at ? formatDateTimeLocal(invite.invited_at) : '—'
+                  const openedText = invite?.opened_at ? formatDateTimeLocal(invite.opened_at) : '—'
                   const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
+                  const roundNumber =
+                    typeof invite?.round_number === 'number'
+                      ? invite.round_number
+                      : invite?.round_number != null
+                        ? Number(invite.round_number)
+                        : null
 
                   return (
-                    <tr key={String(invite?.id || `row-${idx}`)} className="border-b border-border/60 last:border-0">
-                      <td className="px-2 py-2.5 align-top">
-                        <div className="font-medium text-foreground">{reviewerLabel}</div>
-                      </td>
-                      <td className="px-2 py-2.5 align-top">
-                        <div
-                          className={
-                            state === 'declined'
-                              ? 'font-medium text-destructive'
-                              : state === 'selected'
-                                ? 'font-medium text-muted-foreground'
-                                : 'font-medium text-foreground'
-                          }
-                        >
-                          {stateLabel}
-                          {stateAt ? ` ${formatDateLocal(stateAt)}` : ''}
-                          {dueText}
+                    <TableRow key={String(invite?.id || `row-${idx}`)} className="align-top">
+                      <TableCell className="align-top">
+                        <div className="space-y-1">
+                          <div className="font-medium text-foreground">{reviewerLabel}</div>
+                          <div className="text-xs text-muted-foreground">{invite?.reviewer_email || 'No email available'}</div>
+                          {Number.isFinite(roundNumber as number) ? (
+                            <Badge variant="outline" className="mt-1">
+                              Round {roundNumber}
+                            </Badge>
+                          ) : null}
                         </div>
-                        {reasonText ? <div className="mt-0.5 text-xs text-muted-foreground">{reasonText}</div> : null}
-                        {canManageReviewerOutreach ? (
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            Email: invited {invitedText} · reminded {remindedText}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className={inviteMeta.className}>
+                          {inviteMeta.label}
+                          {inviteMeta.stateAt ? ` · ${formatDateLocal(inviteMeta.stateAt)}` : ''}
+                        </div>
+                        {invite?.due_at ? (
+                          <div className="mt-1 text-xs text-muted-foreground">Due {formatDateLocal(invite.due_at)}</div>
+                        ) : null}
+                        {inviteMeta.state === 'declined' && (invite?.decline_reason || invite?.decline_note) ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {String(invite?.decline_reason || '').trim() || 'declined'}
+                            {invite?.decline_note ? ` · ${invite.decline_note}` : ''}
                           </div>
                         ) : null}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className={reviewMeta.className}>
+                          {reviewMeta.label}
+                          {reviewMeta.at ? ` · ${formatDateLocal(reviewMeta.at)}` : ''}
+                        </div>
+                        {invite?.submitted_at ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Report submitted {formatDateTimeLocal(invite.submitted_at)}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div>Invited: {invitedText}</div>
+                          <div>Opened: {openedText}</div>
+                          <div>Reminded: {remindedText}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top">
                         {canManageReviewerOutreach && assignmentId ? (
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="flex flex-col gap-2">
                             {hasTemplateOptions ? (
                               <Select
                                 value={
@@ -431,16 +507,12 @@ export function ReviewerInviteSummaryCard({
                                   onTemplateChange?.({ assignmentId, templateKey: value })
                                 }}
                               >
-                                <SelectTrigger className="h-8 w-[220px] text-xs">
+                                <SelectTrigger className="h-8 w-full text-xs">
                                   <SelectValue placeholder="Select email template" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {emailTemplateOptions.map((template) => (
-                                    <SelectItem
-                                      key={template.template_key}
-                                      value={template.template_key}
-                                      className="text-xs"
-                                    >
+                                    <SelectItem key={template.template_key} value={template.template_key} className="text-xs">
                                       {template.display_name}
                                     </SelectItem>
                                   ))}
@@ -449,62 +521,123 @@ export function ReviewerInviteSummaryCard({
                             ) : (
                               <div className="text-xs text-muted-foreground">No active email templates.</div>
                             )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 px-2.5 text-xs"
-                              disabled={
-                                !reviewerId ||
-                                sendingAssignmentId === assignmentId ||
-                                !(
-                                  selectedTemplateByAssignment[assignmentId] ||
-                                  emailTemplateOptions[0]?.template_key
-                                )
-                              }
-                              onClick={() =>
-                                onSendTemplateEmail?.({
-                                  assignmentId,
-                                  reviewerId,
-                                  templateKey:
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 text-xs"
+                                disabled={
+                                  !reviewerId ||
+                                  sendingAssignmentId === assignmentId ||
+                                  !(
                                     selectedTemplateByAssignment[assignmentId] ||
-                                    emailTemplateOptions[0]?.template_key ||
-                                    '',
-                                })
-                              }
-                              data-testid={`reviewer-send-template-${assignmentId}`}
-                            >
-                              {sendingAssignmentId === assignmentId ? (
-                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Mail className="mr-1 h-3.5 w-3.5" />
-                              )}
-                              Send Email
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2.5 text-xs"
-                              disabled={!reviewerId}
-                              onClick={() =>
-                                onOpenHistory?.({
-                                  reviewerId,
-                                  reviewerLabel,
-                                })
-                              }
-                              data-testid={`reviewer-history-${assignmentId}`}
-                            >
-                              <History className="mr-1 h-3.5 w-3.5" />
-                              History
-                            </Button>
+                                    emailTemplateOptions[0]?.template_key
+                                  )
+                                }
+                                onClick={() =>
+                                  onSendTemplateEmail?.({
+                                    assignmentId,
+                                    reviewerId,
+                                    templateKey:
+                                      selectedTemplateByAssignment[assignmentId] ||
+                                      emailTemplateOptions[0]?.template_key ||
+                                      '',
+                                  })
+                                }
+                                data-testid={`reviewer-send-template-${assignmentId}`}
+                              >
+                                {sendingAssignmentId === assignmentId ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Mail className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                Send Email
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2.5 text-xs"
+                                disabled={!reviewerId}
+                                onClick={() => onOpenHistory?.({ reviewerId, reviewerLabel })}
+                                data-testid={`reviewer-history-${assignmentId}`}
+                              >
+                                <History className="mr-1 h-3.5 w-3.5" />
+                                History
+                              </Button>
+                            </div>
                           </div>
-                        ) : null}
-                      </td>
-                    </tr>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">View only</div>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export function ReviewerInviteSummaryCard({
+  reviewerInvites,
+  deferredLoaded = true,
+  deferredLoading = false,
+  loadError = null,
+  onRetry,
+}: ReviewerInviteSummaryCardProps) {
+  const rows = Array.isArray(reviewerInvites) ? reviewerInvites : []
+  const counts = rows.reduce(
+    (acc, invite) => {
+      const state = resolveReviewerInviteSummaryState(invite)
+      acc[state] += 1
+      return acc
+    },
+    {
+      selected: 0,
+      invited: 0,
+      opened: 0,
+      accepted: 0,
+      submitted: 0,
+      declined: 0,
+    } satisfies Record<keyof typeof REVIEWER_STATE_LABELS, number>
+  )
+
+  return (
+    <Card className="shadow-sm border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Review Summary</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loadError ? (
+          <div className="space-y-2">
+            <div className="text-sm text-destructive">{loadError}</div>
+            {onRetry ? <Button size="sm" variant="outline" onClick={onRetry} data-testid="reviewer-summary-retry">Retry</Button> : null}
+          </div>
+        ) : !deferredLoaded ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {deferredLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Reviewer summary loading...
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No reviewers assigned yet.</div>
+        ) : (
+          <>
+            <div className="text-xs text-muted-foreground">{rows.length} total reviewer records</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {Object.entries(REVIEWER_STATE_LABELS).map(([state, label]) => (
+                <div key={state} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
+                    {counts[state as keyof typeof counts]}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

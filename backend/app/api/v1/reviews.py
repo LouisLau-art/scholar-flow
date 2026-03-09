@@ -843,7 +843,7 @@ async def get_reviewer_history(
     query = (
         supabase_admin.table("review_assignments")
         .select(
-            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, last_reminded_at, created_at, round_number"
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number"
         )
         .eq("reviewer_id", reviewer_id_str)
         .order("created_at", desc=True)
@@ -891,6 +891,13 @@ async def get_reviewer_history(
     if not filtered_rows:
         return {"success": True, "data": []}
 
+    assignment_counts_by_manuscript: dict[str, int] = {}
+    for row in filtered_rows:
+        mid = str(row.get("manuscript_id") or "").strip()
+        if not mid:
+            continue
+        assignment_counts_by_manuscript[mid] = assignment_counts_by_manuscript.get(mid, 0) + 1
+
     report_map: dict[str, dict[str, Any]] = {}
     try:
         rr_res = (
@@ -903,7 +910,7 @@ async def get_reviewer_history(
         )
         for row in (getattr(rr_res, "data", None) or []):
             mid = str(row.get("manuscript_id") or "").strip()
-            if mid and mid not in report_map:
+            if mid and assignment_counts_by_manuscript.get(mid, 0) == 1 and mid not in report_map:
                 report_map[mid] = row
     except Exception:
         report_map = {}
@@ -927,6 +934,8 @@ async def get_reviewer_history(
                 "opened_at": row.get("opened_at"),
                 "accepted_at": row.get("accepted_at"),
                 "declined_at": row.get("declined_at"),
+                "decline_reason": row.get("decline_reason"),
+                "decline_note": row.get("decline_note"),
                 "last_reminded_at": row.get("last_reminded_at"),
                 "due_at": row.get("due_at"),
                 "report_status": report.get("status"),
