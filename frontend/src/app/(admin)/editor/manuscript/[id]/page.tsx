@@ -1093,12 +1093,21 @@ export default function EditorManuscriptDetailPage() {
                 <tbody>
                   {reviewerHistoryRows.map((row, idx) => {
                     const rowKey = String(row.assignment_id || `history-${idx}`)
-                    const emailActions = [
-                      row.invited_at ? `Invited ${formatDateTimeLocal(row.invited_at)}` : '',
-                      row.last_reminded_at ? `Reminded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')
+                    const emailEvents = Array.isArray(row.email_events) ? row.email_events : []
+                    const emailActions = (
+                      emailEvents.length > 0
+                        ? emailEvents.map((event) => {
+                            const status = String(event?.status || '').trim() || 'unknown'
+                            const eventType = String(event?.event_type || '').trim()
+                            const createdAt = event?.created_at ? formatDateTimeLocal(event.created_at) : '—'
+                            const error = String(event?.error_message || '').trim()
+                            return `${status}${eventType ? ` ${eventType}` : ''} ${createdAt}${error ? ` · ${error}` : ''}`
+                          })
+                        : [
+                            row.invited_at ? `Invited ${formatDateTimeLocal(row.invited_at)}` : '',
+                            row.last_reminded_at ? `Reminded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
+                          ].filter(Boolean)
+                    ).join(' · ')
                     const roundText =
                       typeof row.round_number === 'number'
                         ? `Round ${row.round_number}`

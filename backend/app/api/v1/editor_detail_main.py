@@ -14,6 +14,45 @@ from app.models.manuscript import ManuscriptStatus, normalize_status
 logger = logging.getLogger("scholarflow.editor_detail_main")
 
 
+def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "assignment_id": row.get("assignment_id"),
+        "manuscript_id": row.get("manuscript_id"),
+        "status": str(row.get("status") or "").strip().lower() or None,
+        "event_type": str(row.get("event_type") or "").strip().lower() or None,
+        "template_name": row.get("template_name"),
+        "created_at": row.get("created_at"),
+        "error_message": row.get("error_message"),
+        "provider_id": row.get("provider_id"),
+        "idempotency_key": row.get("idempotency_key"),
+    }
+
+
+def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    normalized_ids = [str(item or "").strip() for item in assignment_ids if str(item or "").strip()]
+    if not normalized_ids:
+        return {}
+    try:
+        rows = (
+            runtime.supabase_admin.table("email_logs")
+            .select(
+                "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+            )
+            .in_("assignment_id", normalized_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        out: dict[str, list[dict[str, Any]]] = {}
+        for row in (getattr(rows, "data", None) or []):
+            assignment_id = str(row.get("assignment_id") or "").strip()
+            if not assignment_id:
+                continue
+            out.setdefault(assignment_id, []).append(_serialize_assignment_email_event(row))
+        return out
+    except Exception:
+        return {}
+
+
 async def get_editor_manuscript_detail_impl(
     request: Request,
     id: str,
@@ -71,6 +110,7 @@ async def get_editor_manuscript_detail_impl(
     mf_rows: list[dict[str, Any]] = []
     rr_rows: list[dict[str, Any]] = []
     ra_rows: list[dict[str, Any]] = []
+    email_log_rows: list[dict[str, Any]] = []
     ms["latest_author_response_letter"] = None
     ms["latest_author_response_submitted_at"] = None
     ms["latest_author_response_round"] = None
@@ -86,6 +126,7 @@ async def get_editor_manuscript_detail_impl(
             mf_rows = list(heavy_ctx.get("manuscript_files") or [])
             rr_rows = list(heavy_ctx.get("review_reports") or [])
             ra_rows = list(heavy_ctx.get("review_assignments") or [])
+            email_log_rows = list(heavy_ctx.get("email_logs") or [])
             ms["latest_author_response_letter"] = heavy_ctx.get("latest_author_response_letter")
             ms["latest_author_response_submitted_at"] = heavy_ctx.get("latest_author_response_submitted_at")
             ms["latest_author_response_round"] = heavy_ctx.get("latest_author_response_round")
@@ -94,6 +135,7 @@ async def get_editor_manuscript_detail_impl(
             timings["review_reports"] = 0.0
             timings["revisions"] = 0.0
             timings["review_assignments"] = 0.0
+            timings["email_logs"] = 0.0
         else:
             _mark("heavy_ctx_cache", t0)
             # Feature 033: 内部文件（cover letter / editor peer review attachments）
@@ -154,12 +196,20 @@ async def get_editor_manuscript_detail_impl(
                 logger.warning("[ReviewerInvites] load failed (ignored): %s", e)
             _mark("review_assignments", t0)
 
+            t0 = perf_counter()
+            assignment_ids = [str(row.get("id") or "").strip() for row in ra_rows if str(row.get("id") or "").strip()]
+            email_events_map = _load_assignment_email_events(assignment_ids=assignment_ids)
+            for assignment_id in assignment_ids:
+                email_log_rows.extend(email_events_map.get(assignment_id, []))
+            _mark("email_logs", t0)
+
             runtime._detail_heavy_block_cache.set(
                 heavy_cache_key,
                 {
                     "manuscript_files": mf_rows,
                     "review_reports": rr_rows,
                     "review_assignments": ra_rows,
+                    "email_logs": email_log_rows,
                     "latest_author_response_letter": ms.get("latest_author_response_letter"),
                     "latest_author_response_submitted_at": ms.get("latest_author_response_submitted_at"),
                     "latest_author_response_round": ms.get("latest_author_response_round"),
@@ -172,6 +222,7 @@ async def get_editor_manuscript_detail_impl(
         timings["review_reports"] = 0.0
         timings["revisions"] = 0.0
         timings["review_assignments"] = 0.0
+        timings["email_logs"] = 0.0
 
     # 预审时间线
     tl_rows: list[dict[str, Any]] = []
@@ -529,9 +580,18 @@ async def get_editor_manuscript_detail_impl(
 
     # Feature 037: Reviewer invite timeline（Editor 可见）
     ms["reviewer_invites"] = []
+    email_events_by_assignment: dict[str, list[dict[str, Any]]] = {}
+    for row in email_log_rows:
+        assignment_id = str(row.get("assignment_id") or "").strip()
+        if not assignment_id:
+            continue
+        email_events_by_assignment.setdefault(assignment_id, []).append(row)
     for row in ra_rows:
         rid = str(row.get("reviewer_id") or "").strip()
         prof = profiles_map.get(rid) or {}
+        assignment_id = str(row.get("id") or "").strip()
+        email_events = email_events_by_assignment.get(assignment_id, [])
+        latest_email = email_events[0] if email_events else {}
         status_raw = str(row.get("status") or "").lower()
         if status_raw in {"completed", "submitted"} or submitted_map.get(rid):
             invite_state = "submitted"
@@ -563,6 +623,10 @@ async def get_editor_manuscript_detail_impl(
                 "submitted_at": submitted_map.get(rid),
                 "decline_reason": row.get("decline_reason"),
                 "decline_note": row.get("decline_note"),
+                "latest_email_status": latest_email.get("status"),
+                "latest_email_at": latest_email.get("created_at"),
+                "latest_email_error": latest_email.get("error_message"),
+                "email_events": email_events,
             }
         )
 

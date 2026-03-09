@@ -91,6 +91,30 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
                     "created_at": "2026-02-05T00:00:00Z",
                 }
             ],
+            "email_logs": [
+                {
+                    "assignment_id": "ra-1",
+                    "manuscript_id": "ms-1",
+                    "template_name": "reviewer_invitation_standard",
+                    "status": "sent",
+                    "event_type": "invitation",
+                    "created_at": "2026-02-01T00:00:12Z",
+                    "error_message": None,
+                    "provider_id": "email-1",
+                    "idempotency_key": "reviewer-invitation/ra-1",
+                },
+                {
+                    "assignment_id": "ra-1",
+                    "manuscript_id": "ms-1",
+                    "template_name": "reviewer_invitation_standard",
+                    "status": "queued",
+                    "event_type": "invitation",
+                    "created_at": "2026-02-01T00:00:10Z",
+                    "error_message": None,
+                    "provider_id": None,
+                    "idempotency_key": "reviewer-invitation/ra-1",
+                },
+            ],
             "user_profiles": [
                 {"id": "owner-1", "full_name": "Owner User", "email": "owner@example.com"},
                 {"id": "editor-1", "full_name": "Editor User", "email": "editor@example.com"},
@@ -112,6 +136,9 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
     assert invites[0]["status"] == "submitted"
     assert invites[0]["reviewer_name"] == "Reviewer User"
     assert invites[0]["submitted_at"] == "2026-02-05T00:00:00Z"
+    assert invites[0]["latest_email_status"] == "sent"
+    assert invites[0]["latest_email_at"] == "2026-02-01T00:00:12Z"
+    assert [event["status"] for event in invites[0]["email_events"]] == ["sent", "queued"]
 
 
 @pytest.mark.integration

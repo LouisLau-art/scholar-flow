@@ -49,6 +49,15 @@ describe('Reviewer summary cards', () => {
             status: 'accepted',
             accepted_at: '2026-03-06T00:00:00Z',
             due_at: '2026-03-12T00:00:00Z',
+            latest_email_status: 'sent',
+            latest_email_at: '2026-03-05T00:00:00Z',
+            email_events: [
+              {
+                status: 'sent',
+                event_type: 'invitation',
+                created_at: '2026-03-05T00:00:00Z',
+              },
+            ],
           },
         ]}
         deferredLoaded
@@ -70,6 +79,8 @@ describe('Reviewer summary cards', () => {
     expect(screen.getByText('Reviewer User')).toBeInTheDocument()
     expect(screen.getByText('Invite Status')).toBeInTheDocument()
     expect(screen.getByText('Review Status')).toBeInTheDocument()
+    expect(screen.getByText(/Delivery:/i)).toBeInTheDocument()
+    expect(screen.getByText(/sent/i)).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('reviewer-history-ra-1'))
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
   })

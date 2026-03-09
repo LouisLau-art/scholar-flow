@@ -32,6 +32,22 @@ export type ReviewerHistoryItem = {
   report_status?: string | null
   report_score?: number | null
   report_submitted_at?: string | null
+  latest_email_status?: string | null
+  latest_email_at?: string | null
+  latest_email_error?: string | null
+  email_events?: ReviewerEmailEvent[] | null
+}
+
+export type ReviewerEmailEvent = {
+  assignment_id?: string | null
+  manuscript_id?: string | null
+  status?: string | null
+  event_type?: string | null
+  template_name?: string | null
+  created_at?: string | null
+  error_message?: string | null
+  provider_id?: string | null
+  idempotency_key?: string | null
 }
 
 export type ReviewEmailTemplateOption = {

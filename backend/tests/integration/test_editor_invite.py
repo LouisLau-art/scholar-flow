@@ -419,6 +419,12 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
     assert payload.get("success") is True
     assert payload["data"]["event_type"] == "invitation"
     assert send_mock.call_count == 1
+    email_log_payload = supabase_admin._insert_calls["email_logs"][0]
+    assert email_log_payload["assignment_id"] == str(assignment_id)
+    assert email_log_payload["manuscript_id"] == str(manuscript_id)
+    assert email_log_payload["event_type"] == "invitation"
+    assert email_log_payload["status"] == "queued"
+    assert email_log_payload["idempotency_key"].startswith("reviewer-invitation/")
 
     assignment_patch = supabase_admin._update_calls["review_assignments"][0]
     assert assignment_patch["status"] == "invited"
@@ -482,3 +488,105 @@ async def test_editor_assign_requires_assistant_editor_ownership_for_assignment(
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
         assert resp.status_code == 403
         assert "assistant editor" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_reviewer_history_includes_assignment_email_delivery_events(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1")
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccc1")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                [
+                    {
+                        "id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "status": "invited",
+                        "due_at": "2026-03-20T00:00:00+00:00",
+                        "invited_at": "2026-03-10T00:00:00+00:00",
+                        "opened_at": None,
+                        "accepted_at": None,
+                        "declined_at": None,
+                        "decline_reason": None,
+                        "decline_note": None,
+                        "last_reminded_at": None,
+                        "created_at": "2026-03-10T00:00:00+00:00",
+                        "round_number": 1,
+                    }
+                ],
+            ],
+            "manuscripts": [
+                [
+                    {
+                        "id": str(manuscript_id),
+                        "title": "History Manuscript",
+                        "status": "under_review",
+                        "journal_id": "journal-1",
+                        "assistant_editor_id": editor_id,
+                    }
+                ]
+            ],
+            "review_reports": [[]],
+                "email_logs": [
+                    [
+                        {
+                            "assignment_id": str(assignment_id),
+                            "manuscript_id": str(manuscript_id),
+                            "template_name": "reviewer_invitation_standard",
+                            "status": "sent",
+                            "event_type": "invitation",
+                            "error_message": None,
+                            "created_at": "2026-03-10T00:00:03+00:00",
+                        },
+                        {
+                            "assignment_id": str(assignment_id),
+                            "manuscript_id": str(manuscript_id),
+                            "template_name": "reviewer_invitation_standard",
+                            "status": "queued",
+                            "event_type": "invitation",
+                            "error_message": None,
+                            "created_at": "2026-03-10T00:00:01+00:00",
+                        },
+                    ]
+                ],
+        }
+    )
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+    ):
+        resp = await client.get(
+            f"/api/v1/reviews/reviewer-history/{reviewer_id}?limit=20",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload.get("success") is True
+    rows = payload.get("data") or []
+    assert len(rows) == 1
+    assert rows[0]["latest_email_status"] == "sent"
+    assert rows[0]["latest_email_at"] == "2026-03-10T00:00:03+00:00"
+    assert [event["status"] for event in rows[0]["email_events"]] == ["sent", "queued"]

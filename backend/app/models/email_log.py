@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class EmailStatus(str, Enum):
+    QUEUED = "queued"
     SENT = "sent"
     FAILED = "failed"
     PENDING_RETRY = "pending_retry"
@@ -20,6 +21,11 @@ class EmailLog(BaseModel):
     subject: str
     template_name: str
     status: EmailStatus
+    assignment_id: Optional[UUID] = None
+    manuscript_id: Optional[UUID] = None
+    idempotency_key: Optional[str] = None
+    scene: Optional[str] = None
+    event_type: Optional[str] = None
     provider_id: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0
@@ -33,6 +39,11 @@ class EmailLogCreate(BaseModel):
     subject: str
     template_name: str
     status: EmailStatus = EmailStatus.SENT
+    assignment_id: Optional[UUID] = None
+    manuscript_id: Optional[UUID] = None
+    idempotency_key: Optional[str] = None
+    scene: Optional[str] = None
+    event_type: Optional[str] = None
     provider_id: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0

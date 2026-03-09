@@ -379,6 +379,60 @@ function resolveReviewProgressMeta(invite: ReviewerInviteRow | null | undefined)
   }
 }
 
+function resolveDeliveryMeta(invite: ReviewerInviteRow | null | undefined): {
+  label: string
+  at: string | null
+  className: string
+  error: string | null
+} {
+  const status = String(invite?.latest_email_status || '').trim().toLowerCase()
+  const at = invite?.latest_email_at || null
+  const error = String(invite?.latest_email_error || '').trim() || null
+
+  if (status === 'failed') {
+    return {
+      label: 'failed',
+      at,
+      className: 'font-medium text-destructive',
+      error,
+    }
+  }
+
+  if (status === 'sent') {
+    return {
+      label: 'sent',
+      at,
+      className: 'font-medium text-primary',
+      error: null,
+    }
+  }
+
+  if (status === 'queued') {
+    return {
+      label: 'queued',
+      at,
+      className: 'font-medium text-muted-foreground',
+      error: null,
+    }
+  }
+
+  if (status === 'pending_retry') {
+    return {
+      label: 'pending_retry',
+      at,
+      className: 'font-medium text-amber-600',
+      error,
+    }
+  }
+
+  return {
+    label: '—',
+    at: null,
+    className: 'font-medium text-muted-foreground',
+    error: null,
+  }
+}
+
 export function ReviewerManagementCard({
   reviewerInvites,
   deferredLoaded = true,
@@ -439,6 +493,7 @@ export function ReviewerManagementCard({
                   const invitedText = invite?.invited_at ? formatDateTimeLocal(invite.invited_at) : '—'
                   const openedText = invite?.opened_at ? formatDateTimeLocal(invite.opened_at) : '—'
                   const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
+                  const deliveryMeta = resolveDeliveryMeta(invite)
                   const roundNumber =
                     typeof invite?.round_number === 'number'
                       ? invite.round_number
@@ -487,9 +542,14 @@ export function ReviewerManagementCard({
                       </TableCell>
                       <TableCell className="align-top">
                         <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className={deliveryMeta.className}>
+                            Delivery: {deliveryMeta.label}
+                            {deliveryMeta.at ? ` · ${formatDateTimeLocal(deliveryMeta.at)}` : ''}
+                          </div>
                           <div>Invited: {invitedText}</div>
                           <div>Opened: {openedText}</div>
                           <div>Reminded: {remindedText}</div>
+                          {deliveryMeta.error ? <div className="text-destructive">Error: {deliveryMeta.error}</div> : null}
                         </div>
                       </TableCell>
                       <TableCell className="align-top">

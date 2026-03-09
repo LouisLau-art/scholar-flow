@@ -16,6 +16,7 @@ from postgrest.exceptions import APIError
 from fastapi import Cookie
 
 from app.core.security import create_magic_link_jwt, decode_magic_link_jwt
+from app.models.email_log import EmailStatus
 from app.schemas.review import InviteAcceptPayload, InviteDeclinePayload, ReviewSubmission
 from app.schemas.token import MagicLinkPayload
 from app.core.mail import email_service
@@ -147,6 +148,61 @@ def _build_assignment_email_tags(
         {"name": "manuscript_id", "value": manuscript_id},
         {"name": "journal", "value": journal_title},
     ]
+
+
+def _build_assignment_email_audit_context(
+    *,
+    assignment_id: str,
+    manuscript_id: str,
+    event_type: str,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    return {
+        "assignment_id": assignment_id,
+        "manuscript_id": manuscript_id,
+        "scene": _REVIEW_ASSIGNMENT_SCENE,
+        "event_type": event_type,
+        "idempotency_key": idempotency_key,
+    }
+
+
+def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "assignment_id": row.get("assignment_id"),
+        "manuscript_id": row.get("manuscript_id"),
+        "status": str(row.get("status") or "").strip().lower() or None,
+        "event_type": str(row.get("event_type") or "").strip().lower() or None,
+        "template_name": row.get("template_name"),
+        "created_at": row.get("created_at"),
+        "error_message": row.get("error_message"),
+        "provider_id": row.get("provider_id"),
+        "idempotency_key": row.get("idempotency_key"),
+    }
+
+
+def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    normalized_ids = [str(item or "").strip() for item in assignment_ids if str(item or "").strip()]
+    if not normalized_ids:
+        return {}
+    try:
+        rows = (
+            supabase_admin.table("email_logs")
+            .select(
+                "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+            )
+            .in_("assignment_id", normalized_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        out: dict[str, list[dict[str, Any]]] = {}
+        for row in (getattr(rows, "data", None) or []):
+            assignment_id = str(row.get("assignment_id") or "").strip()
+            if not assignment_id:
+                continue
+            out.setdefault(assignment_id, []).append(_serialize_assignment_email_event(row))
+        return out
+    except Exception:
+        return {}
 
 
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
@@ -755,6 +811,34 @@ async def send_assignment_email(
         "X-SF-Template-Key": template_key,
         "X-SF-Event-Type": event_type,
     }
+    audit_context = _build_assignment_email_audit_context(
+        assignment_id=str(assignment_id),
+        manuscript_id=manuscript_id,
+        event_type=event_type,
+        idempotency_key=idempotency_key,
+    )
+    try:
+        subject_preview = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
+    except Exception:
+        subject_preview = subject_template or "(queued)"
+
+    try:
+        supabase_admin.table("email_logs").insert(
+            {
+                "recipient": reviewer_email,
+                "subject": subject_preview,
+                "template_name": template_key,
+                "status": EmailStatus.QUEUED.value,
+                "assignment_id": str(assignment_id),
+                "manuscript_id": manuscript_id,
+                "idempotency_key": idempotency_key,
+                "scene": _REVIEW_ASSIGNMENT_SCENE,
+                "event_type": event_type,
+                "retry_count": 0,
+            }
+        ).execute()
+    except Exception:
+        pass
 
     background_tasks.add_task(
         email_service.send_inline_email_background,
@@ -767,6 +851,7 @@ async def send_assignment_email(
         idempotency_key=idempotency_key,
         tags=email_tags,
         headers=email_headers,
+        audit_context=audit_context,
     )
 
     now_iso = now_dt.isoformat()
@@ -891,6 +976,9 @@ async def get_reviewer_history(
     if not filtered_rows:
         return {"success": True, "data": []}
 
+    assignment_ids = [str(row.get("id") or "").strip() for row in filtered_rows if str(row.get("id") or "").strip()]
+    email_events_by_assignment = _load_assignment_email_events(assignment_ids=assignment_ids)
+
     assignment_counts_by_manuscript: dict[str, int] = {}
     for row in filtered_rows:
         mid = str(row.get("manuscript_id") or "").strip()
@@ -917,12 +1005,15 @@ async def get_reviewer_history(
 
     out: list[dict[str, Any]] = []
     for row in filtered_rows:
+        assignment_id_value = str(row.get("id") or "").strip()
         mid = str(row.get("manuscript_id") or "").strip()
         manuscript = manuscript_map.get(mid) or {}
         report = report_map.get(mid) or {}
+        email_events = email_events_by_assignment.get(assignment_id_value, [])
+        latest_email = email_events[0] if email_events else {}
         out.append(
             {
-                "assignment_id": row.get("id"),
+                "assignment_id": assignment_id_value or row.get("id"),
                 "reviewer_id": reviewer_id_str,
                 "manuscript_id": mid,
                 "manuscript_title": manuscript.get("title"),
@@ -941,6 +1032,10 @@ async def get_reviewer_history(
                 "report_status": report.get("status"),
                 "report_score": report.get("score"),
                 "report_submitted_at": report.get("created_at"),
+                "latest_email_status": latest_email.get("status"),
+                "latest_email_at": latest_email.get("created_at"),
+                "latest_email_error": latest_email.get("error_message"),
+                "email_events": email_events,
             }
         )
 

@@ -267,6 +267,7 @@ class EmailService:
         idempotency_key: str | None = None,
         tags: Sequence[Mapping[str, str]] | None = None,
         headers: Mapping[str, str] | None = None,
+        audit_context: Mapping[str, Any] | None = None,
     ):
         """
         Entry point for BackgroundTasks. Handles rendering, sending, retrying, and logging.
@@ -286,6 +287,7 @@ class EmailService:
                 template_name,
                 EmailStatus.FAILED,
                 error_message=str(e),
+                audit_context=audit_context,
             )
             return
 
@@ -293,7 +295,7 @@ class EmailService:
         if self.smtp_config:
             ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
             if ok:
-                self._log_attempt(to_email, subject, template_name, EmailStatus.SENT)
+                self._log_attempt(to_email, subject, template_name, EmailStatus.SENT, audit_context=audit_context)
             else:
                 self._log_attempt(
                     to_email,
@@ -301,6 +303,7 @@ class EmailService:
                     template_name,
                     EmailStatus.FAILED,
                     error_message="send failed",
+                    audit_context=audit_context,
                 )
             return
 
@@ -328,6 +331,7 @@ class EmailService:
                 template_name,
                 EmailStatus.SENT,
                 provider_id=provider_id,
+                audit_context=audit_context,
             )
         except Exception as e:
             logger.warning("[Resend] send failed: %s", e)
@@ -337,6 +341,7 @@ class EmailService:
                 template_name,
                 EmailStatus.FAILED,
                 error_message=str(e),
+                audit_context=audit_context,
             )
 
     def send_inline_email_background(
@@ -351,6 +356,7 @@ class EmailService:
         idempotency_key: str | None = None,
         tags: Sequence[Mapping[str, str]] | None = None,
         headers: Mapping[str, str] | None = None,
+        audit_context: Mapping[str, Any] | None = None,
     ) -> None:
         """
         根据数据库模板字符串渲染并后台发送邮件。
@@ -380,13 +386,14 @@ class EmailService:
                 template_key,
                 EmailStatus.FAILED,
                 error_message=str(e),
+                audit_context=audit_context,
             )
             return
 
         if self.smtp_config:
             ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
             if ok:
-                self._log_attempt(to_email, subject, template_key, EmailStatus.SENT)
+                self._log_attempt(to_email, subject, template_key, EmailStatus.SENT, audit_context=audit_context)
             else:
                 self._log_attempt(
                     to_email,
@@ -394,6 +401,7 @@ class EmailService:
                     template_key,
                     EmailStatus.FAILED,
                     error_message="send failed",
+                    audit_context=audit_context,
                 )
             return
 
@@ -421,6 +429,7 @@ class EmailService:
                 template_key,
                 EmailStatus.SENT,
                 provider_id=provider_id,
+                audit_context=audit_context,
             )
         except Exception as e:
             logger.warning("[Resend] send failed: %s", e)
@@ -430,7 +439,29 @@ class EmailService:
                 template_key,
                 EmailStatus.FAILED,
                 error_message=str(e),
+                audit_context=audit_context,
             )
+
+    def log_attempt(
+        self,
+        recipient: str,
+        subject: str,
+        template_name: str,
+        status: EmailStatus,
+        *,
+        provider_id: Optional[str] = None,
+        error_message: Optional[str] = None,
+        audit_context: Mapping[str, Any] | None = None,
+    ) -> None:
+        self._log_attempt(
+            recipient,
+            subject,
+            template_name,
+            status,
+            provider_id=provider_id,
+            error_message=error_message,
+            audit_context=audit_context,
+        )
 
     def _send_resend_message(
         self,
@@ -488,15 +519,22 @@ class EmailService:
         status: EmailStatus,
         provider_id: Optional[str] = None,
         error_message: Optional[str] = None,
+        audit_context: Mapping[str, Any] | None = None,
     ):
         try:
             if self._supabase is None:
                 return
+            context = dict(audit_context or {})
             data = {
                 "recipient": recipient,
                 "subject": subject,
                 "template_name": template_name,
                 "status": status.value,
+                "assignment_id": str(context.get("assignment_id") or "").strip() or None,
+                "manuscript_id": str(context.get("manuscript_id") or "").strip() or None,
+                "idempotency_key": str(context.get("idempotency_key") or "").strip() or None,
+                "scene": str(context.get("scene") or "").strip() or None,
+                "event_type": str(context.get("event_type") or "").strip() or None,
                 "provider_id": provider_id,
                 "error_message": error_message,
                 # Simple retry count tracking logic: if failed, we likely retried 2 more times (total 3).

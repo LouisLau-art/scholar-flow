@@ -29,6 +29,10 @@
 - 右侧 `Review Summary` 已收敛为轻量摘要卡。
 - 多轮 reviewer 的 `submitted_at` 错绑问题已修复。
 - reviewer history modal 已补充 `round / due / decline reason / decline note` 等字段。
+- reviewer invitation 已新增 assignment 级邮件证据链：
+  - `email_logs` 扩展为支持 `assignment_id / manuscript_id / idempotency_key / scene / event_type`
+  - reviewer 邮件发送先落应用级 `queued` 审计，再由后台发送链补 `sent / failed`
+  - 稿件详情页 `Reviewer Management` 与 reviewer history modal 已展示最新 delivery 状态与邮件事件时间线
 
 ## 已写计划与说明文档
 
@@ -45,17 +49,13 @@
    - 目标字段：`added by`、`added via`、更完整的 timeline
    - 当前阻塞：现有 schema 尚无稳定数据源
 
-2. 邮件投递证据链收敛
-   - 需要把 reviewer invitation 从“时间戳近似”升级为真实 `queued / sent / failed`
-   - 当前 `email_logs` 还缺 assignment 级关联字段
-
-3. reviewer 全链路 E2E
+2. reviewer 全链路 E2E
    - 目标覆盖：`select -> send invitation -> accept/decline -> workspace -> submit`
 
 ### P2
 
-4. re-invite / decline 后重新邀请语义进一步收敛
-5. manuscript detail 中 reviewer history 展示继续增强
+3. re-invite / decline 后重新邀请语义进一步收敛
+4. manuscript detail 中 reviewer history 展示继续增强
 
 ## 本轮突发问题
 
