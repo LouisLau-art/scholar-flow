@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from httpx import AsyncClient
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # === 并发请求: 审稿分配 ===
 
@@ -95,8 +95,7 @@ async def test_concurrent_reviewer_assignments(client: AsyncClient, auth_token: 
     fake = _FakeSupabase()
 
     with patch("app.api.v1.reviews.supabase", fake), \
-         patch("app.api.v1.reviews.supabase_admin", fake), \
-         patch("app.api.v1.reviews.NotificationService.create_notification", MagicMock(return_value=None)):
+         patch("app.api.v1.reviews.supabase_admin", fake):
         async def assign(i: int):
             return await client.post(
                 "/api/v1/reviews/assign",
