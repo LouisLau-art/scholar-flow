@@ -12,6 +12,13 @@ on:
         required: false
         type: string
 
+env:
+  HF_SPACE_ID: LouisShawn/scholarflow-api
+  HF_HEALTHCHECK_URL: https://louisshawn-scholarflow-api.hf.space/api/v1/public/journals
+  HF_RUNTIME_TIMEOUT_SEC: "900"
+  HF_RUNTIME_POLL_INTERVAL_SEC: "10"
+  HF_RUNTIME_RESTART_AFTER_SEC: "240"
+
 jobs:
   sync-to-hub:
     if: >
@@ -43,8 +50,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # 中文注释: huggingface_hub v1.x 默认提供 `hf` CLI（不再保证 `huggingface-cli` 命令存在）
+          # 中文注释:
+          # - `hf` CLI 继续用于上传文件到 Hugging Face Space 仓库。
+          # - `huggingface_hub` 作为当前 Python 环境依赖，用于后续 runtime polling / restart。
           uv tool install "huggingface_hub[cli]"
+          uv pip install --system huggingface_hub
 
       - name: Push to Hub
         env:
@@ -75,6 +85,8 @@ jobs:
             return 1
           }
 
+          echo "DEPLOY_SHA=${DEPLOY_SHA}" >> "$GITHUB_ENV"
+
           # 上传 backend 目录到 Space 的 backend/ 目录（避免 flatten 导致 Space 内出现重复的 app/ 与 backend/app/）
           # 中文注释:
           # - Dockerfile 依赖 backend/ 路径（COPY backend/requirements.txt 与 COPY backend/ .）
@@ -83,3 +95,80 @@ jobs:
           
           # 单独上传 Dockerfile (因为它在 GitHub 的根目录下)
           upload_with_retry "Sync Dockerfile from GitHub" "Dockerfile" "Dockerfile"
+
+      - name: Wait for HF runtime to catch up
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          from huggingface_hub import HfApi
+
+          repo_id = os.environ["HF_SPACE_ID"]
+          healthcheck_url = os.environ["HF_HEALTHCHECK_URL"]
+          timeout_sec = int(os.environ.get("HF_RUNTIME_TIMEOUT_SEC", "900"))
+          poll_interval_sec = int(os.environ.get("HF_RUNTIME_POLL_INTERVAL_SEC", "10"))
+          restart_after_sec = int(os.environ.get("HF_RUNTIME_RESTART_AFTER_SEC", "240"))
+          deploy_sha = os.environ.get("DEPLOY_SHA", "").strip()
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          start = time.time()
+          restart_attempted = False
+
+          def fetch_healthcheck(url: str) -> tuple[int | None, str]:
+            try:
+              with urllib.request.urlopen(url, timeout=15) as response:
+                body = response.read(300).decode("utf-8", errors="replace")
+                return response.getcode(), body
+            except urllib.error.HTTPError as exc:
+              body = exc.read(300).decode("utf-8", errors="replace")
+              return exc.code, body
+            except Exception as exc:  # noqa: BLE001
+              return None, str(exc)
+
+          while True:
+            info = api.space_info(repo_id)
+            runtime = api.get_space_runtime(repo_id)
+            raw = getattr(runtime, "raw", {}) or {}
+            stage = raw.get("stage")
+            error_message = str(raw.get("errorMessage") or "").strip()
+            repo_sha = str(getattr(info, "sha", "") or "").strip()
+            runtime_sha = str(raw.get("sha") or raw.get("raw", {}).get("sha") or "").strip()
+            elapsed = int(time.time() - start)
+
+            print(
+              f"[deploy-hf] elapsed={elapsed}s stage={stage} repo_sha={repo_sha or '-'} "
+              f"runtime_sha={runtime_sha or '-'} deploy_sha={deploy_sha or '-'}"
+            )
+
+            if stage in {"CONFIG_ERROR", "BUILD_ERROR", "RUNTIME_ERROR"}:
+              print(
+                f"[deploy-hf] unrecoverable runtime stage={stage} error={error_message or '-'}",
+                file=sys.stderr,
+              )
+              sys.exit(1)
+
+            if stage == "RUNNING" and repo_sha and runtime_sha == repo_sha:
+              status_code, body = fetch_healthcheck(healthcheck_url)
+              print(f"[deploy-hf] healthcheck status={status_code} body={body[:200]}")
+              if status_code == 200:
+                print("[deploy-hf] runtime and healthcheck are ready")
+                sys.exit(0)
+
+            if elapsed >= restart_after_sec and not restart_attempted:
+              print("[deploy-hf] runtime not converged yet, triggering one automatic restart")
+              api.restart_space(repo_id)
+              restart_attempted = True
+
+            if elapsed >= timeout_sec:
+              print("[deploy-hf] timeout waiting for HF runtime to converge", file=sys.stderr)
+              sys.exit(1)
+
+            time.sleep(poll_interval_sec)
+          PY
