@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Response, Query
+from fastapi import APIRouter, HTTPException, Depends, Body, UploadFile, File, Form, Response, Query
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
@@ -176,14 +176,13 @@ def _insert_reinvite_assignment_attempt(
     *,
     assignment: dict[str, Any],
     current_user_id: str,
-    invited_at_iso: str,
 ) -> dict[str, Any]:
     base_payload: dict[str, Any] = {
         "manuscript_id": str(assignment.get("manuscript_id") or "").strip(),
         "reviewer_id": str(assignment.get("reviewer_id") or "").strip(),
-        "status": "invited",
+        "status": "selected",
         "due_at": assignment.get("due_at"),
-        "invited_at": invited_at_iso,
+        "invited_at": None,
         "last_reminded_at": None,
         "opened_at": None,
         "accepted_at": None,
@@ -196,16 +195,14 @@ def _insert_reinvite_assignment_attempt(
         base_payload["round_number"] = round_number
     if current_user_id:
         base_payload["selected_by"] = current_user_id
-        base_payload["invited_by"] = current_user_id
     base_payload["selected_via"] = "system_reinvite"
-    base_payload["invited_via"] = "template_invitation"
 
     payload_variants: list[dict[str, Any]] = [
         dict(base_payload),
         {
             key: value
             for key, value in base_payload.items()
-            if key not in {"selected_by", "selected_via", "invited_by", "invited_via"}
+            if key not in {"selected_by", "selected_via"}
         },
         {
             key: value
@@ -214,8 +211,6 @@ def _insert_reinvite_assignment_attempt(
             not in {
                 "selected_by",
                 "selected_via",
-                "invited_by",
-                "invited_via",
                 "opened_at",
                 "accepted_at",
                 "declined_at",
@@ -843,7 +838,6 @@ async def list_review_email_templates(
 @router.post("/reviews/assignments/{assignment_id}/send-email")
 async def send_assignment_email(
     assignment_id: UUID,
-    background_tasks: BackgroundTasks,
     payload: dict[str, Any] | None = Body(default=None),
     current_user: dict = Depends(get_current_user),
     profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
@@ -854,7 +848,7 @@ async def send_assignment_email(
     中文注释:
     - 根据 template_key 从 email_templates 表读取模板；
     - 自动注入 manuscript/reviewer/journal 变量；
-    - 按模板 event_type 回填 invited_at 或 last_reminded_at。
+    - 现在同步返回真实投递结果（sent/failed），避免前端把 queued 误判成“已发成功”。
     """
     body = payload or {}
     template_key_raw = body.get("template_key") or body.get("template") or "reviewer_invitation_standard"
@@ -927,7 +921,6 @@ async def send_assignment_email(
         effective_assignment = _insert_reinvite_assignment_attempt(
             assignment=assignment,
             current_user_id=current_user_id,
-            invited_at_iso=now_iso,
         )
 
     journal_title = _resolve_journal_title_for_assignment(manuscript)
@@ -988,26 +981,7 @@ async def send_assignment_email(
     except Exception:
         subject_preview = subject_template or "(queued)"
 
-    try:
-        supabase_admin.table("email_logs").insert(
-            {
-                "recipient": reviewer_email,
-                "subject": subject_preview,
-                "template_name": template_key,
-                "status": EmailStatus.QUEUED.value,
-                "assignment_id": effective_assignment_id,
-                "manuscript_id": manuscript_id,
-                "idempotency_key": idempotency_key,
-                "scene": _REVIEW_ASSIGNMENT_SCENE,
-                "event_type": event_type,
-                "retry_count": 0,
-            }
-        ).execute()
-    except Exception:
-        pass
-
-    background_tasks.add_task(
-        email_service.send_inline_email_background,
+    delivery = email_service.send_inline_email(
         to_email=reviewer_email,
         template_key=template_key,
         subject_template=subject_template,
@@ -1019,10 +993,13 @@ async def send_assignment_email(
         headers=email_headers,
         audit_context=audit_context,
     )
+    delivery_status = str(delivery.get("status") or EmailStatus.FAILED.value).strip().lower()
+    delivery_error = str(delivery.get("error_message") or "").strip() or None
+    delivery_subject = str(delivery.get("subject") or subject_preview or "(no subject)").strip() or "(no subject)"
 
     try:
         patch: dict[str, Any] = {}
-        if event_type == "invitation":
+        if event_type == "invitation" and delivery_status == EmailStatus.SENT.value:
             if not assignment_is_declined:
                 patch["invited_at"] = now_iso
                 if assignment_status in {"selected", "pending", "invited", "opened"}:
@@ -1031,7 +1008,13 @@ async def send_assignment_email(
                     patch["invited_by"] = current_user_id
                 if not str(assignment.get("invited_via") or "").strip():
                     patch["invited_via"] = "template_invitation"
-        elif event_type == "reminder":
+            else:
+                patch["invited_at"] = now_iso
+                patch["status"] = "invited"
+                if current_user_id:
+                    patch["invited_by"] = current_user_id
+                patch["invited_via"] = "template_invitation"
+        elif event_type == "reminder" and delivery_status == EmailStatus.SENT.value:
             patch["last_reminded_at"] = now_iso
         if patch:
             try:
@@ -1044,10 +1027,14 @@ async def send_assignment_email(
                     supabase_admin.table("review_assignments").update(fallback_patch).eq("id", effective_assignment_id).execute()
 
         manuscript_status = str(manuscript.get("status") or "").strip().lower()
-        if event_type == "invitation" and manuscript_status in {"pre_check", "resubmitted"}:
+        if (
+            event_type == "invitation"
+            and delivery_status == EmailStatus.SENT.value
+            and manuscript_status in {"pre_check", "resubmitted"}
+        ):
             supabase_admin.table("manuscripts").update({"status": "under_review"}).eq("id", manuscript_id).execute()
     except Exception:
-        # 回填失败不影响主流程（邮件已入队）
+        # 回填失败不影响主流程（真实发送结果已返回给前端）。
         pass
 
     return {
@@ -1060,7 +1047,10 @@ async def send_assignment_email(
             "recipient": reviewer_email,
             "journal_title": journal_title,
             "idempotency_key": idempotency_key,
-            "queued_at": now_iso,
+            "delivery_status": delivery_status,
+            "delivery_error": delivery_error,
+            "delivery_subject": delivery_subject,
+            "processed_at": now_iso,
         },
     }
 

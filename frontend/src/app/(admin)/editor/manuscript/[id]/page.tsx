@@ -726,7 +726,15 @@ export default function EditorManuscriptDetailPage() {
         if (!res?.success) {
           throw new Error(res?.detail || res?.message || 'Failed to send reviewer email')
         }
-        toast.success(`Template "${res?.data?.template_display_name || templateKey}" queued.`)
+        const deliveryStatus = String(res?.data?.delivery_status || '').trim().toLowerCase()
+        const templateLabel = res?.data?.template_display_name || templateKey
+        if (deliveryStatus === 'sent') {
+          toast.success(`Template "${templateLabel}" sent.`)
+        } else if (deliveryStatus === 'failed') {
+          toast.error(res?.data?.delivery_error || `Template "${templateLabel}" failed to send.`)
+        } else {
+          toast.message(`Template "${templateLabel}" accepted. Delivery pending.`)
+        }
         await refreshDetail({ force: true })
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Failed to send reviewer email')

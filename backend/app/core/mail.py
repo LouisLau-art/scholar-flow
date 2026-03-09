@@ -365,8 +365,50 @@ class EmailService:
         - 用于 Admin 可配置模板（subject/html/text 均可为 Jinja 模板字符串）。
         - template_key 作为日志里的 template_name 持久化，便于追踪。
         """
+        self.send_inline_email(
+            to_email=to_email,
+            template_key=template_key,
+            subject_template=subject_template,
+            body_html_template=body_html_template,
+            context=context,
+            body_text_template=body_text_template,
+            idempotency_key=idempotency_key,
+            tags=tags,
+            headers=headers,
+            audit_context=audit_context,
+        )
+
+    def send_inline_email(
+        self,
+        *,
+        to_email: str,
+        template_key: str,
+        subject_template: str,
+        body_html_template: str,
+        context: Dict[str, Any],
+        body_text_template: str | None = None,
+        idempotency_key: str | None = None,
+        tags: Sequence[Mapping[str, str]] | None = None,
+        headers: Mapping[str, str] | None = None,
+        audit_context: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        同步发送 inline template email，并返回真实投递结果。
+
+        中文注释:
+        - reviewer invitation 属于单条强交互动作，前端需要立刻知道 sent/failed。
+        - 这里保留原有日志写入逻辑，但把结果显式返回给调用方。
+        """
+        result = {
+            "ok": False,
+            "status": EmailStatus.FAILED.value,
+            "subject": "(not rendered)",
+            "provider_id": None,
+            "error_message": None,
+        }
         if not self.is_configured():
-            return
+            result["error_message"] = "Email provider is not configured"
+            return result
 
         try:
             subject = self.render_inline_template(subject_template, context).strip()
@@ -378,6 +420,7 @@ class EmailService:
             )
             if not subject:
                 subject = "(no subject)"
+            result["subject"] = subject
         except Exception as e:
             logger.warning("[Email] inline template render failed: %s", e)
             self._log_attempt(
@@ -388,12 +431,16 @@ class EmailService:
                 error_message=str(e),
                 audit_context=audit_context,
             )
-            return
+            result["subject"] = "(render failed)"
+            result["error_message"] = str(e)
+            return result
 
         if self.smtp_config:
             ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
             if ok:
                 self._log_attempt(to_email, subject, template_key, EmailStatus.SENT, audit_context=audit_context)
+                result["ok"] = True
+                result["status"] = EmailStatus.SENT.value
             else:
                 self._log_attempt(
                     to_email,
@@ -403,11 +450,13 @@ class EmailService:
                     error_message="send failed",
                     audit_context=audit_context,
                 )
-            return
+                result["error_message"] = "send failed"
+            return result
 
         resend_cfg = self._effective_resend_config()
         if not resend_cfg:
-            return
+            result["error_message"] = "Resend is not configured"
+            return result
 
         merged_tags = list(tags or [])
         merged_tags.append({"name": "template", "value": template_key})
@@ -431,6 +480,9 @@ class EmailService:
                 provider_id=provider_id,
                 audit_context=audit_context,
             )
+            result["ok"] = True
+            result["status"] = EmailStatus.SENT.value
+            result["provider_id"] = provider_id
         except Exception as e:
             logger.warning("[Resend] send failed: %s", e)
             self._log_attempt(
@@ -441,6 +493,8 @@ class EmailService:
                 error_message=str(e),
                 audit_context=audit_context,
             )
+            result["error_message"] = str(e)
+        return result
 
     def log_attempt(
         self,
@@ -542,6 +596,29 @@ class EmailService:
             }
             self._supabase.table("email_logs").insert(data).execute()
         except Exception as e:
+            lowered = str(e).lower()
+            if (
+                "email_logs.assignment_id" in lowered
+                or "email_logs.manuscript_id" in lowered
+                or "email_logs.idempotency_key" in lowered
+                or "email_logs.scene" in lowered
+                or "email_logs.event_type" in lowered
+                or "schema cache" in lowered
+            ):
+                try:
+                    fallback_data = {
+                        "recipient": recipient,
+                        "subject": subject,
+                        "template_name": template_name,
+                        "status": status.value,
+                        "provider_id": provider_id,
+                        "error_message": error_message,
+                        "retry_count": 3 if status == EmailStatus.FAILED else 0,
+                    }
+                    self._supabase.table("email_logs").insert(fallback_data).execute()
+                    return
+                except Exception as fallback_exc:
+                    logger.warning("[Email] Failed to log email attempt (fallback): %s", fallback_exc)
             logger.warning("[Email] Failed to log email attempt: %s", e)
 
 # Global instance

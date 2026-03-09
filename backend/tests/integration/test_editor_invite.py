@@ -138,7 +138,15 @@ async def test_editor_assign_creates_selected_assignment_without_sending_email(
         }
     )
 
-    send_mock = MagicMock()
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
 
     headers = {"Authorization": f"Bearer {auth_token}"}
     body = {"manuscript_id": str(manuscript_id), "reviewer_id": str(reviewer_id)}
@@ -315,7 +323,15 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
         }
     )
 
-    send_mock = MagicMock()
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
     headers = {"Authorization": f"Bearer {auth_token}"}
     body = {
         "manuscript_id": str(manuscript_id),
@@ -494,7 +510,15 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
         }
     )
 
-    send_mock = MagicMock()
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
     headers = {"Authorization": f"Bearer {auth_token}"}
 
     with (
@@ -504,7 +528,7 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{assignment_id}/send-email",
@@ -516,13 +540,8 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
     payload = resp.json()
     assert payload.get("success") is True
     assert payload["data"]["event_type"] == "invitation"
+    assert payload["data"]["delivery_status"] == "sent"
     assert send_mock.call_count == 1
-    email_log_payload = supabase_admin._insert_calls["email_logs"][0]
-    assert email_log_payload["assignment_id"] == str(assignment_id)
-    assert email_log_payload["manuscript_id"] == str(manuscript_id)
-    assert email_log_payload["event_type"] == "invitation"
-    assert email_log_payload["status"] == "queued"
-    assert email_log_payload["idempotency_key"].startswith("reviewer-invitation/")
 
     assignment_patch = supabase_admin._update_calls["review_assignments"][0]
     assert assignment_patch["status"] == "invited"
@@ -604,7 +623,15 @@ async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_at
         }
     )
 
-    send_mock = MagicMock()
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
     headers = {"Authorization": f"Bearer {auth_token}"}
 
     with (
@@ -614,7 +641,7 @@ async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_at
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -627,23 +654,24 @@ async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_at
     assert payload.get("success") is True
     assert payload["data"]["event_type"] == "invitation"
     assert payload["data"]["assignment_id"] == str(fresh_assignment_id)
+    assert payload["data"]["delivery_status"] == "sent"
     assert send_mock.call_count == 1
 
     reinsert_payload = supabase_admin._insert_calls["review_assignments"][0]
-    assert reinsert_payload["status"] == "invited"
+    assert reinsert_payload["status"] == "selected"
     assert reinsert_payload["manuscript_id"] == str(manuscript_id)
     assert reinsert_payload["reviewer_id"] == str(reviewer_id)
     assert reinsert_payload["selected_by"] == editor_id
     assert reinsert_payload["selected_via"] == "system_reinvite"
-    assert reinsert_payload["invited_by"] == editor_id
-    assert reinsert_payload["invited_via"] == "template_invitation"
+    assert reinsert_payload["invited_at"] is None
     assert reinsert_payload["declined_at"] is None
     assert reinsert_payload["decline_reason"] is None
 
-    email_log_payload = supabase_admin._insert_calls["email_logs"][0]
-    assert email_log_payload["assignment_id"] == str(fresh_assignment_id)
-    assert email_log_payload["manuscript_id"] == str(manuscript_id)
-    assert supabase_admin._update_calls.get("review_assignments") in (None, [])
+    assignment_patch = supabase_admin._update_calls["review_assignments"][0]
+    assert assignment_patch["status"] == "invited"
+    assert assignment_patch["invited_at"]
+    assert assignment_patch["invited_by"] == editor_id
+    assert assignment_patch["invited_via"] == "template_invitation"
     manuscript_patch = supabase_admin._update_calls["manuscripts"][0]
     assert manuscript_patch["status"] == "under_review"
 
@@ -710,7 +738,7 @@ async def test_send_assignment_email_blocks_reminder_for_declined_assignment(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -790,7 +818,7 @@ async def test_send_assignment_email_declined_invitation_does_not_create_fresh_a
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email_background", send_mock),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -803,6 +831,97 @@ async def test_send_assignment_email_declined_invitation_does_not_create_fresh_a
     assert send_mock.call_count == 0
     assert supabase_admin._insert_calls.get("review_assignments") in (None, [])
     assert supabase_admin._insert_calls.get("email_logs") in (None, [])
+
+
+@pytest.mark.asyncio
+async def test_send_assignment_email_does_not_mark_invited_when_delivery_fails(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccf")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaad")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb0")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": None,
+                    "last_reminded_at": None,
+                    "invited_by": None,
+                    "invited_via": None,
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Selection First Workflow",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "ok": False,
+            "status": "failed",
+            "subject": "Invitation to Review",
+            "provider_id": None,
+            "error_message": "The send.example.com domain is not verified.",
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/send-email",
+            json={"template_key": "reviewer_invitation_standard"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    assert payload["data"]["delivery_status"] == "failed"
+    assert "not verified" in str(payload["data"]["delivery_error"]).lower()
+    assert supabase_admin._update_calls.get("review_assignments") in (None, [])
+    assert supabase_admin._update_calls.get("manuscripts") in (None, [])
 
 
 @pytest.mark.asyncio
