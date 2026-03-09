@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ReviewReport(BaseModel):
@@ -13,7 +13,7 @@ class ReviewReport(BaseModel):
     reviewer_id: UUID
     token: str
     expiry_date: datetime
-    status: str = Field("invited", description="评审状态")
+    status: str = "invited"
 
     # Public (Author-visible)
     comments_for_author: Optional[str] = None
@@ -22,5 +22,3 @@ class ReviewReport(BaseModel):
     # Confidential (Editor-only)
     confidential_comments_to_editor: Optional[str] = None
     attachment_path: Optional[str] = None
-
-    score: Optional[int] = Field(None, ge=1, le=5)

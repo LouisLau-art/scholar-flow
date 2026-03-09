@@ -73,7 +73,6 @@ async def test_reviewer_submits_dual_channel_review(
             f"/api/v1/reviews/token/{token}/submit",
             data={
                 "comments_for_author": "Public comments to the author.",
-                "score": "4",
                 "confidential_comments_to_editor": "Confidential notes for editor only.",
             },
         )
@@ -92,6 +91,6 @@ async def test_reviewer_submits_dual_channel_review(
         assert rr["status"] == "completed"
         assert (rr.get("comments_for_author") or rr.get("content")) == "Public comments to the author."
         assert rr["confidential_comments_to_editor"] == "Confidential notes for editor only."
-        assert rr["score"] == 4
+        assert rr["score"] is None
     finally:
         _cleanup(supabase_admin_client, manuscript_id, review_report_id)

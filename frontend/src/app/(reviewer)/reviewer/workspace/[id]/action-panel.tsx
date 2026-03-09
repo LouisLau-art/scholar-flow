@@ -174,9 +174,10 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
             </label>
             <Textarea
               id="comments_for_author"
-              rows={10}
+              rows={16}
               disabled={isReadOnly}
               placeholder="Write your review comment..."
+              className="min-h-[22rem] resize-y"
               {...register('comments_for_author', { required: 'Comment is required' })}
             />
             {errors.comments_for_author ? (
@@ -195,9 +196,10 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
             </label>
             <Textarea
               id="confidential_comments_to_editor"
-              rows={6}
+              rows={10}
               disabled={isReadOnly}
               placeholder="Only editors can see this note."
+              className="min-h-[14rem] resize-y"
               {...register('confidential_comments_to_editor')}
             />
           </div>

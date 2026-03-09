@@ -806,7 +806,6 @@ export function ReviewerFeedbackSummaryCard({
                     {report.reviewer_name || report.reviewer_email || report.reviewer_id || 'Reviewer'}
                   </div>
                   <div className="flex items-center gap-2">
-                    {typeof report.score === 'number' ? <Badge variant="outline">Score {report.score}</Badge> : null}
                     {report.status ? <Badge variant="secondary">{String(report.status)}</Badge> : null}
                   </div>
                 </div>

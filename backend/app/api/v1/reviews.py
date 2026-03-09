@@ -790,7 +790,6 @@ async def submit_review_via_magic_link(
     sf_review_magic: str | None = Cookie(default=None, alias="sf_review_magic"),
     comments_for_author: str | None = Form(None),
     content: str | None = Form(None),
-    score: int = Form(...),
     confidential_comments_to_editor: str | None = Form(None),
     attachment: UploadFile | None = File(None),
 ):
@@ -800,7 +799,6 @@ async def submit_review_via_magic_link(
         payload=payload,
         comments_for_author=comments_for_author,
         content=content,
-        score=score,
         confidential_comments_to_editor=confidential_comments_to_editor,
         attachment=attachment,
         supabase_admin_client=supabase_admin,
@@ -1442,7 +1440,6 @@ async def submit_review_by_token(
     # Feature 022 completion: comments_for_author 必填；兼容旧字段 content
     comments_for_author: str | None = Form(None),
     content: str | None = Form(None),
-    score: int = Form(...),
     confidential_comments_to_editor: str | None = Form(None),
     attachment: UploadFile | None = File(None),
 ):
@@ -1453,7 +1450,6 @@ async def submit_review_by_token(
         token=token,
         comments_for_author=comments_for_author,
         content=content,
-        score=score,
         confidential_comments_to_editor=confidential_comments_to_editor,
         attachment=attachment,
         supabase_admin_client=supabase_admin,
@@ -1470,7 +1466,7 @@ async def get_review_feedback_for_manuscript(
     获取某稿件的审稿反馈（按身份过滤机密字段）
 
     中文注释:
-    - Author 只能看到公开字段（content/score）
+    - Author 只能看到公开字段（comments_for_author/content）
     - Editor/Admin 可以看到机密字段（confidential_comments_to_editor/attachment_path）
     """
     return await get_review_feedback_for_manuscript_impl(

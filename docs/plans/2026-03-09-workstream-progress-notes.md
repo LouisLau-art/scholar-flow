@@ -22,6 +22,12 @@
 - invite 页已支持稿件基础信息与 PDF 预览。
 - decline reasons 已接入 invite 页决策面。
 - reviewer 首次激活不再走明文密码，已改为 activation / set-password 流程。
+- reviewer 第一阶段体验收敛已完成：
+  - reviewer workspace 的 `Comment to Authors` 已扩展为更适合长篇评审的输入区（更高默认高度 + `resize-y`）
+  - reviewer 的公开 token 页与 magic assignment 页已同步放大两个评论框
+  - reviewer 当前主链路（workspace / token / magic assignment）已去掉 `score` 输入
+  - reviewer workspace 提交后不再写入占位 `score = 5`
+  - token/magic 提交链也不再要求或写入 `score`
 
 ### Manuscript Detail / Reviewer Summary
 
@@ -51,6 +57,10 @@
   - `added_via / invited_via` 不再直接显示底层 token，统一转成业务文案
   - `Email Actions` 不再拼接原始字符串，改为按 `Invitation sent / Reminder failed` 这类可读事件展示
   - declined reason 也已做人类可读映射，避免直接暴露内部枚举值
+- 编辑侧 reviewer 反馈展示已完成第一阶段去分数化：
+  - 稿件详情页 `Reviewer Feedback Summary` 不再显示 `Score`
+  - reviewer history modal 不再把 `report_score` 作为主展示文案
+  - `DecisionPanel` 与 `ReviewReportComparison` 已移除 reviewer score 展示，改为仅基于提交状态与评论内容汇总
 
 ## 已写计划与说明文档
 

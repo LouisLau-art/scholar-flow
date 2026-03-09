@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import VersionHistory from '@/components/VersionHistory'
-import { getLatestRevisionDecisionType, getScoreNumber, isReviewCompleted } from '@/lib/decision/reviewUtils'
+import { getLatestRevisionDecisionType, isReviewCompleted } from '@/lib/decision/reviewUtils'
 
 interface ReviewFeedback {
   id: string
@@ -239,14 +239,6 @@ export default function DecisionPanel({
       setRevisionType('minor')
     }
   }, [majorLocked, revisionType])
-
-  const averageOverallScore = useMemo(() => {
-    const scores = reviews
-      .map((r) => getScoreNumber(r.score))
-      .filter((s): s is number => typeof s === 'number' && Number.isFinite(s))
-    if (!scores.length) return 0
-    return scores.reduce((sum, s) => sum + s, 0) / scores.length
-  }, [reviews])
 
   const toWorkspaceDecision = (
     value: 'accept' | 'reject' | 'revision',
@@ -506,9 +498,7 @@ export default function DecisionPanel({
               {reviews.map((r, idx) => {
                 const displayName =
                   r.reviewer_name || r.reviewer_email || r.reviewer_id || `Reviewer ${idx + 1}`
-                const scoreNum = getScoreNumber(r.score)
                 const completed = isReviewCompleted(r)
-                const scoreLabel = scoreNum !== null ? String(scoreNum) : completed ? 'N/A' : 'Pending'
                 const confidential = r.confidential_comments_to_editor || ''
                 const hasAttachment = Boolean((r.attachment_path || '').trim())
                 return (
@@ -518,9 +508,7 @@ export default function DecisionPanel({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="text-sm font-semibold text-foreground">{displayName}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Score: <span className="font-semibold text-foreground">{scoreLabel}</span>
-                      </div>
+                      <div className="text-xs text-muted-foreground">{completed ? 'Submitted' : 'Pending'}</div>
                     </div>
                     <div className="mt-2">
                       <div className="text-xs font-semibold text-foreground">
@@ -551,15 +539,9 @@ export default function DecisionPanel({
         </div>
 
         <div className="rounded-lg bg-muted p-4">
-          <h4 className="mb-2 text-sm font-medium text-foreground">Reviewer Score Summary</h4>
+          <h4 className="mb-2 text-sm font-medium text-foreground">Reviewer Coverage Summary</h4>
           {reviews.length > 0 ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Average Overall Score:</span>
-                <span className="text-lg font-semibold text-primary">
-                  {completedCount > 0 ? averageOverallScore.toFixed(1) : 'N/A'}
-                </span>
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Number of Reviews:</span>
                 <span className="text-lg font-semibold text-primary">
@@ -568,7 +550,7 @@ export default function DecisionPanel({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No reviewer scores available</p>
+            <p className="text-sm text-muted-foreground">No reviewer reports available</p>
           )}
         </div>
 

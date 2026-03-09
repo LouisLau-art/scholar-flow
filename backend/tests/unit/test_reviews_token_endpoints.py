@@ -144,7 +144,6 @@ async def test_submit_review_by_token_uploads_attachment(monkeypatch):
     result = await reviews_api.submit_review_by_token(
         token=token,
         comments_for_author="Public comments",
-        score=5,
         confidential_comments_to_editor="Confidential",
         attachment=upload,
     )
@@ -154,6 +153,7 @@ async def test_submit_review_by_token_uploads_attachment(monkeypatch):
     assert fake.last_update is not None
     assert fake.last_update["confidential_comments_to_editor"] == "Confidential"
     assert fake.last_update["attachment_path"] is not None
+    assert "score" not in fake.last_update
 
 
 @pytest.mark.asyncio
@@ -184,19 +184,6 @@ async def test_get_review_feedback_sanitizes_for_author(monkeypatch):
     assert item["content"] == "Public"
     assert "confidential_comments_to_editor" not in item
     assert "attachment_path" not in item
-
-
-@pytest.mark.asyncio
-async def test_submit_review_by_token_rejects_invalid_score():
-    with pytest.raises(HTTPException) as exc:
-        await reviews_api.submit_review_by_token(
-            token="tok",
-            comments_for_author="ok",
-            score=9,
-            confidential_comments_to_editor=None,
-            attachment=None,
-        )
-    assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio

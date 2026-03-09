@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { FileUpload } from '@/components/FileUpload'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { UI_COPY } from '@/lib/ui-copy'
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
@@ -24,7 +23,6 @@ function ReviewForm({
   manuscriptId: string
   onSubmitted?: () => void
 }) {
-  const [score, setScore] = useState(5)
   const [commentsToAuthor, setCommentsToAuthor] = useState('')
   const [confidentialComments, setConfidentialComments] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
@@ -36,17 +34,12 @@ function ReviewForm({
       toast.error('Comments for the Authors is required.')
       return
     }
-    if (score < 1 || score > 5) {
-      toast.error('Score must be 1-5.')
-      return
-    }
 
     setIsSubmitting(true)
     const toastId = toast.loading('Submitting review...')
     try {
       const fd = new FormData()
       fd.set('comments_for_author', commentsToAuthor)
-      fd.set('score', String(score))
       if (confidentialComments.trim()) fd.set('confidential_comments_to_editor', confidentialComments)
       if (attachment) fd.set('attachment', attachment)
 
@@ -80,33 +73,15 @@ function ReviewForm({
         data-manuscript-id={manuscriptId}
       >
         <div>
-          <label htmlFor="review_score" className="block text-sm font-semibold text-foreground">
-            Score (1-5)
-          </label>
-          <Select value={String(score)} onValueChange={(value) => setScore(Number(value))}>
-            <SelectTrigger id="review_score" className="mt-1 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5">5 - Excellent</SelectItem>
-              <SelectItem value="4">4 - Good</SelectItem>
-              <SelectItem value="3">3 - Average</SelectItem>
-              <SelectItem value="2">2 - Poor</SelectItem>
-              <SelectItem value="1">1 - Terrible</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
           <label htmlFor="comments_for_author" className="block text-sm font-semibold text-foreground">
             Comments for the Authors
           </label>
           <Textarea
             id="comments_for_author"
-            rows={8}
+            rows={16}
             value={commentsToAuthor}
             onChange={(e) => setCommentsToAuthor(e.target.value)}
-            className="mt-1 border-border/80 px-4 py-2"
+            className="mt-1 min-h-[22rem] resize-y border-border/80 px-4 py-2"
           />
         </div>
 
@@ -117,10 +92,10 @@ function ReviewForm({
           <p className="mt-1 text-xs font-semibold text-red-600">Authors will NOT see this</p>
           <Textarea
             id="confidential_comments_to_editor"
-            rows={5}
+            rows={10}
             value={confidentialComments}
             onChange={(e) => setConfidentialComments(e.target.value)}
-            className="mt-2 border-border/80 px-4 py-2"
+            className="mt-2 min-h-[14rem] resize-y border-border/80 px-4 py-2"
           />
         </div>
 

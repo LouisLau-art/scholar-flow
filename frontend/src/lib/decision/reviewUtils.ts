@@ -5,19 +5,9 @@ export type ReviewFeedbackLike = {
   confidential_comments_to_editor?: string | null
 }
 
-export function getScoreNumber(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string') {
-    const n = Number(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
-
 export function isReviewCompleted(review: ReviewFeedbackLike): boolean {
   const status = String(review.status || '').toLowerCase()
   if (status === 'completed' || status === 'submitted' || status === 'done') return true
-  if (getScoreNumber(review.score) !== null) return true
   if ((review.comments_for_author || '').trim()) return true
   if ((review.confidential_comments_to_editor || '').trim()) return true
   return false

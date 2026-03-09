@@ -14,7 +14,6 @@ async def submit_review_via_magic_link_impl(
     payload,
     comments_for_author: str | None,
     content: str | None,
-    score: int,
     confidential_comments_to_editor: str | None,
     attachment: UploadFile | None,
     supabase_admin_client: Any,
@@ -24,8 +23,6 @@ async def submit_review_via_magic_link_impl(
     public_comments = (comments_for_author or content or "").strip()
     if not public_comments:
         raise HTTPException(status_code=400, detail="comments_for_author is required")
-    if score < 1 or score > 5:
-        raise HTTPException(status_code=400, detail="score must be 1..5")
 
     attachment_path = None
     if attachment is not None:
@@ -49,7 +46,6 @@ async def submit_review_via_magic_link_impl(
         "status": "completed",
         "comments_for_author": public_comments,
         "content": public_comments,  # 兼容旧字段
-        "score": score,
         "confidential_comments_to_editor": confidential_comments_to_editor,
         "attachment_path": attachment_path,
     }
@@ -82,7 +78,6 @@ async def submit_review_via_magic_link_impl(
             {
                 "status": "completed",
                 "comments": public_comments,
-                "scores": {"overall": score},
             }
         ).eq("id", str(assignment_id)).execute()
     except Exception as e:
@@ -245,7 +240,6 @@ async def submit_review_by_token_impl(
     token: str,
     comments_for_author: str | None,
     content: str | None,
-    score: int,
     confidential_comments_to_editor: str | None,
     attachment: UploadFile | None,
     supabase_admin_client: Any,
@@ -255,8 +249,6 @@ async def submit_review_by_token_impl(
     public_comments = (comments_for_author or content or "").strip()
     if not public_comments:
         raise HTTPException(status_code=400, detail="comments_for_author is required")
-    if score < 1 or score > 5:
-        raise HTTPException(status_code=400, detail="score must be 1..5")
 
     try:
         rr_resp = (
@@ -301,7 +293,6 @@ async def submit_review_by_token_impl(
         update_payload = {
             "comments_for_author": public_comments,
             "content": public_comments,
-            "score": score,
             "status": "completed",
             "confidential_comments_to_editor": confidential_comments_to_editor,
             "attachment_path": attachment_path,
@@ -358,7 +349,6 @@ async def submit_review_by_token_impl(
                     {
                         "status": "completed",
                         "comments": public_comments,
-                        "scores": {"overall": score},
                     }
                 ).eq("id", assignment_rows[0]["id"]).execute()
 

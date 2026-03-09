@@ -91,6 +91,8 @@ test.describe('Reviewer Workspace layout (mocked)', () => {
     await expect(page).toHaveURL(new RegExp(`/reviewer/workspace/${assignmentId}$`))
     await expect(page.getByText('Reviewer Workspace', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Review Comment' })).toBeVisible()
+    await expect(page.getByLabel('Comment to Authors')).toHaveAttribute('rows', '16')
+    await expect(page.getByLabel('Private note to Editor (optional)')).toHaveAttribute('rows', '10')
     await expect(page.getByTitle('Manuscript PDF')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Reviewer Workspace Mock' })).toBeVisible()
     await expect(page.getByText('ScholarFlow', { exact: false })).toHaveCount(0)

@@ -6,11 +6,6 @@ type ReviewReportComparisonProps = {
   reports: DecisionReport[]
 }
 
-function formatScore(score: number | null | undefined): string {
-  if (score == null) return 'N/A'
-  return String(score)
-}
-
 export function ReviewReportComparison({ reports }: ReviewReportComparisonProps) {
   if (!reports.length) {
     return (
@@ -36,7 +31,6 @@ export function ReviewReportComparison({ reports }: ReviewReportComparisonProps)
                 <h3 className="text-sm font-semibold text-foreground">
                   Reviewer {index + 1}: {report.reviewer_name || report.reviewer_email || 'Unknown'}
                 </h3>
-                <p className="text-xs text-muted-foreground">Score: {formatScore(report.score)}</p>
               </div>
               <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
                 {report.status || 'submitted'}

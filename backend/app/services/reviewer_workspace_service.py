@@ -468,7 +468,6 @@ class ReviewerWorkspaceService:
             "recommendation": recommendation,
             "attachment_path": attachment_path,
             "content": payload.comments_for_author,
-            "score": 5,
         }
 
         existing = (

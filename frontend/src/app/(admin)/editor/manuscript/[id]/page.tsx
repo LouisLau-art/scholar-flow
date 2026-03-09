@@ -1138,18 +1138,13 @@ export default function EditorManuscriptDetailPage() {
                           ? `Round ${Number(row.round_number)}`
                           : '—'
                     const dueText = row.due_at ? formatDateTimeLocal(row.due_at) : '—'
-                    const scoreText =
-                      typeof row.report_score === 'number'
-                        ? `Score ${row.report_score}`
-                        : row.report_status
-                        ? String(row.report_status)
-                        : '—'
+                    const reviewStatusText = row.report_status ? String(row.report_status) : '—'
                     const decisionText =
                       row.assignment_status === 'declined'
                         ? `${formatReviewerDeclineReason(row.decline_reason) || 'Declined'}${
                             row.decline_note ? ` · ${row.decline_note}` : ''
                           }`
-                        : scoreText
+                        : reviewStatusText
                     return (
                       <tr key={rowKey} className="border-b border-border/60 last:border-0 align-top">
                         <td className="px-3 py-2.5">

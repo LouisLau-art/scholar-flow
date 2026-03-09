@@ -23,7 +23,7 @@ async def get_manuscript_reviews(
     获取某稿件的审稿反馈（用于 Editor 决策页展示 Review Summary）。
 
     中文注释:
-    - Author 只能看到公开字段（comments_for_author/content/score）
+    - Author 只能看到公开字段（comments_for_author/content）
     - Internal（admin / managing_editor / editor_in_chief / assistant_editor / production_editor）可读取内部视图
     - assistant_editor 仅可读取自己被分配稿件
     - production_editor 仅可读取自己被分配过 production cycle 的稿件（含历史轮次）
@@ -150,7 +150,7 @@ async def get_manuscript_reviews(
 
     # 中文注释:
     # - 历史上可能出现“重复邀请/重复指派”导致同一 reviewer 多条 review_reports（其中部分未提交）。
-    # - Editor 决策页应优先展示“已完成/有内容”的那条，避免出现 Score N/A 的误导。
+    # - Editor 决策页应优先展示“已完成/有内容”的那条，避免旧占位 score 干扰排序。
     def _parse_dt(value: object) -> datetime | None:
         if isinstance(value, datetime):
             return value
@@ -164,11 +164,10 @@ async def get_manuscript_reviews(
     def _row_rank(r: dict) -> tuple[int, int, int, datetime]:
         status = str(r.get("status") or "").strip().lower()
         is_completed = 1 if status in {"completed", "done", "submitted"} else 0
-        has_score = 1 if r.get("score") is not None else 0
         public_text = str(r.get("comments_for_author") or r.get("content") or "").strip()
         has_public = 1 if public_text else 0
         dt = _parse_dt(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
-        return (is_completed, has_score, has_public, dt)
+        return (is_completed, has_public, len(public_text), dt)
 
     best_by_reviewer: dict[str, dict] = {}
     others: list[dict] = []
@@ -200,7 +199,6 @@ async def get_manuscript_reviews(
                     # 兼容：旧页面读取 content
                     "content": public_text,
                     "comments_for_author": public_text,
-                    "score": r.get("score"),
                     "created_at": r.get("created_at"),
                 }
             )

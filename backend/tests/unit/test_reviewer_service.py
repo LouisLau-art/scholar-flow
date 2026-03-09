@@ -259,6 +259,9 @@ def test_submit_review_marks_assignment_completed(supabase_admin):
     assert out["status"] == "completed"
     assert assignments.update.called is True
     assert reports.insert.called is True
+    inserted_payload = reports.insert.call_args.args[0]
+    assert "score" not in inserted_payload
+    assert reports.insert.called is True
     assert manuscripts.update.called is True
 
 
