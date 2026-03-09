@@ -188,6 +188,34 @@ export default function ReviewerWorkspacePage() {
         <section className="space-y-6 lg:col-span-8">
           <PDFViewer pdfUrl={manuscript.pdf_url} isLoading={false} />
 
+          <ActionPanel
+            assignmentId={assignmentId}
+            workspace={workspace}
+            onDirtyChange={setIsDirty}
+            onSubmitted={() => {
+              setWorkspace((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      assignment: {
+                        ...prev.assignment,
+                        status: 'completed',
+                        submitted_at: new Date().toISOString(),
+                      },
+                      permissions: { ...prev.permissions, is_read_only: true, can_submit: false },
+                      review_report: {
+                        ...prev.review_report,
+                        status: 'completed',
+                        submitted_at: new Date().toISOString(),
+                      },
+                    }
+                  : prev
+              )
+            }}
+          />
+        </section>
+
+        <section className="space-y-6 lg:col-span-4">
           <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Communication Timeline</CardTitle>
@@ -218,34 +246,6 @@ export default function ReviewerWorkspacePage() {
               )}
             </CardContent>
           </Card>
-        </section>
-
-        <section className="space-y-6 lg:col-span-4">
-          <ActionPanel
-            assignmentId={assignmentId}
-            workspace={workspace}
-            onDirtyChange={setIsDirty}
-            onSubmitted={() => {
-              setWorkspace((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      assignment: {
-                        ...prev.assignment,
-                        status: 'completed',
-                        submitted_at: new Date().toISOString(),
-                      },
-                      permissions: { ...prev.permissions, is_read_only: true, can_submit: false },
-                      review_report: {
-                        ...prev.review_report,
-                        status: 'completed',
-                        submitted_at: new Date().toISOString(),
-                      },
-                    }
-                  : prev
-              )
-            }}
-          />
 
           <Card className="border-border shadow-sm">
             <CardHeader>

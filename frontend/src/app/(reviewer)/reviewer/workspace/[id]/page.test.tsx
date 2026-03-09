@@ -87,10 +87,15 @@ describe('ReviewerWorkspacePage', () => {
 
     const authorBox = await screen.findByLabelText('Comment to Authors')
     const editorBox = await screen.findByLabelText('Private note to Editor (optional)')
+    const reviewCommentHeading = await screen.findByRole('heading', { name: 'Review Comment' })
+    const timelineHeading = await screen.findByRole('heading', { name: 'Communication Timeline' })
 
     expect(authorBox).toHaveAttribute('rows', '16')
     expect(authorBox).toHaveClass('resize-y')
     expect(editorBox).toHaveAttribute('rows', '10')
     expect(editorBox).toHaveClass('resize-y')
+    expect(
+      reviewCommentHeading.compareDocumentPosition(timelineHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 })
