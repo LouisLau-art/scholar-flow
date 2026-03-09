@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { Loader2, Save, Send, ShieldAlert, FileText, Download } from 'lucide-react'
+import { Loader2, Send, ShieldAlert, FileText, Download } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -68,7 +68,6 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
     normalizeAttachmentList(reviewReport.attachments)
   )
   const isReadOnly = workspace.permissions.is_read_only
-  const draftStorageKey = useMemo(() => `sf:reviewer:draft:${assignmentId}`, [assignmentId])
   const form = useForm<FormValues>({
     mode: 'onChange',
     defaultValues: {
@@ -81,9 +80,7 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
     register,
     handleSubmit,
     formState: { errors, isDirty, isSubmitting },
-    getValues,
     reset,
-    setValue,
   } = form
 
   useEffect(() => {
@@ -106,36 +103,6 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
     }
     onDirtyChange(isDirty)
   }, [isDirty, isReadOnly, onDirtyChange])
-
-  useEffect(() => {
-    if (isReadOnly) return
-    const authorComment = String(reviewReport.comments_for_author || '').trim()
-    const privateComment = String(reviewReport.confidential_comments_to_editor || '').trim()
-    if (authorComment || privateComment) return
-    try {
-      const raw = window.localStorage.getItem(draftStorageKey)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as {
-        comments_for_author?: string
-        confidential_comments_to_editor?: string
-      } | null
-      if (!parsed) return
-      if (typeof parsed.comments_for_author === 'string') {
-        setValue('comments_for_author', parsed.comments_for_author, { shouldDirty: false })
-      }
-      if (typeof parsed.confidential_comments_to_editor === 'string') {
-        setValue('confidential_comments_to_editor', parsed.confidential_comments_to_editor, { shouldDirty: false })
-      }
-    } catch {
-      // ignore corrupted local draft
-    }
-  }, [
-    draftStorageKey,
-    isReadOnly,
-    setValue,
-    reviewReport.comments_for_author,
-    reviewReport.confidential_comments_to_editor,
-  ])
 
   const handleUpload = async (file: File | null) => {
     if (!file) return
@@ -168,23 +135,6 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
     }
   }
 
-  const saveDraft = () => {
-    if (isReadOnly) return
-    const values = getValues()
-    try {
-      window.localStorage.setItem(
-        draftStorageKey,
-        JSON.stringify({
-          comments_for_author: values.comments_for_author || '',
-          confidential_comments_to_editor: values.confidential_comments_to_editor || '',
-        })
-      )
-      toast.success('Draft saved locally')
-    } catch {
-      toast.error('Failed to save local draft')
-    }
-  }
-
   const onSubmit = handleSubmit(async (values) => {
     const payload: ReviewSubmission = {
       comments_for_author: values.comments_for_author,
@@ -200,11 +150,6 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
     const json = await res.json().catch(() => null)
     if (!res.ok || !json?.success) {
       throw new Error(json?.detail || json?.message || 'Submit failed')
-    }
-    try {
-      window.localStorage.removeItem(draftStorageKey)
-    } catch {
-      // ignore
     }
     toast.success('Review submitted')
     onSubmitted()
@@ -299,16 +244,6 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={saveDraft}
-              disabled={isReadOnly || isSubmitting || isUploading}
-              className="gap-1.5"
-            >
-              <Save className="h-4 w-4" />
-              Save Draft
-            </Button>
             <Button type="submit" disabled={isReadOnly || isSubmitting || isUploading} className="gap-1.5">
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {isReadOnly ? 'Read-only' : isSubmitting ? 'Submitting…' : 'Submit Review'}
