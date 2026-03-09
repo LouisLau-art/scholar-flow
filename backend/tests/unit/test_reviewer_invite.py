@@ -168,6 +168,55 @@ def test_get_invite_view_includes_journal_title(supabase_admin):
     assert out.manuscript.journal_title == "Journal A"
 
 
+def test_get_invite_view_preserves_accepted_state_when_cancel_columns_missing(supabase_admin):
+    svc = reviewer_service_module.ReviewerInviteService()
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.side_effect = [
+        RuntimeError('column review_assignments.cancelled_at does not exist'),
+        _Resp(
+            data={
+                "id": "00000000-0000-0000-0000-000000000001",
+                "manuscript_id": "00000000-0000-0000-0000-000000000011",
+                "reviewer_id": "00000000-0000-0000-0000-000000000022",
+                "status": "pending",
+                "due_at": "2026-03-20T00:00:00Z",
+                "invited_at": "2026-03-01T00:00:00Z",
+                "opened_at": "2026-03-02T00:00:00Z",
+                "accepted_at": "2026-03-03T00:00:00Z",
+                "declined_at": None,
+                "decline_reason": None,
+                "decline_note": None,
+            }
+        ),
+    ]
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000011",
+            "title": "Accepted Manuscript",
+            "abstract": "Abstract text",
+            "journal_id": "00000000-0000-0000-0000-000000000099",
+        }
+    )
+    journals = supabase_admin.table("journals")
+    journals.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000099",
+            "title": "Journal A",
+        }
+    )
+    review_reports = supabase_admin.table("review_reports")
+    review_reports.execute.return_value = _Resp(data=[])
+
+    out = svc.get_invite_view(
+        assignment_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001"),
+        reviewer_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000022"),
+    )
+
+    assert out.assignment.status == "accepted"
+    assert out.can_open_workspace is True
+
+
 def test_accept_invitation_triggers_activation_follow_up_for_pending_reviewer(
     supabase_admin,
     monkeypatch: pytest.MonkeyPatch,

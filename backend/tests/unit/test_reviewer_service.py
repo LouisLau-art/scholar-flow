@@ -202,6 +202,54 @@ def test_workspace_loads_and_returns_permissions(supabase_admin):
     assert out.manuscript.pdf_url.startswith("https://example.com/")
 
 
+def test_workspace_loads_when_cancel_columns_missing_but_acceptance_exists(supabase_admin):
+    svc = reviewer_service_module.ReviewerWorkspaceService()
+
+    assignments = supabase_admin.table("review_assignments")
+    assignments.execute.side_effect = [
+        RuntimeError('column review_assignments.cancelled_at does not exist'),
+        _Resp(
+            data={
+                "id": "a1",
+                "manuscript_id": "00000000-0000-0000-0000-000000000011",
+                "reviewer_id": "00000000-0000-0000-0000-000000000002",
+                "status": "pending",
+                "due_at": None,
+                "invited_at": "2026-03-01T00:00:00Z",
+                "opened_at": "2026-03-02T00:00:00Z",
+                "accepted_at": "2026-03-03T00:00:00Z",
+                "declined_at": None,
+                "decline_reason": None,
+            }
+        ),
+    ]
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.return_value = _Resp(
+        data={
+            "id": "00000000-0000-0000-0000-000000000011",
+            "title": "Paper",
+            "abstract": "Abs",
+            "file_path": "p/a.pdf",
+        }
+    )
+
+    reports = supabase_admin.table("review_reports")
+    reports.execute.return_value = _Resp(data=[])
+
+    supabase_admin.storage.from_.return_value.create_signed_url.return_value = {
+        "signedURL": "https://example.com/signed.pdf"
+    }
+
+    out = svc.get_workspace_data(
+        assignment_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000001"),
+        reviewer_id=reviewer_service_module.UUID("00000000-0000-0000-0000-000000000002"),
+    )
+
+    assert out.assignment.accepted_at is not None
+    assert out.permissions.can_submit is True
+
+
 def test_workspace_requires_explicit_acceptance_before_loading(supabase_admin):
     svc = reviewer_service_module.ReviewerWorkspaceService()
 

@@ -69,7 +69,9 @@ class ReviewerWorkspaceService:
         select_variants = [
             "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, submitted_at, decline_reason, cancelled_at",
             "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, cancelled_at",
-            "id, manuscript_id, reviewer_id, status, due_at, accepted_at, declined_at, cancelled_at",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at",
+            "id, manuscript_id, reviewer_id, status, due_at, accepted_at, declined_at",
             "id, manuscript_id, reviewer_id, status, due_at",
         ]
         last_error: Exception | None = None

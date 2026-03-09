@@ -490,33 +490,34 @@ class ReviewerInviteService:
         return "invited"
 
     def _get_assignment_for_reviewer(self, *, assignment_id: UUID, reviewer_id: UUID) -> Dict[str, Any]:
-        try:
-            resp = (
-                supabase_admin.table("review_assignments")
-                .select(
-                    "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, cancelled_at, cancelled_by, cancel_reason, cancel_via"
-                )
-                .eq("id", str(assignment_id))
-                .single()
-                .execute()
-            )
-        except Exception as e:
-            # 兼容未应用 037 migration 的环境
-            if "column" in str(e).lower() and (
-                "invited_at" in str(e).lower()
-                or "accepted_at" in str(e).lower()
-                or "declined_at" in str(e).lower()
-                or "cancelled_at" in str(e).lower()
-            ):
+        select_variants = [
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, cancelled_at, cancelled_by, cancel_reason, cancel_via",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note",
+            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at",
+            "id, manuscript_id, reviewer_id, status, due_at, accepted_at, declined_at",
+            "id, manuscript_id, reviewer_id, status, due_at",
+        ]
+        last_error: Exception | None = None
+        resp = None
+        for cols in select_variants:
+            try:
                 resp = (
                     supabase_admin.table("review_assignments")
-                    .select("id, manuscript_id, reviewer_id, status, due_at")
+                    .select(cols)
                     .eq("id", str(assignment_id))
                     .single()
                     .execute()
                 )
-            else:
+                last_error = None
+                break
+            except Exception as e:
+                last_error = e
+                text = str(e).lower()
+                if "column" in text or "does not exist" in text or "pgrst" in text:
+                    continue
                 raise
+        if resp is None and last_error is not None:
+            raise last_error
         assignment = getattr(resp, "data", None) or {}
         if not assignment:
             raise ValueError("Assignment not found")
