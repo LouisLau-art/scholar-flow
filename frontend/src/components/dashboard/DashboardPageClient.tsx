@@ -54,7 +54,7 @@ const KNOWN_ROLE_TOKENS = [
 type DashboardPageClientProps = {
   initialStats: any | null
   initialSubmissions: any[]
-  initialRoles: string[] | null
+  initialRoles: unknown | null
   initialStatsLoaded: boolean
   initialSubmissionsLoaded: boolean
   initialRolesLoaded: boolean
@@ -82,15 +82,15 @@ function parseDashboardTab(raw: string | null): DashboardTab | null {
 }
 
 function normalizeRoleTokens(input: unknown): string[] {
-  if (!Array.isArray(input)) return []
+  const values = Array.isArray(input) ? input.flat(Infinity) : [input]
   const out = new Set<string>()
   const known = new Set<string>(KNOWN_ROLE_TOKENS)
   const sortedTokens = [...KNOWN_ROLE_TOKENS].sort((a, b) => b.length - a.length)
-  for (const raw of input) {
+  for (const raw of values) {
     const text = String(raw || '').trim().toLowerCase()
     if (!text) continue
-    // 标准分隔场景: "author,reviewer" / "author reviewer"
-    for (const part of text.split(/[,\s|;/]+/).filter(Boolean)) {
+    // 标准分隔场景: "author,reviewer" / "author reviewer" / "[\"author\",\"reviewer\"]"
+    for (const part of text.split(/[^a-z_]+/).filter(Boolean)) {
       if (known.has(part)) out.add(part)
     }
 
@@ -153,7 +153,7 @@ function DashboardPageContent({
   const [stats, setStats] = useState<any>(initialStats)
   const [submissions, setSubmissions] = useState<any[]>(initialSubmissions)
   const [isLoading, setIsLoading] = useState(!(initialStatsLoaded && initialSubmissionsLoaded))
-  const [roles, setRoles] = useState<string[] | null>(initialRoles)
+  const [roles, setRoles] = useState<unknown>(initialRoles)
   const [rolesLoading, setRolesLoading] = useState(!initialRolesLoaded)
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     const tab = parseDashboardTab(tabParam)

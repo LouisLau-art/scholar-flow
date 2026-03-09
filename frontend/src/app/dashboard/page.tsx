@@ -5,7 +5,7 @@ import { getServerAccessToken } from '@/lib/server-session'
 type DashboardInitialData = {
   initialStats: any | null
   initialSubmissions: any[]
-  initialRoles: string[] | null
+  initialRoles: unknown | null
   initialStatsLoaded: boolean
   initialSubmissionsLoaded: boolean
   initialRolesLoaded: boolean
@@ -49,7 +49,7 @@ async function getDashboardInitialData(): Promise<DashboardInitialData> {
   return {
     initialStats: statsRes.ok ? statsRes.data : null,
     initialSubmissions: submissionsRes.ok && Array.isArray(submissionsRes.data) ? submissionsRes.data : [],
-    initialRoles: profileRes.ok && Array.isArray(profileRes.data?.roles) ? profileRes.data.roles : null,
+    initialRoles: profileRes.ok ? (profileRes.data?.roles ?? null) : null,
     initialStatsLoaded: statsRes.ok,
     initialSubmissionsLoaded: submissionsRes.ok,
     initialRolesLoaded: profileRes.ok,
