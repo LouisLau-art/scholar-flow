@@ -122,14 +122,6 @@ def _validate_cooldown_policy(
     override_requested = bool(override_cooldown and policy.get("cooldown_active"))
     if not policy.get("cooldown_active"):
         return override_role_set, False
-
-    cooldown_until = str(policy.get("cooldown_until") or "").strip()
-    cooldown_suffix = f" until {cooldown_until}" if cooldown_until else ""
-    if not override_requested:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Invitation blocked: cooldown active{cooldown_suffix}; override_cooldown=true required",
-        )
     return override_role_set, True
 
 

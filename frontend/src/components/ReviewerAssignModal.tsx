@@ -331,19 +331,14 @@ export default function ReviewerAssignModal({
       if (!ownerId) {
         toast.message('未绑定 Owner：将由后端自动绑定为当前操作人。')
       }
-      if (selectedOverrideReviewers.length > 0) {
-        const missingReason = selectedOverrideReviewers.find((rid) => !String(overrideReasons[rid] || '').trim())
-        if (missingReason) {
-          toast.error('请填写 cooldown override 原因后再提交。')
-          return
-        }
-      }
       setIsSubmitting(true)
       try {
-        const overrides: AssignOverride[] = selectedOverrideReviewers.map((rid) => ({
-          reviewerId: rid,
-          reason: String(overrideReasons[rid] || '').trim(),
-        }))
+        const overrides: AssignOverride[] = selectedOverrideReviewers
+          .map((rid) => ({
+            reviewerId: rid,
+            reason: String(overrideReasons[rid] || '').trim(),
+          }))
+          .filter((item) => Boolean(item.reason))
         const ret = await Promise.resolve(
           (overrides.length > 0 ? onAssign(selectedReviewers, { overrides }) : onAssign(selectedReviewers)) as any
         )
@@ -619,7 +614,7 @@ export default function ReviewerAssignModal({
             </div>
 
             <div className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Selection policy hint: cooldown {policyMeta.cooldown_days || 30} days (same journal) is currently guarded here, conflict-of-interest is hard block, overdue risk is warning-only.
+              Selection policy hint: cooldown {policyMeta.cooldown_days || 30} days (same journal) is warning-only here, conflict-of-interest remains hard block, overdue risk is warning-only.
             </div>
 
             <ReviewerCandidateList
@@ -642,9 +637,9 @@ export default function ReviewerAssignModal({
 
             {selectedOverrideReviewers.length > 0 && (
               <div className="mt-4 rounded-lg border border-secondary-foreground/20 bg-secondary p-3">
-                <div className="text-sm font-semibold text-secondary-foreground">Cooldown override required</div>
+                <div className="text-sm font-semibold text-secondary-foreground">Cooldown note</div>
                 <div className="mt-1 text-xs text-secondary-foreground">
-                  你已选择 {selectedOverrideReviewers.length} 位命中 cooldown 的审稿人。提交前请填写 override 原因（将写入审计日志）。
+                  你已选择 {selectedOverrideReviewers.length} 位命中 cooldown 的审稿人。可选填写备注，提交后会随审计信息一并保留。
                 </div>
                 <div className="mt-3 space-y-2">
                   {selectedOverrideReviewers.map((rid) => (

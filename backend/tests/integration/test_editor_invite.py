@@ -167,7 +167,7 @@ async def test_editor_assign_creates_selected_assignment_without_sending_email(
 
 
 @pytest.mark.asyncio
-async def test_editor_assign_blocked_by_cooldown_without_override(
+async def test_editor_assign_allows_cooldown_without_override(
     client: AsyncClient,
     auth_token: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -235,8 +235,13 @@ async def test_editor_assign_blocked_by_cooldown_without_override(
         patch("app.core.roles.supabase", supabase),
     ):
         resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
-        assert resp.status_code == 409
-        assert "cooldown" in str(resp.json().get("detail", "")).lower()
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload.get("success") is True
+        assert payload.get("policy", {}).get("cooldown_active") is True
+
+    insert_payload = supabase_admin._insert_calls["review_assignments"][0]
+    assert insert_payload["status"] == "selected"
 
 
 @pytest.mark.asyncio
