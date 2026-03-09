@@ -1085,6 +1085,8 @@ export default function EditorManuscriptDetailPage() {
                     <th className="px-3 py-2 text-left font-semibold">Status</th>
                     <th className="px-3 py-2 text-left font-semibold">Round / Due</th>
                     <th className="px-3 py-2 text-left font-semibold">Added On</th>
+                    <th className="px-3 py-2 text-left font-semibold">Added By</th>
+                    <th className="px-3 py-2 text-left font-semibold">Added Via</th>
                     <th className="px-3 py-2 text-left font-semibold">Email Actions</th>
                     <th className="px-3 py-2 text-left font-semibold">Decision / Submitted</th>
                     <th className="px-3 py-2 text-left font-semibold">Manuscript Status</th>
@@ -1094,6 +1096,12 @@ export default function EditorManuscriptDetailPage() {
                   {reviewerHistoryRows.map((row, idx) => {
                     const rowKey = String(row.assignment_id || `history-${idx}`)
                     const emailEvents = Array.isArray(row.email_events) ? row.email_events : []
+                    const addedByLabel =
+                      String(row.added_by?.full_name || '').trim() ||
+                      String(row.added_by?.email || '').trim() ||
+                      '—'
+                    const invitedByLabel =
+                      String(row.invited_by?.full_name || '').trim() || String(row.invited_by?.email || '').trim()
                     const emailActions = (
                       emailEvents.length > 0
                         ? emailEvents.map((event) => {
@@ -1104,6 +1112,9 @@ export default function EditorManuscriptDetailPage() {
                             return `${status}${eventType ? ` ${eventType}` : ''} ${createdAt}${error ? ` · ${error}` : ''}`
                           })
                         : [
+                            invitedByLabel
+                              ? `Invited by ${invitedByLabel}${row.invited_via ? ` via ${row.invited_via}` : ''}`
+                              : '',
                             row.invited_at ? `Invited ${formatDateTimeLocal(row.invited_at)}` : '',
                             row.last_reminded_at ? `Reminded ${formatDateTimeLocal(row.last_reminded_at)}` : '',
                           ].filter(Boolean)
@@ -1137,6 +1148,8 @@ export default function EditorManuscriptDetailPage() {
                           <div className="text-xs text-muted-foreground">Due {dueText}</div>
                         </td>
                         <td className="px-3 py-2.5">{row.added_on ? formatDateTimeLocal(row.added_on) : '—'}</td>
+                        <td className="px-3 py-2.5">{addedByLabel}</td>
+                        <td className="px-3 py-2.5">{row.added_via || '—'}</td>
                         <td className="px-3 py-2.5">{emailActions || '—'}</td>
                         <td className="px-3 py-2.5">
                           <div>{decisionText}</div>

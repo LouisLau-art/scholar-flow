@@ -51,6 +51,10 @@ describe('Reviewer summary cards', () => {
             due_at: '2026-03-12T00:00:00Z',
             latest_email_status: 'sent',
             latest_email_at: '2026-03-05T00:00:00Z',
+            added_by_name: 'Selector User',
+            added_via: 'editor_selection',
+            invited_by_name: 'Inviter User',
+            invited_via: 'template_invitation',
             email_events: [
               {
                 status: 'sent',
@@ -81,6 +85,8 @@ describe('Reviewer summary cards', () => {
     expect(screen.getByText('Review Status')).toBeInTheDocument()
     expect(screen.getByText(/Delivery:/i)).toBeInTheDocument()
     expect(screen.getByText(/sent/i)).toBeInTheDocument()
+    expect(screen.getByText(/Selected by Selector User via editor_selection/i)).toBeInTheDocument()
+    expect(screen.getByText(/Invited by Inviter User via template_invitation/i)).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('reviewer-history-ra-1'))
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
   })

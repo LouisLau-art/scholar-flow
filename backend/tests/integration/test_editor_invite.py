@@ -159,6 +159,8 @@ async def test_editor_assign_creates_selected_assignment_without_sending_email(
     assert send_mock.call_count == 0
     insert_payload = supabase_admin._insert_calls["review_assignments"][0]
     assert insert_payload["status"] == "selected"
+    assert insert_payload["selected_by"] == editor_id
+    assert insert_payload["selected_via"] == "editor_selection"
     assert "invited_at" not in insert_payload
     assert supabase_admin._update_calls.get("manuscripts") in (None, [])
     assert supabase_admin._insert_calls.get("status_transition_logs") in (None, [])
@@ -374,6 +376,8 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
                     "due_at": "2026-03-20T00:00:00+00:00",
                     "invited_at": None,
                     "last_reminded_at": None,
+                    "invited_by": None,
+                    "invited_via": None,
                 },
                 [{}],
             ],
@@ -429,6 +433,8 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
     assignment_patch = supabase_admin._update_calls["review_assignments"][0]
     assert assignment_patch["status"] == "invited"
     assert assignment_patch["invited_at"]
+    assert assignment_patch["invited_by"] == editor_id
+    assert assignment_patch["invited_via"] == "template_invitation"
 
     manuscript_patch = supabase_admin._update_calls["manuscripts"][0]
     assert manuscript_patch["status"] == "under_review"
@@ -502,6 +508,8 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
     manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1")
     assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccc1")
     editor_id = "00000000-0000-0000-0000-000000000000"
+    selector_id = "11111111-1111-1111-1111-111111111111"
+    inviter_id = "22222222-2222-2222-2222-222222222222"
 
     supabase = _Client(
         {
@@ -529,6 +537,10 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
                         "last_reminded_at": None,
                         "created_at": "2026-03-10T00:00:00+00:00",
                         "round_number": 1,
+                        "selected_by": selector_id,
+                        "selected_via": "editor_selection",
+                        "invited_by": inviter_id,
+                        "invited_via": "template_invitation",
                     }
                 ],
             ],
@@ -544,28 +556,34 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
                 ]
             ],
             "review_reports": [[]],
-                "email_logs": [
-                    [
-                        {
-                            "assignment_id": str(assignment_id),
-                            "manuscript_id": str(manuscript_id),
-                            "template_name": "reviewer_invitation_standard",
-                            "status": "sent",
-                            "event_type": "invitation",
-                            "error_message": None,
-                            "created_at": "2026-03-10T00:00:03+00:00",
-                        },
-                        {
-                            "assignment_id": str(assignment_id),
-                            "manuscript_id": str(manuscript_id),
-                            "template_name": "reviewer_invitation_standard",
-                            "status": "queued",
-                            "event_type": "invitation",
-                            "error_message": None,
-                            "created_at": "2026-03-10T00:00:01+00:00",
-                        },
-                    ]
-                ],
+            "email_logs": [
+                [
+                    {
+                        "assignment_id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "template_name": "reviewer_invitation_standard",
+                        "status": "sent",
+                        "event_type": "invitation",
+                        "error_message": None,
+                        "created_at": "2026-03-10T00:00:03+00:00",
+                    },
+                    {
+                        "assignment_id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "template_name": "reviewer_invitation_standard",
+                        "status": "queued",
+                        "event_type": "invitation",
+                        "error_message": None,
+                        "created_at": "2026-03-10T00:00:01+00:00",
+                    },
+                ]
+            ],
+            "user_profiles": [
+                [
+                    {"id": selector_id, "full_name": "Selector User", "email": "selector@example.com"},
+                    {"id": inviter_id, "full_name": "Inviter User", "email": "inviter@example.com"},
+                ]
+            ],
         }
     )
 
@@ -589,4 +607,8 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
     assert len(rows) == 1
     assert rows[0]["latest_email_status"] == "sent"
     assert rows[0]["latest_email_at"] == "2026-03-10T00:00:03+00:00"
+    assert rows[0]["added_by"]["full_name"] == "Selector User"
+    assert rows[0]["added_via"] == "editor_selection"
+    assert rows[0]["invited_by"]["full_name"] == "Inviter User"
+    assert rows[0]["invited_via"] == "template_invitation"
     assert [event["status"] for event in rows[0]["email_events"]] == ["sent", "queued"]

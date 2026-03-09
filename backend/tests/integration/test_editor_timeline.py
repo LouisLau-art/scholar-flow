@@ -81,6 +81,11 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
                     "decline_reason": None,
                     "decline_note": None,
                     "created_at": "2026-02-01T00:00:00Z",
+                    "round_number": 1,
+                    "selected_by": "selector-1",
+                    "selected_via": "editor_selection",
+                    "invited_by": "inviter-1",
+                    "invited_via": "template_invitation",
                 }
             ],
             "review_reports": [
@@ -119,6 +124,8 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
                 {"id": "owner-1", "full_name": "Owner User", "email": "owner@example.com"},
                 {"id": "editor-1", "full_name": "Editor User", "email": "editor@example.com"},
                 {"id": "reviewer-1", "full_name": "Reviewer User", "email": "reviewer@example.com"},
+                {"id": "selector-1", "full_name": "Selector User", "email": "selector@example.com"},
+                {"id": "inviter-1", "full_name": "Inviter User", "email": "inviter@example.com"},
             ],
         }
     )
@@ -136,6 +143,10 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
     assert invites[0]["status"] == "submitted"
     assert invites[0]["reviewer_name"] == "Reviewer User"
     assert invites[0]["submitted_at"] == "2026-02-05T00:00:00Z"
+    assert invites[0]["added_by_name"] == "Selector User"
+    assert invites[0]["added_via"] == "editor_selection"
+    assert invites[0]["invited_by_name"] == "Inviter User"
+    assert invites[0]["invited_via"] == "template_invitation"
     assert invites[0]["latest_email_status"] == "sent"
     assert invites[0]["latest_email_at"] == "2026-02-01T00:00:12Z"
     assert [event["status"] for event in invites[0]["email_events"]] == ["sent", "queued"]

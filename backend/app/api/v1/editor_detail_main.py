@@ -185,7 +185,7 @@ async def get_editor_manuscript_detail_impl(
                 ra_resp = (
                     runtime.supabase_admin.table("review_assignments")
                     .select(
-                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at"
+                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number,selected_by,selected_via,invited_by,invited_via"
                     )
                     .eq("manuscript_id", id)
                     .order("created_at", desc=True)
@@ -312,6 +312,12 @@ async def get_editor_manuscript_detail_impl(
         rid = str(row.get("reviewer_id") or "").strip()
         if rid:
             profile_ids.add(rid)
+        selected_by = str(row.get("selected_by") or "").strip()
+        if selected_by:
+            profile_ids.add(selected_by)
+        invited_by = str(row.get("invited_by") or "").strip()
+        if invited_by:
+            profile_ids.add(invited_by)
 
     profiles_map: dict[str, dict] = {}
     t0 = perf_counter()
@@ -592,6 +598,10 @@ async def get_editor_manuscript_detail_impl(
         assignment_id = str(row.get("id") or "").strip()
         email_events = email_events_by_assignment.get(assignment_id, [])
         latest_email = email_events[0] if email_events else {}
+        selected_by_id = str(row.get("selected_by") or "").strip()
+        invited_by_id = str(row.get("invited_by") or "").strip()
+        selected_by_profile = profiles_map.get(selected_by_id) or {}
+        invited_by_profile = profiles_map.get(invited_by_id) or {}
         status_raw = str(row.get("status") or "").lower()
         if status_raw in {"completed", "submitted"} or submitted_map.get(rid):
             invite_state = "submitted"
@@ -614,6 +624,14 @@ async def get_editor_manuscript_detail_impl(
                 "reviewer_email": prof.get("email"),
                 "status": invite_state,
                 "round_number": row.get("round_number"),
+                "added_by_id": selected_by_id or None,
+                "added_by_name": selected_by_profile.get("full_name"),
+                "added_by_email": selected_by_profile.get("email"),
+                "added_via": row.get("selected_via"),
+                "invited_by_id": invited_by_id or None,
+                "invited_by_name": invited_by_profile.get("full_name"),
+                "invited_by_email": invited_by_profile.get("email"),
+                "invited_via": row.get("invited_via"),
                 "due_at": row.get("due_at"),
                 "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),

@@ -433,6 +433,20 @@ function resolveDeliveryMeta(invite: ReviewerInviteRow | null | undefined): {
   }
 }
 
+function formatAuditActorLine(args: {
+  label: 'Selected' | 'Invited'
+  actorName?: string | null
+  actorEmail?: string | null
+  via?: string | null
+}) {
+  const actorLabel = String(args.actorName || '').trim() || String(args.actorEmail || '').trim()
+  const viaLabel = String(args.via || '').trim()
+  if (actorLabel && viaLabel) return `${args.label} by ${actorLabel} via ${viaLabel}`
+  if (actorLabel) return `${args.label} by ${actorLabel}`
+  if (viaLabel) return `${args.label} via ${viaLabel}`
+  return null
+}
+
 export function ReviewerManagementCard({
   reviewerInvites,
   deferredLoaded = true,
@@ -494,6 +508,18 @@ export function ReviewerManagementCard({
                   const openedText = invite?.opened_at ? formatDateTimeLocal(invite.opened_at) : '—'
                   const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
                   const deliveryMeta = resolveDeliveryMeta(invite)
+                  const selectedAudit = formatAuditActorLine({
+                    label: 'Selected',
+                    actorName: invite?.added_by_name,
+                    actorEmail: invite?.added_by_email,
+                    via: invite?.added_via,
+                  })
+                  const invitedAudit = formatAuditActorLine({
+                    label: 'Invited',
+                    actorName: invite?.invited_by_name,
+                    actorEmail: invite?.invited_by_email,
+                    via: invite?.invited_via,
+                  })
                   const roundNumber =
                     typeof invite?.round_number === 'number'
                       ? invite.round_number
@@ -549,6 +575,8 @@ export function ReviewerManagementCard({
                           <div>Invited: {invitedText}</div>
                           <div>Opened: {openedText}</div>
                           <div>Reminded: {remindedText}</div>
+                          {selectedAudit ? <div>{selectedAudit}</div> : null}
+                          {invitedAudit ? <div>{invitedAudit}</div> : null}
                           {deliveryMeta.error ? <div className="text-destructive">Error: {deliveryMeta.error}</div> : null}
                         </div>
                       </TableCell>

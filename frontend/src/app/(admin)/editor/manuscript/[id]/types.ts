@@ -21,6 +21,18 @@ export type ReviewerHistoryItem = {
   assignment_status?: string | null
   round_number?: number | null
   added_on?: string | null
+  added_by?: {
+    id?: string | null
+    full_name?: string | null
+    email?: string | null
+  } | null
+  added_via?: string | null
+  invited_by?: {
+    id?: string | null
+    full_name?: string | null
+    email?: string | null
+  } | null
+  invited_via?: string | null
   invited_at?: string | null
   opened_at?: string | null
   accepted_at?: string | null

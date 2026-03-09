@@ -111,6 +111,22 @@ _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES: dict[str, dict[str, Any]] = {
 }
 
 
+def _is_missing_assignment_audit_column_error(error: Exception | str) -> bool:
+    text = str(error or "").lower()
+    return (
+        ("pgrst204" in text or "column" in text or "does not exist" in text)
+        and any(
+            column in text
+            for column in (
+                "selected_by",
+                "selected_via",
+                "invited_by",
+                "invited_via",
+            )
+        )
+    )
+
+
 def _build_assignment_email_idempotency_key(
     *,
     assignment_id: str,
@@ -713,13 +729,24 @@ async def send_assignment_email(
     if not template_row:
         raise HTTPException(status_code=404, detail=f"Email template not found: {template_key_raw}")
 
-    assignment_res = (
-        supabase_admin.table("review_assignments")
-        .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at")
-        .eq("id", str(assignment_id))
-        .single()
-        .execute()
-    )
+    try:
+        assignment_res = (
+            supabase_admin.table("review_assignments")
+            .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at, invited_by, invited_via")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
+    except Exception as exc:
+        if not _is_missing_assignment_audit_column_error(exc):
+            raise
+        assignment_res = (
+            supabase_admin.table("review_assignments")
+            .select("id, manuscript_id, reviewer_id, status, due_at, invited_at, last_reminded_at")
+            .eq("id", str(assignment_id))
+            .single()
+            .execute()
+        )
     assignment = getattr(assignment_res, "data", None) or {}
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -858,14 +885,26 @@ async def send_assignment_email(
     try:
         patch: dict[str, Any] = {}
         assignment_status = str(assignment.get("status") or "").strip().lower()
+        current_user_id = str(current_user.get("id") or "").strip()
         if event_type == "invitation":
             patch["invited_at"] = now_iso
             if assignment_status in {"selected", "pending", "invited", "opened"}:
                 patch["status"] = "invited"
+            if current_user_id and not str(assignment.get("invited_by") or "").strip():
+                patch["invited_by"] = current_user_id
+            if not str(assignment.get("invited_via") or "").strip():
+                patch["invited_via"] = "template_invitation"
         elif event_type == "reminder":
             patch["last_reminded_at"] = now_iso
         if patch:
-            supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+            try:
+                supabase_admin.table("review_assignments").update(patch).eq("id", str(assignment_id)).execute()
+            except Exception as exc:
+                if not _is_missing_assignment_audit_column_error(exc):
+                    raise
+                fallback_patch = {key: value for key, value in patch.items() if key not in {"invited_by", "invited_via"}}
+                if fallback_patch:
+                    supabase_admin.table("review_assignments").update(fallback_patch).eq("id", str(assignment_id)).execute()
 
         manuscript_status = str(manuscript.get("status") or "").strip().lower()
         if event_type == "invitation" and manuscript_status in {"pre_check", "resubmitted"}:
@@ -925,18 +964,34 @@ async def get_reviewer_history(
     roles = set(normalize_roles(_parse_roles(profile)))
     reviewer_id_str = str(reviewer_id)
 
-    query = (
-        supabase_admin.table("review_assignments")
-        .select(
-            "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number"
+    try:
+        query = (
+            supabase_admin.table("review_assignments")
+            .select(
+                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number, selected_by, selected_via, invited_by, invited_via"
+            )
+            .eq("reviewer_id", reviewer_id_str)
+            .order("created_at", desc=True)
+            .limit(limit)
         )
-        .eq("reviewer_id", reviewer_id_str)
-        .order("created_at", desc=True)
-        .limit(limit)
-    )
-    if manuscript_id is not None:
-        query = query.eq("manuscript_id", str(manuscript_id))
-    assignments_res = query.execute()
+        if manuscript_id is not None:
+            query = query.eq("manuscript_id", str(manuscript_id))
+        assignments_res = query.execute()
+    except Exception as exc:
+        if not _is_missing_assignment_audit_column_error(exc):
+            raise
+        query = (
+            supabase_admin.table("review_assignments")
+            .select(
+                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number"
+            )
+            .eq("reviewer_id", reviewer_id_str)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if manuscript_id is not None:
+            query = query.eq("manuscript_id", str(manuscript_id))
+        assignments_res = query.execute()
     assignment_rows = getattr(assignments_res, "data", None) or []
     if not assignment_rows:
         return {"success": True, "data": []}
@@ -978,6 +1033,33 @@ async def get_reviewer_history(
 
     assignment_ids = [str(row.get("id") or "").strip() for row in filtered_rows if str(row.get("id") or "").strip()]
     email_events_by_assignment = _load_assignment_email_events(assignment_ids=assignment_ids)
+    actor_ids = sorted(
+        {
+            str(row.get("selected_by") or "").strip()
+            for row in filtered_rows
+            if str(row.get("selected_by") or "").strip()
+        }
+        | {
+            str(row.get("invited_by") or "").strip()
+            for row in filtered_rows
+            if str(row.get("invited_by") or "").strip()
+        }
+    )
+    actor_profiles: dict[str, dict[str, Any]] = {}
+    if actor_ids:
+        try:
+            actor_res = (
+                supabase_admin.table("user_profiles")
+                .select("id, email, full_name")
+                .in_("id", actor_ids)
+                .execute()
+            )
+            for row in (getattr(actor_res, "data", None) or []):
+                actor_id = str(row.get("id") or "").strip()
+                if actor_id:
+                    actor_profiles[actor_id] = row
+        except Exception:
+            actor_profiles = {}
 
     assignment_counts_by_manuscript: dict[str, int] = {}
     for row in filtered_rows:
@@ -1011,6 +1093,10 @@ async def get_reviewer_history(
         report = report_map.get(mid) or {}
         email_events = email_events_by_assignment.get(assignment_id_value, [])
         latest_email = email_events[0] if email_events else {}
+        added_by_id = str(row.get("selected_by") or "").strip()
+        invited_by_id = str(row.get("invited_by") or "").strip()
+        added_by_profile = actor_profiles.get(added_by_id) or {}
+        invited_by_profile = actor_profiles.get(invited_by_id) or {}
         out.append(
             {
                 "assignment_id": assignment_id_value or row.get("id"),
@@ -1021,6 +1107,26 @@ async def get_reviewer_history(
                 "assignment_status": row.get("status"),
                 "round_number": row.get("round_number"),
                 "added_on": row.get("created_at"),
+                "added_by": (
+                    {
+                        "id": added_by_id or None,
+                        "full_name": added_by_profile.get("full_name"),
+                        "email": added_by_profile.get("email"),
+                    }
+                    if added_by_id or added_by_profile
+                    else None
+                ),
+                "added_via": row.get("selected_via"),
+                "invited_by": (
+                    {
+                        "id": invited_by_id or None,
+                        "full_name": invited_by_profile.get("full_name"),
+                        "email": invited_by_profile.get("email"),
+                    }
+                    if invited_by_id or invited_by_profile
+                    else None
+                ),
+                "invited_via": row.get("invited_via"),
                 "invited_at": row.get("invited_at"),
                 "opened_at": row.get("opened_at"),
                 "accepted_at": row.get("accepted_at"),

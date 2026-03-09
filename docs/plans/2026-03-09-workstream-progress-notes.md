@@ -49,13 +49,27 @@
 ### P1
 
 1. reviewer invitation history 进一步对齐参考图
-   - 目标字段：`added by`、`added via`、更完整的 timeline
-   - 当前阻塞：现有 schema 尚无稳定数据源
+   - 已完成第一阶段：
+     - `review_assignments` 新增审计字段设计并已落代码：`selected_by / selected_via / invited_by / invited_via`
+     - 选入拟邀请名单时记录 `selected_by=当前编辑`、`selected_via=editor_selection`
+     - 首次发送 invitation 时记录 `invited_by=当前编辑`、`invited_via=template_invitation`
+     - 稿件详情页左侧 `Reviewer Management` 已展示：
+       - `Selected by X via ...`
+       - `Invited by Y via ...`
+     - reviewer history modal 已展示：
+       - `Added By`
+       - `Added Via`
+       - `Email Actions` 中保留 delivery 事件，并可补充邀请执行人语义
+   - 云端前置：需执行 `supabase/migrations/20260309120000_review_assignments_audit_fields.sql`
 
 ### P2
 
 2. re-invite / decline 后重新邀请语义进一步收敛
 3. manuscript detail 中 reviewer history 展示继续增强
+4. reviewer invitation history 继续向参考图靠拢：
+   - `added via` 友好文案
+   - `invited by / reminder by` 更细粒度展示
+   - 如需要，再补独立事件表而不是继续堆字段
 
 ## 本轮突发问题
 

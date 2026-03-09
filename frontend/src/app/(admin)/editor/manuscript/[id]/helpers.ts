@@ -44,6 +44,14 @@ export type ManuscriptDetail = {
     reviewer_email?: string | null
     status: string
     round_number?: number | null
+    added_by_id?: string | null
+    added_by_name?: string | null
+    added_by_email?: string | null
+    added_via?: string | null
+    invited_by_id?: string | null
+    invited_by_name?: string | null
+    invited_by_email?: string | null
+    invited_via?: string | null
     due_at?: string | null
     invited_at?: string | null
     opened_at?: string | null

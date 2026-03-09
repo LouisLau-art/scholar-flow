@@ -8,6 +8,14 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 
 
+def _is_missing_assignment_audit_column_error(exc: Exception) -> bool:
+    text = str(exc or "").lower()
+    return (
+        ("pgrst204" in text or "column" in text or "does not exist" in text)
+        and ("selected_by" in text or "selected_via" in text)
+    )
+
+
 def _load_manuscript_for_assignment(
     *,
     supabase_client: Any,
@@ -135,6 +143,7 @@ def _insert_review_assignment(
     reviewer_id: str,
     round_number: int,
     due_at: str,
+    selected_by: str | None,
 ) -> Any:
     payload = {
         "manuscript_id": manuscript_id,
@@ -142,8 +151,22 @@ def _insert_review_assignment(
         "status": "selected",
         "due_at": due_at,
         "round_number": round_number,
+        "selected_by": selected_by,
+        "selected_via": "editor_selection",
     }
-    return supabase_admin_client.table("review_assignments").insert(payload).execute()
+    try:
+        return supabase_admin_client.table("review_assignments").insert(payload).execute()
+    except Exception as exc:
+        if not _is_missing_assignment_audit_column_error(exc):
+            raise
+        fallback_payload = {
+            "manuscript_id": manuscript_id,
+            "reviewer_id": reviewer_id,
+            "status": "selected",
+            "due_at": due_at,
+            "round_number": round_number,
+        }
+        return supabase_admin_client.table("review_assignments").insert(fallback_payload).execute()
 
 
 async def assign_reviewer_impl(
@@ -221,6 +244,7 @@ async def assign_reviewer_impl(
             reviewer_id=reviewer_id_str,
             round_number=current_version,
             due_at=due_at,
+            selected_by=current_user_id or None,
         )
 
         row = (getattr(insert_resp, "data", None) or [{}])[0]
