@@ -14,6 +14,9 @@ import { FileUpload } from "@/components/FileUpload"
 import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml"
 import { normalizeApiErrorMessage } from "@/lib/normalizeApiError"
 
+export const REVIEW_ATTACHMENT_ACCEPT =
+  ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 interface ReviewTask {
   assignmentId: string
   manuscript_id: string
@@ -312,9 +315,9 @@ function ReviewModal({
           </div>
 
           <FileUpload
-            label="Upload Annotated PDF (Optional)"
-            helperText="Only Editors and you (the Reviewer) can download this file."
-            accept="application/pdf"
+            label="Upload Review Attachment (Optional)"
+            helperText="Only Editors and you (the Reviewer) can download this file. Accepted formats: .pdf, .doc, .docx."
+            accept={REVIEW_ATTACHMENT_ACCEPT}
             file={reviewData.attachment}
             onFileSelected={(file) => setReviewData({ ...reviewData, attachment: file })}
           />

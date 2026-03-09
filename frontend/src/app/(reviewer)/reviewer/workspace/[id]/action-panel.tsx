@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import type { ReviewSubmission, WorkspaceAttachment, WorkspaceData } from '@/types/review'
 
+const REVIEW_ATTACHMENT_ACCEPT =
+  '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
 interface ActionPanelProps {
   assignmentId: string
   workspace: WorkspaceData
@@ -255,16 +258,17 @@ export function ActionPanel({ assignmentId, workspace, onSubmitted, onDirtyChang
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Attachment (optional)</label>
+            <label className="text-sm font-semibold text-foreground">Review Attachment (optional)</label>
             <div className="flex items-center gap-2">
               <Input
                 type="file"
-                accept="application/pdf,.doc,.docx,.txt"
+                accept={REVIEW_ATTACHMENT_ACCEPT}
                 disabled={isReadOnly || isUploading}
                 onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
               />
               {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
             </div>
+            <p className="text-xs text-muted-foreground">Accepted formats: `.pdf`, `.doc`, `.docx`.</p>
             {attachments.length > 0 ? (
               <div className="space-y-2 rounded-md border border-border bg-muted/50 p-2.5">
                 {attachments.map((item) => (

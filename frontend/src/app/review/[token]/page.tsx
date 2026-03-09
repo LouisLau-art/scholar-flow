@@ -12,6 +12,9 @@ import { UI_COPY } from '@/lib/ui-copy'
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml'
 import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
+const REVIEW_ATTACHMENT_ACCEPT =
+  '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
 function ReviewForm({
   token,
   manuscriptId,
@@ -114,9 +117,9 @@ function ReviewForm({
         </div>
 
         <FileUpload
-          label="Upload Annotated PDF (Optional)"
-          helperText="Only Editors and you (the Reviewer) can download this file."
-          accept="application/pdf"
+          label="Upload Review Attachment (Optional)"
+          helperText="Only Editors and you (the Reviewer) can download this file. Accepted formats: .pdf, .doc, .docx."
+          accept={REVIEW_ATTACHMENT_ACCEPT}
           disabled={isSubmitting}
           file={attachment}
           onFileSelected={setAttachment}

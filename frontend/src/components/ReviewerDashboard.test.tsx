@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest'
-import ReviewerDashboard from '@/components/ReviewerDashboard'
+import ReviewerDashboard, { REVIEW_ATTACHMENT_ACCEPT } from '@/components/ReviewerDashboard'
 
 const pushMock = vi.fn()
 
@@ -73,6 +73,16 @@ describe('ReviewerDashboard', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('allows Word reviewer attachments in the shared accept list', () => {
+    expect(REVIEW_ATTACHMENT_ACCEPT).toContain('.pdf')
+    expect(REVIEW_ATTACHMENT_ACCEPT).toContain('.doc')
+    expect(REVIEW_ATTACHMENT_ACCEPT).toContain('.docx')
+    expect(REVIEW_ATTACHMENT_ACCEPT).toContain('application/msword')
+    expect(REVIEW_ATTACHMENT_ACCEPT).toContain(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
   })
 
   it('opens preview modal and requests signed url', async () => {
