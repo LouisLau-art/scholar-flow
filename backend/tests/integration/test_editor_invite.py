@@ -554,6 +554,96 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
 
 
 @pytest.mark.asyncio
+async def test_send_assignment_email_uses_fresh_idempotency_key_for_reinvited_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://scholar-flow-q1yw.vercel.app")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccf")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab0")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb0")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "invited",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": "2026-03-09T06:00:00+00:00",
+                    "last_reminded_at": None,
+                    "invited_by": editor_id,
+                    "invited_via": "template_invitation",
+                },
+                [{}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Invitation Resend Workflow",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                },
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/send-email",
+            json={"template_key": "reviewer_invitation_standard"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    assert send_mock.call_count == 1
+    send_kwargs = send_mock.call_args.kwargs
+    assert send_kwargs["idempotency_key"].startswith(f"reviewer-invitation-resend/{assignment_id}/")
+    assert send_kwargs["context"]["review_url"].startswith("https://scholar-flow-q1yw.vercel.app/review/invite?token=")
+
+
+@pytest.mark.asyncio
 async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_attempt(
     client: AsyncClient,
     auth_token: str,

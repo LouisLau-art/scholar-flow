@@ -261,16 +261,22 @@ def _build_assignment_email_idempotency_key(
     template_key: str,
     event_type: str,
     now: datetime,
+    assignment_status: str | None = None,
 ) -> str:
     """
     中文注释:
-    - invitation：固定 key，防止重复点击产生多封邀请。
+    - invitation：仅首次 `selected` 邀请使用固定 key，防止重复点击产生多封邀请。
+      已进入 `invited/opened/pending` 的再次发送属于合法重发，应生成新的 key，避免
+      Resend 因“同 key 但 body 已变化（如新 magic link / 新环境 URL）”返回 409。
     - reminder：按小时去重，避免短时间重复触发；跨小时可再次发送。
     - none/其他：按分钟去重，兼顾防抖与可重复发送。
     """
     event = str(event_type or "none").strip().lower()
     if event == "invitation":
-        return f"reviewer-invitation/{assignment_id}"
+        status = str(assignment_status or "").strip().lower()
+        if status == "selected":
+            return f"reviewer-invitation/{assignment_id}"
+        return f"reviewer-invitation-resend/{assignment_id}/{now.strftime('%Y%m%d%H%M%S%f')}"
     if event == "reminder":
         return f"reviewer-reminder/{assignment_id}/{now.strftime('%Y%m%d%H')}"
     return f"reviewer-email/{assignment_id}/{template_key}/{now.strftime('%Y%m%d%H%M')}"
@@ -938,11 +944,13 @@ async def send_assignment_email(
     if not effective_assignment_id:
         raise HTTPException(status_code=500, detail="Failed to resolve assignment id for reviewer email")
     effective_due_at = str(effective_assignment.get("due_at") or due_at).strip()
+    effective_assignment_status = str(effective_assignment.get("status") or assignment_status).strip().lower()
     idempotency_key = str(body.get("idempotency_key") or "").strip() or _build_assignment_email_idempotency_key(
         assignment_id=effective_assignment_id,
         template_key=template_key,
         event_type=event_type,
         now=now_dt,
+        assignment_status=effective_assignment_status,
     )
     email_tags = _build_assignment_email_tags(
         assignment_id=effective_assignment_id,
