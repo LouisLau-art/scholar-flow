@@ -407,7 +407,7 @@ class UserManagementService:
 
     # --- T033, T034: Implement search, filter and pagination logic ---
 
-    def get_users(self, page: int = 1, per_page: int = 10, search: Optional[str] = None, role: Optional[str] = None) -> Dict[str, Any]:
+    def get_users(self, page: int = 1, per_page: int = 25, search: Optional[str] = None, role: Optional[str] = None) -> Dict[str, Any]:
         """
         T033, T034: Fetch users from user_profiles with pagination and filters.
         """

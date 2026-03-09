@@ -21,7 +21,7 @@ describe('adminUserService', () => {
 
   describe('getUsers', () => {
     it('fetches users with default parameters', async () => {
-      const mockResponse = { data: [], total: 0, page: 1, per_page: 10 };
+      const mockResponse = { data: [], total: 0, page: 1, per_page: 25 };
       (globalThis.fetch as any).mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
@@ -31,7 +31,7 @@ describe('adminUserService', () => {
 
       expect(authService.getAccessToken).toHaveBeenCalled();
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/admin/users?page=1&per_page=10'),
+        expect.stringContaining('/api/v1/admin/users?page=1&per_page=25'),
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer mock-token',

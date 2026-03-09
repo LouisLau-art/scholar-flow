@@ -11,12 +11,59 @@ interface UserTableProps {
   perPage: number;
   total: number;
   onPageChange: (newPage: number) => void;
+  onPerPageChange: (newPerPage: number) => void;
   onEdit: (user: User) => void;
   onResetPassword: (user: User) => void;
 }
 
-export function UserTable({ users, isLoading, page, perPage, total, onPageChange, onEdit, onResetPassword }: UserTableProps) {
-  const totalPages = Math.ceil(total / perPage);
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+
+function buildVisiblePages(currentPage: number, totalPages: number): Array<number | 'ellipsis-left' | 'ellipsis-right'> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set<number>([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
+  const sortedPages = Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((a, b) => a - b);
+
+  const visiblePages: Array<number | 'ellipsis-left' | 'ellipsis-right'> = [];
+  for (const page of sortedPages) {
+    const previousPage = typeof visiblePages[visiblePages.length - 1] === 'number'
+      ? (visiblePages[visiblePages.length - 1] as number)
+      : null;
+
+    if (previousPage !== null && page - previousPage > 1) {
+      visiblePages.push(previousPage < currentPage ? 'ellipsis-left' : 'ellipsis-right');
+    }
+    visiblePages.push(page);
+  }
+
+  return visiblePages;
+}
+
+export function UserTable({
+  users,
+  isLoading,
+  page,
+  perPage,
+  total,
+  onPageChange,
+  onPerPageChange,
+  onEdit,
+  onResetPassword,
+}: UserTableProps) {
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+  const visiblePages = buildVisiblePages(currentPage, totalPages);
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === currentPage) {
+      return;
+    }
+    onPageChange(nextPage);
+  };
 
   if (isLoading) {
     return (
@@ -109,23 +156,85 @@ export function UserTable({ users, isLoading, page, perPage, total, onPageChange
       
       <div className="flex items-center justify-between border-t border-border bg-muted/30 px-6 py-3">
         <div className="text-xs text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{Math.min((page - 1) * perPage + 1, total)}</span> to <span className="font-medium text-foreground">{Math.min(page * perPage, total)}</span> of <span className="font-medium text-foreground">{total}</span> results
+          Showing <span className="font-medium text-foreground">{Math.min((currentPage - 1) * perPage + 1, total)}</span> to <span className="font-medium text-foreground">{Math.min(currentPage * perPage, total)}</span> of <span className="font-medium text-foreground">{total}</span> results
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onPageChange(page - 1)}
-            disabled={page === 1}
-            className="rounded border border-input bg-background px-3 py-1 text-xs font-medium text-foreground disabled:opacity-50 hover:bg-muted transition-colors"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => onPageChange(page + 1)}
-            disabled={page * perPage >= total}
-            className="rounded border border-input bg-background px-3 py-1 text-xs font-medium text-foreground disabled:opacity-50 hover:bg-muted transition-colors"
-          >
-            Next
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-4">
+          <div className="flex items-center gap-2">
+            {PAGE_SIZE_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                type="button"
+                size="sm"
+                variant={option === perPage ? 'default' : 'outline'}
+                onClick={() => onPerPageChange(option)}
+              >
+                {option} / 页
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              首页
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              上一页
+            </Button>
+            {visiblePages.map((item, index) => {
+              if (typeof item !== 'number') {
+                return (
+                  <span
+                    key={`${item}-${index}`}
+                    className="px-1 text-xs text-muted-foreground"
+                  >
+                    ...
+                  </span>
+                );
+              }
+
+              return (
+                <Button
+                  key={item}
+                  type="button"
+                  size="sm"
+                  variant={item === currentPage ? 'default' : 'outline'}
+                  aria-current={item === currentPage ? 'page' : undefined}
+                  onClick={() => handlePageChange(item)}
+                >
+                  {item}
+                </Button>
+              );
+            })}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              下一页
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              末页
+            </Button>
+          </div>
         </div>
       </div>
     </div>

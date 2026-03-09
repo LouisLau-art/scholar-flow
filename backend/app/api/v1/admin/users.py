@@ -416,7 +416,7 @@ def _fallback_journal_rows(rows: list[dict[str, Any]], *, include_inactive: bool
 @router.get("/admin/users", response_model=UserListResponse)
 async def get_users(
     page: int = Query(1, ge=1),
-    per_page: int = Query(10, ge=1, le=100),
+    per_page: int = Query(25, ge=1, le=100),
     search: Optional[str] = None,
     role: Optional[str] = None,
     _auth: dict = Depends(editor_or_admin),

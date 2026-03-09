@@ -27,6 +27,7 @@ export default function UserManagementPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
   
@@ -107,7 +108,7 @@ export default function UserManagementPage() {
     const requestId = ++fetchRequestIdRef.current;
     setLoading(true);
     try {
-      const response = await adminUserService.getUsers(page, 10, debouncedSearch, role);
+      const response = await adminUserService.getUsers(page, perPage, debouncedSearch, role);
       if (requestId !== fetchRequestIdRef.current) return;
       setUsers(response.data);
       setTotal(response.pagination.total);
@@ -121,7 +122,7 @@ export default function UserManagementPage() {
       if (requestId !== fetchRequestIdRef.current) return;
       setLoading(false);
     }
-  }, [page, debouncedSearch, role, isAdmin]);
+  }, [page, perPage, debouncedSearch, role, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -132,6 +133,11 @@ export default function UserManagementPage() {
   // 3. Actions
   const handleRoleChange = (newRole: string) => {
     setRole(newRole);
+    setPage(1);
+  };
+
+  const handlePerPageChange = (nextPerPage: number) => {
+    setPerPage(nextPerPage);
     setPage(1);
   };
 
@@ -256,9 +262,10 @@ export default function UserManagementPage() {
             users={users}
             isLoading={loading}
             page={page}
-            perPage={10}
+            perPage={perPage}
             total={total}
             onPageChange={setPage}
+            onPerPageChange={handlePerPageChange}
             onEdit={handleEditClick}
             onResetPassword={handleResetPasswordClick}
           />

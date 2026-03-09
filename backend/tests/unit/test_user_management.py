@@ -259,6 +259,7 @@ class TestGetUsers:
             assert "data" in result
             assert "pagination" in result
             assert result["pagination"]["total"] == 1
+            assert result["pagination"]["per_page"] == 25
 
     def test_get_users_with_filters(self, mock_env):
         """Test user retrieval with search and role filters"""
