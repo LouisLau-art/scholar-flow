@@ -9,8 +9,11 @@ class _FakeQuery:
     def __init__(self, table: str, dataset: dict[str, list[dict]]):
         self.table = table
         self.dataset = dataset
+        self.select_clause = ""
 
-    def select(self, *_args, **_kwargs):
+    def select(self, *args, **_kwargs):
+        if args:
+            self.select_clause = str(args[0] or "")
         return self
 
     def eq(self, *_args, **_kwargs):
@@ -43,6 +46,22 @@ class _FakeSupabase:
     def table(self, name: str):
         self.call_count[name] = self.call_count.get(name, 0) + 1
         return _FakeQuery(name, self.dataset)
+
+
+class _ReviewAssignmentsCompatQuery(_FakeQuery):
+    def execute(self):
+        if self.table == "review_assignments" and any(
+            column in self.select_clause
+            for column in ("selected_by", "selected_via", "invited_by", "invited_via")
+        ):
+            raise RuntimeError("PGRST204: column review_assignments.selected_by does not exist")
+        return super().execute()
+
+
+class _ReviewAssignmentsCompatSupabase(_FakeSupabase):
+    def table(self, name: str):
+        self.call_count[name] = self.call_count.get(name, 0) + 1
+        return _ReviewAssignmentsCompatQuery(name, self.dataset)
 
 
 @pytest.mark.integration
@@ -358,3 +377,69 @@ async def test_editor_detail_skip_cards_with_include_heavy_loads_reviewer_timeli
     assert len(invites) == 1
     assert invites[0]["status"] == "submitted"
     assert fake_db.call_count.get("review_assignments", 0) >= 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_editor_detail_reviewer_timeline_falls_back_when_assignment_audit_columns_missing(
+    client,
+    auth_token,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setattr(editor_detail_api, "_get_signed_url", lambda *_args, **_kwargs: "https://example.com/signed")
+
+    fake_db = _ReviewAssignmentsCompatSupabase(
+        {
+            "manuscripts": [
+                {
+                    "id": "ms-compat",
+                    "title": "Compat Reviewer Timeline Manuscript",
+                    "status": "under_review",
+                    "owner_id": "owner-1",
+                    "editor_id": "editor-1",
+                    "file_path": "manuscripts/ms-compat/v1.pdf",
+                    "created_at": "2026-02-01T00:00:00Z",
+                    "updated_at": "2026-02-02T00:00:00Z",
+                    "journals": {"title": "Journal"},
+                }
+            ],
+            "invoices": [],
+            "manuscript_files": [],
+            "review_assignments": [
+                {
+                    "id": "ra-selected",
+                    "reviewer_id": "reviewer-1",
+                    "status": "selected",
+                    "due_at": None,
+                    "invited_at": None,
+                    "opened_at": None,
+                    "accepted_at": None,
+                    "declined_at": None,
+                    "last_reminded_at": None,
+                    "created_at": "2026-03-09T10:00:00Z",
+                }
+            ],
+            "review_reports": [],
+            "email_logs": [],
+            "user_profiles": [
+                {"id": "owner-1", "full_name": "Owner User", "email": "owner@example.com"},
+                {"id": "editor-1", "full_name": "Editor User", "email": "editor@example.com"},
+                {"id": "reviewer-1", "full_name": "Reviewer User", "email": "reviewer@example.com"},
+            ],
+        }
+    )
+    monkeypatch.setattr(editor_detail_api, "supabase_admin", fake_db)
+
+    res = await client.get(
+        "/api/v1/editor/manuscripts/ms-compat?skip_cards=true&include_heavy=true",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    invites = payload["data"].get("reviewer_invites") or []
+    assert len(invites) == 1
+    assert invites[0]["id"] == "ra-selected"
+    assert invites[0]["status"] == "selected"
+    assert invites[0]["reviewer_name"] == "Reviewer User"

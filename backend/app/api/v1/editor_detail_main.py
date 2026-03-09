@@ -53,6 +53,34 @@ def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, lis
         return {}
 
 
+def _load_reviewer_assignments_for_detail(manuscript_id: str) -> list[dict[str, Any]]:
+    select_variants = (
+        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number,selected_by,selected_via,invited_by,invited_via",
+        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number",
+        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,created_at,round_number",
+        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,created_at",
+        "id,reviewer_id,status,due_at,invited_at,created_at",
+    )
+    last_exc: Exception | None = None
+    for select_clause in select_variants:
+        try:
+            ra_resp = (
+                runtime.supabase_admin.table("review_assignments")
+                .select(select_clause)
+                .eq("manuscript_id", manuscript_id)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            return getattr(ra_resp, "data", None) or []
+        except Exception as exc:
+            last_exc = exc
+            if not runtime._is_schema_compat_error(exc):
+                raise
+    if last_exc:
+        raise last_exc
+    return []
+
+
 async def get_editor_manuscript_detail_impl(
     request: Request,
     id: str,
@@ -182,16 +210,7 @@ async def get_editor_manuscript_detail_impl(
             # Reviewer 邀请时间线
             t0 = perf_counter()
             try:
-                ra_resp = (
-                    runtime.supabase_admin.table("review_assignments")
-                    .select(
-                        "id,reviewer_id,status,due_at,invited_at,opened_at,accepted_at,declined_at,last_reminded_at,decline_reason,decline_note,created_at,round_number,selected_by,selected_via,invited_by,invited_via"
-                    )
-                    .eq("manuscript_id", id)
-                    .order("created_at", desc=True)
-                    .execute()
-                )
-                ra_rows = getattr(ra_resp, "data", None) or []
+                ra_rows = _load_reviewer_assignments_for_detail(id)
             except Exception as e:
                 logger.warning("[ReviewerInvites] load failed (ignored): %s", e)
             _mark("review_assignments", t0)
