@@ -33,6 +33,9 @@
   - `email_logs` 扩展为支持 `assignment_id / manuscript_id / idempotency_key / scene / event_type`
   - reviewer 邮件发送先落应用级 `queued` 审计，再由后台发送链补 `sent / failed`
   - 稿件详情页 `Reviewer Management` 与 reviewer history modal 已展示最新 delivery 状态与邮件事件时间线
+- reviewer 主链路 E2E 已新增两条跨浏览器回归：
+  - 未接受邀请时，`/reviewer/workspace/[id]` 必须挡回 `/review/invite`
+  - 编辑侧稿件详情页必须展示 reviewer delivery 状态，并可在 history modal 中看到 `sent / queued` 事件
 
 ## 已写计划与说明文档
 
@@ -49,13 +52,10 @@
    - 目标字段：`added by`、`added via`、更完整的 timeline
    - 当前阻塞：现有 schema 尚无稳定数据源
 
-2. reviewer 全链路 E2E
-   - 目标覆盖：`select -> send invitation -> accept/decline -> workspace -> submit`
-
 ### P2
 
-3. re-invite / decline 后重新邀请语义进一步收敛
-4. manuscript detail 中 reviewer history 展示继续增强
+2. re-invite / decline 后重新邀请语义进一步收敛
+3. manuscript detail 中 reviewer history 展示继续增强
 
 ## 本轮突发问题
 
