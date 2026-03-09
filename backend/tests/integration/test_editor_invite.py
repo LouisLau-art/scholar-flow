@@ -338,6 +338,95 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
     insert_payload = supabase_admin._insert_calls["review_assignments"][0]
     assert insert_payload["status"] == "selected"
     assert "invited_at" not in insert_payload
+
+
+@pytest.mark.asyncio
+async def test_editor_assign_allows_cooldown_override_for_assistant_editor_when_reason_provided(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
+    monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_OVERRIDE_ROLES", "admin,managing_editor")
+
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaad")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbe")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccce")
+
+    now_iso = "2026-02-09T00:00:00+00:00"
+    cooldown_ms_id = "99999999-9999-9999-9999-999999999997"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "author_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    "title": "Cooldown Override AE Manuscript",
+                    "version": 1,
+                    "status": "pre_check",
+                    "owner_id": editor_id,
+                    "file_path": "manuscripts/x.pdf",
+                    "journal_id": "journal-1",
+                }
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                [],
+                [
+                    {
+                        "manuscript_id": cooldown_ms_id,
+                        "reviewer_id": str(reviewer_id),
+                        "status": "pending",
+                        "due_at": None,
+                        "invited_at": now_iso,
+                        "created_at": now_iso,
+                    }
+                ],
+                [
+                    {
+                        "id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "status": "selected",
+                    }
+                ],
+            ],
+            "manuscripts": [[{"id": cooldown_ms_id, "journal_id": "journal-1"}]],
+        }
+    )
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "manuscript_id": str(manuscript_id),
+        "reviewer_id": str(reviewer_id),
+        "override_cooldown": True,
+        "override_reason": "AE manually approves cooldown override for urgent reassignment",
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+    ):
+        resp = await client.post("/api/v1/reviews/assign", json=body, headers=headers)
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload.get("success") is True
+        assert payload.get("policy", {}).get("cooldown_active") is True
     assert supabase_admin._update_calls.get("manuscripts") in (None, [])
     assert supabase_admin._insert_calls.get("status_transition_logs") in (None, [])
 

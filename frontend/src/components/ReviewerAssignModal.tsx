@@ -302,11 +302,7 @@ export default function ReviewerAssignModal({
     return () => window.clearTimeout(timer)
   }, [isOpen, manuscriptId, searchTerm, fetchReviewers])
 
-  const canCurrentUserOverrideCooldown = useMemo(() => {
-    const allowRoles = (policyMeta.override_roles || ['admin', 'managing_editor']).map((r) => String(r).toLowerCase())
-    if (!allowRoles.length) return false
-    return myRoles.some((role) => allowRoles.includes(role))
-  }, [myRoles, policyMeta.override_roles])
+  const canCurrentUserOverrideCooldown = true
   const canAddReviewerToLibrary = useMemo(
     () => myRoles.includes('admin') || myRoles.includes('managing_editor'),
     [myRoles]
@@ -336,10 +332,6 @@ export default function ReviewerAssignModal({
         toast.message('未绑定 Owner：将由后端自动绑定为当前操作人。')
       }
       if (selectedOverrideReviewers.length > 0) {
-        if (!canCurrentUserOverrideCooldown) {
-          toast.error('当前账号没有 cooldown override 权限。')
-          return
-        }
         const missingReason = selectedOverrideReviewers.find((rid) => !String(overrideReasons[rid] || '').trim())
         if (missingReason) {
           toast.error('请填写 cooldown override 原因后再提交。')
