@@ -31,7 +31,7 @@ describe('adminUserService', () => {
 
       expect(authService.getAccessToken).toHaveBeenCalled();
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/admin/users?page=1&per_page=25'),
+        expect.stringContaining('/api/v1/admin/users?page=1&per_page=25&include_test_profiles=false'),
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer mock-token',
@@ -51,7 +51,30 @@ describe('adminUserService', () => {
       await adminUserService.getUsers(2, 20, 'test', 'editor');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('page=2&per_page=20&search=test&role=editor'),
+        expect.stringContaining('page=2&per_page=20&include_test_profiles=false'),
+        expect.anything()
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('search=test'),
+        expect.anything()
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('role=editor'),
+        expect.anything()
+      );
+    });
+
+    it('can include hidden test profiles when requested', async () => {
+      const mockResponse = { data: [], total: 0 };
+      (globalThis.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      await adminUserService.getUsers(1, 25, '', '', true);
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('page=1&per_page=25&include_test_profiles=true'),
         expect.anything()
       );
     });

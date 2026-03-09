@@ -30,6 +30,7 @@ export default function UserManagementPage() {
   const [perPage, setPerPage] = useState(25);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
+  const [includeTestProfiles, setIncludeTestProfiles] = useState(false);
   
   // Dialog State
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
@@ -108,7 +109,13 @@ export default function UserManagementPage() {
     const requestId = ++fetchRequestIdRef.current;
     setLoading(true);
     try {
-      const response = await adminUserService.getUsers(page, perPage, debouncedSearch, role);
+      const response = await adminUserService.getUsers(
+        page,
+        perPage,
+        debouncedSearch,
+        role,
+        includeTestProfiles,
+      );
       if (requestId !== fetchRequestIdRef.current) return;
       setUsers(response.data);
       setTotal(response.pagination.total);
@@ -122,7 +129,7 @@ export default function UserManagementPage() {
       if (requestId !== fetchRequestIdRef.current) return;
       setLoading(false);
     }
-  }, [page, perPage, debouncedSearch, role, isAdmin]);
+  }, [page, perPage, debouncedSearch, role, includeTestProfiles, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -138,6 +145,11 @@ export default function UserManagementPage() {
 
   const handlePerPageChange = (nextPerPage: number) => {
     setPerPage(nextPerPage);
+    setPage(1);
+  };
+
+  const handleIncludeTestProfilesChange = (nextValue: boolean) => {
+    setIncludeTestProfiles(nextValue);
     setPage(1);
   };
 
@@ -254,8 +266,10 @@ export default function UserManagementPage() {
           <UserFilters
             search={search}
             role={role}
+            includeTestProfiles={includeTestProfiles}
             onSearchChange={setSearch}
             onRoleChange={handleRoleChange}
+            onIncludeTestProfilesChange={handleIncludeTestProfilesChange}
           />
 
           <UserTable

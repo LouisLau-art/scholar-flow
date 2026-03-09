@@ -419,6 +419,7 @@ async def get_users(
     per_page: int = Query(25, ge=1, le=100),
     search: Optional[str] = None,
     role: Optional[str] = None,
+    include_test_profiles: bool = Query(False),
     _auth: dict = Depends(editor_or_admin),
     service: UserManagementService = Depends(get_user_management_service)
 ):
@@ -426,7 +427,13 @@ async def get_users(
     T032: Get list of users with pagination, search and filters.
     """
     try:
-        return service.get_users(page=page, per_page=per_page, search=search, role=role)
+        return service.get_users(
+            page=page,
+            per_page=per_page,
+            search=search,
+            role=role,
+            include_test_profiles=include_test_profiles,
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

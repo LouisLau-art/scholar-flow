@@ -24,11 +24,12 @@ async function getAuthHeader() {
 
 export const adminUserService = {
   // T037: Implement getUsers() method
-  async getUsers(page = 1, perPage = 25, search = '', role = ''): Promise<UserListResponse> {
+  async getUsers(page = 1, perPage = 25, search = '', role = '', includeTestProfiles = false): Promise<UserListResponse> {
     const headers = await getAuthHeader();
     const params = new URLSearchParams({
       page: page.toString(),
-      per_page: perPage.toString()
+      per_page: perPage.toString(),
+      include_test_profiles: String(includeTestProfiles),
     });
     if (search) params.append('search', search);
     if (role) params.append('role', role);

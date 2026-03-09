@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import quote
 from uuid import UUID
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterable
 from supabase import create_client, Client
 
 from app.core.default_password import get_default_bootstrap_password
@@ -182,6 +182,49 @@ class UserManagementService:
             if isinstance(raw, dict):
                 return dict(raw)
         return {}
+
+    @staticmethod
+    def _extract_list_users_payload(response: Any) -> Iterable[Any]:
+        users = getattr(response, "users", None)
+        if users is not None:
+            return users
+        if isinstance(response, dict):
+            maybe_users = response.get("users")
+            if maybe_users is not None:
+                return maybe_users
+        if isinstance(response, list):
+            return response
+        return []
+
+    def _list_auth_user_ids(self) -> set[str]:
+        user_ids: set[str] = set()
+        page = 1
+        per_page = 200
+
+        while True:
+            response = self.admin_client.auth.admin.list_users(page=page, per_page=per_page)
+            users = list(self._extract_list_users_payload(response))
+            if not users:
+                break
+
+            for user in users:
+                user_id = getattr(user, "id", None)
+                if user_id is None and isinstance(user, dict):
+                    user_id = user.get("id")
+                if user_id:
+                    user_ids.add(str(user_id))
+
+            if len(users) < per_page:
+                break
+            page += 1
+
+        return user_ids
+
+    @staticmethod
+    def _is_hidden_test_profile(item: Dict[str, Any], auth_user_ids: set[str]) -> bool:
+        email = str(item.get("email") or "").strip().lower()
+        profile_id = str(item.get("id") or "").strip()
+        return bool(email.endswith("@example.com") and profile_id and profile_id not in auth_user_ids)
 
     def send_reviewer_activation_email(
         self,
@@ -407,7 +450,14 @@ class UserManagementService:
 
     # --- T033, T034: Implement search, filter and pagination logic ---
 
-    def get_users(self, page: int = 1, per_page: int = 25, search: Optional[str] = None, role: Optional[str] = None) -> Dict[str, Any]:
+    def get_users(
+        self,
+        page: int = 1,
+        per_page: int = 25,
+        search: Optional[str] = None,
+        role: Optional[str] = None,
+        include_test_profiles: bool = False,
+    ) -> Dict[str, Any]:
         """
         T033, T034: Fetch users from user_profiles with pagination and filters.
         """
@@ -422,16 +472,25 @@ class UserManagementService:
             # Searching by email or full_name
             if search:
                 query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
-            
-            # Pagination
-            offset = (page - 1) * per_page
-            query = query.range(offset, offset + per_page - 1).order("created_at", desc=True)
-            
-            response = query.execute()
-            
-            total = response.count
-            data = response.data
-            
+
+            if include_test_profiles:
+                offset = (page - 1) * per_page
+                query = query.range(offset, offset + per_page - 1).order("created_at", desc=True)
+                response = query.execute()
+                total = response.count
+                data = response.data
+            else:
+                query = query.order("created_at", desc=True)
+                response = query.execute()
+                auth_user_ids = self._list_auth_user_ids()
+                filtered_rows = [
+                    item for item in (response.data or [])
+                    if not self._is_hidden_test_profile(item, auth_user_ids)
+                ]
+                total = len(filtered_rows)
+                offset = (page - 1) * per_page
+                data = filtered_rows[offset:offset + per_page]
+
             # Map to response format
             users = []
             for item in data:

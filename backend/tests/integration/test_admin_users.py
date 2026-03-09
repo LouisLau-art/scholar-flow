@@ -60,7 +60,7 @@ async def test_get_users_authorized_admin(client: AsyncClient, auth_token, mock_
     
     mock_admin_service.get_users.return_value = {
         "data": mock_users_data,
-        "pagination": {"total": 2, "page": 1, "per_page": 10, "total_pages": 1}
+        "pagination": {"total": 2, "page": 1, "per_page": 25, "total_pages": 1}
     }
     
     response = await client.get(
@@ -71,6 +71,25 @@ async def test_get_users_authorized_admin(client: AsyncClient, auth_token, mock_
     data = response.json()
     assert len(data["data"]) == 2
     assert data["data"][0]["email"] == "user1@example.com"
+
+
+@pytest.mark.asyncio
+async def test_get_users_can_request_hidden_test_profiles(
+    client: AsyncClient, auth_token, mock_admin_role, mock_admin_service
+):
+    mock_admin_service.get_users.return_value = {
+        "data": [],
+        "pagination": {"total": 0, "page": 1, "per_page": 25, "total_pages": 0},
+    }
+
+    response = await client.get(
+        "/api/v1/admin/users?include_test_profiles=true",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 200
+    mock_admin_service.get_users.assert_called_once()
+    assert mock_admin_service.get_users.call_args.kwargs["include_test_profiles"] is True
 
 @pytest.mark.asyncio
 async def test_get_users_invalid_pagination(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
