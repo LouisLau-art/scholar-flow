@@ -112,7 +112,7 @@ async def test_get_users_invalid_pagination(client: AsyncClient, auth_token, moc
 async def test_get_users_with_real_db(client: AsyncClient, auth_token, mock_admin_role, db_connection):
     """T030: Integration test: Use REAL database connection to fetch users"""
     user_id = str(uuid4())
-    test_email = f"real_db_test_{user_id[:8]}@example.com"
+    test_email = f"real_db_test_{user_id[:8]}@test.com"
     profile_data = {
         "id": user_id,
         "email": test_email,

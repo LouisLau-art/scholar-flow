@@ -305,13 +305,53 @@ class TestGetUsers:
             assert result["pagination"]["total"] == 0
             assert result["pagination"]["total_pages"] == 0
 
-    def test_get_users_pagination(self, mock_env):
-        """Test user retrieval with pagination"""
+    def test_get_users_pagination_applies_filter_before_paginating(self, mock_env):
+        """默认隐藏测试 profile 时，应先过滤再分页。"""
+        visible_users = [
+            {
+                "id": f"visible-{i}",
+                "email": f"user{i}@test.com",
+                "full_name": f"User {i}",
+                "roles": ["author"],
+                "created_at": "2024-01-01",
+            }
+            for i in range(8)
+        ]
+        hidden_users = [
+            {
+                "id": f"orphan-{i}",
+                "email": f"editor_e2e_{i}@example.com",
+                "full_name": f"Hidden User {i}",
+                "roles": ["managing_editor"],
+                "created_at": "2024-01-01",
+            }
+            for i in range(2)
+        ]
+        users_data = visible_users + hidden_users
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_query = MockQueryBuilder(return_data=users_data)
+            mock_query._count = len(users_data)
+            mock_client = MockAdminClient(mock_query)
+            mock_client.auth.admin.list_users.return_value = []
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            result = service.get_users(page=2, per_page=5)
+
+            assert result["pagination"]["total"] == 8
+            assert result["pagination"]["page"] == 2
+            assert result["pagination"]["per_page"] == 5
+            assert result["pagination"]["total_pages"] == 2
+            assert len(result["data"]) == 3
+
+    def test_get_users_pagination_with_include_test_profiles_uses_backend_count(self, mock_env):
+        """显式包含测试 profile 时，应保留后端 count 语义。"""
         users_data = [
             {
                 "id": str(i),
                 "email": f"user{i}@test.com",
-                "name": f"User {i}",
+                "full_name": f"User {i}",
                 "roles": ["author"],
                 "created_at": "2024-01-01",
             }
@@ -320,13 +360,14 @@ class TestGetUsers:
 
         with patch("app.services.user_management.create_client") as mock_create:
             mock_query = MockQueryBuilder(return_data=users_data)
-            mock_query._count = 25  # Total count
+            mock_query._count = 25
             mock_client = MockAdminClient(mock_query)
             mock_create.return_value = mock_client
 
             service = UserManagementService()
-            result = service.get_users(page=2, per_page=5)
+            result = service.get_users(page=2, per_page=5, include_test_profiles=True)
 
+            assert result["pagination"]["total"] == 25
             assert result["pagination"]["page"] == 2
             assert result["pagination"]["per_page"] == 5
             assert result["pagination"]["total_pages"] == 5
@@ -377,6 +418,39 @@ class TestGetUsers:
 
             assert result["pagination"]["total"] == 1
             assert [item["email"] for item in result["data"]] == ["real@test.com"]
+
+    def test_get_users_keeps_example_profile_when_auth_user_exists(self, mock_env):
+        users_data = [
+            {
+                "id": "auth-user-1",
+                "email": "real@example.com",
+                "full_name": "Real Example User",
+                "roles": ["author"],
+                "created_at": "2024-01-02",
+            },
+            {
+                "id": "orphan-user-1",
+                "email": "editor_e2e@example.com",
+                "full_name": "Orphan Test User",
+                "roles": ["managing_editor"],
+                "created_at": "2024-01-01",
+            },
+        ]
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_query = MockQueryBuilder(return_data=users_data)
+            mock_query._count = 2
+            mock_client = MockAdminClient(mock_query)
+            mock_client.auth.admin.list_users.return_value = [
+                type("AuthUser", (), {"id": "auth-user-1"})()
+            ]
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            result = service.get_users()
+
+            assert result["pagination"]["total"] == 1
+            assert [item["email"] for item in result["data"]] == ["real@example.com"]
 
     def test_get_users_can_include_hidden_test_profiles(self, mock_env):
         users_data = [
