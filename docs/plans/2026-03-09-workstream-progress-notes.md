@@ -58,6 +58,8 @@
 - `docs/plans/2026-03-06-next16-stabilization-notes.md`
 - `docs/plans/2026-03-06-reviewer-invitation-workflow-plan.md`
 - `docs/plans/2026-03-06-reviewer-invitation-state-machine-notes.md`
+- `docs/plans/2026-03-09-reviewer-decision-cancel-design.md`
+- `docs/plans/2026-03-09-reviewer-decision-cancel-plan.md`
 
 ## 当前尚未完成的 reviewer 相关工作
 
