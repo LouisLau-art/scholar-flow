@@ -156,6 +156,28 @@ class EmailService:
             normalized.append({"name": name, "value": value})
         return normalized or None
 
+    def _merge_inline_email_tags(
+        self,
+        *,
+        template_key: str,
+        tags: Sequence[Mapping[str, str]] | None,
+    ) -> list[dict[str, str]] | None:
+        """
+        中文注释:
+        - Resend 的 tag 名称需要唯一，重复的 `template` 会直接触发 provider 错误。
+        - 这里统一保证 `template` tag 只出现一次，且值始终与当前 template_key 对齐。
+        """
+        merged: list[dict[str, str]] = []
+        seen_names: set[str] = set()
+        for item in self._normalize_tags(tags) or []:
+            name = str(item.get("name") or "").strip()
+            if not name or name == "template" or name in seen_names:
+                continue
+            merged.append(item)
+            seen_names.add(name)
+        merged.append({"name": "template", "value": template_key})
+        return merged
+
     def _normalize_headers(self, headers: Mapping[str, str] | None) -> dict[str, str] | None:
         if not headers:
             return None
@@ -458,8 +480,7 @@ class EmailService:
             result["error_message"] = "Resend is not configured"
             return result
 
-        merged_tags = list(tags or [])
-        merged_tags.append({"name": "template", "value": template_key})
+        merged_tags = self._merge_inline_email_tags(template_key=template_key, tags=tags)
         try:
             res = self._send_resend_message(
                 to_email=to_email,
