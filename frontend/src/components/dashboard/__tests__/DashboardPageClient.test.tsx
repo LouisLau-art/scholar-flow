@@ -92,4 +92,32 @@ describe('DashboardPageClient role normalization', () => {
     expect(screen.getByRole('tab', { name: /Author/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Reviewer/i })).toBeInTheDocument()
   })
+
+  it('shows backend-unavailable guidance instead of role-missing copy when profile API is unavailable', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { total_submissions: 0 } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: [] }) })
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+
+    vi.stubGlobal('fetch', fetchMock as typeof fetch)
+
+    render(
+      <DashboardPageClient
+        initialStats={null}
+        initialSubmissions={[]}
+        initialRoles={null}
+        initialStatsLoaded={false}
+        initialSubmissionsLoaded={false}
+        initialRolesLoaded={false}
+      />
+    )
+
+    expect(
+      await screen.findByText('当前无法加载 Dashboard 权限信息，后端服务可能暂时不可用。')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('当前账号未分配可访问的 Dashboard 角色，请联系管理员在 User Management 中补齐角色。')
+    ).not.toBeInTheDocument()
+  })
 })

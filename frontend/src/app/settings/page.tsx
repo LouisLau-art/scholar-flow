@@ -10,7 +10,7 @@ import { useProfile } from "@/hooks/useProfile"
 import { Loader2, User, BookOpen, Shield } from "lucide-react"
 
 export default function SettingsPage() {
-  const { profile, isLoading, saveProfile, isSaving, changePassword } = useProfile()
+  const { profile, isLoading, error, saveProfile, isSaving, changePassword } = useProfile()
 
   if (isLoading) {
     return (
@@ -23,7 +23,33 @@ export default function SettingsPage() {
     )
   }
 
-  if (!profile) return null
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <SiteHeader />
+        <main className="flex-1 mx-auto flex w-full max-w-4xl items-center px-4 py-12 sm:px-6">
+          <div className="w-full rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950 shadow-sm">
+            <h1 className="text-2xl font-serif font-bold">当前无法加载账号设置，请稍后重试。</h1>
+            <p className="mt-2 text-sm text-amber-900">后端服务或个人资料接口当前不可用。</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <SiteHeader />
+        <main className="flex-1 mx-auto flex w-full max-w-4xl items-center px-4 py-12 sm:px-6">
+          <div className="w-full rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950 shadow-sm">
+            <h1 className="text-2xl font-serif font-bold">当前无法加载账号设置，请稍后重试。</h1>
+            <p className="mt-2 text-sm text-amber-900">用户资料暂时不可用，请重新登录或等待后端服务恢复。</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">

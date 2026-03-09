@@ -155,6 +155,7 @@ function DashboardPageContent({
   const [isLoading, setIsLoading] = useState(!(initialStatsLoaded && initialSubmissionsLoaded))
   const [roles, setRoles] = useState<unknown>(initialRoles)
   const [rolesLoading, setRolesLoading] = useState(!initialRolesLoaded)
+  const [rolesError, setRolesError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     const tab = parseDashboardTab(tabParam)
     if (tab) return tab
@@ -172,6 +173,7 @@ function DashboardPageContent({
       try {
         const token = await authService.getAccessToken()
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+        setRolesError(null)
 
         const [statsResponse, submissionsResponse, profileResponse] = await Promise.all([
           fetch('/api/v1/stats/author', {
@@ -208,11 +210,15 @@ function DashboardPageContent({
           const payload = await profileResponse.json().catch(() => null)
           if (payload?.success) {
             setRoles(payload.data?.roles || [])
+            setRolesError(null)
           }
+        } else if (token) {
+          setRolesError('PROFILE_UNAVAILABLE')
         }
       } catch (err) {
         if ((err as { name?: string })?.name !== 'AbortError') {
           console.error('Failed to load dashboard data:', err)
+          setRolesError('PROFILE_UNAVAILABLE')
         }
       } finally {
         setIsLoading(false)
@@ -263,8 +269,15 @@ function DashboardPageContent({
       canSeeAdmin,
     ]
   )
-  const roleLabel = rolesLoading ? 'loading…' : (normalizedRoles.length > 0 ? normalizedRoles.join(', ') : 'none')
+  const roleLabel = rolesLoading
+    ? 'loading…'
+    : rolesError && normalizedRoles.length === 0
+      ? 'unavailable'
+      : normalizedRoles.length > 0
+        ? normalizedRoles.join(', ')
+        : 'none'
   const hasAnyTab = Object.values(allowedTabs).some(Boolean)
+  const showRoleServiceUnavailable = !rolesLoading && !hasAnyTab && Boolean(rolesError)
 
   // 支持 /dashboard?tab=reviewer 之类的深链
   useEffect(() => {
@@ -344,7 +357,15 @@ function DashboardPageContent({
             )}
           </div>
 
-          {!rolesLoading && !hasAnyTab && (
+          {!rolesLoading && !hasAnyTab && showRoleServiceUnavailable && (
+            <TabsContent value={activeTab} className="sf-motion-enter-up">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+                当前无法加载 Dashboard 权限信息，后端服务可能暂时不可用。
+              </div>
+            </TabsContent>
+          )}
+
+          {!rolesLoading && !hasAnyTab && !showRoleServiceUnavailable && (
             <TabsContent value={activeTab} className="sf-motion-enter-up">
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
                 当前账号未分配可访问的 Dashboard 角色，请联系管理员在 User Management 中补齐角色。
