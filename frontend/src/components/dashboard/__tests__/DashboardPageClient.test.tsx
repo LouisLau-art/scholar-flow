@@ -59,8 +59,8 @@ describe('DashboardPageClient role normalization', () => {
       ).not.toBeInTheDocument()
     })
 
-    expect(screen.getByRole('tab', { name: /Author/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Reviewer/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Author/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Reviewer/i })).toBeInTheDocument()
   })
 
   it('accepts comma-separated role string from profile API and still shows allowed tabs', async () => {
