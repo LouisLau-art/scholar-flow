@@ -10,6 +10,19 @@ export class LoginPage {
   async login(email: string, password: string) {
     await this.page.getByTestId('login-email').fill(email)
     await this.page.getByTestId('login-password').fill(password)
-    await this.page.getByTestId('login-submit').click()
+    await Promise.all([
+      this.page.waitForResponse(
+        (response) =>
+          response.url().includes('/auth/v1/token?grant_type=password') &&
+          response.request().method() === 'POST' &&
+          response.ok(),
+        { timeout: 20000 }
+      ),
+      this.page.getByTestId('login-submit').click(),
+    ])
+
+    await this.page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+      timeout: 20000,
+    })
   }
 }
