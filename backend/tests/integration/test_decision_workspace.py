@@ -342,6 +342,7 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
             headers={"Authorization": f"Bearer {editor.token}"},
             json={
                 "target_stage": "first",
+                "requested_outcome": "major_revision",
                 "note": "Enough review evidence collected",
                 "accepted_pending_resolutions": [
                     {
@@ -435,6 +436,7 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
             headers={"Authorization": f"Bearer {editor.token}"},
             json={
                 "target_stage": "first",
+                "requested_outcome": "minor_revision",
                 "note": "Proceed without waiting for reviewer reports",
                 "accepted_pending_resolutions": [],
             },

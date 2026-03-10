@@ -430,6 +430,7 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
     await expect(exitDialog.getByText(/系统会自动 cancel 1 位 selected \/ invited \/ opened reviewer/i)).toBeVisible()
     await expect(exitDialog.getByText(/Accepted but not submitted/i)).toBeVisible()
     await expect(exitDialog.getByText('Accepted Reviewer', { exact: true })).toBeVisible()
+    await expect(exitDialog.getByText(/AE recommendation for First Decision/i)).toBeVisible()
 
     await page.getByRole('button', { name: 'Continue' }).click()
     await expect(page.getByText(/Please explicitly handle every accepted reviewer/i)).toBeVisible()
@@ -450,6 +451,7 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
 
     expect(exitPayload).toEqual({
       target_stage: 'first',
+      requested_outcome: 'major_revision',
       note: 'Two completed reviews are enough for first decision.',
       accepted_pending_resolutions: [
         {

@@ -218,6 +218,49 @@ class DecisionService(
             except Exception:
                 continue
 
+    def _get_latest_review_stage_exit_request(self, manuscript_id: str) -> dict[str, Any] | None:
+        """
+        读取最近一次 review_stage_exit 审计 payload，给 decision workspace 展示 AE 推荐结论。
+        """
+        try:
+            rows = (
+                self.client.table("status_transition_logs")
+                .select("payload,comment,created_at,changed_by")
+                .eq("manuscript_id", manuscript_id)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            return None
+
+        for row in rows:
+            payload = row.get("payload") if isinstance(row, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            if str(payload.get("action") or "").strip().lower() != "review_stage_exit":
+                continue
+            target_stage = str(payload.get("target_stage") or "").strip().lower()
+            if target_stage not in {
+                ManuscriptStatus.DECISION.value,
+                ManuscriptStatus.DECISION_DONE.value,
+                "first",
+                "final",
+                ManuscriptStatus.MAJOR_REVISION.value,
+                ManuscriptStatus.MINOR_REVISION.value,
+            }:
+                continue
+            return {
+                "target_stage": target_stage,
+                "requested_outcome": payload.get("requested_outcome"),
+                "note": str(row.get("comment") or ""),
+                "changed_at": row.get("created_at"),
+                "changed_by": row.get("changed_by"),
+            }
+        return None
+
     def _signed_url(self, bucket: str, path: str, expires_in: int = 60 * 10) -> str | None:
         p = str(path or "").strip()
         if not p:
@@ -518,6 +561,7 @@ class DecisionService(
             "source": "editor_detail",
             "reason": "editor_exit_review_stage",
             "target_stage": target_stage,
+            "requested_outcome": request.requested_outcome,
             "auto_cancelled_assignment_ids": auto_cancelled_ids,
             "manually_cancelled_assignment_ids": manually_cancelled_ids,
             "before": {"status": current_status},
@@ -619,6 +663,7 @@ class DecisionService(
             editor_id=user_id,
             status="draft",
         )
+        review_stage_exit_request = self._get_latest_review_stage_exit_request(manuscript_id)
         template_content = self._build_template(reports)
 
         draft_payload: dict[str, Any] | None = None
@@ -654,6 +699,7 @@ class DecisionService(
             },
             "reports": reports,
             "draft": draft_payload,
+            "review_stage_exit_request": review_stage_exit_request,
             "templates": [
                 {"id": "default", "name": "Default Decision Template", "content": template_content}
             ],

@@ -318,3 +318,39 @@
   - `cd frontend && bun run lint`
   - `cd frontend && bunx tsc --noEmit`
   - `cd frontend && bunx playwright test tests/e2e/specs/deployed_smoke.spec.ts --list`
+
+## 2026-03-10 继续推进：review-stage-exit First Decision recommendation
+
+- `review-stage-exit` 继续收敛成正式业务契约：
+  - 当 `target_stage=first` 时，AE 现在必须显式选择 `requested_outcome`
+  - 允许值：
+    - `major_revision`
+    - `minor_revision`
+    - `reject`
+    - `add_reviewer`
+  - 当 `target_stage != first` 时，禁止携带 `requested_outcome`
+
+- 后端改动：
+  - `backend/app/models/decision.py`
+    - 新增 `ReviewStageExitRequestedOutcome`
+    - `ReviewStageExitRequest` 增加 `requested_outcome`
+    - 使用 Pydantic `model_validator(mode='after')` 做条件校验
+    - `DecisionContextResponse` 增加 `review_stage_exit_request`
+  - `backend/app/services/decision_service.py`
+    - `exit_review_stage()` 会把 `requested_outcome` 写入 `status_transition_logs.payload`
+    - `get_decision_context()` 会回读最近一次 `review_stage_exit` 审计，供 Decision Workspace 展示
+
+- 前端改动：
+  - `frontend/src/app/(admin)/editor/manuscript/[id]/page.tsx`
+    - `Exit Review Stage` 弹窗新增 `AE recommendation for First Decision`
+  - `frontend/src/app/(admin)/editor/decision/[id]/page.tsx`
+    - Decision Workspace 右侧新增 `AE recommendation` 提示卡
+  - `frontend/src/services/editor-api/types.ts`
+  - `frontend/src/types/decision.ts`
+
+- 本轮定向验证：
+  - `cd backend && pytest -q -o addopts= tests/unit/test_decision_service_access.py`
+  - `cd backend && pytest -q -o addopts= tests/integration/test_decision_workspace.py -k 'review_stage_exit_moves_to_decision_and_cancels_pending_reviewers or review_stage_exit_allows_zero_submitted_reports'`
+  - `cd backend && uvx ruff check app/models/decision.py app/services/decision_service.py app/api/v1/editor.py tests/unit/test_decision_service_access.py tests/integration/test_decision_workspace.py --select=E9,F63,F7,F82`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bun run lint`

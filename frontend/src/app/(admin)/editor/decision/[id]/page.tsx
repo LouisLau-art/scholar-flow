@@ -10,6 +10,23 @@ import { ReviewReportComparison } from '@/components/editor/decision/ReviewRepor
 import { DecisionEditor } from '@/components/editor/decision/DecisionEditor'
 import type { DecisionContext } from '@/types/decision'
 
+function getReviewStageExitRequestedOutcomeLabel(
+  outcome: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
+): string {
+  switch (outcome) {
+    case 'major_revision':
+      return 'Major Revision'
+    case 'minor_revision':
+      return 'Minor Revision'
+    case 'reject':
+      return 'Reject'
+    case 'add_reviewer':
+      return 'Add Reviewer'
+    default:
+      return String(outcome)
+  }
+}
+
 export default function DecisionWorkspacePage() {
   const params = useParams()
   const router = useRouter()
@@ -102,6 +119,19 @@ export default function DecisionWorkspacePage() {
       middle={<ReviewReportComparison reports={context.reports || []} />}
       right={
         <div className="space-y-3">
+          {context.review_stage_exit_request?.target_stage === 'first' ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <div className="font-semibold">AE recommendation</div>
+              <div className="mt-1">
+                {context.review_stage_exit_request.requested_outcome
+                  ? getReviewStageExitRequestedOutcomeLabel(context.review_stage_exit_request.requested_outcome)
+                  : 'No recommendation recorded'}
+              </div>
+              {context.review_stage_exit_request.note ? (
+                <div className="mt-1 text-[11px] text-amber-100/80">{context.review_stage_exit_request.note}</div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
             <strong>First Decision</strong> 仅保存建议草稿；<strong>Final Decision</strong> 才会触发状态流转与作者通知。
           </div>

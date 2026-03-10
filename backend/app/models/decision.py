@@ -10,6 +10,12 @@ DecisionValue = Literal["accept", "reject", "major_revision", "minor_revision"]
 DecisionLetterStatus = Literal["draft", "final"]
 ReviewStageExitTarget = Literal["first", "final", "major_revision", "minor_revision"]
 ReviewStageExitPendingAction = Literal["cancel", "wait"]
+ReviewStageExitRequestedOutcome = Literal[
+    "major_revision",
+    "minor_revision",
+    "reject",
+    "add_reviewer",
+]
 
 
 class DecisionSubmitRequest(BaseModel):
@@ -49,11 +55,23 @@ class ReviewStageExitPendingResolution(BaseModel):
 
 class ReviewStageExitRequest(BaseModel):
     target_stage: ReviewStageExitTarget = Field(..., description="外审结束后进入的决策阶段")
+    requested_outcome: ReviewStageExitRequestedOutcome | None = Field(
+        default=None,
+        description="当 target_stage=first 时，AE 提交给学术编辑/主编的推荐处理结论",
+    )
     note: str = Field("", max_length=1000, description="本次离开外审的说明，会写入审计")
     accepted_pending_resolutions: list[ReviewStageExitPendingResolution] = Field(
         default_factory=list,
         description="针对 accepted 但未提交 reviewer 的显式处理清单",
     )
+
+    @model_validator(mode="after")
+    def _validate_requested_outcome(self) -> "ReviewStageExitRequest":
+        if self.target_stage == "first" and self.requested_outcome is None:
+            raise ValueError("requested_outcome is required when target_stage is first")
+        if self.target_stage != "first" and self.requested_outcome is not None:
+            raise ValueError("requested_outcome is only allowed when target_stage is first")
+        return self
 
 
 class ReviewStageExitResponse(BaseModel):
@@ -64,6 +82,14 @@ class ReviewStageExitResponse(BaseModel):
     remaining_pending_assignment_ids: list[str] = Field(default_factory=list)
     cancellation_email_sent_assignment_ids: list[str] = Field(default_factory=list)
     cancellation_email_failed_assignment_ids: list[str] = Field(default_factory=list)
+
+
+class ReviewStageExitRequestSummary(BaseModel):
+    target_stage: ReviewStageExitTarget
+    requested_outcome: ReviewStageExitRequestedOutcome | None = None
+    note: str = ""
+    changed_at: datetime | None = None
+    changed_by: str | None = None
 
 
 class DecisionLetterPayload(BaseModel):
@@ -90,5 +116,6 @@ class DecisionContextResponse(BaseModel):
     manuscript: dict
     reports: list[dict]
     draft: dict | None = None
+    review_stage_exit_request: ReviewStageExitRequestSummary | None = None
     templates: list[dict] = Field(default_factory=list)
     permissions: dict = Field(default_factory=dict)

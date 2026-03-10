@@ -84,6 +84,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 }
 
 type ReviewStageExitTarget = 'first' | 'final' | 'major_revision' | 'minor_revision'
+type ReviewStageExitRequestedOutcome = 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
 
 function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
   switch (target) {
@@ -96,6 +97,21 @@ function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
     case 'first':
     default:
       return 'First Decision'
+  }
+}
+
+function getReviewStageExitRequestedOutcomeLabel(outcome: ReviewStageExitRequestedOutcome): string {
+  switch (outcome) {
+    case 'major_revision':
+      return 'Major Revision'
+    case 'minor_revision':
+      return 'Minor Revision'
+    case 'reject':
+      return 'Reject'
+    case 'add_reviewer':
+      return 'Add Reviewer'
+    default:
+      return outcome
   }
 }
 
@@ -125,6 +141,8 @@ export default function EditorManuscriptDetailPage() {
   const [transitionReason, setTransitionReason] = useState('')
   const [reviewStageExitDialogOpen, setReviewStageExitDialogOpen] = useState(false)
   const [reviewStageExitTarget, setReviewStageExitTarget] = useState<ReviewStageExitTarget>('first')
+  const [reviewStageExitRequestedOutcome, setReviewStageExitRequestedOutcome] =
+    useState<ReviewStageExitRequestedOutcome>('major_revision')
   const [reviewStageExitNote, setReviewStageExitNote] = useState('')
   const [reviewStageExitSubmitting, setReviewStageExitSubmitting] = useState(false)
   const [acceptedPendingResolutionByAssignment, setAcceptedPendingResolutionByAssignment] = useState<
@@ -743,6 +761,7 @@ export default function EditorManuscriptDetailPage() {
 
   const handleOpenReviewStageExitDialog = useCallback(() => {
     setReviewStageExitTarget('first')
+    setReviewStageExitRequestedOutcome('major_revision')
     setReviewStageExitNote('')
     setAcceptedPendingResolutionByAssignment({})
     setReviewStageExitDialogOpen(true)
@@ -768,8 +787,13 @@ export default function EditorManuscriptDetailPage() {
 
     setReviewStageExitSubmitting(true)
     try {
+      if (reviewStageExitTarget === 'first' && !reviewStageExitRequestedOutcome) {
+        toast.error('Please select an AE recommendation before sending to First Decision.')
+        return
+      }
       const res = await EditorApi.exitReviewStage(id, {
         target_stage: reviewStageExitTarget,
+        requested_outcome: reviewStageExitTarget === 'first' ? reviewStageExitRequestedOutcome : undefined,
         note: reviewStageExitNote.trim() || undefined,
         accepted_pending_resolutions: acceptedPendingInvites.map((invite) => ({
           assignment_id: String(invite.id || ''),
@@ -784,8 +808,14 @@ export default function EditorManuscriptDetailPage() {
         throw new Error(res?.detail || res?.message || 'Failed to exit review stage')
       }
       const targetLabel = getReviewStageExitLabel(reviewStageExitTarget)
+      const requestedOutcomeLabel =
+        reviewStageExitTarget === 'first'
+          ? getReviewStageExitRequestedOutcomeLabel(reviewStageExitRequestedOutcome)
+          : null
       toast.success(
-        `Moved manuscript to ${targetLabel}. Auto-cancelled ${res?.data?.auto_cancelled_assignment_ids?.length || 0} reviewer(s).`
+        `Moved manuscript to ${targetLabel}${requestedOutcomeLabel ? ` (${requestedOutcomeLabel})` : ''}. Auto-cancelled ${
+          res?.data?.auto_cancelled_assignment_ids?.length || 0
+        } reviewer(s).`
       )
       const failedCancellationEmails = Array.isArray(res?.data?.cancellation_email_failed_assignment_ids)
         ? res.data.cancellation_email_failed_assignment_ids.length
@@ -794,6 +824,7 @@ export default function EditorManuscriptDetailPage() {
         toast.warning(`${failedCancellationEmails} cancellation email(s) failed. Reviewer access is still revoked.`)
       }
       setReviewStageExitDialogOpen(false)
+      setReviewStageExitRequestedOutcome('major_revision')
       setReviewStageExitNote('')
       setAcceptedPendingResolutionByAssignment({})
       await refreshDetail({ force: true })
@@ -808,6 +839,7 @@ export default function EditorManuscriptDetailPage() {
     id,
     refreshDetail,
     reviewStageExitNote,
+    reviewStageExitRequestedOutcome,
     reviewStageExitTarget,
   ])
 
@@ -1158,7 +1190,13 @@ export default function EditorManuscriptDetailPage() {
               <div className="text-sm font-medium text-foreground">Next action</div>
               <RadioGroup
                 value={reviewStageExitTarget}
-                onValueChange={(value) => setReviewStageExitTarget(value as ReviewStageExitTarget)}
+                onValueChange={(value) => {
+                  const nextTarget = value as ReviewStageExitTarget
+                  setReviewStageExitTarget(nextTarget)
+                  if (nextTarget !== 'first') {
+                    setReviewStageExitRequestedOutcome('major_revision')
+                  }
+                }}
                 className="grid gap-2"
               >
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
@@ -1207,6 +1245,59 @@ export default function EditorManuscriptDetailPage() {
                 </label>
               </RadioGroup>
             </div>
+
+            {reviewStageExitTarget === 'first' ? (
+              <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+                <div className="text-sm font-medium text-foreground">AE recommendation for First Decision</div>
+                <div className="text-xs text-muted-foreground">
+                  AE 不直接做 reject；这里只是把推荐结论连同稿件一并提交给学术编辑/主编。
+                </div>
+                <RadioGroup
+                  value={reviewStageExitRequestedOutcome}
+                  onValueChange={(value) =>
+                    setReviewStageExitRequestedOutcome(value as ReviewStageExitRequestedOutcome)
+                  }
+                  className="grid gap-2 pt-1"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-major" value="major_revision" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-major" className="cursor-pointer font-medium">
+                        Recommend Major Revision
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑大修。</div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-minor" value="minor_revision" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-minor" className="cursor-pointer font-medium">
+                        Recommend Minor Revision
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑小修。</div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-reject" value="reject" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-reject" className="cursor-pointer font-medium">
+                        Recommend Reject
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑拒稿。</div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-add-reviewer" value="add_reviewer" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-add-reviewer" className="cursor-pointer font-medium">
+                        Recommend Add Reviewer
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编补充新的 reviewer 再做判断。</div>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+            ) : null}
 
             <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
               <div className="text-sm font-medium text-foreground">Automatic cleanup</div>

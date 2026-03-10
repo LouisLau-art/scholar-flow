@@ -43,6 +43,13 @@ export type DecisionContext = {
   }
   reports: DecisionReport[]
   draft?: DecisionDraft | null
+  review_stage_exit_request?: {
+    target_stage: 'first' | 'final' | 'major_revision' | 'minor_revision'
+    requested_outcome?: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer' | null
+    note?: string | null
+    changed_at?: string | null
+    changed_by?: string | null
+  } | null
   templates: Array<{ id: string; name: string; content: string }>
   permissions?: {
     can_record_first?: boolean

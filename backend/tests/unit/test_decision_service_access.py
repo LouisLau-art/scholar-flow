@@ -157,6 +157,17 @@ def test_get_decision_context_returns_role_based_permission_flags(
     monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
     monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1"}])
     monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_get_latest_review_stage_exit_request",
+        lambda _id: {
+            "target_stage": "first",
+            "requested_outcome": "major_revision",
+            "note": "AE recommends major revision",
+            "changed_at": "2026-03-10T00:00:00+00:00",
+            "changed_by": "ae-1",
+        },
+    )
     monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
     monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
 
@@ -170,6 +181,26 @@ def test_get_decision_context_returns_role_based_permission_flags(
     assert permissions.get("can_record_first") is True
     assert permissions.get("can_submit_final") is False
     assert permissions.get("can_submit") is True
+    assert context.get("review_stage_exit_request", {}).get("requested_outcome") == "major_revision"
+
+
+def test_review_stage_exit_request_requires_requested_outcome_for_first_target() -> None:
+    with pytest.raises(ValueError, match="requested_outcome is required"):
+        ReviewStageExitRequest(
+            target_stage="first",
+            note="Send to academic editor",
+            accepted_pending_resolutions=[],
+        )
+
+
+def test_review_stage_exit_request_rejects_requested_outcome_for_non_first_target() -> None:
+    with pytest.raises(ValueError, match="requested_outcome is only allowed"):
+        ReviewStageExitRequest(
+            target_stage="major_revision",
+            requested_outcome="reject",
+            note="AE direct major revision",
+            accepted_pending_resolutions=[],
+        )
 
 
 def test_has_submitted_author_revision_scans_all_rows_not_only_latest() -> None:
@@ -524,6 +555,7 @@ def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
         profile_roles=["assistant_editor"],
         request=ReviewStageExitRequest(
             target_stage="first",
+            requested_outcome="major_revision",
             note="Enough evidence collected",
             accepted_pending_resolutions=[
                 {"assignment_id": "acc-1", "action": "cancel", "reason": "AE decided two reviews are enough"}
@@ -599,6 +631,7 @@ def test_exit_review_stage_allows_zero_submitted_reports(
         profile_roles=["assistant_editor"],
         request=ReviewStageExitRequest(
             target_stage="first",
+            requested_outcome="minor_revision",
             note="Proceed without waiting for reviewer reports",
             accepted_pending_resolutions=[],
         ),
@@ -665,6 +698,53 @@ def test_exit_review_stage_allows_direct_revision_targets(
     assert len(transitions) == 1
     assert transitions[0]["to_status"] == expected_status
     assert transitions[0]["allow_skip"] is False
+
+
+def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_current_round_review_assignments", lambda **_kwargs: [])
+    transitions: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(
+            update_status=lambda **kwargs: transitions.append(kwargs) or {"status": kwargs["to_status"]}
+        ),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            requested_outcome="reject",
+            note="AE recommends reject but escalates for first decision",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert len(transitions) == 1
+    payload = transitions[0]["payload"]
+    assert isinstance(payload, dict)
+    assert payload["target_stage"] == "first"
+    assert payload["requested_outcome"] == "reject"
 
 
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
@@ -761,11 +841,12 @@ def test_exit_review_stage_keeps_transition_when_cancellation_email_fails(
         manuscript_id="ms-1",
         user_id="ae-1",
         profile_roles=["assistant_editor"],
-        request=ReviewStageExitRequest(
-            target_stage="first",
-            note="Proceed with current evidence",
-            accepted_pending_resolutions=[
-                {"assignment_id": "acc-1", "action": "cancel", "reason": "AE closed review stage"}
+            request=ReviewStageExitRequest(
+                target_stage="first",
+                requested_outcome="major_revision",
+                note="Proceed with current evidence",
+                accepted_pending_resolutions=[
+                    {"assignment_id": "acc-1", "action": "cancel", "reason": "AE closed review stage"}
             ],
         ),
     )
