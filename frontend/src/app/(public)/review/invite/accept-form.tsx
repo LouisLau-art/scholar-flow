@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { DatePicker } from '@/components/ui/date-picker'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
@@ -50,8 +50,18 @@ export function AcceptForm({
     <div className="rounded-lg border border-border bg-card p-4">
       <h2 className="text-base font-semibold text-foreground">Accept Invitation</h2>
       <p className="mt-1 text-sm text-muted-foreground">Confirm you can review this manuscript and choose a due date before entering the reviewer workspace.</p>
-      <Label className="mt-4 block text-sm font-medium text-foreground">Due date</Label>
-      <DatePicker value={dueDate} minDate={minDueDate} maxDate={maxDueDate} onChange={setDueDate} className="mt-1" />
+      <Label htmlFor="review-invite-due-date" className="mt-4 block text-sm font-medium text-foreground">
+        Due date
+      </Label>
+      <Input
+        id="review-invite-due-date"
+        type="date"
+        value={dueDate}
+        min={minDueDate}
+        max={maxDueDate}
+        onChange={(event) => setDueDate(event.target.value)}
+        className="mt-1"
+      />
       <p className="mt-1 text-xs text-muted-foreground">
         Allowed window: {minDueDate} to {maxDueDate}
       </p>
