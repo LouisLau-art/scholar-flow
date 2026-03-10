@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 
@@ -42,6 +43,7 @@ export function DateTimePicker({
   disabled = false,
   className,
 }: DateTimePickerProps) {
+  const [open, setOpen] = useState(false)
   const selected = parseLocalDateTime(value)
   const currentHour = selected ? String(selected.getHours()).padStart(2, '0') : '09'
   const currentMinute = selected ? String(selected.getMinutes()).padStart(2, '0') : '00'
@@ -54,7 +56,7 @@ export function DateTimePicker({
   }
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"

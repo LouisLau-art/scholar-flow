@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 
@@ -35,12 +36,13 @@ export function DatePicker({
   disabled = false,
   className,
 }: DatePickerProps) {
+  const [open, setOpen] = useState(false)
   const selectedDate = parseDateInput(value)
   const min = parseDateInput(minDate)
   const max = parseDateInput(maxDate)
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -59,6 +61,7 @@ export function DatePicker({
           onSelect={(next) => {
             if (!next) return
             onChange(format(next, 'yyyy-MM-dd'))
+            setOpen(false)
           }}
           disabled={(date) => {
             if (min && date < min) return true
