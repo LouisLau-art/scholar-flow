@@ -83,6 +83,9 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || (github.event.inputs.ref || 'main') }}
 
+      - name: Capture expected frontend deploy SHA
+        run: echo "EXPECTED_FRONTEND_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -103,23 +106,15 @@ jobs:
             echo "## Frontend Smoke Scope"
             echo
             echo "- This workflow validates the canonical UAT frontend URL."
-            echo "- It does **not** prove Vercel commit SHA parity."
-            echo "- Exact frontend deployment binding requires a future Vercel deployment hook / metadata gate."
+            echo "- It now waits for the deployed frontend runtime SHA to converge before running Playwright."
+            echo "- This prevents false negatives caused by GitHub code being newer than the live Vercel deployment."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Wait for deployed frontend
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 24); do
-            status="$(curl -s -o /dev/null -w '%{http_code}' "${UAT_BASE_URL}/login" || true)"
-            echo "[uat-smoke] attempt=${attempt} status=${status}"
-            if [[ "${status}" == "200" ]]; then
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "[uat-smoke] frontend did not become ready in time" >&2
-          exit 1
+      - name: Wait for deployed frontend runtime SHA
+        env:
+          BASE_URL: ${{ env.UAT_BASE_URL }}
+          EXPECTED_SHA: ${{ env.EXPECTED_FRONTEND_SHA }}
+        run: bash scripts/ci/check-frontend-runtime.sh --base-url "${BASE_URL}" --expected-sha "${EXPECTED_SHA}"
 
       - name: Install Playwright browser
         working-directory: ./frontend
