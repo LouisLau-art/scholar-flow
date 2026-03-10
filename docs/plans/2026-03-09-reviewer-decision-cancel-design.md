@@ -283,6 +283,7 @@ AE 下一步有三种业务出口：
 - `major_revision`
 - `minor_revision`
 - `reject`
+- `add_reviewer`
 
 不允许：
 
@@ -290,7 +291,7 @@ AE 下一步有三种业务出口：
 
 定位：
 
-- AE 不好把握时，把稿件交给学术委员会 / 主编判断
+- AE 不好把握时，把稿件交给学术委员会 / 主编判断；`add_reviewer` 表示建议补充 reviewer 后再判断
 
 ### final decision
 

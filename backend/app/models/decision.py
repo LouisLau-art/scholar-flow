@@ -6,7 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-DecisionValue = Literal["accept", "reject", "major_revision", "minor_revision"]
+DecisionSubmissionValue = Literal["accept", "reject", "major_revision", "minor_revision", "add_reviewer"]
+DecisionLetterDecision = Literal["accept", "reject", "major_revision", "minor_revision"]
 DecisionLetterStatus = Literal["draft", "final"]
 ReviewStageExitTarget = Literal["first", "final", "major_revision", "minor_revision"]
 ReviewStageExitPendingAction = Literal["cancel", "wait"]
@@ -24,11 +25,11 @@ class DecisionSubmitRequest(BaseModel):
     """
 
     content: str = Field("", description="Markdown 决策信正文")
-    decision: DecisionValue = Field(..., description="决策结论")
-    is_final: bool = Field(..., description="是否最终提交")
+    decision: DecisionSubmissionValue = Field(..., description="决策结论")
+    is_final: bool = Field(..., description="是否提交当前决策阶段动作；false 表示保存草稿")
     decision_stage: Literal["first", "final"] | None = Field(
         default=None,
-        description="决策阶段（可选）。未提供时由 is_final 推导",
+        description="决策阶段（可选）。未提供时为兼容旧客户端按 is_final 推导",
     )
     attachment_paths: list[str] = Field(default_factory=list, description="附件引用列表")
     last_updated_at: datetime | None = Field(
@@ -42,8 +43,6 @@ class DecisionSubmitRequest(BaseModel):
         if self.decision_stage is None:
             self.decision_stage = inferred
             return self
-        if self.decision_stage != inferred:
-            raise ValueError("decision_stage and is_final are inconsistent")
         return self
 
 
@@ -98,7 +97,7 @@ class DecisionLetterPayload(BaseModel):
     manuscript_version: int
     editor_id: str
     content: str
-    decision: DecisionValue
+    decision: DecisionLetterDecision
     status: DecisionLetterStatus
     attachment_paths: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
@@ -106,8 +105,8 @@ class DecisionLetterPayload(BaseModel):
 
 
 class DecisionSubmitResponse(BaseModel):
-    decision_letter_id: str
-    status: DecisionLetterStatus
+    decision_letter_id: str | None = None
+    status: DecisionLetterStatus | None = None
     manuscript_status: str
     updated_at: datetime | None = None
 

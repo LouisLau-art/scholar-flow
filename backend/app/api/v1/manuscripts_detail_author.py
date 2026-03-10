@@ -194,7 +194,7 @@ async def get_manuscript_author_context_impl(
             }
         )
 
-    # 5) Final decision letters（作者可见）
+    # 5) Decision letters（作者可见）
     for row in decision_letters:
         letter_id = str(row.get("id") or "").strip()
         decision = str(row.get("decision") or "").strip().lower()
@@ -221,7 +221,7 @@ async def get_manuscript_author_context_impl(
                 "id": f"decision-{letter_id}",
                 "timestamp": ts,
                 "actor": "editorial",
-                "title": f"最终决定：{utils._humanize_decision(decision)}",
+                "title": f"编辑决定：{utils._humanize_decision(decision)}",
                 "message": content,
                 "attachments": attachments,
             }

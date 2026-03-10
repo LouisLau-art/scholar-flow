@@ -374,6 +374,276 @@ def test_submit_decision_blocks_first_decision_accept(
     assert exc.value.status_code == 422
 
 
+def test_decision_submit_request_allows_committed_first_stage_action() -> None:
+    request = DecisionSubmitRequest(
+        content="Need one more reviewer",
+        decision="add_reviewer",
+        is_final=True,
+        decision_stage="first",
+        attachment_paths=[],
+        last_updated_at=None,
+    )
+
+    assert request.decision_stage == "first"
+
+
+def test_submit_decision_first_stage_add_reviewer_returns_to_under_review_without_letter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    deleted_letters: list[str] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "eic-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
+    monkeypatch.setattr(
+        svc,
+        "_get_latest_letter",
+        lambda **_kwargs: {
+            "id": "draft-1",
+            "status": "draft",
+            "updated_at": "2026-03-10T00:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("add_reviewer should not persist decision letter")),
+    )
+    transition_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_transition_for_first_decision",
+        lambda **kwargs: transition_calls.append(kwargs) or "under_review",
+    )
+    monkeypatch.setattr(
+        svc,
+        "_notify_author",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("add_reviewer should not notify author")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_delete_letter_by_id",
+        lambda *, letter_id: deleted_letters.append(letter_id),
+    )
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="eic-1",
+        profile_roles=["editor_in_chief"],
+        request=DecisionSubmitRequest(
+            content="",
+            decision="add_reviewer",
+            is_final=True,
+            decision_stage="first",
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["decision_letter_id"] is None
+    assert out["status"] is None
+    assert out["manuscript_status"] == "under_review"
+    assert len(transition_calls) == 1
+    assert transition_calls[0]["decision"] == "add_reviewer"
+    assert deleted_letters == ["draft-1"]
+
+
+def test_submit_decision_first_stage_reuses_current_draft_instead_of_latest_final_letter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    save_calls: list[dict[str, object]] = []
+    latest_letter_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "eic-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_get_latest_letter",
+        lambda **kwargs: latest_letter_calls.append(kwargs)
+        or (
+            {
+                "id": "draft-1",
+                "status": "draft",
+                "updated_at": "2026-03-10T00:00:00+00:00",
+            }
+            if kwargs.get("status") == "draft"
+            else (_ for _ in ()).throw(AssertionError("first decision should only query draft letter"))
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **kwargs: save_calls.append(kwargs)
+        or {
+            "id": "draft-1",
+            "status": "final",
+            "updated_at": "2026-03-10T00:05:00+00:00",
+            "attachment_paths": [],
+            "content": kwargs["content"],
+        },
+    )
+    monkeypatch.setattr(svc, "_transition_for_first_decision", lambda **_kwargs: "major_revision")
+    monkeypatch.setattr(svc, "_notify_author", lambda **_kwargs: None)
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="eic-1",
+        profile_roles=["editor_in_chief"],
+        request=DecisionSubmitRequest(
+            content="Need major revision",
+            decision="major_revision",
+            is_final=True,
+            decision_stage="first",
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["decision_letter_id"] == "draft-1"
+    assert len(save_calls) == 1
+    assert save_calls[0]["existing"]["id"] == "draft-1"
+    assert save_calls[0]["status"] == "final"
+    assert latest_letter_calls[0]["manuscript_version"] == 2
+
+
+def test_submit_decision_final_stage_creates_new_letter_and_discards_stale_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    save_calls: list[dict[str, object]] = []
+    deleted_letters: list[str] = []
+    latest_letter_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision_done",
+            "version": 3,
+            "author_id": "author-1",
+            "editor_id": "eic-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_get_latest_letter",
+        lambda **kwargs: latest_letter_calls.append(kwargs)
+        or (
+            {
+                "id": "draft-9",
+                "status": "draft",
+                "updated_at": "2026-03-10T00:00:00+00:00",
+            }
+            if kwargs.get("status") == "draft"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **kwargs: save_calls.append(kwargs)
+        or {
+            "id": "final-1",
+            "status": "final",
+            "updated_at": "2026-03-10T00:10:00+00:00",
+            "attachment_paths": [],
+            "content": kwargs["content"],
+        },
+    )
+    monkeypatch.setattr(svc, "_transition_for_final_decision", lambda **_kwargs: "approved")
+    monkeypatch.setattr(svc, "_notify_author", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_delete_letter_by_id",
+        lambda *, letter_id: deleted_letters.append(letter_id),
+    )
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="eic-1",
+        profile_roles=["editor_in_chief"],
+        request=DecisionSubmitRequest(
+            content="Accept",
+            decision="accept",
+            is_final=True,
+            decision_stage="final",
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["decision_letter_id"] == "final-1"
+    assert len(save_calls) == 1
+    assert save_calls[0]["existing"] is None
+    assert save_calls[0]["status"] == "final"
+    assert deleted_letters == ["draft-9"]
+    assert latest_letter_calls[0]["manuscript_version"] == 3
+
+
+def test_submit_decision_blocks_add_reviewer_in_final_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision_done",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "eic-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_decision(
+            manuscript_id="ms-1",
+            user_id="eic-1",
+            profile_roles=["editor_in_chief"],
+            request=DecisionSubmitRequest(
+                content="Need more reviewers",
+                decision="add_reviewer",
+                is_final=True,
+                decision_stage="final",
+                attachment_paths=[],
+                last_updated_at=None,
+            ),
+        )
+
+    assert exc.value.status_code == 422
+    assert "only allowed in first decision" in str(exc.value.detail).lower()
+
+
 def test_get_decision_context_blocks_under_review_until_exit_review_stage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

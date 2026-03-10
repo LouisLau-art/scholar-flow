@@ -169,12 +169,13 @@
 
 通过标准：
 - `under_review / resubmitted` 阶段不能直接绕过 `Exit Review Stage` 进入决策。
-- `first decision` 不显示 `accept`。
+- `first decision` 不显示 `accept`，并允许 `add reviewer`。
 - `final decision` 才允许 `accept`。
 
 失败即阻断：
 - 在错误阶段提前打开决策工作台。
 - `first decision` 仍出现 `accept`。
+- `first decision` 缺少 `add reviewer`。
 - 终审阶段不该出现的选项仍可选。
 
 ## 建议记录格式

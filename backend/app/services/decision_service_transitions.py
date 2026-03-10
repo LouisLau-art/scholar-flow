@@ -8,6 +8,57 @@ from app.models.manuscript import ManuscriptStatus, normalize_status
 
 
 class DecisionServiceTransitionsMixin:
+    def _transition_for_first_decision(
+        self,
+        *,
+        manuscript_id: str,
+        current_status: str,
+        decision: str,
+        changed_by: str,
+        transition_payload: dict[str, Any],
+    ) -> str:
+        norm = normalize_status(current_status) or ManuscriptStatus.PRE_CHECK.value
+        if norm != ManuscriptStatus.DECISION.value:
+            raise HTTPException(
+                status_code=422,
+                detail="First decision submission is only allowed in decision stage",
+            )
+
+        target_status = (
+            ManuscriptStatus.UNDER_REVIEW.value
+            if decision == "add_reviewer"
+            else ManuscriptStatus.REJECTED.value
+            if decision == "reject"
+            else ManuscriptStatus.MAJOR_REVISION.value
+            if decision == "major_revision"
+            else ManuscriptStatus.MINOR_REVISION.value
+        )
+        audit_payload = dict(transition_payload or {})
+        audit_payload.setdefault("source", "decision_workspace")
+        audit_payload.setdefault("reason", "editor_submit_first_decision")
+        audit_payload["decision_stage"] = "first"
+        audit_payload["before"] = {"status": norm}
+        audit_payload["after"] = {"status": target_status}
+
+        if decision == "reject":
+            self.editorial.update_status(
+                manuscript_id=manuscript_id,
+                to_status=ManuscriptStatus.DECISION_DONE.value,
+                changed_by=changed_by,
+                comment="first decision auto step",
+                allow_skip=False,
+            )
+
+        updated = self.editorial.update_status(
+            manuscript_id=manuscript_id,
+            to_status=target_status,
+            changed_by=changed_by,
+            comment=f"first_decision:{decision}",
+            allow_skip=False,
+            payload=audit_payload,
+        )
+        return str(updated.get("status") or target_status)
+
     def _transition_for_final_decision(
         self,
         *,

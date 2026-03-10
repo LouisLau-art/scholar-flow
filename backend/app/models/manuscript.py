@@ -70,6 +70,7 @@ class ManuscriptStatus(str, Enum):
             # - 这样可避免上层用 allow_skip 绕过状态机。
             return {
                 cls.DECISION_DONE.value,
+                cls.UNDER_REVIEW.value,
                 cls.MAJOR_REVISION.value,
                 cls.MINOR_REVISION.value,
             }

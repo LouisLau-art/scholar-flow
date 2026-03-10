@@ -6,6 +6,7 @@ from app.models.manuscript import ManuscriptStatus
 def test_allowed_next_decision_includes_revision_paths() -> None:
     allowed = ManuscriptStatus.allowed_next(ManuscriptStatus.DECISION.value)
     assert ManuscriptStatus.DECISION_DONE.value in allowed
+    assert ManuscriptStatus.UNDER_REVIEW.value in allowed
     assert ManuscriptStatus.MAJOR_REVISION.value in allowed
     assert ManuscriptStatus.MINOR_REVISION.value in allowed
 

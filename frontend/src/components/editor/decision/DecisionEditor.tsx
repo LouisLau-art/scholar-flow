@@ -34,6 +34,9 @@ export function getDecisionOptionsForStage(manuscriptStatus?: string | null): Fi
   if (normalizedStatus === 'decision_done') {
     return ['accept', 'minor_revision', 'major_revision', 'reject']
   }
+  if (normalizedStatus === 'decision') {
+    return ['minor_revision', 'major_revision', 'reject', 'add_reviewer']
+  }
   return ['minor_revision', 'major_revision', 'reject']
 }
 
@@ -74,10 +77,17 @@ export function DecisionEditor({
   const baselineRef = useRef('')
 
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  const currentDecisionStage: 'first' | 'final' = normalizedStatus === 'decision_done' ? 'final' : 'first'
   const canEditDraft = (canRecordFirst || canSubmitFinal) && normalizedStatus === 'decision'
   const decisionOptions = useMemo(() => getDecisionOptionsForStage(manuscriptStatus), [manuscriptStatus])
   const decisionSpecificBlockingReasons = useMemo(() => {
     const reasons = [...finalBlockingReasons]
+    if (currentDecisionStage === 'first') {
+      if (decision === 'accept') {
+        reasons.push('Accept is not available in first decision stage')
+      }
+      return reasons
+    }
     if (decision === 'major_revision' || decision === 'minor_revision') {
       if (!['decision', 'decision_done'].includes(normalizedStatus)) {
         reasons.push('Revision decision is only allowed in decision/decision_done stage')
@@ -94,9 +104,9 @@ export function DecisionEditor({
       reasons.push('Final reject requires manuscript status in decision/decision_done')
     }
     return reasons
-  }, [decision, finalBlockingReasons, normalizedStatus])
+  }, [currentDecisionStage, decision, finalBlockingReasons, normalizedStatus])
 
-  const canSubmitFinalNow = canSubmitFinal && decisionSpecificBlockingReasons.length === 0
+  const canSubmitDecisionNow = canSubmitFinal && decisionSpecificBlockingReasons.length === 0
 
   const snapshot = useMemo(
     () =>
@@ -204,16 +214,16 @@ export function DecisionEditor({
       toast.error('First decision draft is only available in decision stage')
       return
     }
-    if (isFinal && !content.trim()) {
-      toast.error('Final submission requires decision letter content')
+    if (isFinal && decision !== 'add_reviewer' && !content.trim()) {
+      toast.error(`${currentDecisionStage === 'first' ? 'First' : 'Final'} decision requires letter content`)
       return
     }
     if (isFinal && !canSubmitFinal) {
-      toast.error('Only Editor-in-Chief/Admin can submit final decision')
+      toast.error(`Only Editor-in-Chief/Admin can submit ${currentDecisionStage} decision`)
       return
     }
-    if (isFinal && !canSubmitFinalNow) {
-      toast.error(decisionSpecificBlockingReasons[0] || 'Final decision is blocked by workflow requirements')
+    if (isFinal && !canSubmitDecisionNow) {
+      toast.error(decisionSpecificBlockingReasons[0] || `${currentDecisionStage} decision is blocked by workflow requirements`)
       return
     }
 
@@ -224,7 +234,7 @@ export function DecisionEditor({
         content,
         decision,
         is_final: isFinal,
-        decision_stage: isFinal ? 'final' : 'first',
+        decision_stage: currentDecisionStage,
         attachment_paths: attachments.map((item) => item.ref),
         last_updated_at: lastUpdatedAt,
       })
@@ -236,7 +246,11 @@ export function DecisionEditor({
       setSavedBaseline(updatedAt)
 
       if (isFinal) {
-        toast.success('Final decision submitted')
+        toast.success(
+          decision === 'add_reviewer'
+            ? 'Manuscript returned to under review'
+            : `${currentDecisionStage === 'first' ? 'First' : 'Final'} decision submitted`
+        )
         onSubmitted(String(res.data.manuscript_status || ''))
       } else {
         toast.success('Draft saved')
@@ -252,16 +266,18 @@ export function DecisionEditor({
     <aside className="rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Decision Letter</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Draft content and attachments remain private until <strong>Submit Final Decision</strong>.
+        {currentDecisionStage === 'first'
+          ? 'First decision can be saved as a draft in the decision queue. Submitting add reviewer will immediately return the manuscript to under review.'
+          : 'Final decision is only available in the final decision queue and will trigger the manuscript state transition.'}
       </p>
       {!canSubmitFinal ? (
         <p className="mt-1 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
-          当前账号仅可记录 First Decision 草稿；Final Decision 需由 Editor-in-Chief/Admin 提交。
+          当前账号仅可记录 First Decision 草稿；提交决策动作需由 Editor-in-Chief/Admin 执行。
         </p>
       ) : null}
-      {canSubmitFinal && !canSubmitFinalNow ? (
+      {canSubmitFinal && !canSubmitDecisionNow ? (
         <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
-          <div className="font-semibold">Final submission blocked</div>
+          <div className="font-semibold">{currentDecisionStage === 'first' ? 'First decision blocked' : 'Final decision blocked'}</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             {decisionSpecificBlockingReasons.map((reason) => (
               <li key={reason}>{reason}</li>
@@ -286,6 +302,8 @@ export function DecisionEditor({
                 <SelectItem key={option} value={option}>
                   {option === 'accept'
                     ? 'Accept'
+                    : option === 'add_reviewer'
+                      ? 'Add Reviewer'
                     : option === 'minor_revision'
                       ? 'Minor Revision'
                       : option === 'major_revision'
@@ -362,16 +380,20 @@ export function DecisionEditor({
             className="inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60"
           >
             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save Draft
+            Save First Decision Draft
           </Button>
           <Button
             type="button"
             onClick={() => void submit(true)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmitFinalNow}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmitDecisionNow}
             className="inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60"
           >
             {isSubmittingFinal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Submit Final Decision
+            {decision === 'add_reviewer'
+              ? 'Return To Under Review'
+              : currentDecisionStage === 'first'
+                ? 'Submit First Decision'
+                : 'Submit Final Decision'}
           </Button>
         </div>
       </div>

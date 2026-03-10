@@ -87,8 +87,8 @@ test.describe('Decision Workspace flow (mocked)', () => {
     await expect(page.getByText('Decision Letter')).toBeVisible()
 
     await page.getByRole('button', { name: 'Generate Letter Draft' }).click()
-    await page.getByRole('button', { name: 'Save Draft' }).click()
-    await page.getByRole('button', { name: 'Submit Final Decision' }).click()
+    await page.getByRole('button', { name: 'Save First Decision Draft' }).click()
+    await page.getByRole('button', { name: 'Submit First Decision' }).click()
 
     await expect.poll(() => decisionPayloads.length).toBe(2)
     expect(decisionPayloads[0]?.is_final).toBe(false)

@@ -91,7 +91,36 @@
     - 旧的 `under_review -> save first decision draft` 绕路口子已封住
   - reviewer 状态展示补全：
     - 前端 reviewer summary / management 已正式识别 `cancelled`
-    - `cancelled` 不再被误显示成 `selected`
+  - `cancelled` 不再被误显示成 `selected`
+
+## 2026-03-10 继续推进：first decision 真动作化
+
+- `decision` 阶段不再只是“保存建议草稿”：
+  - `major_revision`
+  - `minor_revision`
+  - `reject`
+  - `add_reviewer`
+  现在都可作为第一阶段的真实提交动作
+- `add_reviewer` 已实现为真实 workflow action：
+  - 仅允许在 `decision` 阶段提交
+  - 提交后 manuscript 退回 `under_review`
+  - 不生成 author-facing `decision_letters`
+  - 不触发作者通知
+- `major_revision / minor_revision / reject` 在 `decision` 阶段提交时：
+  - 继续保存决策信
+  - 执行真实状态流转
+  - 触发作者通知
+- `decision_done` 阶段仍为 final decision：
+  - `accept`
+  - `major_revision`
+  - `minor_revision`
+  - `reject`
+- `Decision Workspace` 前端已同步：
+  - `decision` 阶段显示 `add_reviewer`
+  - `decision_done` 阶段不显示 `add_reviewer`
+  - `decision` 阶段按钮文案改为 `Submit First Decision`
+  - 选中 `add_reviewer` 时按钮文案改为 `Return To Under Review`
+  - 提交后若稿件离开 `decision / decision_done`，页面直接跳回稿件详情
 
 ## 已写计划与说明文档
 
@@ -352,5 +381,54 @@
   - `cd backend && pytest -q -o addopts= tests/unit/test_decision_service_access.py`
   - `cd backend && pytest -q -o addopts= tests/integration/test_decision_workspace.py -k 'review_stage_exit_moves_to_decision_and_cancels_pending_reviewers or review_stage_exit_allows_zero_submitted_reports'`
   - `cd backend && uvx ruff check app/models/decision.py app/services/decision_service.py app/api/v1/editor.py tests/unit/test_decision_service_access.py tests/integration/test_decision_workspace.py --select=E9,F63,F7,F82`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bun run lint`
+
+## 2026-03-10 继续推进：First Decision add_reviewer 真动作与 decision letter 语义收敛
+
+- `Decision Workspace` 现在支持真正的 `first decision + add_reviewer` 提交动作：
+  - `decision` 阶段可选：
+    - `minor_revision`
+    - `major_revision`
+    - `reject`
+    - `add_reviewer`
+  - `decision_done` 阶段可选：
+    - `accept`
+    - `minor_revision`
+    - `major_revision`
+    - `reject`
+
+- 后端状态机调整：
+  - `backend/app/models/manuscript.py`
+    - `decision -> under_review` 现在是合法流转
+  - `backend/app/services/decision_service_transitions.py`
+    - `first decision + add_reviewer` 会把 manuscript 返回 `under_review`
+
+- decision letter 持久化语义收敛：
+  - `backend/app/services/decision_service.py`
+  - `backend/app/services/decision_service_letters.py`
+  - 规则改成：
+    - 草稿：继续只维护当前 editor 的最新 `draft`
+    - first decision 提交：只允许复用当前 `draft`，不再更新“最近任意 letter”
+    - final decision 提交：始终新建一条 committed `final` letter，保留 first decision 历史
+    - `add_reviewer`：不生成 author-facing decision letter，并清理当前 draft，避免后续 decision 轮次把旧草稿重新带出来
+
+- 作者侧决策文案收敛：
+  - `backend/app/api/v1/manuscripts_detail_author.py`
+  - 原先统一显示“最终决定”，现在改为更中性的“编辑决定”，避免 first/final decision 共存时误导作者
+
+- 前端与文档同步：
+  - `frontend/src/app/(admin)/editor/manuscript/[id]/page.tsx`
+  - `docs/UAT_MINIMAL_CHECKLIST.md`
+  - `docs/plans/2026-03-09-reviewer-decision-cancel-design.md`
+  - 已统一为：
+    - `first decision` 不允许 `accept`
+    - `first decision` 允许 `add_reviewer`
+    - `add_reviewer` 会把稿件退回 `under_review`
+
+- 本轮定向验证：
+  - `cd backend && pytest -q -o addopts= tests/unit/test_decision_service_access.py tests/unit/test_manuscript_status_model.py tests/integration/test_decision_workspace.py`
+  - `cd frontend && bun run test:run src/components/editor/decision/DecisionEditor.test.ts`
+  - `cd frontend && bun run test:e2e tests/e2e/specs/decision_workspace.spec.ts`
   - `cd frontend && bunx tsc --noEmit`
   - `cd frontend && bun run lint`

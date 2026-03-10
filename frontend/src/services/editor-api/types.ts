@@ -35,7 +35,7 @@ export type EditorRbacContextResponse = {
 
 export type DecisionSubmissionPayload = {
   content: string
-  decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision'
+  decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision' | 'add_reviewer'
   is_final: boolean
   decision_stage?: 'first' | 'final'
   attachment_paths: string[]

@@ -115,7 +115,8 @@
   - `resubmitted`
   离开外审阶段
 
-- 至少已有 `1` 份有效 review 提交
+- 为避免流程卡死，`0` 份 review 也允许离开外审阶段
+- 是否继续等待 reviewer，由 AE 自行决定并承担流程判断
 
 ### 4.2 退出结果
 
@@ -138,6 +139,11 @@
   - `minor_revision`
   - `major_revision`
   - `reject`
+  - `add_reviewer`
+- 其中：
+  - `major_revision / minor_revision / reject` 为真正提交动作
+  - `add_reviewer` 会把稿件退回 `under_review`
+  - `add_reviewer` 不生成 author-facing decision letter
 
 ### 5.2 final decision
 

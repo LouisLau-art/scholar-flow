@@ -1,4 +1,4 @@
-export type FinalDecision = 'accept' | 'reject' | 'major_revision' | 'minor_revision'
+export type FinalDecision = 'accept' | 'reject' | 'major_revision' | 'minor_revision' | 'add_reviewer'
 
 export type DecisionAttachment = {
   id: string

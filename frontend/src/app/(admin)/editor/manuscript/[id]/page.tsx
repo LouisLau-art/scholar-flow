@@ -1228,7 +1228,7 @@ export default function EditorManuscriptDetailPage() {
                       Send to First Decision
                     </Label>
                     <div className="text-xs text-muted-foreground">
-                      进入 `decision` 队列，只允许 major revision / minor revision / reject。
+                      进入 `decision` 队列，由学术编辑/主编处理 major revision / minor revision / reject / add reviewer。
                     </div>
                   </div>
                 </label>

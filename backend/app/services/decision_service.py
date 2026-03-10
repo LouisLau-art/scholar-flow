@@ -651,8 +651,6 @@ class DecisionService(
         }
 
         final_blocking_reasons: list[str] = []
-        if len(reports) == 0:
-            final_blocking_reasons.append("At least one submitted review report is required")
         if not is_final_status_allowed:
             final_blocking_reasons.append(
                 "Decision submission is only allowed in decision/decision_done stage"
@@ -662,6 +660,7 @@ class DecisionService(
             manuscript_id=manuscript_id,
             editor_id=user_id,
             status="draft",
+            manuscript_version=int(manuscript.get("version") or 1),
         )
         review_stage_exit_request = self._get_latest_review_stage_exit_request(manuscript_id)
         template_content = self._build_template(reports)
@@ -734,31 +733,42 @@ class DecisionService(
         )
 
         decision = str(request.decision).strip().lower()
-        if decision not in {"accept", "reject", "major_revision", "minor_revision"}:
+        if decision not in {"accept", "reject", "major_revision", "minor_revision", "add_reviewer"}:
             raise HTTPException(status_code=422, detail="Invalid decision")
-        if not request.is_final and decision == "accept":
+        if request.decision_stage == "final" and decision == "add_reviewer":
+            raise HTTPException(
+                status_code=422,
+                detail="Add reviewer is only allowed in first decision stage",
+            )
+        if request.decision_stage == "first" and decision == "accept":
             raise HTTPException(
                 status_code=422,
                 detail="First decision does not allow accept; route manuscript to final decision instead",
             )
 
         content = str(request.content or "").strip()
-        if request.is_final and not content:
-            raise HTTPException(status_code=422, detail="Final decision letter content is required")
+        if request.is_final and decision != "add_reviewer" and not content:
+            raise HTTPException(status_code=422, detail="Decision letter content is required")
 
         reports = self._list_submitted_reports(manuscript_id)
-        if request.is_final and len(reports) == 0:
-            raise HTTPException(
-                status_code=422, detail="At least one submitted review report is required"
-            )
-
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
-        if not request.is_final and current_status != ManuscriptStatus.DECISION.value:
-            raise HTTPException(
-                status_code=422,
-                detail="Exit review stage first; first decision draft is only available in decision stage",
-            )
-        if request.is_final:
+        if request.decision_stage == "first":
+            if current_status != ManuscriptStatus.DECISION.value:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Exit review stage first; first decision is only available in decision stage",
+                )
+            if not request.is_final and decision == "add_reviewer":
+                raise HTTPException(
+                    status_code=422,
+                    detail="Add reviewer is a workflow action and cannot be saved as a draft",
+                )
+        elif request.decision_stage == "final":
+            if not request.is_final:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Final decision stage does not support draft save; submit the decision instead",
+                )
             if current_status not in {
                 ManuscriptStatus.DECISION.value,
                 ManuscriptStatus.DECISION_DONE.value,
@@ -772,22 +782,60 @@ class DecisionService(
                     status_code=422,
                     detail="Accept is only allowed in final decision queue (decision_done)",
                 )
+        else:
+            raise HTTPException(status_code=422, detail="Invalid decision stage")
 
-        existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
-        row = self._save_letter(
-            existing=existing,
+        draft = self._get_latest_letter(
             manuscript_id=manuscript_id,
-            manuscript_version=int(manuscript.get("version") or 1),
             editor_id=user_id,
-            content=content,
-            decision=decision,
-            status="final" if request.is_final else "draft",
-            attachment_paths=list(request.attachment_paths or []),
-            last_updated_at=request.last_updated_at,
+            status="draft",
+            manuscript_version=int(manuscript.get("version") or 1),
         )
+        row: dict[str, Any] | None = None
+        if not request.is_final:
+            row = self._save_letter(
+                existing=draft,
+                manuscript_id=manuscript_id,
+                manuscript_version=int(manuscript.get("version") or 1),
+                editor_id=user_id,
+                content=content,
+                decision=decision,
+                status="draft",
+                attachment_paths=list(request.attachment_paths or []),
+                last_updated_at=request.last_updated_at,
+            )
+        elif request.decision_stage == "first" and decision != "add_reviewer":
+            # 中文注释:
+            # - first decision 提交时只允许复用当前 draft；不再“更新最近任意 letter”，
+            #   避免覆盖后续 final decision 或历史 committed letter。
+            row = self._save_letter(
+                existing=draft,
+                manuscript_id=manuscript_id,
+                manuscript_version=int(manuscript.get("version") or 1),
+                editor_id=user_id,
+                content=content,
+                decision=decision,
+                status="final",
+                attachment_paths=list(request.attachment_paths or []),
+                last_updated_at=request.last_updated_at,
+            )
+        elif request.decision_stage == "final":
+            # 中文注释:
+            # - final decision 始终新建一条 committed letter，保留 first decision 历史。
+            row = self._save_letter(
+                existing=None,
+                manuscript_id=manuscript_id,
+                manuscript_version=int(manuscript.get("version") or 1),
+                editor_id=user_id,
+                content=content,
+                decision=decision,
+                status="final",
+                attachment_paths=list(request.attachment_paths or []),
+                last_updated_at=request.last_updated_at,
+            )
         new_status = current_status
 
-        if request.is_final:
+        if request.is_final and request.decision_stage == "final":
             transition_payload = {
                 "action": "final_decision_workspace",
                 "decision": decision,
@@ -795,10 +843,10 @@ class DecisionService(
                 "source": "decision_workspace",
                 "reason": "editor_submit_final_decision",
                 "decision_letter": {
-                    "id": row.get("id"),
-                    "status": row.get("status"),
-                    "content": row.get("content"),
-                    "attachment_paths": row.get("attachment_paths") or [],
+                    "id": row.get("id") if row else None,
+                    "status": row.get("status") if row else None,
+                    "content": row.get("content") if row else content,
+                    "attachment_paths": row.get("attachment_paths") if row else list(request.attachment_paths or []),
                 },
             }
             new_status = self._transition_for_final_decision(
@@ -808,9 +856,41 @@ class DecisionService(
                 changed_by=user_id,
                 transition_payload=transition_payload,
             )
+            if draft and str(draft.get("id") or "").strip():
+                self._delete_letter_by_id(letter_id=str(draft.get("id") or ""))
             self._notify_author(
                 manuscript=manuscript, manuscript_id=manuscript_id, decision=decision
             )
+        elif request.is_final and request.decision_stage == "first":
+            transition_payload = {
+                "action": "first_decision_workspace",
+                "decision": decision,
+                "decision_stage": "first",
+                "source": "decision_workspace",
+                "reason": "editor_submit_first_decision",
+            }
+            if row is not None:
+                transition_payload["decision_letter"] = {
+                    "id": row.get("id"),
+                    "status": row.get("status"),
+                    "content": row.get("content"),
+                    "attachment_paths": row.get("attachment_paths") or [],
+                }
+            new_status = self._transition_for_first_decision(
+                manuscript_id=manuscript_id,
+                current_status=current_status,
+                decision=decision,
+                changed_by=user_id,
+                transition_payload=transition_payload,
+            )
+            if decision == "add_reviewer" and draft and str(draft.get("id") or "").strip():
+                self._delete_letter_by_id(letter_id=str(draft.get("id") or ""))
+            if decision != "add_reviewer":
+                self._notify_author(
+                    manuscript=manuscript,
+                    manuscript_id=manuscript_id,
+                    decision=decision,
+                )
         else:
             self._safe_insert_audit_log(
                 manuscript_id=manuscript_id,
@@ -827,16 +907,16 @@ class DecisionService(
                     "before": {"status": current_status},
                     "after": {"status": current_status},
                     "decision_letter": {
-                        "id": row.get("id"),
-                        "status": row.get("status"),
-                        "attachment_paths": row.get("attachment_paths") or [],
+                        "id": row.get("id") if row else None,
+                        "status": row.get("status") if row else None,
+                        "attachment_paths": row.get("attachment_paths") if row else [],
                     },
                 },
             )
 
         return {
-            "decision_letter_id": row.get("id"),
-            "status": row.get("status"),
+            "decision_letter_id": row.get("id") if row else None,
+            "status": row.get("status") if row else None,
             "manuscript_status": new_status,
-            "updated_at": row.get("updated_at"),
+            "updated_at": row.get("updated_at") if row else None,
         }

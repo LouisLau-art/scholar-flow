@@ -133,7 +133,18 @@ export default function DecisionWorkspacePage() {
             </div>
           ) : null}
           <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
-            <strong>First Decision</strong> 仅保存建议草稿；<strong>Final Decision</strong> 才会触发状态流转与作者通知。
+            {String(context.manuscript.status || '').toLowerCase() === 'decision'
+              ? (
+                  <>
+                    <strong>First Decision</strong> 会执行实际处理结果；
+                    <strong>Add Reviewer</strong> 会把稿件退回 <code>under_review</code>。
+                  </>
+                )
+              : (
+                  <>
+                    <strong>Final Decision</strong> 会触发最终状态流转与作者通知。
+                  </>
+                )}
           </div>
           <DecisionEditor
             manuscriptId={manuscriptId}
@@ -151,11 +162,8 @@ export default function DecisionWorkspacePage() {
             onSubmitted={(_status) => {
               setDirty(false)
               const nextStatus = String(_status || '').toLowerCase()
-              // Final 提交后若已离开决策阶段，直接回详情页，避免停留在“blocked + 灰按钮”状态。
-              if (
-                nextStatus &&
-                !['under_review', 'resubmitted', 'decision', 'decision_done'].includes(nextStatus)
-              ) {
+              // 提交后若稿件离开 decision/decision_done，直接回详情页，避免停留在错误的工作台。
+              if (nextStatus && !['decision', 'decision_done'].includes(nextStatus)) {
                 router.replace(`/editor/manuscript/${encodeURIComponent(manuscriptId)}`)
                 return
               }

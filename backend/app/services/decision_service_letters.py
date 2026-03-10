@@ -157,7 +157,12 @@ class DecisionServiceLettersMixin:
         return False
 
     def _get_latest_letter(
-        self, *, manuscript_id: str, editor_id: str, status: str | None = None
+        self,
+        *,
+        manuscript_id: str,
+        editor_id: str,
+        status: str | None = None,
+        manuscript_version: int | None = None,
     ) -> dict[str, Any] | None:
         try:
             query = (
@@ -168,6 +173,8 @@ class DecisionServiceLettersMixin:
                 .eq("manuscript_id", manuscript_id)
                 .eq("editor_id", editor_id)
             )
+            if manuscript_version is not None:
+                query = query.eq("manuscript_version", int(manuscript_version))
             if status:
                 query = query.eq("status", status)
             resp = query.order("updated_at", desc=True).limit(1).execute()
@@ -244,3 +251,16 @@ class DecisionServiceLettersMixin:
         if not rows:
             raise HTTPException(status_code=500, detail="Failed to create decision letter")
         return rows[0]
+
+    def _delete_letter_by_id(self, *, letter_id: str) -> None:
+        target_id = str(letter_id or "").strip()
+        if not target_id:
+            return
+        try:
+            self.client.table("decision_letters").delete().eq("id", target_id).execute()
+        except Exception as e:
+            if "decision_letters" in str(e).lower() and "does not exist" in str(e).lower():
+                raise HTTPException(
+                    status_code=500, detail="DB not migrated: decision_letters table missing"
+                ) from e
+            raise
