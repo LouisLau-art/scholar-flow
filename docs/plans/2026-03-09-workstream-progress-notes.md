@@ -245,3 +245,67 @@
   - `cd frontend && bun run test:e2e tests/e2e/specs/reviewer_management_delivery.spec.ts`
   - `cd frontend && bun run lint`
   - `cd frontend && bunx tsc --noEmit`
+
+## 2026-03-10 继续推进：部署后 smoke / 平台门禁 / 最小 UAT 清单
+
+- 新增内部平台 readiness 接口：
+  - `GET /api/v1/internal/platform-readiness`
+  - 仅内部调用（`X-Admin-Key`）
+  - 用于检查：
+    - `ADMIN_API_KEY`
+    - magic link secret
+    - `FRONTEND_BASE_URL`
+    - `FRONTEND_ORIGIN`
+    - 邮件 provider（Resend / SMTP）
+    - 正式发件人地址
+    - Supabase 核心配置
+  - 设计目标：
+    - 不返回任何真实 secret
+    - 只返回 readiness 状态、域名、布尔配置结果
+
+- 新增 CI 脚本：
+  - `scripts/ci/check-platform-readiness.sh`
+  - `scripts/ci/check-supabase-linked-parity.sh`
+- 平台门禁新增：
+  - linked Supabase migration parity（`migration list --linked` + `db push --linked --dry-run`）
+  - backend 平台 readiness internal gate
+
+- 新增部署后 smoke workflow：
+  - `.github/workflows/uat-smoke.yml`
+  - 触发方式：
+    - `Sync to Hugging Face Hub` 成功后自动运行
+    - `workflow_dispatch`
+  - 覆盖：
+    - 平台门禁
+    - 真实部署 Playwright smoke（Chromium）
+    - artifact 上传（Playwright report）
+
+- 新增真实部署 smoke spec：
+  - `frontend/tests/e2e/specs/deployed_smoke.spec.ts`
+  - 当前覆盖：
+    - 首页
+    - 登录
+    - dashboard
+    - settings
+    - `/editor/process`
+    - `/admin/users`
+    - （可选）已发表文章页
+  - 原则：
+    - 只跑线上只读链路
+    - 不在 smoke 里污染 UAT 业务数据
+
+- 新增文档：
+  - `docs/UAT_MINIMAL_CHECKLIST.md`
+  - `docs/WORKFLOW_ASSERTIONS.md`
+- 定位：
+  - `UAT_MINIMAL_CHECKLIST.md`：发版后 10-15 分钟最小人工验证
+  - `WORKFLOW_ASSERTIONS.md`：当前 reviewer / review-stage-exit / decision 边界的明确断言
+
+- 本轮定向验证：
+  - `cd backend && pytest -q -o addopts= tests/integration/test_internal_platform_readiness.py tests/contract/test_api_paths.py`
+  - `cd backend && uvx ruff check app/api/v1/internal.py app/models/platform_readiness.py tests/integration/test_internal_platform_readiness.py tests/contract/test_api_paths.py --select=E9,F63,F7,F82`
+  - `bash -n scripts/ci/check-platform-readiness.sh`
+  - `bash -n scripts/ci/check-supabase-linked-parity.sh`
+  - `cd frontend && bun run lint`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bunx playwright test tests/e2e/specs/deployed_smoke.spec.ts --list`

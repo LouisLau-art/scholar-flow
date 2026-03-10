@@ -6,6 +6,12 @@ from uuid import UUID
 import resend
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from app.core.config import get_admin_api_key
+from app.models.platform_readiness import (
+    PlatformReadinessCheck,
+    PlatformReadinessResponse,
+    PlatformReadinessStatus,
+)
 from app.core.scheduler import ChaseScheduler
 from app.core.security import require_admin_key
 from app.models.release_validation import (
@@ -19,6 +25,219 @@ from app.services.doi_service import DOIService
 
 router = APIRouter(prefix="/internal", tags=["Internal"])
 logger = logging.getLogger(__name__)
+
+
+def _is_local_url(value: str) -> bool:
+    lowered = value.strip().lower()
+    return "localhost" in lowered or "127.0.0.1" in lowered
+
+
+def _extract_sender_domain(sender: str) -> str | None:
+    normalized = sender.strip()
+    if not normalized:
+        return None
+    if "<" in normalized and ">" in normalized:
+        normalized = normalized.split("<", 1)[1].split(">", 1)[0].strip()
+    if "@" not in normalized:
+        return None
+    return normalized.rsplit("@", 1)[-1].strip().lower() or None
+
+
+def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
+    checks: list[PlatformReadinessCheck] = []
+
+    admin_key = get_admin_api_key()
+    checks.append(
+        PlatformReadinessCheck(
+            key="admin_key.configured",
+            title="ADMIN_API_KEY 已配置",
+            status=PlatformReadinessStatus.PASSED if admin_key else PlatformReadinessStatus.BLOCKED,
+            detail="内部接口可使用 ADMIN_API_KEY 鉴权" if admin_key else "ADMIN_API_KEY 未配置，内部 smoke / readiness 无法运行",
+            evidence={"configured": bool(admin_key)},
+        )
+    )
+
+    magic_link_secret = (os.environ.get("MAGIC_LINK_JWT_SECRET") or "").strip()
+    fallback_secret = (os.environ.get("SECRET_KEY") or "").strip()
+    checks.append(
+        PlatformReadinessCheck(
+            key="magic_link_secret.configured",
+            title="Reviewer Magic Link 密钥已配置",
+            status=(
+                PlatformReadinessStatus.PASSED
+                if magic_link_secret or fallback_secret
+                else PlatformReadinessStatus.BLOCKED
+            ),
+            detail=(
+                "MAGIC_LINK_JWT_SECRET 已配置"
+                if magic_link_secret
+                else "当前走 SECRET_KEY 兜底，建议显式配置 MAGIC_LINK_JWT_SECRET"
+                if fallback_secret
+                else "MAGIC_LINK_JWT_SECRET/SECRET_KEY 均未配置"
+            ),
+            evidence={
+                "magic_link_secret_configured": bool(magic_link_secret),
+                "secret_key_fallback_configured": bool(fallback_secret),
+            },
+        )
+    )
+
+    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "").strip()
+    checks.append(
+        PlatformReadinessCheck(
+            key="frontend_base_url.ready",
+            title="FRONTEND_BASE_URL 指向线上地址",
+            status=(
+                PlatformReadinessStatus.BLOCKED
+                if not frontend_base_url
+                else PlatformReadinessStatus.FAILED
+                if _is_local_url(frontend_base_url)
+                else PlatformReadinessStatus.PASSED
+            ),
+            detail=(
+                "FRONTEND_BASE_URL 未配置"
+                if not frontend_base_url
+                else f"FRONTEND_BASE_URL 指向本地地址：{frontend_base_url}"
+                if _is_local_url(frontend_base_url)
+                else f"FRONTEND_BASE_URL={frontend_base_url}"
+            ),
+            evidence={
+                "configured": bool(frontend_base_url),
+                "is_local": _is_local_url(frontend_base_url) if frontend_base_url else False,
+            },
+        )
+    )
+
+    frontend_origin = (os.environ.get("FRONTEND_ORIGIN") or "").strip()
+    checks.append(
+        PlatformReadinessCheck(
+            key="frontend_origin.ready",
+            title="FRONTEND_ORIGIN 指向线上地址",
+            status=(
+                PlatformReadinessStatus.BLOCKED
+                if not frontend_origin
+                else PlatformReadinessStatus.FAILED
+                if _is_local_url(frontend_origin)
+                else PlatformReadinessStatus.PASSED
+            ),
+            detail=(
+                "FRONTEND_ORIGIN 未配置"
+                if not frontend_origin
+                else f"FRONTEND_ORIGIN 指向本地地址：{frontend_origin}"
+                if _is_local_url(frontend_origin)
+                else f"FRONTEND_ORIGIN={frontend_origin}"
+            ),
+            evidence={
+                "configured": bool(frontend_origin),
+                "is_local": _is_local_url(frontend_origin) if frontend_origin else False,
+            },
+        )
+    )
+
+    resend_api_key = (os.environ.get("RESEND_API_KEY") or "").strip()
+    smtp_host = (os.environ.get("SMTP_HOST") or "").strip()
+    smtp_from_email = (
+        os.environ.get("SMTP_FROM_EMAIL")
+        or os.environ.get("SMTP_USER")
+        or ""
+    ).strip()
+    checks.append(
+        PlatformReadinessCheck(
+            key="email_provider.configured",
+            title="邮件 provider 已配置",
+            status=(
+                PlatformReadinessStatus.PASSED
+                if resend_api_key or smtp_host
+                else PlatformReadinessStatus.BLOCKED
+            ),
+            detail=(
+                "当前使用 Resend"
+                if resend_api_key
+                else "当前使用 SMTP"
+                if smtp_host
+                else "RESEND_API_KEY 与 SMTP_HOST 均未配置，邮件发送不可用"
+            ),
+            evidence={
+                "uses_resend": bool(resend_api_key),
+                "uses_smtp": bool(smtp_host),
+            },
+        )
+    )
+
+    email_sender = (
+        (os.environ.get("EMAIL_SENDER") or "").strip()
+        if resend_api_key
+        else smtp_from_email
+    )
+    sender_domain = _extract_sender_domain(email_sender or "")
+    sender_uses_fallback = bool(
+        resend_api_key and (sender_domain == "resend.dev" or "onboarding@resend.dev" in email_sender.lower())
+    )
+    checks.append(
+        PlatformReadinessCheck(
+            key="email_sender.ready",
+            title="邮件发件人已配置正式地址",
+            status=(
+                PlatformReadinessStatus.BLOCKED
+                if not email_sender and (resend_api_key or smtp_host)
+                else PlatformReadinessStatus.BLOCKED
+                if not resend_api_key and not smtp_host
+                else PlatformReadinessStatus.FAILED
+                if sender_uses_fallback
+                else PlatformReadinessStatus.PASSED
+            ),
+            detail=(
+                "未配置任何邮件 provider"
+                if not resend_api_key and not smtp_host
+                else "EMAIL_SENDER 未配置"
+                if resend_api_key and not email_sender
+                else "SMTP_FROM_EMAIL / SMTP_USER 未配置"
+                if smtp_host and not email_sender
+                else f"当前仍使用 Resend 开发发件人：{email_sender}"
+                if sender_uses_fallback
+                else f"sender={email_sender}"
+            ),
+            evidence={
+                "configured": bool(email_sender),
+                "sender_domain": sender_domain,
+                "uses_resend_dev_fallback": sender_uses_fallback,
+                "provider": "resend" if resend_api_key else "smtp" if smtp_host else None,
+            },
+        )
+    )
+
+    supabase_url = (os.environ.get("SUPABASE_URL") or "").strip()
+    supabase_service_key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY") or "").strip()
+    checks.append(
+        PlatformReadinessCheck(
+            key="supabase.core_configured",
+            title="Supabase 核心配置已存在",
+            status=(
+                PlatformReadinessStatus.PASSED
+                if supabase_url and supabase_service_key
+                else PlatformReadinessStatus.BLOCKED
+            ),
+            detail=(
+                "SUPABASE_URL 与 service role 已配置"
+                if supabase_url and supabase_service_key
+                else "SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY/SUPABASE_KEY 缺失"
+            ),
+            evidence={
+                "url_configured": bool(supabase_url),
+                "service_key_configured": bool(supabase_service_key),
+            },
+        )
+    )
+
+    return checks
+
+
+def _derive_platform_readiness_status(checks: list[PlatformReadinessCheck]) -> PlatformReadinessStatus:
+    if any(check.status == PlatformReadinessStatus.FAILED for check in checks):
+        return PlatformReadinessStatus.FAILED
+    if any(check.status == PlatformReadinessStatus.BLOCKED for check in checks):
+        return PlatformReadinessStatus.BLOCKED
+    return PlatformReadinessStatus.PASSED
 
 
 @router.post("/cron/chase-reviews")
@@ -56,6 +275,22 @@ async def sentry_test_error(_admin: None = Depends(require_admin_key)):
     - 目的：验证 Sentry 能捕获后端异常 + 堆栈。
     """
     raise RuntimeError("Sentry test error (backend)")
+
+
+@router.get("/platform-readiness", response_model=PlatformReadinessResponse)
+async def get_platform_readiness(_admin: None = Depends(require_admin_key)):
+    """
+    平台运行前置条件检查（内部接口）。
+
+    中文注释:
+    - 仅返回“是否配置正确”的布尔/域名信息，不泄露真实 secret。
+    - 用于部署后 smoke gate，尽早发现 sender/frontend origin/localhost 之类配置漂移。
+    """
+    checks = _build_platform_readiness_checks()
+    return PlatformReadinessResponse(
+        status=_derive_platform_readiness_status(checks),
+        checks=checks,
+    )
 
 
 @router.post("/webhooks/resend")
