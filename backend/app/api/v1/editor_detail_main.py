@@ -448,9 +448,23 @@ async def get_editor_manuscript_detail_impl(
         meta = {}
         ms["invoice_metadata"] = meta
     if not str(meta.get("authors") or "").strip():
-        meta["authors"] = str((ms.get("author") or {}).get("full_name") or "").strip() or None
+        raw_authors = ms.get("authors")
+        if isinstance(raw_authors, list):
+            joined_authors = ", ".join(str(item or "").strip() for item in raw_authors if str(item or "").strip())
+            meta["authors"] = joined_authors or None
+        else:
+            meta["authors"] = str((ms.get("author") or {}).get("full_name") or "").strip() or None
     if not str(meta.get("affiliation") or "").strip():
-        meta["affiliation"] = str((ms.get("author") or {}).get("affiliation") or "").strip() or None
+        author_contacts = ms.get("author_contacts") if isinstance(ms.get("author_contacts"), list) else []
+        corresponding = next(
+            (item for item in author_contacts if isinstance(item, dict) and item.get("is_corresponding")),
+            author_contacts[0] if author_contacts else None,
+        )
+        meta["affiliation"] = (
+            str((corresponding or {}).get("affiliation") or "").strip()
+            or str((ms.get("author") or {}).get("affiliation") or "").strip()
+            or None
+        )
 
     # 文件签名（原稿 PDF + 审稿附件）
     file_path = str(ms.get("file_path") or "").strip()

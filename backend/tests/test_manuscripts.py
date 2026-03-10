@@ -48,6 +48,23 @@ def required_submission_files(user_id: str):
         "manuscript_word_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
 
+
+def required_author_contacts():
+    return [
+        {
+            "name": "Alice Author",
+            "email": "alice.author@example.org",
+            "affiliation": "Example University",
+            "is_corresponding": True,
+        },
+        {
+            "name": "Bob Author",
+            "email": "bob.author@example.org",
+            "affiliation": "Example Institute",
+            "is_corresponding": False,
+        },
+    ]
+
 @pytest.mark.asyncio
 async def test_get_manuscripts_empty(client: AsyncClient, auth_token: str):
     """验证列表接口返回成功"""
@@ -77,6 +94,9 @@ async def test_create_manuscript_success(client: AsyncClient):
         "id": manuscript_id,
         "title": "Test Manuscript",
         "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "corresponding@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": required_author_contacts(),
         "dataset_url": "https://example.com/dataset",
         "source_code_url": "https://github.com/example/repo",
         "author_id": "00000000-0000-0000-0000-000000000000",
@@ -98,6 +118,8 @@ async def test_create_manuscript_success(client: AsyncClient):
             json={
                 "title": "Test Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "dataset_url": "https://example.com/dataset",
                 "source_code_url": "https://github.com/example/repo",
                 "author_id": "00000000-0000-0000-0000-000000000000",
@@ -112,10 +134,15 @@ async def test_create_manuscript_success(client: AsyncClient):
         assert result["data"]["status"] == "pre_check"
         assert result["data"]["dataset_url"] == "https://example.com/dataset"
         assert result["data"]["source_code_url"] == "https://github.com/example/repo"
+        assert result["data"]["submission_email"] == "corresponding@example.org"
+        assert result["data"]["authors"] == ["Alice Author", "Bob Author"]
 
         insert_payload = mock.insert.call_args[0][0]
         assert insert_payload["dataset_url"] == "https://example.com/dataset"
         assert insert_payload["source_code_url"] == "https://github.com/example/repo"
+        assert insert_payload["submission_email"] == "corresponding@example.org"
+        assert insert_payload["authors"] == ["Alice Author", "Bob Author"]
+        assert insert_payload["author_contacts"][0]["is_corresponding"] is True
 
 @pytest.mark.asyncio
 async def test_create_manuscript_invalid_data(client: AsyncClient):
@@ -133,6 +160,8 @@ async def test_create_manuscript_invalid_data(client: AsyncClient):
             json={
                 "title": "",  # 空标题
                 "abstract": "",
+                "submission_email": "invalid",
+                "author_contacts": [],
                 "author_id": "00000000-0000-0000-0000-000000000000"
             },
             headers={"Authorization": f"Bearer {mock_token}"}
@@ -150,6 +179,9 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
         "id": manuscript_id,
         "title": "Auth Bound Manuscript",
         "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "corresponding@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": required_author_contacts(),
         "author_id": token_user_id,
         "status": "pre_check",
         "created_at": "2026-01-28T00:00:00.000000+00:00",
@@ -169,6 +201,8 @@ async def test_create_manuscript_ignores_cross_user_author_id(client: AsyncClien
             json={
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "author_id": provided_author_id,
                 **required_submission_files(token_user_id),
             },
@@ -214,6 +248,8 @@ async def test_create_manuscript_with_journal_binding(client: AsyncClient):
             json={
                 "title": "Journal Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "author_id": token_user_id,
                 "journal_id": journal_id,
                 **required_submission_files(token_user_id),
@@ -224,6 +260,43 @@ async def test_create_manuscript_with_journal_binding(client: AsyncClient):
     assert response.status_code == 200
     insert_payload = mock.insert.call_args[0][0]
     assert insert_payload["journal_id"] == journal_id
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_requires_exactly_one_corresponding_author(client: AsyncClient):
+    mock = get_full_mock([])
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Structured Author Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "submissions@example.org",
+                "author_contacts": [
+                    {
+                        "name": "Alice Author",
+                        "email": "alice.author@example.org",
+                        "affiliation": "Example University",
+                        "is_corresponding": False,
+                    },
+                    {
+                        "name": "Bob Author",
+                        "email": "bob.author@example.org",
+                        "affiliation": "Example Institute",
+                        "is_corresponding": False,
+                    },
+                ],
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+        assert response.status_code == 422
+        assert "corresponding" in response.text.lower()
 
 
 @pytest.mark.asyncio
@@ -279,6 +352,8 @@ async def test_create_manuscript_with_cover_letter_persists_metadata(client: Asy
             json={
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "author_id": token_user_id,
                 **required_submission_files(token_user_id),
                 "cover_letter_path": f"{token_user_id}/cover-letters/test_cover.docx",
@@ -317,6 +392,8 @@ async def test_create_manuscript_rejects_cover_letter_outside_user_scope(client:
             json={
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "author_id": token_user_id,
                 **required_submission_files(token_user_id),
                 "cover_letter_path": "someone-else/cover-letters/test_cover.docx",
@@ -343,6 +420,8 @@ async def test_create_manuscript_rejects_missing_word_manuscript(client: AsyncCl
             json={
                 "title": "Auth Bound Manuscript",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
                 "author_id": token_user_id,
                 "file_path": f"{token_user_id}/paper.pdf",
             },
@@ -383,7 +462,13 @@ async def test_route_path_matching(client: AsyncClient):
         assert get_response.status_code == 200
 
     # 测试 POST 路由（使用相同的路径）
-    mock_data = [{"id": str(uuid.uuid4()), "title": "Test"}]
+    mock_data = [{
+        "id": str(uuid.uuid4()),
+        "title": "Test",
+        "submission_email": "corresponding@example.org",
+        "authors": ["Alice Author"],
+        "author_contacts": [required_author_contacts()[0]],
+    }]
     mock = get_full_mock(mock_data)
     admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
     with patch("app.lib.api_client.supabase", mock), \
@@ -394,6 +479,8 @@ async def test_route_path_matching(client: AsyncClient):
             json={
                 "title": "Valid Title",
                 "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": [required_author_contacts()[0]],
                 "author_id": "00000000-0000-0000-0000-000000000000",
                 **required_submission_files("00000000-0000-0000-0000-000000000000"),
             },

@@ -1,15 +1,36 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic.config import ConfigDict
 
 # === 核心业务实体模型 (Pydantic v2) ===
+
+class ManuscriptAuthorContact(BaseModel):
+    """稿件作者联系方式快照"""
+
+    name: str = Field(..., min_length=1, max_length=200, description="作者姓名")
+    email: EmailStr = Field(..., description="作者邮箱")
+    affiliation: str = Field(..., min_length=1, max_length=500, description="作者机构")
+    is_corresponding: bool = Field(False, description="是否为通讯作者")
+
+    @field_validator("name", "affiliation")
+    @classmethod
+    def validate_non_empty_strings(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("field cannot be empty")
+        return trimmed
+
 
 class ManuscriptBase(BaseModel):
     """稿件基础模型"""
     title: str = Field(..., min_length=5, max_length=500, description="稿件标题")
     abstract: str = Field(..., min_length=30, max_length=5000, description="稿件摘要")
+    submission_email: EmailStr = Field(..., description="投稿联系邮箱")
+    author_contacts: list[ManuscriptAuthorContact] = Field(
+        ..., min_length=1, max_length=20, description="作者列表（含通讯作者标记）"
+    )
     file_path: Optional[str] = Field(None, description="Supabase Storage 路径")
     manuscript_word_path: Optional[str] = Field(None, max_length=1000, description="Word 主稿在 Storage 中的路径")
     manuscript_word_filename: Optional[str] = Field(None, max_length=255, description="Word 主稿原始文件名")
@@ -20,6 +41,7 @@ class ManuscriptBase(BaseModel):
     dataset_url: Optional[str] = Field(None, max_length=1000, description="外部数据集链接")
     source_code_url: Optional[str] = Field(None, max_length=1000, description="代码仓库链接")
     journal_id: Optional[UUID] = Field(None, description="绑定的期刊 ID")
+    special_issue: Optional[str] = Field(None, max_length=255, description="目标专刊")
 
     @field_validator("title")
     @classmethod
@@ -38,6 +60,16 @@ class ManuscriptBase(BaseModel):
         if len(trimmed) < 30:
             raise ValueError("abstract must be at least 30 characters")
         return trimmed
+
+    @field_validator("special_issue", mode="before")
+    @classmethod
+    def normalize_optional_special_issue(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
 
     @field_validator(
         "file_path",
@@ -73,6 +105,13 @@ class ManuscriptBase(BaseModel):
                 raise ValueError("url must start with http:// or https://")
             return trimmed
         return value
+
+    @model_validator(mode="after")
+    def validate_author_contacts(self):
+        corresponding_count = sum(1 for item in self.author_contacts if item.is_corresponding)
+        if corresponding_count != 1:
+            raise ValueError("exactly one corresponding author is required")
+        return self
 
 class ManuscriptCreate(ManuscriptBase):
     """创建稿件时使用的模型"""

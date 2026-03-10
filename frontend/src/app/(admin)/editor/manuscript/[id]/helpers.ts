@@ -15,6 +15,15 @@ export type ManuscriptDetail = {
   updated_at?: string | null
   final_pdf_path?: string | null
   author?: { full_name?: string | null; email?: string | null; affiliation?: string | null } | null
+  authors?: string[] | null
+  submission_email?: string | null
+  special_issue?: string | null
+  author_contacts?: Array<{
+    name?: string | null
+    email?: string | null
+    affiliation?: string | null
+    is_corresponding?: boolean | null
+  }> | null
   owner?: { full_name?: string | null; email?: string | null } | null
   editor?: { id?: string | null; full_name?: string | null; email?: string | null } | null
   assistant_editor?: { id?: string | null; full_name?: string | null; email?: string | null } | null

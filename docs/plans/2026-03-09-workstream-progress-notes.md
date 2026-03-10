@@ -209,7 +209,7 @@
     - `cancellation_email_failed_assignment_ids`
   - 前端在失败时会 toast warning，但不会阻塞状态推进
   - 语义修正：
-    - `selected` 仅代表内部 shortlist，auto-cancel 时不会给 reviewer 发取消信
+- `selected` 仅代表内部 shortlist，auto-cancel 时不会给 reviewer 发取消信
     - 只有 reviewer 已被真正联系过（`invited/opened/accepted/...`）才会收到 cancellation email
     - 已 `cancelled` assignment 若首次通知失败，可再次调用同一 `cancel` 接口并带 `send_email=true` 补发取消信
 
@@ -217,6 +217,45 @@
   - `backend/app/api/v1/admin/users.py`
   - `frontend/src/types/email-template.ts`
   - `frontend/src/app/admin/email-templates/page.tsx`
+
+## 2026-03-10 继续推进：投稿作者元数据结构化
+
+- 投稿表单已扩展为结构化作者信息输入：
+  - `submission_email`
+  - `author_contacts[]`
+  - 每位作者包含：
+    - `name`
+    - `email`
+    - `affiliation`
+    - `is_corresponding`
+- 业务规则：
+  - 至少 1 位作者
+  - 恰好 1 位通讯作者
+  - 作者无需预先拥有 ScholarFlow 账号
+
+- 后端 schema / API 已收口：
+  - `ManuscriptCreate` 已支持：
+    - `submission_email`
+    - `author_contacts`
+    - `special_issue`
+  - `POST /api/v1/manuscripts` 已持久化：
+    - `authors`
+    - `submission_email`
+    - `author_contacts`
+    - `special_issue`
+
+- 远端 Supabase migration 已通过本地 CLI 执行：
+  - `supabase/migrations/20260310160000_submission_author_contacts.sql`
+
+- 稿件详情页 metadata 卡片已开始展示：
+  - Authors
+  - Corresponding Author
+  - Submission Email
+  - Special Issue
+
+- 当前这条线的剩余收尾：
+  - 作者侧其他通知邮件改为优先使用 `submission_email / corresponding author`
+  - 检查作者详情、导出、决策信是否仍在默认使用账号邮箱
 
 - reviewer invitation / reminder 发送入口仍然只暴露 invitation/reminder：
   - `GET /api/v1/reviews/email-templates` 已排除 cancellation 模板

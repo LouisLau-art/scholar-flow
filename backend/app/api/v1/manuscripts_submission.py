@@ -511,6 +511,10 @@ async def create_manuscript(
 
         manuscript_word_filename = str(manuscript.manuscript_word_filename or "").strip() or None
         manuscript_word_content_type = str(manuscript.manuscript_word_content_type or "").strip() or None
+        submission_email = str(manuscript.submission_email or "").strip().lower()
+        author_contacts = [item.model_dump(mode="json") for item in manuscript.author_contacts]
+        author_names = [str(item.get("name") or "").strip() for item in author_contacts if str(item.get("name") or "").strip()]
+        corresponding_author = next((item for item in author_contacts if item.get("is_corresponding")), None) or {}
 
         cover_letter_path = str(manuscript.cover_letter_path or "").strip()
         cover_letter_filename = str(manuscript.cover_letter_filename or "").strip() or None
@@ -537,6 +541,10 @@ async def create_manuscript(
             "file_path": pdf_path,
             "dataset_url": manuscript.dataset_url,
             "source_code_url": manuscript.source_code_url,
+            "authors": author_names,
+            "submission_email": submission_email,
+            "author_contacts": author_contacts,
+            "special_issue": manuscript.special_issue,
             "journal_id": validated_journal_id,
             "author_id": current_user_id,
             "status": "pre_check",
@@ -601,7 +609,7 @@ async def create_manuscript(
             )
 
             try:
-                author_email = current_user.get("email")
+                author_email = submission_email or str(current_user.get("email") or "").strip().lower()
                 if author_email:
                     email_service = EmailService()
                     background_tasks.add_task(
@@ -611,9 +619,8 @@ async def create_manuscript(
                         template_name="submission_ack.html",
                         context={
                             "subject": "Submission Received",
-                            "recipient_name": author_email.split("@")[0]
-                            .replace(".", " ")
-                            .title(),
+                            "recipient_name": str(corresponding_author.get("name") or "").strip()
+                            or author_email.split("@")[0].replace(".", " ").title(),
                             "manuscript_title": manuscript.title,
                             "manuscript_id": str(manuscript_id),
                         },

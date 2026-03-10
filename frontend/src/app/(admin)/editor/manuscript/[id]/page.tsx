@@ -1017,6 +1017,7 @@ export default function EditorManuscriptDetailPage() {
             affiliation={invoiceForm.affiliation}
             correspondingAuthorLabel={correspondingAuthorLabel}
             submissionEmail={submissionEmail}
+            specialIssue={ms.special_issue}
             submittedAt={ms.created_at}
             owner={ms.owner}
             canBindOwner={capability.canBindOwner}
