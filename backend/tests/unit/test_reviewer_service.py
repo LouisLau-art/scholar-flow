@@ -355,6 +355,17 @@ def test_review_policy_due_window_default_days(monkeypatch: pytest.MonkeyPatch, 
     assert default_days == 10
 
 
+def test_review_policy_due_window_falls_back_to_seven_day_default(monkeypatch: pytest.MonkeyPatch, supabase_admin):
+    monkeypatch.delenv("REVIEW_INVITE_DUE_MIN_DAYS", raising=False)
+    monkeypatch.delenv("REVIEW_INVITE_DUE_MAX_DAYS", raising=False)
+    monkeypatch.delenv("REVIEW_INVITE_DUE_DEFAULT_DAYS", raising=False)
+    svc = reviewer_service_module.ReviewPolicyService()
+    min_days, max_days, default_days = svc.due_window_days()
+    assert min_days == 7
+    assert max_days == 21
+    assert default_days == 7
+
+
 def test_review_policy_marks_cooldown_conflict_and_overdue(monkeypatch: pytest.MonkeyPatch, supabase_admin):
     monkeypatch.setenv("REVIEW_INVITE_COOLDOWN_DAYS", "30")
     svc = reviewer_service_module.ReviewPolicyService()

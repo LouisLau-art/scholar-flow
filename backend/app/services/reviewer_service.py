@@ -88,7 +88,7 @@ class ReviewPolicyService:
     def due_window_days(self) -> tuple[int, int, int]:
         min_days = self._safe_int_env("REVIEW_INVITE_DUE_MIN_DAYS", 7, min_value=1)
         max_days = self._safe_int_env("REVIEW_INVITE_DUE_MAX_DAYS", 21, min_value=min_days)
-        default_days = self._safe_int_env("REVIEW_INVITE_DUE_DEFAULT_DAYS", 10, min_value=min_days)
+        default_days = self._safe_int_env("REVIEW_INVITE_DUE_DEFAULT_DAYS", 7, min_value=min_days)
         if default_days > max_days:
             default_days = max_days
         return min_days, max_days, default_days
