@@ -421,6 +421,18 @@ def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
         cancelled.append((kwargs["assignment_id"], kwargs["reason"], kwargs["via"]))
 
     monkeypatch.setattr(svc, "_cancel_assignment_for_stage_exit", _cancel)
+    cancellation_emails: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        svc,
+        "_send_cancellation_email_for_stage_exit",
+        lambda **kwargs: cancellation_emails.append(
+            (
+                str(kwargs["assignment"].get("id") or ""),
+                str(kwargs["cancel_reason"] or ""),
+            )
+        )
+        or {"status": "sent"},
+    )
     monkeypatch.setattr(
         svc,
         "editorial",
@@ -450,6 +462,13 @@ def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
         ("opn-1", "Enough evidence collected", "auto_stage_exit"),
         ("acc-1", "AE decided two reviews are enough", "post_acceptance_cleanup"),
     ]
+    assert cancellation_emails == [
+        ("inv-1", "Enough evidence collected"),
+        ("opn-1", "Enough evidence collected"),
+        ("acc-1", "AE decided two reviews are enough"),
+    ]
+    assert out["cancellation_email_sent_assignment_ids"] == ["inv-1", "opn-1", "acc-1"]
+    assert out["cancellation_email_failed_assignment_ids"] == []
 
 
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
@@ -492,6 +511,77 @@ def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
             ),
         )
     assert exc.value.status_code == 409
+
+
+def test_exit_review_stage_keeps_transition_when_cancellation_email_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_list_current_round_review_assignments",
+        lambda **_kwargs: [
+            {"id": "sel-1", "status": "selected"},
+            {"id": "inv-1", "status": "invited", "invited_at": "2026-03-09T00:00:00Z"},
+            {"id": "acc-1", "status": "pending", "accepted_at": "2026-03-09T02:00:00Z"},
+            {"id": "sub-1", "status": "completed", "submitted_at": "2026-03-09T03:00:00Z"},
+        ],
+    )
+    cancelled: list[tuple[str, str, str]] = []
+
+    def _cancel(**kwargs):
+        cancelled.append((kwargs["assignment_id"], kwargs["reason"], kwargs["via"]))
+
+    monkeypatch.setattr(svc, "_cancel_assignment_for_stage_exit", _cancel)
+    monkeypatch.setattr(
+        svc,
+        "_send_cancellation_email_for_stage_exit",
+        lambda **kwargs: {
+            "status": "failed",
+            "error_message": f"failed:{kwargs['assignment'].get('id')}",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(update_status=lambda **kwargs: {"status": kwargs["to_status"]}),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            note="Proceed with current evidence",
+            accepted_pending_resolutions=[
+                {"assignment_id": "acc-1", "action": "cancel", "reason": "AE closed review stage"}
+            ],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert cancelled == [
+        ("sel-1", "Proceed with current evidence", "auto_stage_exit"),
+        ("inv-1", "Proceed with current evidence", "auto_stage_exit"),
+        ("acc-1", "AE closed review stage", "post_acceptance_cleanup"),
+    ]
+    assert out["cancellation_email_sent_assignment_ids"] == []
+    assert out["cancellation_email_failed_assignment_ids"] == ["inv-1", "acc-1"]
 
 
 def test_transition_final_revision_from_decision_done_never_uses_allow_skip(

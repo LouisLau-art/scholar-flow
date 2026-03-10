@@ -635,6 +635,266 @@ async def test_cancel_assignment_marks_cancel_audit_and_preserves_history(
 
 
 @pytest.mark.asyncio
+async def test_cancel_assignment_sends_cancellation_email_when_requested(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc13")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa13")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb113")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "accepted",
+                    "round_number": 2,
+                    "due_at": "2026-03-19T00:00:00+00:00",
+                    "invited_at": "2026-03-09T12:00:00+00:00",
+                    "opened_at": "2026-03-09T12:10:00+00:00",
+                    "accepted_at": "2026-03-09T12:20:00+00:00",
+                },
+                [{}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Enough Reviews Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                }
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "status": "sent",
+            "template_key": "reviewer_cancellation_standard",
+            "error_message": None,
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "reason": "Enough completed reviews received",
+        "via": "post_acceptance_cleanup",
+        "send_email": True,
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch(
+            "app.api.v1.reviews_handlers_assignment_manage.send_reviewer_assignment_cancellation_email",
+            send_mock,
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/cancel",
+            json=body,
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["data"]["email_status"] == "sent"
+    assert payload["data"]["email_error"] is None
+    send_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cancel_assignment_skips_email_for_selected_shortlist(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc14")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa14")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb114")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "round_number": 2,
+                    "due_at": "2026-03-19T00:00:00+00:00",
+                },
+                [{}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Shortlist Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                }
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "status": "sent",
+            "template_key": "reviewer_cancellation_standard",
+            "error_message": None,
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "reason": "External review stage ended",
+        "via": "auto_stage_exit",
+        "send_email": True,
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch(
+            "app.api.v1.reviews_handlers_assignment_manage.send_reviewer_assignment_cancellation_email",
+            send_mock,
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/cancel",
+            json=body,
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["data"]["email_status"] == "skipped"
+    assert payload["data"]["email_error"] == "Reviewer was never invited"
+    send_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cancel_assignment_can_retry_cancellation_email_after_idempotent_cancel(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc15")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa15")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb115")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "cancelled",
+                    "round_number": 2,
+                    "due_at": "2026-03-19T00:00:00+00:00",
+                    "invited_at": "2026-03-09T12:00:00+00:00",
+                    "opened_at": "2026-03-09T12:10:00+00:00",
+                    "cancel_reason": "Enough completed reviews received",
+                    "cancel_via": "post_acceptance_cleanup",
+                },
+                [{}],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Enough Reviews Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                }
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "status": "sent",
+            "template_key": "reviewer_cancellation_standard",
+            "error_message": None,
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    body = {
+        "reason": "Retry cancellation notice",
+        "via": "post_acceptance_cleanup",
+        "send_email": True,
+    }
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch(
+            "app.api.v1.reviews_handlers_assignment_manage.send_reviewer_assignment_cancellation_email",
+            send_mock,
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/cancel",
+            json=body,
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["data"]["idempotent"] is True
+    assert payload["data"]["email_status"] == "sent"
+    assert payload["data"]["email_error"] is None
+    send_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_unassign_reviewer_rejects_non_selected_assignment(
     client: AsyncClient,
     auth_token: str,

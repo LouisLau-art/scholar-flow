@@ -29,3 +29,4 @@ bun run email:build-templates
 - `{{ journal_title }}`
 - `{{ due_date or due_at or '-' }}`
 - `{{ review_url }}`
+- `{{ cancel_reason }}`

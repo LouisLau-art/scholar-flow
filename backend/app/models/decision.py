@@ -62,6 +62,8 @@ class ReviewStageExitResponse(BaseModel):
     auto_cancelled_assignment_ids: list[str] = Field(default_factory=list)
     manually_cancelled_assignment_ids: list[str] = Field(default_factory=list)
     remaining_pending_assignment_ids: list[str] = Field(default_factory=list)
+    cancellation_email_sent_assignment_ids: list[str] = Field(default_factory=list)
+    cancellation_email_failed_assignment_ids: list[str] = Field(default_factory=list)
 
 
 class DecisionLetterPayload(BaseModel):

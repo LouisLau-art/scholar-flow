@@ -523,7 +523,11 @@ def _list_active_review_assignment_templates(scene: str) -> list[dict[str, Any]]
         )
         rows = getattr(resp, "data", None) or []
         if rows:
-            return rows
+            return [
+                row
+                for row in rows
+                if str(row.get("event_type") or "").strip().lower() in {"none", "invitation", "reminder"}
+            ]
         return fallback_rows
     except Exception as e:
         if _is_missing_table_error(str(e), _EMAIL_TEMPLATE_TABLE):
@@ -922,7 +926,10 @@ async def send_assignment_email(
         raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
     event_type = str(template_row.get("event_type") or "none").strip().lower()
     if event_type not in {"none", "invitation", "reminder"}:
-        event_type = "none"
+        raise HTTPException(
+            status_code=422,
+            detail="Only invitation/reminder reviewer templates can be sent from this action",
+        )
 
     now_dt = datetime.now(timezone.utc)
     now_iso = now_dt.isoformat()

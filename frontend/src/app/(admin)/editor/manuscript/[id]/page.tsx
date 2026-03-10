@@ -770,6 +770,12 @@ export default function EditorManuscriptDetailPage() {
       toast.success(
         `Moved manuscript to ${targetLabel}. Auto-cancelled ${res?.data?.auto_cancelled_assignment_ids?.length || 0} reviewer(s).`
       )
+      const failedCancellationEmails = Array.isArray(res?.data?.cancellation_email_failed_assignment_ids)
+        ? res.data.cancellation_email_failed_assignment_ids.length
+        : 0
+      if (failedCancellationEmails > 0) {
+        toast.warning(`${failedCancellationEmails} cancellation email(s) failed. Reviewer access is still revoked.`)
+      }
       setReviewStageExitDialogOpen(false)
       setReviewStageExitNote('')
       setAcceptedPendingResolutionByAssignment({})

@@ -1,4 +1,4 @@
-export type EmailTemplateEventType = 'none' | 'invitation' | 'reminder'
+export type EmailTemplateEventType = 'none' | 'invitation' | 'reminder' | 'cancellation'
 
 export type EmailTemplate = {
   id: string

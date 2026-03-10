@@ -17,7 +17,8 @@ export type ReviewerAssignmentTemplateProps = {
   manuscriptId: string
   journalTitle: string
   dueDate: string
-  reviewUrl: string
+  reviewUrl?: string
+  cancelReason?: string
 }
 
 const style = {
@@ -181,6 +182,37 @@ export function ReviewerReminderPoliteEmail({
         Thanks again for supporting our editorial process.
         <br />
         Link: {reviewUrl}
+      </Text>
+    </ReviewerMailLayout>
+  )
+}
+
+export function ReviewerCancellationStandardEmail({
+  reviewerName,
+  manuscriptTitle,
+  manuscriptId,
+  journalTitle,
+  cancelReason,
+}: ReviewerAssignmentTemplateProps) {
+  return (
+    <ReviewerMailLayout>
+      <Text style={style.badge}>Review Update</Text>
+      <Heading style={style.heading}>Review Assignment Cancelled</Heading>
+      <Text style={style.paragraph}>Dear {reviewerName},</Text>
+      <Text style={style.paragraph}>
+        Your review assignment for <strong>{manuscriptTitle}</strong> in <strong>{journalTitle}</strong> has been
+        cancelled.
+      </Text>
+      <Section style={style.metaBox}>
+        <Text style={style.metaLabel}>Manuscript ID</Text>
+        <Text style={style.metaValue}>{manuscriptId}</Text>
+        <Text style={style.metaLabel}>Reason</Text>
+        <Text style={style.metaValue}>{cancelReason || 'Editorial workflow updated.'}</Text>
+      </Section>
+      <Hr style={{ borderColor: '#e2e8f0', margin: '20px 0 14px' }} />
+      <Text style={style.footnote}>
+        No further action is required. If you already started drafting comments, please disregard the earlier
+        invitation link.
       </Text>
     </ReviewerMailLayout>
   )

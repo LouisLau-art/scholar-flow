@@ -6,6 +6,11 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.services.reviewer_assignment_cancellation_email import (
+    send_reviewer_assignment_cancellation_email,
+    should_send_reviewer_assignment_cancellation_email,
+)
+
 
 def _pick_target_round(
     *,
@@ -225,7 +230,7 @@ async def cancel_reviewer_impl(
         manuscript_id = str(assignment.get("manuscript_id") or "").strip()
         manuscript_res = (
             supabase_admin_client.table("manuscripts")
-            .select("id,journal_id,assistant_editor_id,status")
+            .select("id,journal_id,assistant_editor_id,status,title")
             .eq("id", manuscript_id)
             .single()
             .execute()
@@ -246,6 +251,25 @@ async def cancel_reviewer_impl(
         if status_raw == "declined":
             raise HTTPException(status_code=409, detail="Declined reviewer assignment cannot be cancelled")
         if status_raw == "cancelled":
+            email_result = {"status": "skipped", "error_message": None}
+            if send_email:
+                if should_send_reviewer_assignment_cancellation_email(assignment):
+                    try:
+                        email_result = send_reviewer_assignment_cancellation_email(
+                            assignment={**assignment, "id": str(assignment_id)},
+                            manuscript=manuscript,
+                            cancel_reason=reason.strip() or str(assignment.get("cancel_reason") or "").strip(),
+                        )
+                    except Exception as exc:
+                        email_result = {
+                            "status": "failed",
+                            "error_message": str(exc),
+                        }
+                else:
+                    email_result = {
+                        "status": "skipped",
+                        "error_message": "Reviewer was never invited",
+                    }
             return {
                 "success": True,
                 "data": {
@@ -253,7 +277,8 @@ async def cancel_reviewer_impl(
                     "status": "cancelled",
                     "idempotent": True,
                     "send_email": bool(send_email),
-                    "email_status": "skipped",
+                    "email_status": str(email_result.get("status") or "skipped"),
+                    "email_error": email_result.get("error_message"),
                 },
             }
 
@@ -295,6 +320,26 @@ async def cancel_reviewer_impl(
         except Exception:
             pass
 
+        email_result = {"status": "skipped", "error_message": None}
+        if send_email:
+            if should_send_reviewer_assignment_cancellation_email(assignment):
+                try:
+                    email_result = send_reviewer_assignment_cancellation_email(
+                        assignment={**assignment, "id": str(assignment_id)},
+                        manuscript=manuscript,
+                        cancel_reason=reason.strip(),
+                    )
+                except Exception as exc:
+                    email_result = {
+                        "status": "failed",
+                        "error_message": str(exc),
+                    }
+            else:
+                email_result = {
+                    "status": "skipped",
+                    "error_message": "Reviewer was never invited",
+                }
+
         return {
             "success": True,
             "data": {
@@ -302,7 +347,8 @@ async def cancel_reviewer_impl(
                 "status": "cancelled",
                 "idempotent": False,
                 "send_email": bool(send_email),
-                "email_status": "skipped",
+                "email_status": str(email_result.get("status") or "skipped"),
+                "email_error": email_result.get("error_message"),
             },
         }
     except HTTPException:

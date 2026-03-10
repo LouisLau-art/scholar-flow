@@ -4,6 +4,7 @@ import path from 'node:path'
 import { render, toPlainText } from '@react-email/render'
 
 import {
+  ReviewerCancellationStandardEmail,
   ReviewerInvitationStandardEmail,
   ReviewerReminderPoliteEmail,
   type ReviewerAssignmentTemplateProps,
@@ -14,7 +15,7 @@ type EmailTemplateSeedRecord = {
   display_name: string
   description: string
   scene: string
-  event_type: 'none' | 'invitation' | 'reminder'
+  event_type: 'none' | 'invitation' | 'reminder' | 'cancellation'
   subject_template: string
   body_html_template: string
   body_text_template: string
@@ -28,6 +29,7 @@ const placeholderProps: ReviewerAssignmentTemplateProps = {
   journalTitle: '{{ journal_title }}',
   dueDate: '{{ due_date }}',
   reviewUrl: '{{ review_url }}',
+  cancelReason: '{{ cancel_reason }}',
 }
 
 async function buildReviewerTemplates(): Promise<EmailTemplateSeedRecord[]> {
@@ -37,8 +39,12 @@ async function buildReviewerTemplates(): Promise<EmailTemplateSeedRecord[]> {
   const reminderHtmlRaw = await render(
     ReviewerReminderPoliteEmail(placeholderProps)
   )
+  const cancellationHtmlRaw = await render(
+    ReviewerCancellationStandardEmail(placeholderProps)
+  )
   const invitationHtml = sanitizeRenderedHtml(invitationHtmlRaw)
   const reminderHtml = sanitizeRenderedHtml(reminderHtmlRaw)
+  const cancellationHtml = sanitizeRenderedHtml(cancellationHtmlRaw)
 
   return [
     {
@@ -61,6 +67,17 @@ async function buildReviewerTemplates(): Promise<EmailTemplateSeedRecord[]> {
       subject_template: 'Friendly Reminder - {{ journal_title }} Review for {{ manuscript_title }}',
       body_html_template: reminderHtml,
       body_text_template: toPlainText(reminderHtml),
+      is_active: true,
+    },
+    {
+      template_key: 'reviewer_cancellation_standard',
+      display_name: '审稿取消通知（React Email）',
+      description: '由 React Email 生成，可用于 reviewer assignment 取消通知。',
+      scene: 'reviewer_assignment',
+      event_type: 'cancellation',
+      subject_template: 'Review Assignment Cancelled - {{ journal_title }}',
+      body_html_template: cancellationHtml,
+      body_text_template: toPlainText(cancellationHtml),
       is_active: true,
     },
   ]

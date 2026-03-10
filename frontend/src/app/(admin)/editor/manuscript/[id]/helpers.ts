@@ -166,6 +166,9 @@ export function formatReviewerAuditVia(raw: unknown): string | null {
     manual_email: 'Manual email',
     template_invitation: 'Invitation template',
     template_reminder: 'Reminder template',
+    auto_stage_exit: 'Auto cancel on stage exit',
+    post_acceptance_cleanup: 'Post-acceptance cleanup',
+    editor_manual_cancel: 'Manual cancel',
     legacy: 'Legacy record',
   }
   return mapping[value] || humanizeReviewerToken(value)

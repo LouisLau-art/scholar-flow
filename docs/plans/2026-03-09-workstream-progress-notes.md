@@ -150,3 +150,56 @@
 1. 继续 reviewer invitation history / email evidence 展示细化
 2. 视需要把相同的 roles 归一化防御收敛到其他依赖 `/api/v1/user/profile` 的页面
 3. reviewer 功能收尾后，再评估是否需要独立 reviewer assignment events 表
+
+## 2026-03-10 继续推进：reviewer cancel 邮件模板与发送
+
+- 已新增 reviewer cancellation 专用模板能力：
+  - 新 migration：`supabase/migrations/20260310103000_email_templates_cancellation.sql`
+  - 已通过本地 `supabase db push --linked` 推到云端
+  - `email_templates.event_type` 现支持 `cancellation`
+  - 已默认 upsert：`reviewer_cancellation_standard`
+
+- 已新增后端 helper：
+  - `backend/app/services/reviewer_assignment_cancellation_email.py`
+  - 负责：
+    - reviewer cancellation 模板加载（DB/fallback）
+    - reviewer 邮箱与期刊标题解析
+    - cancellation email tags / audit_context / idempotency key
+    - 实际发送取消通知
+
+- 手动 cancel 已接通发送逻辑：
+  - `POST /api/v1/reviews/assignments/{assignment_id}/cancel`
+  - 当 `send_email=true` 时，会真正发送 reviewer cancellation email
+  - API 返回 `email_status / email_error`
+
+- `review-stage-exit` 已接通取消通知：
+  - `selected / invited / opened` 自动 cancel 后会发取消信
+  - `accepted but not submitted` 被 AE 显式取消后也会发取消信
+  - 响应增加：
+    - `cancellation_email_sent_assignment_ids`
+    - `cancellation_email_failed_assignment_ids`
+  - 前端在失败时会 toast warning，但不会阻塞状态推进
+  - 语义修正：
+    - `selected` 仅代表内部 shortlist，auto-cancel 时不会给 reviewer 发取消信
+    - 只有 reviewer 已被真正联系过（`invited/opened/accepted/...`）才会收到 cancellation email
+    - 已 `cancelled` assignment 若首次通知失败，可再次调用同一 `cancel` 接口并带 `send_email=true` 补发取消信
+
+- Admin 模板管理已放开 cancellation 类型：
+  - `backend/app/api/v1/admin/users.py`
+  - `frontend/src/types/email-template.ts`
+  - `frontend/src/app/admin/email-templates/page.tsx`
+
+- reviewer invitation / reminder 发送入口仍然只暴露 invitation/reminder：
+  - `GET /api/v1/reviews/email-templates` 已排除 cancellation 模板
+  - `POST /api/v1/reviews/assignments/{assignment_id}/send-email` 若传 cancellation 模板会直接 422
+
+- React Email 模板工程同步更新：
+  - `frontend/emails/reviewer-assignment.tsx`
+  - `frontend/scripts/build-email-templates.ts`
+  - `frontend/emails/generated/reviewer-assignment.templates.json`
+
+- 本轮定向验证：
+  - `cd frontend && bun run email:build-templates`
+  - `cd backend && pytest -q -o addopts= tests/integration/test_editor_invite.py tests/unit/test_decision_service_access.py -k 'cancel or exit_review_stage'`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bun run lint`

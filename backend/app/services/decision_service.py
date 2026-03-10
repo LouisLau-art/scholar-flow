@@ -10,6 +10,10 @@ from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
 from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from app.models.manuscript import ManuscriptStatus, normalize_status
+from app.services.reviewer_assignment_cancellation_email import (
+    send_reviewer_assignment_cancellation_email,
+    should_send_reviewer_assignment_cancellation_email,
+)
 from app.services.decision_service_attachments import DecisionServiceAttachmentMixin
 from app.services.decision_service_letters import DecisionServiceLettersMixin
 from app.services.decision_service_transitions import DecisionServiceTransitionsMixin
@@ -70,10 +74,12 @@ class DecisionService(
     def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
         select_candidates = [
             # 首选：完整字段（含 version + assistant_editor_id）
-            "id,title,abstract,status,file_path,version,author_id,editor_id,assistant_editor_id,updated_at",
+            "id,title,abstract,status,file_path,version,author_id,editor_id,assistant_editor_id,journal_id,updated_at",
             # 兼容：旧 schema 缺少 version
-            "id,title,abstract,status,file_path,author_id,editor_id,assistant_editor_id,updated_at",
+            "id,title,abstract,status,file_path,author_id,editor_id,assistant_editor_id,journal_id,updated_at",
             # 兼容：更旧 schema 缺少 version + assistant_editor_id
+            "id,title,abstract,status,file_path,author_id,editor_id,journal_id,updated_at",
+            # 兼容：极旧 schema 缺少 journal_id
             "id,title,abstract,status,file_path,author_id,editor_id,updated_at",
         ]
         resp = None
@@ -104,6 +110,7 @@ class DecisionService(
         if row.get("version") is None:
             row["version"] = 1
         row.setdefault("assistant_editor_id", None)
+        row.setdefault("journal_id", None)
         return row
 
     def _ensure_editor_access(
@@ -336,6 +343,25 @@ class DecisionService(
                 raise
             self.client.table("review_assignments").update(fallback_payload).eq("id", assignment_id).execute()
 
+    def _send_cancellation_email_for_stage_exit(
+        self,
+        *,
+        assignment: dict[str, Any],
+        manuscript: dict[str, Any],
+        cancel_reason: str,
+    ) -> dict[str, Any]:
+        try:
+            return send_reviewer_assignment_cancellation_email(
+                assignment=assignment,
+                manuscript=manuscript,
+                cancel_reason=cancel_reason,
+            )
+        except Exception as exc:
+            return {
+                "status": "failed",
+                "error_message": str(exc),
+            }
+
     def exit_review_stage(
         self,
         *,
@@ -419,6 +445,8 @@ class DecisionService(
 
         auto_cancelled_ids: list[str] = []
         manually_cancelled_ids: list[str] = []
+        cancellation_email_sent_assignment_ids: list[str] = []
+        cancellation_email_failed_assignment_ids: list[str] = []
         stage_note = str(request.note or "").strip()
 
         for row in auto_cancel_candidates:
@@ -437,6 +465,16 @@ class DecisionService(
                 via="auto_stage_exit",
             )
             auto_cancelled_ids.append(assignment_id)
+            if should_send_reviewer_assignment_cancellation_email(row):
+                email_result = self._send_cancellation_email_for_stage_exit(
+                    assignment=row,
+                    manuscript=manuscript,
+                    cancel_reason=reason,
+                )
+                if str(email_result.get("status") or "").strip().lower() == "sent":
+                    cancellation_email_sent_assignment_ids.append(assignment_id)
+                else:
+                    cancellation_email_failed_assignment_ids.append(assignment_id)
 
         for row in accepted_pending:
             assignment_id = str(row.get("id") or "").strip()
@@ -456,6 +494,15 @@ class DecisionService(
                 via="post_acceptance_cleanup",
             )
             manually_cancelled_ids.append(assignment_id)
+            email_result = self._send_cancellation_email_for_stage_exit(
+                assignment=row,
+                manuscript=manuscript,
+                cancel_reason=str(reason).strip(),
+            )
+            if str(email_result.get("status") or "").strip().lower() == "sent":
+                cancellation_email_sent_assignment_ids.append(assignment_id)
+            else:
+                cancellation_email_failed_assignment_ids.append(assignment_id)
 
         remaining_pending_ids = sorted(
             assignment_id
@@ -517,6 +564,8 @@ class DecisionService(
             "auto_cancelled_assignment_ids": auto_cancelled_ids,
             "manually_cancelled_assignment_ids": manually_cancelled_ids,
             "remaining_pending_assignment_ids": remaining_pending_ids,
+            "cancellation_email_sent_assignment_ids": cancellation_email_sent_assignment_ids,
+            "cancellation_email_failed_assignment_ids": cancellation_email_failed_assignment_ids,
         }
 
     def get_decision_context(
