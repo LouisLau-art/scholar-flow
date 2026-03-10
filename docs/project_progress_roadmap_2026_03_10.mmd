@@ -1,0 +1,21 @@
+gantt
+    title ScholarFlow 项目路线图（2026-03-10）
+    dateFormat  YYYY-MM-DD
+    axisFormat  %m-%d
+    excludes    weekends
+
+    section 已完成
+    Next 16 / React 19 稳定化          :done, next16, 2026-03-06, 2026-03-09
+    Reviewer 邀请与审稿主流程          :done, reviewer_core, 2026-03-06, 2026-03-10
+    Reviewer cancel / 阶段退出 / 取消邮件 :done, reviewer_exit, 2026-03-09, 2026-03-10
+
+    section 进行中
+    Reviewer history / reminder 细化   :active, reviewer_history, 2026-03-10, 2026-03-12
+    Decision 边界与可见性收边          :active, decision_edge, 2026-03-10, 2026-03-13
+    邮件模板与投递可达性完善           :active, mail_hardening, 2026-03-10, 2026-03-14
+
+    section 待完成
+    全链路 UAT 回归                    :uat, 2026-03-13, 2026-03-18
+    发布准备与问题清零                 :release, 2026-03-18, 2026-03-20
+    稳定版本形成                       :milestone, stable, 2026-03-20, 1d
+

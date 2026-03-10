@@ -1,0 +1,18 @@
+stateDiagram-v2
+    [*] --> selected
+    selected --> invited: 发送邀请邮件
+    invited --> opened: reviewer 打开邀请页
+    opened --> accepted: Accept & Continue
+    invited --> declined: Decline
+    opened --> declined: Decline
+    accepted --> submitted: Submit review
+
+    selected --> cancelled: AE/系统终止\n(内部 shortlist，不发取消信)
+    invited --> cancelled: AE/系统取消\n发送 cancellation email
+    opened --> cancelled: AE/系统取消\n发送 cancellation email
+    accepted --> cancelled: 沟通后取消\n发送 cancellation email
+
+    declined --> [*]
+    submitted --> [*]
+    cancelled --> [*]
+

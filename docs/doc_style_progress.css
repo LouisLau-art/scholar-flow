@@ -1,0 +1,129 @@
+@page {
+  size: A4;
+  margin: 14mm 14mm;
+}
+
+:root {
+  --text: #1f2937;
+  --muted: #64748b;
+  --heading: #0f172a;
+  --line: #dbe3ef;
+  --table-head: #f8fafc;
+  --accent: #2563eb;
+  --soft: #eef4ff;
+}
+
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  color: var(--text);
+  line-height: 1.7;
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--heading);
+  line-height: 1.35;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h1 {
+  font-size: 28px;
+  margin: 0 0 10px;
+}
+
+h2 {
+  margin-top: 24px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 19px;
+}
+
+h3 {
+  margin-top: 16px;
+  font-size: 15px;
+}
+
+p,
+li,
+td,
+th,
+blockquote {
+  font-size: 13px;
+}
+
+strong {
+  color: #111827;
+}
+
+blockquote {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-left: 4px solid var(--accent);
+  background: var(--soft);
+}
+
+figure {
+  margin: 14px 0 18px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220mm;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+figcaption {
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  text-align: left;
+  padding: 8px;
+  vertical-align: top;
+}
+
+th {
+  background: var(--table-head);
+}
+
+code {
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+@media print {
+  h2,
+  h3,
+  table,
+  figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

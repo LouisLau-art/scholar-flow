@@ -1,0 +1,26 @@
+flowchart TD
+    A[Author Submit] --> B[ME Technical Check]
+    B -->|不通过| B1[Return to Author]
+    B -->|通过| C[ME Assign AE]
+    C --> D[AE Manage Reviewers]
+    D --> D1[Selected: 内部 shortlist]
+    D1 --> E[Send Invitation Email]
+    E --> F{Reviewer Response}
+    F -->|Decline| F1[Declined]
+    F -->|Accept| G[Reviewer Workspace]
+    G --> H[Reviewer Submit Report]
+    H --> I{AE 是否已有足够证据?}
+    I -->|否| D
+    I -->|是| J[Exit Review Stage]
+    J --> J1[Auto cancel selected / invited / opened]
+    J --> J2[AE 显式处理 accepted but not submitted]
+    J1 --> K{下一步路径}
+    J2 --> K
+    K -->|直接给 revision 建议| L[Decision / Revision]
+    K -->|送 First Decision| M[Academic / EIC Decision]
+    K -->|证据非常明确| N[Final Decision]
+    M --> O[Major Revision / Minor Revision / Reject]
+    N --> P[Accept / Reject / Revision]
+    P --> Q[Production + Finance]
+    Q --> R[Publish]
+
