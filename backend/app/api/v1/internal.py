@@ -82,11 +82,11 @@ def _probe_resend_sender_domain_status(
         status_code = exc.response.status_code if exc.response is not None else None
         evidence["probe_error"] = type(exc).__name__
         evidence["http_status"] = status_code
-        if status_code == 403:
+        if status_code in {401, 403}:
             evidence["probe_restricted"] = True
             return (
                 PlatformReadinessStatus.PASSED,
-                "Resend 域名管理探测受限（sending_access key），跳过域名校验并以后续真实发信结果为准",
+                "Resend 域名管理探测受限（sending_access / restricted key），跳过域名校验并以后续真实发信结果为准",
                 evidence,
             )
         return (
