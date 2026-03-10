@@ -30,6 +30,8 @@ export default function SubmissionForm() {
         journalId={form.journalId}
         specialIssue={form.specialIssue}
         metadata={{ title: form.metadata.title, abstract: form.metadata.abstract }}
+        submissionEmail={form.metadata.submissionEmail}
+        authorContacts={form.authorContacts}
         datasetUrl={form.datasetUrl}
         sourceCodeUrl={form.sourceCodeUrl}
         policyConsent={form.policyConsent}
@@ -37,6 +39,8 @@ export default function SubmissionForm() {
         touched={form.touched}
         showTitleError={form.showTitleError}
         showAbstractError={form.showAbstractError}
+        showSubmissionEmailError={form.showSubmissionEmailError}
+        showAuthorContactsError={form.showAuthorContactsError}
         showDatasetError={form.showDatasetError}
         showSourceCodeError={form.showSourceCodeError}
         showJournalError={form.showJournalError}
@@ -49,6 +53,13 @@ export default function SubmissionForm() {
         onTitleBlur={form.onTitleBlur}
         onAbstractChange={form.onAbstractChange}
         onAbstractBlur={form.onAbstractBlur}
+        onSubmissionEmailChange={form.onSubmissionEmailChange}
+        onSubmissionEmailBlur={form.onSubmissionEmailBlur}
+        onAuthorContactChange={form.onAuthorContactChange}
+        onAuthorContactsBlur={form.onAuthorContactsBlur}
+        onAddAuthorContact={form.onAddAuthorContact}
+        onRemoveAuthorContact={form.onRemoveAuthorContact}
+        onSelectCorrespondingAuthor={form.onSelectCorrespondingAuthor}
         onDatasetUrlChange={form.onDatasetUrlChange}
         onDatasetUrlBlur={form.onDatasetUrlBlur}
         onSourceCodeUrlChange={form.onSourceCodeUrlChange}

@@ -652,11 +652,26 @@ export default function EditorManuscriptDetailPage() {
   )
   const showDirectStatusTransitions = !isPostAcceptance && !['published', 'rejected'].includes(statusLower)
   const displayAuthors =
+    (Array.isArray(ms?.authors) ? ms.authors.filter(Boolean).join(', ') : '') ||
     String(invoiceForm.authors || '').trim() ||
     String(ms?.author?.full_name || '').trim() ||
     String(ms?.author?.email || '').trim() ||
     String(ms?.owner?.full_name || '').trim() ||
     String(ms?.owner?.email || '').trim() ||
+    '—'
+  const correspondingAuthor = Array.isArray(ms?.author_contacts)
+    ? ms.author_contacts.find((item) => item?.is_corresponding) || ms.author_contacts[0] || null
+    : null
+  const correspondingAuthorLabel =
+    String(correspondingAuthor?.name || '').trim() ||
+    String(correspondingAuthor?.email || '').trim() ||
+    String(ms?.author?.full_name || '').trim() ||
+    String(ms?.author?.email || '').trim() ||
+    '—'
+  const submissionEmail =
+    String(ms?.submission_email || '').trim() ||
+    String(correspondingAuthor?.email || '').trim() ||
+    String(ms?.author?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
   const acceptedPendingInvites = useMemo(
@@ -1000,6 +1015,8 @@ export default function EditorManuscriptDetailPage() {
             manuscriptId={id}
             displayAuthors={displayAuthors}
             affiliation={invoiceForm.affiliation}
+            correspondingAuthorLabel={correspondingAuthorLabel}
+            submissionEmail={submissionEmail}
             submittedAt={ms.created_at}
             owner={ms.owner}
             canBindOwner={capability.canBindOwner}

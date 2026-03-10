@@ -10,14 +10,21 @@ import {
   INITIAL_TOUCHED,
   STORAGE_UPLOAD_TIMEOUT_MS,
   SUPPLEMENTAL_UPLOAD_TIMEOUT_MS,
+  buildAuthorContactsFromNames,
+  createAuthorContact,
   extractTraceId,
+  hasExactlyOneCorrespondingAuthor,
+  hasValidAuthorContacts,
   hasJournalSelection,
   isHttpUrl,
   isSupportedCoverLetterDocument,
   isSupportedWordDocument,
+  isValidEmail,
+  normalizeAuthorContactsForPayload,
   parseManuscriptMetadataWithFallback,
   sanitizeFilename,
   type MetadataState,
+  type SubmissionAuthorContact,
   type TouchedState,
   withTimeout,
 } from './submission-form-utils'
@@ -54,6 +61,9 @@ export function useSubmissionForm() {
 
   const titleValid = metadata.title.trim().length >= 5
   const abstractValid = metadata.abstract.trim().length >= 30
+  const submissionEmailValue = metadata.submissionEmail.trim()
+  const submissionEmailValid = isValidEmail(submissionEmailValue)
+  const authorContactsValid = hasValidAuthorContacts(metadata.authorContacts)
   const fileValid = !!uploadedPath
   const wordFileValid = !!wordFilePath
   const coverLetterValid = !!coverLetterPath
@@ -64,6 +74,8 @@ export function useSubmissionForm() {
   const sourceCodeUrlValid = sourceCodeValue === '' || isHttpUrl(sourceCodeValue)
   const showTitleError = touched.title && !titleValid
   const showAbstractError = touched.abstract && !abstractValid
+  const showSubmissionEmailError = touched.submissionEmail && !submissionEmailValid
+  const showAuthorContactsError = touched.authorContacts && !authorContactsValid
   const showDatasetError = touched.datasetUrl && !datasetUrlValid
   const showSourceCodeError = touched.sourceCodeUrl && !sourceCodeUrlValid
   const showJournalError = touched.journal && !journalValid
@@ -75,6 +87,14 @@ export function useSubmissionForm() {
       const session = await authService.getSession()
       if (session?.user) {
         setUser(session.user)
+        setMetadata((prev) =>
+          prev.submissionEmail.trim().length > 0
+            ? prev
+            : {
+                ...prev,
+                submissionEmail: String(session.user.email || '').trim(),
+              },
+        )
       } else {
         toast.error('Please log in to submit a manuscript')
       }
@@ -153,8 +173,11 @@ export function useSubmissionForm() {
           next.abstract = parsedAbstract
         }
       }
-      if (parsedAuthors.length > 0 && prev.authors.length === 0) {
-        next.authors = parsedAuthors
+      const hasStructuredAuthorInput = prev.authorContacts.some((author) =>
+        [author.name, author.email, author.affiliation].some((value) => value.trim().length > 0),
+      )
+      if (parsedAuthors.length > 0 && !hasStructuredAuthorInput) {
+        next.authorContacts = buildAuthorContactsFromNames(parsedAuthors)
       }
       return next
     })
@@ -400,6 +423,8 @@ export function useSubmissionForm() {
   const handleFinalize = async () => {
     setTouched((prev) => ({
       ...prev,
+      submissionEmail: true,
+      authorContacts: true,
       policyConsent: true,
       ethicsConsent: true,
     }))
@@ -434,6 +459,18 @@ export function useSubmissionForm() {
     }
     if (!abstractValid) {
       toast.error('Abstract must be at least 30 characters.')
+      return
+    }
+    if (!submissionEmailValid) {
+      toast.error('Please provide a valid submission email.')
+      return
+    }
+    if (!authorContactsValid) {
+      if (!hasExactlyOneCorrespondingAuthor(metadata.authorContacts)) {
+        toast.error('Please keep exactly one corresponding author.')
+      } else {
+        toast.error('Please complete every author with name, email, and affiliation.')
+      }
       return
     }
     if (!datasetUrlValid) {
@@ -487,6 +524,8 @@ export function useSubmissionForm() {
         body: JSON.stringify({
           title: metadata.title,
           abstract: metadata.abstract,
+          submission_email: submissionEmailValue,
+          author_contacts: normalizeAuthorContactsForPayload(metadata.authorContacts),
           author_id: user.id,
           file_path: uploadedPath,
           manuscript_word_path: wordFilePath,
@@ -545,6 +584,8 @@ export function useSubmissionForm() {
     touched,
     showTitleError,
     showAbstractError,
+    showSubmissionEmailError,
+    showAuthorContactsError,
     showDatasetError,
     showSourceCodeError,
     showJournalError,
@@ -556,6 +597,8 @@ export function useSubmissionForm() {
       !coverLetterValid ||
       !titleValid ||
       !abstractValid ||
+      !submissionEmailValid ||
+      !authorContactsValid ||
       !journalValid ||
       !datasetUrlValid ||
       !sourceCodeUrlValid ||
@@ -574,6 +617,8 @@ export function useSubmissionForm() {
         !coverLetterValid ||
         !titleValid ||
         !abstractValid ||
+        !submissionEmailValid ||
+        !authorContactsValid ||
         !journalValid ||
         !datasetUrlValid ||
         !sourceCodeUrlValid ||
@@ -601,6 +646,59 @@ export function useSubmissionForm() {
       markTouched('abstract')
     },
     onAbstractBlur: () => markTouched('abstract'),
+    onSubmissionEmailChange: (value: string) => {
+      setMetadata((prev) => ({ ...prev, submissionEmail: value }))
+      markTouched('submissionEmail')
+    },
+    onSubmissionEmailBlur: () => markTouched('submissionEmail'),
+    authorContacts: metadata.authorContacts,
+    onAuthorContactChange: (
+      authorId: string,
+      field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation'>,
+      value: string,
+    ) => {
+      setMetadata((prev) => ({
+        ...prev,
+        authorContacts: prev.authorContacts.map((author) =>
+          author.id === authorId ? { ...author, [field]: value } : author,
+        ),
+      }))
+      markTouched('authorContacts')
+    },
+    onAddAuthorContact: () => {
+      setMetadata((prev) => ({
+        ...prev,
+        authorContacts: [...prev.authorContacts, createAuthorContact()],
+      }))
+      markTouched('authorContacts')
+    },
+    onRemoveAuthorContact: (authorId: string) => {
+      setMetadata((prev) => {
+        if (prev.authorContacts.length <= 1) {
+          return prev
+        }
+        const remaining = prev.authorContacts.filter((author) => author.id !== authorId)
+        if (!remaining.some((author) => author.isCorresponding) && remaining[0]) {
+          remaining[0] = { ...remaining[0], isCorresponding: true }
+        }
+        return {
+          ...prev,
+          authorContacts: remaining,
+        }
+      })
+      markTouched('authorContacts')
+    },
+    onSelectCorrespondingAuthor: (authorId: string) => {
+      setMetadata((prev) => ({
+        ...prev,
+        authorContacts: prev.authorContacts.map((author) => ({
+          ...author,
+          isCorresponding: author.id === authorId,
+        })),
+      }))
+      markTouched('authorContacts')
+    },
+    onAuthorContactsBlur: () => markTouched('authorContacts'),
     onDatasetUrlChange: (value: string) => {
       setDatasetUrl(value)
       markTouched('datasetUrl')

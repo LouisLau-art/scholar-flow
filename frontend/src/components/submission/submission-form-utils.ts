@@ -9,12 +9,23 @@ const DIRECT_API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace
 export type MetadataState = {
   title: string
   abstract: string
-  authors: string[]
+  submissionEmail: string
+  authorContacts: SubmissionAuthorContact[]
+}
+
+export type SubmissionAuthorContact = {
+  id: string
+  name: string
+  email: string
+  affiliation: string
+  isCorresponding: boolean
 }
 
 export type TouchedState = {
   title: boolean
   abstract: boolean
+  submissionEmail: boolean
+  authorContacts: boolean
   datasetUrl: boolean
   sourceCodeUrl: boolean
   journal: boolean
@@ -32,17 +43,77 @@ export type MetadataParsePayload = {
 export const INITIAL_METADATA: MetadataState = {
   title: '',
   abstract: '',
-  authors: [],
+  submissionEmail: '',
+  authorContacts: [createAuthorContact({ isCorresponding: true })],
 }
 
 export const INITIAL_TOUCHED: TouchedState = {
   title: false,
   abstract: false,
+  submissionEmail: false,
+  authorContacts: false,
   datasetUrl: false,
   sourceCodeUrl: false,
   journal: false,
   policyConsent: false,
   ethicsConsent: false,
+}
+
+const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export function createAuthorContact(overrides: Partial<Omit<SubmissionAuthorContact, 'id'>> = {}): SubmissionAuthorContact {
+  return {
+    id: `author-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    name: '',
+    email: '',
+    affiliation: '',
+    isCorresponding: false,
+    ...overrides,
+  }
+}
+
+export function isValidEmail(value: string): boolean {
+  const trimmed = value.trim()
+  return SIMPLE_EMAIL_PATTERN.test(trimmed)
+}
+
+export function isAuthorContactComplete(author: SubmissionAuthorContact): boolean {
+  return (
+    author.name.trim().length > 0 &&
+    author.email.trim().length > 0 &&
+    author.affiliation.trim().length > 0 &&
+    isValidEmail(author.email)
+  )
+}
+
+export function hasExactlyOneCorrespondingAuthor(authorContacts: SubmissionAuthorContact[]): boolean {
+  return authorContacts.filter((author) => author.isCorresponding).length === 1
+}
+
+export function hasValidAuthorContacts(authorContacts: SubmissionAuthorContact[]): boolean {
+  return authorContacts.length > 0 && hasExactlyOneCorrespondingAuthor(authorContacts) && authorContacts.every(isAuthorContactComplete)
+}
+
+export function buildAuthorContactsFromNames(names: string[]): SubmissionAuthorContact[] {
+  const cleaned = names.map((item) => item.trim()).filter(Boolean).slice(0, 20)
+  if (cleaned.length === 0) {
+    return [createAuthorContact({ isCorresponding: true })]
+  }
+  return cleaned.map((name, index) =>
+    createAuthorContact({
+      name,
+      isCorresponding: index === 0,
+    }),
+  )
+}
+
+export function normalizeAuthorContactsForPayload(authorContacts: SubmissionAuthorContact[]) {
+  return authorContacts.map((author) => ({
+    name: author.name.trim(),
+    email: author.email.trim(),
+    affiliation: author.affiliation.trim(),
+    is_corresponding: author.isCorresponding,
+  }))
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

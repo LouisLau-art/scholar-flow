@@ -87,6 +87,21 @@ function acceptRequiredDeclarations() {
   fireEvent.click(screen.getByTestId('submission-ethics-consent'))
 }
 
+function fillRequiredAuthorFields() {
+  fireEvent.change(screen.getByTestId('submission-email'), {
+    target: { value: 'corresponding@example.com' },
+  })
+  fireEvent.change(screen.getByTestId('submission-author-name-0'), {
+    target: { value: 'Alice Zhang' },
+  })
+  fireEvent.change(screen.getByTestId('submission-author-email-0'), {
+    target: { value: 'alice.zhang@example.com' },
+  })
+  fireEvent.change(screen.getByTestId('submission-author-affiliation-0'), {
+    target: { value: 'Central China Normal University' },
+  })
+}
+
 describe('SubmissionForm Component', () => {
   /**
    * 验证投稿表单核心交互
@@ -159,6 +174,26 @@ describe('SubmissionForm Component', () => {
     await waitFor(() => {
       expect(screen.getByTestId('submission-user')).toHaveTextContent('user@example.com')
     })
+
+    expect(screen.getByTestId('submission-email')).toHaveValue('user@example.com')
+  })
+
+  it('supports multiple author contacts while keeping exactly one corresponding author', async () => {
+    render(<SubmissionForm />)
+
+    expect(screen.getByTestId('submission-author-card-0')).toBeInTheDocument()
+    expect(screen.getByTestId('submission-author-corresponding-0')).toBeChecked()
+
+    fireEvent.click(screen.getByTestId('submission-add-author'))
+
+    expect(screen.getByTestId('submission-author-card-1')).toBeInTheDocument()
+    expect(screen.getByTestId('submission-author-corresponding-0')).toBeChecked()
+    expect(screen.getByTestId('submission-author-corresponding-1')).not.toBeChecked()
+
+    fireEvent.click(screen.getByTestId('submission-author-corresponding-1'))
+
+    expect(screen.getByTestId('submission-author-corresponding-0')).not.toBeChecked()
+    expect(screen.getByTestId('submission-author-corresponding-1')).toBeChecked()
   })
 
   it('handles file upload success and populates metadata', async () => {
@@ -305,6 +340,7 @@ describe('SubmissionForm Component', () => {
     })
     expect(screen.getByTestId('submission-finalize')).toBeDisabled()
 
+    fillRequiredAuthorFields()
     acceptRequiredDeclarations()
 
     await waitFor(() => {
@@ -381,6 +417,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
 
+    fillRequiredAuthorFields()
     acceptRequiredDeclarations()
 
     await waitFor(() => {
@@ -467,6 +504,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
 
+    fillRequiredAuthorFields()
     acceptRequiredDeclarations()
 
     fireEvent.click(screen.getByTestId('submission-finalize'))
@@ -489,6 +527,15 @@ describe('SubmissionForm Component', () => {
       expect(body.cover_letter_content_type).toBe(
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       )
+      expect(body.submission_email).toBe('corresponding@example.com')
+      expect(body.author_contacts).toEqual([
+        {
+          name: 'Alice Zhang',
+          email: 'alice.zhang@example.com',
+          affiliation: 'Central China Normal University',
+          is_corresponding: true,
+        },
+      ])
     })
 
     expect(storageUploadMock).toHaveBeenCalledTimes(3)
@@ -559,6 +606,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
     })
 
+    fillRequiredAuthorFields()
     acceptRequiredDeclarations()
 
     await waitFor(() => {

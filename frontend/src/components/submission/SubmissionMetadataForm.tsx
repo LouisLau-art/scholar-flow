@@ -3,6 +3,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { Journal } from '@/types/journal'
+import { SubmissionAuthorContactsField } from './SubmissionAuthorContactsField'
+import type { SubmissionAuthorContact } from './submission-form-utils'
 
 type MetadataState = {
   title: string
@@ -12,6 +14,8 @@ type MetadataState = {
 type TouchedState = {
   title: boolean
   abstract: boolean
+  submissionEmail: boolean
+  authorContacts: boolean
   datasetUrl: boolean
   sourceCodeUrl: boolean
   journal: boolean
@@ -24,6 +28,8 @@ type SubmissionMetadataFormProps = {
   journalId: string
   specialIssue: string
   metadata: MetadataState
+  submissionEmail: string
+  authorContacts: SubmissionAuthorContact[]
   datasetUrl: string
   sourceCodeUrl: string
   policyConsent: boolean
@@ -31,6 +37,8 @@ type SubmissionMetadataFormProps = {
   touched: TouchedState
   showTitleError: boolean
   showAbstractError: boolean
+  showSubmissionEmailError: boolean
+  showAuthorContactsError: boolean
   showDatasetError: boolean
   showSourceCodeError: boolean
   showJournalError: boolean
@@ -43,6 +51,17 @@ type SubmissionMetadataFormProps = {
   onTitleBlur: () => void
   onAbstractChange: (value: string) => void
   onAbstractBlur: () => void
+  onSubmissionEmailChange: (value: string) => void
+  onSubmissionEmailBlur: () => void
+  onAuthorContactChange: (
+    authorId: string,
+    field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation'>,
+    value: string,
+  ) => void
+  onAuthorContactsBlur: () => void
+  onAddAuthorContact: () => void
+  onRemoveAuthorContact: (authorId: string) => void
+  onSelectCorrespondingAuthor: (authorId: string) => void
   onDatasetUrlChange: (value: string) => void
   onDatasetUrlBlur: () => void
   onSourceCodeUrlChange: (value: string) => void
@@ -160,6 +179,20 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
           </p>
         ) : null}
       </div>
+
+      <SubmissionAuthorContactsField
+        submissionEmail={props.submissionEmail}
+        authorContacts={props.authorContacts}
+        showSubmissionEmailError={props.showSubmissionEmailError}
+        showAuthorContactsError={props.showAuthorContactsError}
+        onSubmissionEmailChange={props.onSubmissionEmailChange}
+        onSubmissionEmailBlur={props.onSubmissionEmailBlur}
+        onAuthorContactChange={props.onAuthorContactChange}
+        onAuthorContactsBlur={props.onAuthorContactsBlur}
+        onAddAuthorContact={props.onAddAuthorContact}
+        onRemoveAuthorContact={props.onRemoveAuthorContact}
+        onSelectCorrespondingAuthor={props.onSelectCorrespondingAuthor}
+      />
 
       <div>
         <label htmlFor="submission-dataset-url" className="mb-2 block text-sm font-semibold text-foreground">
