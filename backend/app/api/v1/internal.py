@@ -3,6 +3,7 @@ import logging
 import os
 from uuid import UUID
 
+import httpx
 import resend
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -10,6 +11,7 @@ from app.core.config import get_admin_api_key
 from app.models.platform_readiness import (
     PlatformReadinessCheck,
     PlatformReadinessResponse,
+    PlatformRuntimeVersionResponse,
     PlatformReadinessStatus,
 )
 from app.core.scheduler import ChaseScheduler
@@ -43,6 +45,82 @@ def _extract_sender_domain(sender: str) -> str | None:
     return normalized.rsplit("@", 1)[-1].strip().lower() or None
 
 
+def _looks_like_email_address(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized or "@" not in normalized:
+        return False
+    local_part, domain = normalized.rsplit("@", 1)
+    return bool(local_part.strip()) and "." in domain and " " not in normalized
+
+
+def _probe_resend_sender_domain_status(
+    api_key: str,
+    sender_domain: str | None,
+) -> tuple[PlatformReadinessStatus, str, dict[str, object]]:
+    evidence: dict[str, object] = {
+        "provider_probe": "resend",
+        "sender_domain": sender_domain,
+        "domain_found": False,
+        "domain_verified": False,
+    }
+    if not sender_domain:
+        return (
+            PlatformReadinessStatus.BLOCKED,
+            "EMAIL_SENDER 缺少可识别的邮箱域名",
+            evidence,
+        )
+
+    try:
+        response = httpx.get(
+            "https://api.resend.com/domains",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=5.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:  # noqa: BLE001
+        evidence["probe_error"] = type(exc).__name__
+        return (
+            PlatformReadinessStatus.FAILED,
+            f"Resend 域名探测失败：{type(exc).__name__}",
+            evidence,
+        )
+
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    domains = rows if isinstance(rows, list) else []
+    matched = next(
+        (
+            item
+            for item in domains
+            if isinstance(item, dict) and str(item.get("name") or "").strip().lower() == sender_domain
+        ),
+        None,
+    )
+    if not matched:
+        return (
+            PlatformReadinessStatus.FAILED,
+            f"Resend 中未找到 sender 域名：{sender_domain}",
+            evidence,
+        )
+
+    evidence["domain_found"] = True
+    domain_status = str(matched.get("status") or "").strip().lower()
+    evidence["resend_domain_status"] = domain_status or None
+    if domain_status != "verified":
+        return (
+            PlatformReadinessStatus.FAILED,
+            f"Resend sender 域名未验证：{sender_domain} ({domain_status or 'unknown'})",
+            evidence,
+        )
+
+    evidence["domain_verified"] = True
+    return (
+        PlatformReadinessStatus.PASSED,
+        f"sender 域名已在 Resend 验证：{sender_domain}",
+        evidence,
+    )
+
+
 def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
     checks: list[PlatformReadinessCheck] = []
 
@@ -65,15 +143,15 @@ def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
             title="Reviewer Magic Link 密钥已配置",
             status=(
                 PlatformReadinessStatus.PASSED
-                if magic_link_secret or fallback_secret
+                if magic_link_secret
                 else PlatformReadinessStatus.BLOCKED
             ),
             detail=(
                 "MAGIC_LINK_JWT_SECRET 已配置"
                 if magic_link_secret
-                else "当前走 SECRET_KEY 兜底，建议显式配置 MAGIC_LINK_JWT_SECRET"
+                else "仅检测到 SECRET_KEY 兜底，部署基线要求显式配置 MAGIC_LINK_JWT_SECRET"
                 if fallback_secret
-                else "MAGIC_LINK_JWT_SECRET/SECRET_KEY 均未配置"
+                else "MAGIC_LINK_JWT_SECRET 未配置"
             ),
             evidence={
                 "magic_link_secret_configured": bool(magic_link_secret),
@@ -136,11 +214,7 @@ def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
 
     resend_api_key = (os.environ.get("RESEND_API_KEY") or "").strip()
     smtp_host = (os.environ.get("SMTP_HOST") or "").strip()
-    smtp_from_email = (
-        os.environ.get("SMTP_FROM_EMAIL")
-        or os.environ.get("SMTP_USER")
-        or ""
-    ).strip()
+    smtp_from_email = (os.environ.get("SMTP_FROM_EMAIL") or "").strip()
     checks.append(
         PlatformReadinessCheck(
             key="email_provider.configured",
@@ -173,17 +247,35 @@ def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
     sender_uses_fallback = bool(
         resend_api_key and (sender_domain == "resend.dev" or "onboarding@resend.dev" in email_sender.lower())
     )
+    smtp_sender_invalid = bool(smtp_host and (not email_sender or not _looks_like_email_address(email_sender)))
+    resend_probe_status = PlatformReadinessStatus.BLOCKED
+    resend_probe_detail = "未执行 Resend sender 探测"
+    resend_probe_evidence: dict[str, object] = {
+        "provider_probe": "resend",
+        "sender_domain": sender_domain,
+    }
+    if resend_api_key and email_sender and not sender_uses_fallback:
+        resend_probe_status, resend_probe_detail, resend_probe_evidence = _probe_resend_sender_domain_status(
+            resend_api_key,
+            sender_domain,
+        )
     checks.append(
         PlatformReadinessCheck(
             key="email_sender.ready",
             title="邮件发件人已配置正式地址",
             status=(
                 PlatformReadinessStatus.BLOCKED
-                if not email_sender and (resend_api_key or smtp_host)
+                if not email_sender and resend_api_key
+                else PlatformReadinessStatus.BLOCKED
+                if smtp_host and not email_sender
                 else PlatformReadinessStatus.BLOCKED
                 if not resend_api_key and not smtp_host
                 else PlatformReadinessStatus.FAILED
+                if smtp_sender_invalid
+                else PlatformReadinessStatus.FAILED
                 if sender_uses_fallback
+                else resend_probe_status
+                if resend_api_key
                 else PlatformReadinessStatus.PASSED
             ),
             detail=(
@@ -191,10 +283,14 @@ def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
                 if not resend_api_key and not smtp_host
                 else "EMAIL_SENDER 未配置"
                 if resend_api_key and not email_sender
-                else "SMTP_FROM_EMAIL / SMTP_USER 未配置"
+                else "SMTP_FROM_EMAIL 未配置"
                 if smtp_host and not email_sender
+                else f"SMTP_FROM_EMAIL 不是合法邮箱：{email_sender}"
+                if smtp_sender_invalid
                 else f"当前仍使用 Resend 开发发件人：{email_sender}"
                 if sender_uses_fallback
+                else resend_probe_detail
+                if resend_api_key
                 else f"sender={email_sender}"
             ),
             evidence={
@@ -202,6 +298,8 @@ def _build_platform_readiness_checks() -> list[PlatformReadinessCheck]:
                 "sender_domain": sender_domain,
                 "uses_resend_dev_fallback": sender_uses_fallback,
                 "provider": "resend" if resend_api_key else "smtp" if smtp_host else None,
+                "smtp_sender_email_like": _looks_like_email_address(email_sender) if smtp_host else None,
+                **(resend_probe_evidence if resend_api_key else {}),
             },
         )
     )
@@ -291,6 +389,19 @@ async def get_platform_readiness(_admin: None = Depends(require_admin_key)):
         status=_derive_platform_readiness_status(checks),
         checks=checks,
     )
+
+
+@router.get("/runtime-version", response_model=PlatformRuntimeVersionResponse)
+async def get_runtime_version(_admin: None = Depends(require_admin_key)):
+    """
+    当前后端运行版本（内部接口）。
+
+    中文注释:
+    - 用于 UAT smoke 校验 HF 运行中的容器是否已经切到本次 deploy SHA。
+    - 只暴露 git SHA，不返回任何 secret。
+    """
+    deploy_sha = (os.environ.get("DEPLOY_SHA") or "").strip() or None
+    return PlatformRuntimeVersionResponse(deploy_sha=deploy_sha)
 
 
 @router.post("/webhooks/resend")

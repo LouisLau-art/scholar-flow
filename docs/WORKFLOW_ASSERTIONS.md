@@ -197,7 +197,10 @@
   - 在使用 Resend 时继续落到 `resend.dev` 开发发件人
   - 未配置任何邮件 provider（Resend / SMTP）
   - 缺失 `ADMIN_API_KEY`
-  - 缺失 reviewer magic link secret
+  - 缺失显式 `MAGIC_LINK_JWT_SECRET`（`SECRET_KEY` 兜底不算通过）
+- UAT canonical smoke 必须额外校验：
+  - HF 运行中的 `DEPLOY_SHA` 与本次触发 SHA 一致
+  - 前端 smoke 只验证稳定 UAT URL 的壳层与关键入口，不宣称 Vercel commit 级绑定
 - deployed smoke 必须覆盖：
   - 登录
   - dashboard

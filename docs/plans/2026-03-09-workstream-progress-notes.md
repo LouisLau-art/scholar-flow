@@ -258,6 +258,15 @@
     - `FRONTEND_ORIGIN`
     - 邮件 provider（Resend / SMTP）
     - 正式发件人地址
+
+- 2026-03-10 晚些时候补了一轮门禁收紧：
+  - `MAGIC_LINK_JWT_SECRET` 必须显式存在；仅 `SECRET_KEY` 兜底不再视为通过
+  - Resend sender readiness 现在会探测 provider 域名状态，不再只看字符串存在
+  - SMTP sender readiness 现在要求显式 `SMTP_FROM_EMAIL`，避免 `SMTP_USER=mailer` 这种伪通过
+  - 新增内部版本接口：`GET /api/v1/internal/runtime-version`
+  - `deploy-hf.yml` 会把 `DEPLOY_SHA` 写入 HF Space variable
+  - `uat-smoke.yml` 会校验运行中后端 `DEPLOY_SHA` 与本次触发 SHA 一致
+  - workflow 命名与 summary 也已改成 `UAT Canonical Smoke`，明确前端部分验证的是稳定 UAT URL，不宣称 Vercel commit 级绑定
     - Supabase 核心配置
   - 设计目标：
     - 不返回任何真实 secret

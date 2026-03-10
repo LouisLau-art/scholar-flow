@@ -96,6 +96,34 @@ jobs:
           # 单独上传 Dockerfile (因为它在 GitHub 的根目录下)
           upload_with_retry "Sync Dockerfile from GitHub" "Dockerfile" "Dockerfile"
 
+      - name: Update HF Space DEPLOY_SHA variable
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo_id = os.environ["HF_SPACE_ID"]
+          deploy_sha = os.environ["DEPLOY_SHA"]
+
+          try:
+            api.delete_space_variable(repo_id, "DEPLOY_SHA")
+          except Exception:
+            pass
+
+          api.add_space_variable(
+            repo_id,
+            "DEPLOY_SHA",
+            deploy_sha,
+            description="Current deployed backend git SHA",
+          )
+          print(f"[deploy-hf] updated HF Space DEPLOY_SHA={deploy_sha}")
+          PY
+
       - name: Wait for HF runtime to catch up
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

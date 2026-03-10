@@ -23,3 +23,8 @@ class PlatformReadinessCheck(BaseModel):
 class PlatformReadinessResponse(BaseModel):
     status: PlatformReadinessStatus
     checks: list[PlatformReadinessCheck] = Field(default_factory=list)
+
+
+class PlatformRuntimeVersionResponse(BaseModel):
+    deploy_sha: str | None = None
+    source: str = Field(default="huggingface-space", min_length=1, max_length=64)

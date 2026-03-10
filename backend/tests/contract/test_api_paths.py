@@ -46,6 +46,7 @@ EXPECTED_ROUTES = {
     ("PUT", "/api/v1/cms/menu"),
     ("POST", "/api/v1/internal/cron/chase-reviews"),
     ("GET", "/api/v1/internal/platform-readiness"),
+    ("GET", "/api/v1/internal/runtime-version"),
     ("POST", "/api/v1/internal/release-validation/runs"),
     ("GET", "/api/v1/internal/release-validation/runs"),
     ("POST", "/api/v1/internal/release-validation/runs/{run_id}/readiness"),

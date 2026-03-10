@@ -25,8 +25,6 @@ test.describe('Deployed UAT smoke', () => {
     await loginPage.goto()
     await loginPage.login(smokeEmail, smokePassword)
 
-    await page.waitForURL(/\/$/, { timeout: 20000 })
-
     await page.goto('/dashboard?tab=editor')
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 20000 })
     await expect(

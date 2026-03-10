@@ -1,4 +1,4 @@
-name: UAT Smoke
+name: UAT Canonical Smoke
 
 on:
   workflow_run:
@@ -45,6 +45,9 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || (github.event.inputs.ref || 'main') }}
 
+      - name: Capture expected backend deploy SHA
+        run: echo "EXPECTED_DEPLOY_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Verify required secrets
         run: |
           test -n "${{ secrets.ADMIN_API_KEY }}"
@@ -69,7 +72,8 @@ jobs:
         env:
           UAT_API_BASE_URL: ${{ env.UAT_API_BASE_URL }}
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-        run: bash scripts/ci/check-platform-readiness.sh
+          EXPECTED_DEPLOY_SHA: ${{ env.EXPECTED_DEPLOY_SHA }}
+        run: bash scripts/ci/check-platform-readiness.sh --expected-deploy-sha "${EXPECTED_DEPLOY_SHA}"
 
   frontend-smoke:
     needs: platform-gates
@@ -93,6 +97,16 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: bun install --frozen-lockfile
+
+      - name: Document frontend smoke scope
+        run: |
+          {
+            echo "## Frontend Smoke Scope"
+            echo
+            echo "- This workflow validates the canonical UAT frontend URL."
+            echo "- It does **not** prove Vercel commit SHA parity."
+            echo "- Exact frontend deployment binding requires a future Vercel deployment hook / metadata gate."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Wait for deployed frontend
         run: |

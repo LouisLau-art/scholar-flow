@@ -46,6 +46,41 @@ echo "[supabase-parity] running dry-run push"
 dry_run_output="$(supabase db push --linked --dry-run 2>&1)"
 echo "${dry_run_output}"
 
+set +e
+mismatch_report="$(
+  MIGRATION_OUTPUT="${migration_output}" python - <<'PY'
+import os
+import re
+import sys
+
+rows: list[tuple[str, str]] = []
+pattern = re.compile(r"^\s*([0-9]{14}|[A-Za-z0-9_-]+)?\s*\|\s*([0-9]{14}|[A-Za-z0-9_-]+)?\s*\|")
+for raw_line in os.environ.get("MIGRATION_OUTPUT", "").splitlines():
+    line = raw_line.rstrip()
+    matched = pattern.match(line)
+    if not matched:
+        continue
+    local_version = (matched.group(1) or "").strip()
+    remote_version = (matched.group(2) or "").strip()
+    rows.append((local_version, remote_version))
+
+if not rows:
+    print("Unable to parse `supabase migration list --linked` output", file=sys.stderr)
+    sys.exit(2)
+
+mismatches = [(local, remote) for local, remote in rows if local != remote]
+if mismatches:
+    print("mismatch")
+    for local, remote in mismatches:
+        print(f"{local or '-'} != {remote or '-'}")
+    sys.exit(1)
+
+print("ok")
+PY
+)"
+parse_status=$?
+set -e
+
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
     echo "## Supabase Migration Parity"
@@ -66,10 +101,11 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   } >> "${GITHUB_STEP_SUMMARY}"
 fi
 
-if grep -q "Remote database is up to date" <<<"${dry_run_output}"; then
+if [[ ${parse_status} -eq 0 && "${mismatch_report}" == "ok" ]]; then
   echo "[supabase-parity] remote database is up to date"
   exit 0
 fi
 
 echo "[supabase-parity] pending migration drift detected" >&2
+echo "${mismatch_report}" >&2
 exit 1
