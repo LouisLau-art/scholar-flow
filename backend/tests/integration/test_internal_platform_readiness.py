@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 
@@ -205,6 +206,40 @@ async def test_platform_readiness_requires_explicit_smtp_from_email(
     checks = {item["key"]: item for item in payload["checks"]}
     assert checks["email_provider.configured"]["status"] == "passed"
     assert checks["email_sender.ready"]["status"] == "blocked"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_platform_readiness_tolerates_resend_sending_access_domain_probe_restriction(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def _raise_forbidden(*_args, **_kwargs):
+        request = httpx.Request("GET", "https://api.resend.com/domains")
+        response = httpx.Response(status_code=403, request=request)
+        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+
+    monkeypatch.setattr("app.api.v1.internal.httpx.get", _raise_forbidden)
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "magic-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://scholar-flow-q1yw.vercel.app")
+    monkeypatch.setenv("FRONTEND_ORIGIN", "https://scholar-flow-q1yw.vercel.app")
+    monkeypatch.setenv("RESEND_API_KEY", "re_secret_live_123")
+    monkeypatch.setenv("EMAIL_SENDER", "ScholarFlow <no-reply@louisliu.fun>")
+    monkeypatch.setenv("SUPABASE_URL", "https://mmvulyrfsorqdpdrzbkd.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role")
+
+    resp = await client.get(
+        "/api/v1/internal/platform-readiness",
+        headers={"X-Admin-Key": "test-admin"},
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["status"] == "passed"
+    checks = {item["key"]: item for item in payload["checks"]}
+    assert checks["email_sender.ready"]["status"] == "passed"
+    assert checks["email_sender.ready"]["evidence"]["probe_restricted"] is True
+    assert checks["email_sender.ready"]["evidence"]["http_status"] == 403
 
 
 @pytest.mark.integration
