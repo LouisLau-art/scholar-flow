@@ -66,4 +66,18 @@ describe('env staging detection', () => {
 
     expect(mod.IS_STAGING).toBe(false)
   })
+
+  it('recognizes runtime UAT hostnames on the client fallback path', async () => {
+    const mod = await loadEnvModule({
+      NEXT_PUBLIC_APP_ENV: 'development',
+      NEXT_PUBLIC_SITE_URL: undefined,
+      VERCEL_PROJECT_PRODUCTION_URL: undefined,
+      VERCEL_URL: undefined,
+    })
+
+    expect(mod.IS_STAGING).toBe(false)
+    expect(mod.isRuntimeStagingHost('scholar-flow-q1yw.vercel.app')).toBe(true)
+    expect(mod.isRuntimeStagingHost('https://scholar-flow-q1yw.vercel.app/dashboard')).toBe(true)
+    expect(mod.isRuntimeStagingHost('scholarflow.example.com')).toBe(false)
+  })
 })

@@ -8,7 +8,7 @@ const DEPLOY_HOST_HINTS = [
   .filter(Boolean)
   .map((value) => String(value).trim().toLowerCase())
 
-function isKnownStagingHost(value: string): boolean {
+export function isKnownStagingHost(value: string): boolean {
   if (!value) return false
   return (
     value.includes('scholar-flow-q1yw.vercel.app') ||
@@ -19,4 +19,9 @@ function isKnownStagingHost(value: string): boolean {
 }
 
 export const IS_STAGING = APP_ENV === 'staging' || DEPLOY_HOST_HINTS.some(isKnownStagingHost)
+
+export function isRuntimeStagingHost(hostOrUrl: string | null | undefined): boolean {
+  return isKnownStagingHost(String(hostOrUrl || '').trim().toLowerCase())
+}
+
 export { APP_ENV }

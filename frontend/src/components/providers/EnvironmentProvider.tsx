@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { IS_STAGING } from "@/lib/env"
+import { IS_STAGING, isRuntimeStagingHost } from "@/lib/env"
 
 // Dynamically import UAT components to enable tree-shaking in Production
 const EnvironmentBanner = dynamic(() => import("@/components/uat/EnvironmentBanner"), {
@@ -14,11 +14,19 @@ const FeedbackWidget = dynamic(() => import("@/components/uat/FeedbackWidget"), 
 })
 
 export function EnvironmentProvider({ children }: { children: React.ReactNode }) {
-  // If not staging, just render children. 
-  // Next.js compiler + Terser should eliminate the dead code path for the imports if IS_STAGING is hardcoded false at build time.
-  // However, since IS_STAGING is process.env based, it works.
-  
-  if (!IS_STAGING) {
+  const [isStaging, setIsStaging] = React.useState(IS_STAGING)
+
+  React.useEffect(() => {
+    if (IS_STAGING || typeof window === "undefined") return
+    const runtimeHost = `${window.location.hostname} ${window.location.href}`
+    if (isRuntimeStagingHost(runtimeHost)) {
+      setIsStaging(true)
+    }
+  }, [])
+
+  // 如果构建时环境变量没显式标记 staging，则在客户端按当前域名补判一次。
+  // 这样 Vercel 上的 UAT 域名不会因为缺失 NEXT_PUBLIC_APP_ENV 而丢失横幅/反馈组件。
+  if (!isStaging) {
     return <>{children}</>
   }
 
