@@ -614,6 +614,59 @@ def test_exit_review_stage_allows_zero_submitted_reports(
     ]
 
 
+@pytest.mark.parametrize(
+    ("target_stage", "expected_status"),
+    [
+        ("major_revision", "major_revision"),
+        ("minor_revision", "minor_revision"),
+    ],
+)
+def test_exit_review_stage_allows_direct_revision_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    target_stage: str,
+    expected_status: str,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_current_round_review_assignments", lambda **_kwargs: [])
+    transitions: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(
+            update_status=lambda **kwargs: transitions.append(kwargs) or {"status": kwargs["to_status"]}
+        ),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage=target_stage,  # type: ignore[arg-type]
+            note=f"AE requested {target_stage}",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert out["manuscript_status"] == expected_status
+    assert len(transitions) == 1
+    assert transitions[0]["to_status"] == expected_status
+    assert transitions[0]["allow_skip"] is False
+
+
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

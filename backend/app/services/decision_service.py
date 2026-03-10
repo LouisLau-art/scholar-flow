@@ -441,6 +441,7 @@ class DecisionService(
         cancellation_email_sent_assignment_ids: list[str] = []
         cancellation_email_failed_assignment_ids: list[str] = []
         stage_note = str(request.note or "").strip()
+        target_label = str(request.target_stage or "").strip().lower().replace("_", " ")
 
         for row in auto_cancel_candidates:
             assignment_id = str(row.get("id") or "").strip()
@@ -449,7 +450,7 @@ class DecisionService(
             state = self._resolve_review_stage_assignment_state(row)
             reason = (
                 stage_note
-                or f"Review stage exited to {request.target_stage} decision; {state} reviewer assignment closed automatically"
+                or f"Review stage exited to {target_label}; {state} reviewer assignment closed automatically"
             )
             self._cancel_assignment_for_stage_exit(
                 assignment_id=assignment_id,
@@ -478,7 +479,7 @@ class DecisionService(
             if action != "cancel":
                 continue
             reason = resolution.get("reason") or stage_note or (
-                f"Review stage exited to {request.target_stage} decision by editor decision"
+                f"Review stage exited to {target_label} by editor decision"
             )
             self._cancel_assignment_for_stage_exit(
                 assignment_id=assignment_id,
@@ -532,7 +533,7 @@ class DecisionService(
                 payload={**transition_payload, "after": {"status": ManuscriptStatus.DECISION.value}},
             )
             new_status = str(updated.get("status") or ManuscriptStatus.DECISION.value)
-        else:
+        elif target_stage == "final":
             if current_status != ManuscriptStatus.DECISION.value:
                 self.editorial.update_status(
                     manuscript_id=manuscript_id,
@@ -550,6 +551,21 @@ class DecisionService(
                 payload={**transition_payload, "after": {"status": ManuscriptStatus.DECISION_DONE.value}},
             )
             new_status = str(updated.get("status") or ManuscriptStatus.DECISION_DONE.value)
+        elif target_stage in {
+            ManuscriptStatus.MAJOR_REVISION.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+        }:
+            updated = self.editorial.update_status(
+                manuscript_id=manuscript_id,
+                to_status=target_stage,
+                changed_by=user_id,
+                comment=exit_note,
+                allow_skip=False,
+                payload={**transition_payload, "after": {"status": target_stage}},
+            )
+            new_status = str(updated.get("status") or target_stage)
+        else:
+            raise HTTPException(status_code=422, detail="Invalid review-stage exit target")
 
         return {
             "manuscript_status": new_status,

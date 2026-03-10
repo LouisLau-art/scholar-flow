@@ -714,7 +714,8 @@ async def exit_review_stage(
     中文注释:
     - selected/invited/opened reviewer 会自动 cancel；
     - accepted 但未提交 reviewer 必须在 payload 中显式处理；
-    - target_stage=first -> decision，target_stage=final -> decision_done。
+    - target_stage=first -> decision，target_stage=final -> decision_done；
+    - target_stage=major_revision/minor_revision -> 直接进入对应修回状态。
     """
     decision_roles = profile.get("roles") or []
     can_record_first = can_perform_action(action="decision:record_first", roles=decision_roles)

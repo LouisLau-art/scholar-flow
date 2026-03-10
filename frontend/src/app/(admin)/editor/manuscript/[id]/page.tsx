@@ -83,6 +83,22 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   })
 }
 
+type ReviewStageExitTarget = 'first' | 'final' | 'major_revision' | 'minor_revision'
+
+function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
+  switch (target) {
+    case 'major_revision':
+      return 'Major Revision'
+    case 'minor_revision':
+      return 'Minor Revision'
+    case 'final':
+      return 'Final Decision'
+    case 'first':
+    default:
+      return 'First Decision'
+  }
+}
+
 export default function EditorManuscriptDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -108,7 +124,7 @@ export default function EditorManuscriptDetailPage() {
   const [transitionDialogOpen, setTransitionDialogOpen] = useState(false)
   const [transitionReason, setTransitionReason] = useState('')
   const [reviewStageExitDialogOpen, setReviewStageExitDialogOpen] = useState(false)
-  const [reviewStageExitTarget, setReviewStageExitTarget] = useState<'first' | 'final'>('first')
+  const [reviewStageExitTarget, setReviewStageExitTarget] = useState<ReviewStageExitTarget>('first')
   const [reviewStageExitNote, setReviewStageExitNote] = useState('')
   const [reviewStageExitSubmitting, setReviewStageExitSubmitting] = useState(false)
   const [acceptedPendingResolutionByAssignment, setAcceptedPendingResolutionByAssignment] = useState<
@@ -767,7 +783,7 @@ export default function EditorManuscriptDetailPage() {
       if (!res?.success) {
         throw new Error(res?.detail || res?.message || 'Failed to exit review stage')
       }
-      const targetLabel = reviewStageExitTarget === 'first' ? 'First Decision' : 'Final Decision'
+      const targetLabel = getReviewStageExitLabel(reviewStageExitTarget)
       toast.success(
         `Moved manuscript to ${targetLabel}. Auto-cancelled ${res?.data?.auto_cancelled_assignment_ids?.length || 0} reviewer(s).`
       )
@@ -1139,17 +1155,39 @@ export default function EditorManuscriptDetailPage() {
 
           <div className="space-y-5">
             <div className="space-y-2">
-              <div className="text-sm font-medium text-foreground">Next decision stage</div>
+              <div className="text-sm font-medium text-foreground">Next action</div>
               <RadioGroup
                 value={reviewStageExitTarget}
-                onValueChange={(value) => setReviewStageExitTarget(value as 'first' | 'final')}
+                onValueChange={(value) => setReviewStageExitTarget(value as ReviewStageExitTarget)}
                 className="grid gap-2"
               >
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                  <RadioGroupItem id="review-stage-target-major" value="major_revision" className="mt-1" />
+                  <div className="space-y-1">
+                    <Label htmlFor="review-stage-target-major" className="cursor-pointer font-medium">
+                      Direct Major Revision
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      AE 直接把稿件推进到 `major_revision`，作者可立即开始修改。
+                    </div>
+                  </div>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                  <RadioGroupItem id="review-stage-target-minor" value="minor_revision" className="mt-1" />
+                  <div className="space-y-1">
+                    <Label htmlFor="review-stage-target-minor" className="cursor-pointer font-medium">
+                      Direct Minor Revision
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      AE 直接把稿件推进到 `minor_revision`，不必先进入 decision queue。
+                    </div>
+                  </div>
+                </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
                   <RadioGroupItem id="review-stage-target-first" value="first" className="mt-1" />
                   <div className="space-y-1">
                     <Label htmlFor="review-stage-target-first" className="cursor-pointer font-medium">
-                      First Decision
+                      Send to First Decision
                     </Label>
                     <div className="text-xs text-muted-foreground">
                       进入 `decision` 队列，只允许 major revision / minor revision / reject。
@@ -1160,7 +1198,7 @@ export default function EditorManuscriptDetailPage() {
                   <RadioGroupItem id="review-stage-target-final" value="final" className="mt-1" />
                   <div className="space-y-1">
                     <Label htmlFor="review-stage-target-final" className="cursor-pointer font-medium">
-                      Final Decision
+                      Send to Final Decision
                     </Label>
                     <div className="text-xs text-muted-foreground">
                       直接进入 `decision_done` 队列，可供终轮决策使用。

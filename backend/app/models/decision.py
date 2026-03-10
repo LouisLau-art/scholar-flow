@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 DecisionValue = Literal["accept", "reject", "major_revision", "minor_revision"]
 DecisionLetterStatus = Literal["draft", "final"]
-ReviewStageExitTarget = Literal["first", "final"]
+ReviewStageExitTarget = Literal["first", "final", "major_revision", "minor_revision"]
 ReviewStageExitPendingAction = Literal["cancel", "wait"]
 
 
