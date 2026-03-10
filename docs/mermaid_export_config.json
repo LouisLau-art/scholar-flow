@@ -1,0 +1,13 @@
+{
+  "theme": "neutral",
+  "markdownAutoWrap": false,
+  "flowchart": {
+    "htmlLabels": false,
+    "useMaxWidth": false,
+    "curve": "linear"
+  },
+  "themeVariables": {
+    "fontFamily": "Noto Sans CJK SC, Noto Sans SC, Source Han Sans SC, Arial, sans-serif",
+    "fontSize": "16px"
+  }
+}

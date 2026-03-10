@@ -1,0 +1,22 @@
+---
+config:
+  htmlLabels: false
+  markdownAutoWrap: false
+---
+flowchart TD
+    A[Under review or resubmitted] --> B{At least one submitted review?}
+    B -->|no| B1[Stay in review stage]
+    B -->|yes| C[AE opens Exit Review Stage]
+    C --> D[Auto-cancel selected, invited, opened]
+    C --> E{Accepted but not submitted reviewers}
+    E -->|wait| B1
+    E -->|all handled| F{Target stage}
+    D --> F
+    F -->|first| G[Decision queue]
+    F -->|final| H[Decision done queue]
+    G --> I[First Decision: major, minor, reject]
+    H --> J[Final Decision]
+    J -->|accept| K[Production and Finance]
+    J -->|major, minor, reject| L[Revision or reject]
+    I --> L
+    K --> M[Publish]
