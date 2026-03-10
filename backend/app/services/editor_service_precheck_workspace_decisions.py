@@ -340,9 +340,8 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
     ) -> list[dict[str, Any]]:
         """
         EIC Final Decision Queue:
-        - 常规展示 status in decision / decision_done（终审阶段）
-        - 额外展示“已有 first decision 草稿”的 under_review / resubmitted 稿件，
-          便于 EIC 从 AE 草稿接手终审。
+        - 仅展示 status in decision / decision_done（终审阶段）
+        - under_review / resubmitted 必须先通过 Exit Review Stage 进入决策队列
         """
         normalized_roles = set(normalize_roles(viewer_roles))
         decision_stage_statuses = {
@@ -355,8 +354,6 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             .in_(
                 "status",
                 [
-                    ManuscriptStatus.UNDER_REVIEW.value,
-                    ManuscriptStatus.RESUBMITTED.value,
                     ManuscriptStatus.DECISION.value,
                     ManuscriptStatus.DECISION_DONE.value,
                 ],
@@ -417,8 +414,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         filtered_rows: list[dict[str, Any]] = []
         for row in rows:
             status = normalize_status(str(row.get("status") or ""))
-            has_draft = row.get("latest_first_decision_draft") is not None
-            if status in decision_stage_statuses or has_draft:
+            if status in decision_stage_statuses:
                 filtered_rows.append(row)
         return filtered_rows
 

@@ -36,22 +36,7 @@ class DecisionServiceTransitionsMixin:
         audit_payload["after"] = {"status": target_status}
 
         if decision == "reject":
-            if norm == ManuscriptStatus.RESUBMITTED.value:
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION_DONE.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-            elif norm == ManuscriptStatus.DECISION.value:
+            if norm == ManuscriptStatus.DECISION.value:
                 self.editorial.update_status(
                     manuscript_id=manuscript_id,
                     to_status=ManuscriptStatus.DECISION_DONE.value,
@@ -62,7 +47,7 @@ class DecisionServiceTransitionsMixin:
             elif norm != ManuscriptStatus.DECISION_DONE.value:
                 raise HTTPException(
                     status_code=422,
-                    detail="Final reject only allowed in resubmitted/decision/decision_done stage",
+                    detail="Final reject only allowed in decision/decision_done stage",
                 )
             updated = self.editorial.update_status(
                 manuscript_id=manuscript_id,
@@ -75,33 +60,10 @@ class DecisionServiceTransitionsMixin:
             return str(updated.get("status") or ManuscriptStatus.REJECTED.value)
 
         if decision == "accept":
-            if norm == ManuscriptStatus.RESUBMITTED.value:
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION_DONE.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-            elif norm == ManuscriptStatus.DECISION.value:
-                self.editorial.update_status(
-                    manuscript_id=manuscript_id,
-                    to_status=ManuscriptStatus.DECISION_DONE.value,
-                    changed_by=changed_by,
-                    comment="decision workspace auto step",
-                    allow_skip=False,
-                )
-            elif norm != ManuscriptStatus.DECISION_DONE.value:
+            if norm != ManuscriptStatus.DECISION_DONE.value:
                 raise HTTPException(
                     status_code=422,
-                    detail="Final accept only allowed in resubmitted/decision/decision_done stage",
+                    detail="Final accept only allowed in decision_done stage",
                 )
             updated = self.editorial.update_status(
                 manuscript_id=manuscript_id,
@@ -119,14 +81,12 @@ class DecisionServiceTransitionsMixin:
             else ManuscriptStatus.MINOR_REVISION.value
         )
         if norm not in {
-            ManuscriptStatus.UNDER_REVIEW.value,
-            ManuscriptStatus.RESUBMITTED.value,
             ManuscriptStatus.DECISION.value,
             ManuscriptStatus.DECISION_DONE.value,
         }:
             raise HTTPException(
                 status_code=422,
-                detail="Final revision decision only allowed in under_review/resubmitted/decision/decision_done stage",
+                detail="Final revision decision only allowed in decision/decision_done stage",
             )
         updated = self.editorial.update_status(
             manuscript_id=manuscript_id,

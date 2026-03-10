@@ -10,6 +10,10 @@ describe('getDecisionOptionsForStage', () => {
 
   it('allows accept in final decision contexts', () => {
     expect(getDecisionOptionsForStage('decision_done')).toEqual(['accept', 'minor_revision', 'major_revision', 'reject'])
-    expect(getDecisionOptionsForStage('resubmitted')).toEqual(['accept', 'minor_revision', 'major_revision', 'reject'])
+  })
+
+  it('does not expose accept before manuscript enters final decision queue', () => {
+    expect(getDecisionOptionsForStage('resubmitted')).toEqual(['minor_revision', 'major_revision', 'reject'])
+    expect(getDecisionOptionsForStage('under_review')).toEqual(['minor_revision', 'major_revision', 'reject'])
   })
 })

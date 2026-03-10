@@ -221,9 +221,243 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
 
     await page.getByTestId(`reviewer-history-${assignmentId}`).click()
 
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByText(/Invitations History \(Reviewer User\)/i)).toBeVisible()
-    await expect(page.getByText(/sent invitation/i)).toBeVisible()
-    await expect(page.getByText(/queued invitation/i)).toBeVisible()
+    const historyDialog = page.getByRole('dialog')
+    await expect(historyDialog).toBeVisible()
+    await expect(historyDialog.getByText(/Invitations History \(Reviewer User\)/i)).toBeVisible()
+    await expect(historyDialog.getByText(/Invitation sent/i)).toBeVisible()
+    await expect(historyDialog.getByText(/Invitation queued/i)).toBeVisible()
+  })
+
+  test('requires explicit handling of accepted reviewers before exiting review stage', async ({ page }) => {
+    await enableE2EAuthBypass(page)
+    await seedSession(page, buildSession('00000000-0000-0000-0000-000000000001', 'editor@example.com'))
+
+    const manuscriptId = '00000000-0000-0000-0000-000000000302'
+    const acceptedAssignmentId = 'ra-accepted'
+    const invitedAssignmentId = 'ra-invited'
+    let exitPayload: Record<string, unknown> | null = null
+
+    const detailState = {
+      id: manuscriptId,
+      title: 'Review Stage Exit Manuscript',
+      status: 'under_review',
+      updated_at: '2026-03-10T12:00:00Z',
+      created_at: '2026-03-10T10:00:00Z',
+      is_deferred_context_loaded: true,
+      journals: { title: 'Journal C' },
+      owner: { full_name: 'Owner User', email: 'owner@example.com' },
+      editor: { full_name: 'Editor User', email: 'editor@example.com' },
+      assistant_editor: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+      assistant_editor_id: 'ae-1',
+      role_queue: {
+        current_role: 'assistant_editor',
+        current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+      },
+      files: [],
+      signed_files: {},
+      task_summary: {
+        open_tasks_count: 0,
+        overdue_tasks_count: 0,
+        is_overdue: false,
+        nearest_due_at: null,
+      },
+      reviewer_invites: [
+        {
+          id: invitedAssignmentId,
+          reviewer_id: 'reviewer-invited',
+          reviewer_name: 'Invited Reviewer',
+          reviewer_email: 'invited@example.com',
+          status: 'invited',
+          round_number: 1,
+          due_at: '2026-03-20T00:00:00Z',
+          invited_at: '2026-03-10T10:05:00Z',
+          opened_at: null,
+          accepted_at: null,
+          declined_at: null,
+          last_reminded_at: null,
+          submitted_at: null,
+          latest_email_status: 'sent',
+          latest_email_at: '2026-03-10T10:05:03Z',
+          latest_email_error: null,
+          email_events: [],
+        },
+        {
+          id: acceptedAssignmentId,
+          reviewer_id: 'reviewer-accepted',
+          reviewer_name: 'Accepted Reviewer',
+          reviewer_email: 'accepted@example.com',
+          status: 'accepted',
+          round_number: 1,
+          due_at: '2026-03-21T00:00:00Z',
+          invited_at: '2026-03-10T10:01:00Z',
+          opened_at: '2026-03-10T10:10:00Z',
+          accepted_at: '2026-03-10T10:12:00Z',
+          declined_at: null,
+          last_reminded_at: null,
+          submitted_at: null,
+          latest_email_status: 'sent',
+          latest_email_at: '2026-03-10T10:01:03Z',
+          latest_email_error: null,
+          email_events: [],
+        },
+      ],
+      author_response_history: [],
+    }
+
+    await page.route('**/api/v1/**', async (route) => {
+      const req = route.request()
+      const pathname = new URL(req.url()).pathname
+
+      if (pathname === '/api/v1/cms/menu') {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+      if (pathname === '/api/v1/user/profile') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: { roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'] },
+        })
+      }
+      if (pathname === '/api/v1/notifications') {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: '00000000-0000-0000-0000-000000000001',
+            roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'],
+            normalized_roles: ['admin', 'managing_editor', 'assistant_editor', 'editor_in_chief'],
+            allowed_actions: [
+              'process:view',
+              'manuscript:view_detail',
+              'review:assign',
+              'review:view_assignments',
+              'review:unassign',
+              'decision:record_first',
+              'decision:submit_final',
+            ],
+            journal_scope: {
+              enforcement_enabled: false,
+              allowed_journal_ids: [],
+              is_admin: true,
+            },
+          },
+        })
+      }
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}` && req.method() === 'GET') {
+        return fulfillJson(route, 200, { success: true, data: detailState })
+      }
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/cards-context`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            task_summary: detailState.task_summary,
+            role_queue: {
+              current_role: 'assistant_editor',
+              current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+              current_assignee_label: null,
+              assigned_at: '2026-03-10T10:00:00Z',
+              technical_completed_at: null,
+              academic_completed_at: null,
+            },
+          },
+        })
+      }
+      if (pathname === `/api/v1/manuscripts/${manuscriptId}/reviews`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: [
+            {
+              id: 'report-1',
+              reviewer_id: 'reviewer-completed',
+              reviewer_name: 'Completed Reviewer',
+              report_status: 'completed',
+              comments_for_author: 'Good paper',
+              confidential_comments_to_editor: 'Enough to decide',
+              submitted_at: '2026-03-10T11:00:00Z',
+            },
+          ],
+        })
+      }
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/review-stage-exit` && req.method() === 'POST') {
+        exitPayload = (req.postDataJSON() as Record<string, unknown>) || null
+        detailState.status = 'decision'
+        detailState.updated_at = '2026-03-10T12:05:00Z'
+        detailState.reviewer_invites = detailState.reviewer_invites.map((invite) => {
+          if (invite.id === invitedAssignmentId) {
+            return {
+              ...invite,
+              status: 'cancelled',
+              cancelled_at: '2026-03-10T12:05:00Z',
+            }
+          }
+          if (invite.id === acceptedAssignmentId) {
+            return {
+              ...invite,
+              status: 'cancelled',
+              cancelled_at: '2026-03-10T12:05:00Z',
+            }
+          }
+          return invite
+        })
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            manuscript_status: 'decision',
+            target_stage: 'first',
+            auto_cancelled_assignment_ids: [invitedAssignmentId],
+            manually_cancelled_assignment_ids: [acceptedAssignmentId],
+            remaining_pending_assignment_ids: [],
+            cancellation_email_sent_assignment_ids: [acceptedAssignmentId],
+            cancellation_email_failed_assignment_ids: [],
+          },
+        })
+      }
+
+      return fulfillJson(route, 200, { success: true, data: [] })
+    })
+
+    await page.goto(`/editor/manuscript/${manuscriptId}`, { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('heading', { name: 'Review Stage Exit Manuscript' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: /Exit Review Stage/i })).toBeVisible()
+    await expect(page.getByText(/Decision Workspace 仅在 `decision \/ decision_done` 阶段开放/i)).toBeVisible()
+
+    await page.getByRole('button', { name: /Exit Review Stage/i }).click()
+
+    const exitDialog = page.getByRole('dialog')
+    await expect(exitDialog).toBeVisible()
+    await expect(exitDialog.getByText(/系统会自动 cancel 1 位 selected \/ invited \/ opened reviewer/i)).toBeVisible()
+    await expect(exitDialog.getByText(/Accepted but not submitted/i)).toBeVisible()
+    await expect(exitDialog.getByText('Accepted Reviewer', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText(/Please explicitly handle every accepted reviewer/i)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Keep waiting' }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText(/Some accepted reviewers are still marked as waiting/i)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Cancel reviewer' }).click()
+    await page.getByPlaceholder('Explain why review stage is being closed and why any accepted reviewers are being cancelled...').fill(
+      'Two completed reviews are enough for first decision.'
+    )
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await expect(page.getByText(/Moved manuscript to First Decision/i)).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByRole('button', { name: /Open Decision Workspace/i })).toBeVisible()
+
+    expect(exitPayload).toEqual({
+      target_stage: 'first',
+      note: 'Two completed reviews are enough for first decision.',
+      accepted_pending_resolutions: [
+        {
+          assignment_id: acceptedAssignmentId,
+          action: 'cancel',
+          reason: 'Two completed reviews are enough for first decision.',
+        },
+      ],
+    })
   })
 })

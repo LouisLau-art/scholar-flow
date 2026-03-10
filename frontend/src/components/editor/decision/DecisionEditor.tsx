@@ -31,7 +31,7 @@ type DecisionEditorProps = {
 
 export function getDecisionOptionsForStage(manuscriptStatus?: string | null): FinalDecision[] {
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
-  if (normalizedStatus === 'decision_done' || normalizedStatus === 'resubmitted') {
+  if (normalizedStatus === 'decision_done') {
     return ['accept', 'minor_revision', 'major_revision', 'reject']
   }
   return ['minor_revision', 'major_revision', 'reject']
@@ -59,7 +59,6 @@ export function DecisionEditor({
   canSubmit,
   canRecordFirst,
   canSubmitFinal,
-  hasSubmittedAuthorRevision,
   finalBlockingReasons,
   isReadOnly,
   onDirtyChange,
@@ -80,25 +79,22 @@ export function DecisionEditor({
   const decisionSpecificBlockingReasons = useMemo(() => {
     const reasons = [...finalBlockingReasons]
     if (decision === 'major_revision' || decision === 'minor_revision') {
-      if (!['under_review', 'resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
-        reasons.push('Revision decision is only allowed in under_review/resubmitted/decision/decision_done stage')
+      if (!['decision', 'decision_done'].includes(normalizedStatus)) {
+        reasons.push('Revision decision is only allowed in decision/decision_done stage')
       }
       return reasons
     }
     if (decision === 'accept') {
-      if (!['resubmitted', 'decision_done'].includes(normalizedStatus)) {
-        reasons.push('Accept is only allowed in decision_done or after author resubmission')
-      }
-      if (normalizedStatus !== 'decision_done' && !hasSubmittedAuthorRevision) {
-        reasons.push('Final accept requires at least one submitted author revision unless manuscript is already in decision_done')
+      if (normalizedStatus !== 'decision_done') {
+        reasons.push('Accept is only allowed in final decision queue (decision_done)')
       }
       return reasons
     }
-    if (!['resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
-      reasons.push('Final reject requires manuscript status in resubmitted/decision/decision_done')
+    if (!['decision', 'decision_done'].includes(normalizedStatus)) {
+      reasons.push('Final reject requires manuscript status in decision/decision_done')
     }
     return reasons
-  }, [decision, finalBlockingReasons, hasSubmittedAuthorRevision, normalizedStatus])
+  }, [decision, finalBlockingReasons, normalizedStatus])
 
   const canSubmitFinalNow = canSubmitFinal && decisionSpecificBlockingReasons.length === 0
 

@@ -145,7 +145,7 @@ def test_get_decision_context_returns_role_based_permission_flags(
             "id": _id,
             "title": "Demo",
             "abstract": "A",
-            "status": "under_review",
+            "status": "decision",
             "file_path": "manuscripts/demo.pdf",
             "version": 2,
             "author_id": "author-1",
@@ -341,6 +341,85 @@ def test_submit_decision_blocks_first_decision_accept(
             ),
         )
     assert exc.value.status_code == 422
+
+
+def test_get_decision_context_blocks_under_review_until_exit_review_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
+    monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
+    monkeypatch.setattr(svc, "_has_submitted_author_revision", lambda _id: False)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.get_decision_context(
+            manuscript_id="ms-1",
+            user_id="ae-1",
+            profile_roles=["assistant_editor"],
+        )
+
+    assert exc.value.status_code == 400
+    assert "decision workspace unavailable" in str(exc.value.detail).lower()
+
+
+def test_submit_decision_blocks_final_revision_before_decision_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **_kwargs: {"id": "dl-1", "status": "final", "updated_at": "2026-02-12T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(svc, "_transition_for_final_decision", lambda **_kwargs: "major_revision")
+    monkeypatch.setattr(svc, "_notify_author", lambda **_kwargs: None)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_decision(
+            manuscript_id="ms-1",
+            user_id="eic-1",
+            profile_roles=["editor_in_chief"],
+            request=DecisionSubmitRequest(
+                content="Need revision",
+                decision="major_revision",
+                is_final=True,
+                attachment_paths=[],
+                last_updated_at=None,
+            ),
+        )
+
+    assert exc.value.status_code == 422
+    assert "exit review stage first" in str(exc.value.detail).lower()
 
 
 def test_submit_decision_allows_accept_in_decision_done_without_author_revision(

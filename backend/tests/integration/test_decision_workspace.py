@@ -71,22 +71,11 @@ async def test_submit_final_accept_persists_decision_letter_and_updates_status(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="resubmitted",
+        status="decision_done",
         title="Decision Accept Manuscript",
         version=2,
         file_path=f"manuscripts/{manuscript_id}/v2.pdf",
     )
-    supabase_admin_client.table("revisions").insert(
-        {
-            "manuscript_id": manuscript_id,
-            "round_number": 1,
-            "decision_type": "major",
-            "editor_comment": "Please revise and resubmit.",
-            "status": "submitted",
-            "response_letter": "Author addressed all comments.",
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
-        }
-    ).execute()
     supabase_admin_client.table("review_reports").insert(
         {
             "manuscript_id": manuscript_id,
@@ -187,7 +176,7 @@ async def test_reject_blocked_outside_decision_stage(
             },
         )
         assert res.status_code == 422, res.text
-        assert "after author resubmission" in (res.text.lower())
+        assert "exit review stage first" in (res.text.lower())
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
 

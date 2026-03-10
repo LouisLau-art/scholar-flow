@@ -583,8 +583,6 @@ class DecisionService(
 
         status = normalize_status(str(manuscript.get("status") or "")) or ""
         if status not in {
-            ManuscriptStatus.UNDER_REVIEW.value,
-            ManuscriptStatus.RESUBMITTED.value,
             ManuscriptStatus.DECISION.value,
             ManuscriptStatus.DECISION_DONE.value,
         }:
@@ -595,8 +593,6 @@ class DecisionService(
         can_submit_final = can_perform_action(action="decision:submit_final", roles=roles)
         has_submitted_author_revision = self._has_submitted_author_revision(manuscript_id)
         is_final_status_allowed = status in {
-            ManuscriptStatus.UNDER_REVIEW.value,
-            ManuscriptStatus.RESUBMITTED.value,
             ManuscriptStatus.DECISION.value,
             ManuscriptStatus.DECISION_DONE.value,
         }
@@ -606,7 +602,7 @@ class DecisionService(
             final_blocking_reasons.append("At least one submitted review report is required")
         if not is_final_status_allowed:
             final_blocking_reasons.append(
-                "Decision submission is only allowed in under_review/resubmitted/decision/decision_done stage"
+                "Decision submission is only allowed in decision/decision_done stage"
             )
 
         draft = self._get_latest_letter(
@@ -708,44 +704,19 @@ class DecisionService(
                 detail="Exit review stage first; first decision draft is only available in decision stage",
             )
         if request.is_final:
-            if decision in {"major_revision", "minor_revision"}:
-                if current_status not in {
-                    ManuscriptStatus.UNDER_REVIEW.value,
-                    ManuscriptStatus.RESUBMITTED.value,
-                    ManuscriptStatus.DECISION.value,
-                    ManuscriptStatus.DECISION_DONE.value,
-                }:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=(
-                            "Revision decision is only allowed in under_review/"
-                            "resubmitted/decision/decision_done stage"
-                        ),
-                    )
-            else:
-                if current_status not in {
-                    ManuscriptStatus.RESUBMITTED.value,
-                    ManuscriptStatus.DECISION.value,
-                    ManuscriptStatus.DECISION_DONE.value,
-                }:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=(
-                            "Final decision is only allowed after author resubmission "
-                            "(status must be resubmitted/decision/decision_done)"
-                        ),
-                    )
-                has_submitted_revision = self._has_submitted_author_revision(manuscript_id)
-                if decision == "accept" and current_status != ManuscriptStatus.DECISION_DONE.value and not has_submitted_revision:
-                    raise HTTPException(
-                        status_code=422,
-                        detail="Final decision requires at least one submitted author revision",
-                    )
-                if decision == "accept" and current_status == ManuscriptStatus.DECISION.value:
-                    raise HTTPException(
-                        status_code=422,
-                        detail="Accept is only allowed in final decision queue (decision_done) or after author resubmission",
-                    )
+            if current_status not in {
+                ManuscriptStatus.DECISION.value,
+                ManuscriptStatus.DECISION_DONE.value,
+            }:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Exit review stage first; final decision submission is only available in decision/decision_done stage",
+                )
+            if decision == "accept" and current_status != ManuscriptStatus.DECISION_DONE.value:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Accept is only allowed in final decision queue (decision_done)",
+                )
 
         existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
         row = self._save_letter(

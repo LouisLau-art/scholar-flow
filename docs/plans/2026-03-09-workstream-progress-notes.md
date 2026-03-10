@@ -203,3 +203,45 @@
   - `cd backend && pytest -q -o addopts= tests/integration/test_editor_invite.py tests/unit/test_decision_service_access.py -k 'cancel or exit_review_stage'`
   - `cd frontend && bunx tsc --noEmit`
   - `cd frontend && bun run lint`
+
+## 2026-03-10 继续推进：decision 边界收紧与 review-stage-exit E2E
+
+- decision 边界已按第二阶段设计继续收紧：
+  - `backend/app/services/decision_service.py`
+  - `backend/app/services/decision_service_transitions.py`
+  - `backend/app/services/editor_service_precheck_workspace_decisions.py`
+- 新口径：
+  - `Decision Workspace` 仅在 `decision / decision_done` 阶段开放
+  - `under_review / resubmitted` 不再允许直接打开决策工作台
+  - `final decision` 提交不再接受 `under_review / resubmitted`
+  - `accept` 仅允许在 `decision_done`
+  - `Final Decision Queue` 不再因为“已有 first decision draft”而把 `under_review / resubmitted` 稿件提前捞入终审队列
+- 前端已同步：
+  - `frontend/src/components/editor/decision/DecisionEditor.tsx`
+  - `frontend/src/app/(admin)/editor/academic/page.tsx`
+  - `resubmitted` 不再展示 `accept`
+  - `decision` 阶段仍允许 `major_revision / minor_revision / reject`
+
+- 已补 decision 边界红绿回归：
+  - `backend/tests/unit/test_decision_service_access.py`
+  - `backend/tests/unit/test_editor_service.py`
+  - `backend/tests/integration/test_decision_workspace.py`
+  - `frontend/src/components/editor/decision/DecisionEditor.test.ts`
+
+- 已新增 AE `review-stage-exit` 浏览器级回归：
+  - `frontend/tests/e2e/specs/reviewer_management_delivery.spec.ts`
+  - 覆盖：
+    - 外审阶段详情页先显示 `Exit Review Stage`
+    - 未处理 accepted reviewer 时，`Continue` 会被前端拦截
+    - 将 accepted reviewer 标记为 `Keep waiting` 时仍禁止退出
+    - 显式改成 `Cancel reviewer` 后允许提交
+    - 成功后详情页刷新到 `decision`
+    - `Open Decision Workspace` 随之开放
+
+- 本轮定向验证：
+  - `cd backend && pytest -q -o addopts= tests/unit/test_decision_service_access.py tests/unit/test_editor_service.py tests/integration/test_decision_workspace.py`
+  - `cd backend && uvx ruff check app/services/decision_service.py app/services/decision_service_transitions.py app/services/editor_service_precheck_workspace_decisions.py tests/unit/test_decision_service_access.py tests/unit/test_editor_service.py tests/integration/test_decision_workspace.py --select=E9,F63,F7,F82`
+  - `cd frontend && bun run test:run src/components/editor/decision/DecisionEditor.test.ts 'src/app/(admin)/editor/manuscript/[id]/__tests__/helpers.reviewer-history.test.ts'`
+  - `cd frontend && bun run test:e2e tests/e2e/specs/reviewer_management_delivery.spec.ts`
+  - `cd frontend && bun run lint`
+  - `cd frontend && bunx tsc --noEmit`
