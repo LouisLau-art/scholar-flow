@@ -5,6 +5,8 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-${UAT_API_BASE_URL:-}}"
 ADMIN_KEY="${ADMIN_API_KEY:-}"
 EXPECTED_DEPLOY_SHA="${EXPECTED_DEPLOY_SHA:-}"
+RUNTIME_SHA_WAIT_ATTEMPTS="${RUNTIME_SHA_WAIT_ATTEMPTS:-12}"
+RUNTIME_SHA_WAIT_SECONDS="${RUNTIME_SHA_WAIT_SECONDS:-5}"
 
 usage() {
   cat <<'EOF'
@@ -93,23 +95,33 @@ fi
 
 runtime_sha="-"
 if [[ -n "${EXPECTED_DEPLOY_SHA}" ]]; then
-  runtime_tmp_file="$(mktemp)"
-  runtime_http_status="$(
-    curl -sS -o "${runtime_tmp_file}" -w "%{http_code}" \
-      -H "X-Admin-Key: ${ADMIN_KEY}" \
-      "${BASE_URL}/api/v1/internal/runtime-version"
-  )"
-  runtime_body="$(cat "${runtime_tmp_file}")"
-  rm -f "${runtime_tmp_file}"
+  for attempt in $(seq 1 "${RUNTIME_SHA_WAIT_ATTEMPTS}"); do
+    runtime_tmp_file="$(mktemp)"
+    runtime_http_status="$(
+      curl -sS -o "${runtime_tmp_file}" -w "%{http_code}" \
+        -H "X-Admin-Key: ${ADMIN_KEY}" \
+        "${BASE_URL}/api/v1/internal/runtime-version"
+    )"
+    runtime_body="$(cat "${runtime_tmp_file}")"
+    rm -f "${runtime_tmp_file}"
 
-  if [[ "${runtime_http_status}" -ge 400 ]]; then
-    echo "[platform-readiness] runtime version request failed: HTTP ${runtime_http_status}" >&2
-    echo "${runtime_body}" >&2
-    exit 4
-  fi
+    if [[ "${runtime_http_status}" -ge 400 ]]; then
+      echo "[platform-readiness] runtime version request failed: HTTP ${runtime_http_status}" >&2
+      echo "${runtime_body}" >&2
+      exit 4
+    fi
 
-  runtime_sha="$(echo "${runtime_body}" | jq -er '.deploy_sha // "-"')"
-  echo "[platform-readiness] runtime_sha=${runtime_sha} expected=${EXPECTED_DEPLOY_SHA}"
+    runtime_sha="$(echo "${runtime_body}" | jq -er '.deploy_sha // "-"')"
+    echo "[platform-readiness] runtime_sha=${runtime_sha} expected=${EXPECTED_DEPLOY_SHA} attempt=${attempt}/${RUNTIME_SHA_WAIT_ATTEMPTS}"
+
+    if [[ "${runtime_sha}" == "${EXPECTED_DEPLOY_SHA}" ]]; then
+      break
+    fi
+
+    if [[ "${attempt}" -lt "${RUNTIME_SHA_WAIT_ATTEMPTS}" ]]; then
+      sleep "${RUNTIME_SHA_WAIT_SECONDS}"
+    fi
+  done
 
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     {
