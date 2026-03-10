@@ -50,18 +50,21 @@ set +e
 mismatch_report="$(
   MIGRATION_OUTPUT="${migration_output}" python - <<'PY'
 import os
-import re
 import sys
 
 rows: list[tuple[str, str]] = []
-pattern = re.compile(r"^\s*([0-9]{14}|[A-Za-z0-9_-]+)?\s*\|\s*([0-9]{14}|[A-Za-z0-9_-]+)?\s*\|")
 for raw_line in os.environ.get("MIGRATION_OUTPUT", "").splitlines():
-    line = raw_line.rstrip()
-    matched = pattern.match(line)
-    if not matched:
+    line = raw_line.strip()
+    if "|" not in line:
         continue
-    local_version = (matched.group(1) or "").strip()
-    remote_version = (matched.group(2) or "").strip()
+    parts = [part.strip() for part in line.split("|")]
+    if len(parts) < 3:
+        continue
+    local_version, remote_version = parts[0], parts[1]
+    if not local_version.isdigit() or len(local_version) != 14:
+        continue
+    if not remote_version.isdigit() or len(remote_version) != 14:
+        continue
     rows.append((local_version, remote_version))
 
 if not rows:
