@@ -29,6 +29,14 @@ type DecisionEditorProps = {
   onSubmitted: (manuscriptStatus: string) => void
 }
 
+export function getDecisionOptionsForStage(manuscriptStatus?: string | null): FinalDecision[] {
+  const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  if (normalizedStatus === 'decision_done' || normalizedStatus === 'resubmitted') {
+    return ['accept', 'minor_revision', 'major_revision', 'reject']
+  }
+  return ['minor_revision', 'major_revision', 'reject']
+}
+
 function toAttachmentRef(attachment: DecisionAttachment): string {
   return `${attachment.id}|${attachment.path}`
 }
@@ -65,9 +73,10 @@ export function DecisionEditor({
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const baselineRef = useRef('')
-  const canEditDraft = canRecordFirst || canSubmitFinal
 
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  const canEditDraft = (canRecordFirst || canSubmitFinal) && normalizedStatus === 'decision'
+  const decisionOptions = useMemo(() => getDecisionOptionsForStage(manuscriptStatus), [manuscriptStatus])
   const decisionSpecificBlockingReasons = useMemo(() => {
     const reasons = [...finalBlockingReasons]
     if (decision === 'major_revision' || decision === 'minor_revision') {
@@ -76,11 +85,17 @@ export function DecisionEditor({
       }
       return reasons
     }
-    if (!['resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
-      reasons.push('Final accept/reject requires manuscript status in resubmitted/decision/decision_done')
+    if (decision === 'accept') {
+      if (!['resubmitted', 'decision_done'].includes(normalizedStatus)) {
+        reasons.push('Accept is only allowed in decision_done or after author resubmission')
+      }
+      if (normalizedStatus !== 'decision_done' && !hasSubmittedAuthorRevision) {
+        reasons.push('Final accept requires at least one submitted author revision unless manuscript is already in decision_done')
+      }
+      return reasons
     }
-    if (!hasSubmittedAuthorRevision) {
-      reasons.push('Final decision requires at least one submitted author revision')
+    if (!['resubmitted', 'decision', 'decision_done'].includes(normalizedStatus)) {
+      reasons.push('Final reject requires manuscript status in resubmitted/decision/decision_done')
     }
     return reasons
   }, [decision, finalBlockingReasons, hasSubmittedAuthorRevision, normalizedStatus])
@@ -99,9 +114,10 @@ export function DecisionEditor({
   )
 
   useEffect(() => {
+    const availableOptions = getDecisionOptionsForStage(manuscriptStatus)
     const fromDraft = initialDraft
       ? {
-          decision: initialDraft.decision,
+          decision: availableOptions.includes(initialDraft.decision) ? initialDraft.decision : availableOptions[0],
           content: initialDraft.content || '',
           lastUpdatedAt: initialDraft.last_updated_at || null,
           attachments: (initialDraft.attachments || []).map((item) =>
@@ -109,7 +125,7 @@ export function DecisionEditor({
           ),
         }
       : {
-          decision: 'minor_revision' as FinalDecision,
+          decision: availableOptions[0],
           content: templateContent || '',
           lastUpdatedAt: null,
           attachments: [] as LocalAttachment[],
@@ -127,7 +143,7 @@ export function DecisionEditor({
       attachments: fromDraft.attachments.map((item) => ({ id: item.id, path: item.path, ref: item.ref })),
     })
     onDirtyChange(false)
-  }, [initialDraft, templateContent, onDirtyChange])
+  }, [initialDraft, manuscriptStatus, templateContent, onDirtyChange])
 
   useEffect(() => {
     onDirtyChange(snapshot !== baselineRef.current && !isReadOnly)
@@ -189,7 +205,7 @@ export function DecisionEditor({
   const submit = async (isFinal: boolean) => {
     if (isReadOnly) return
     if (!isFinal && !canEditDraft) {
-      toast.error('Current role cannot save first decision draft')
+      toast.error('First decision draft is only available in decision stage')
       return
     }
     if (isFinal && !content.trim()) {
@@ -270,10 +286,17 @@ export function DecisionEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="accept">Accept</SelectItem>
-              <SelectItem value="minor_revision">Minor Revision</SelectItem>
-              <SelectItem value="major_revision">Major Revision</SelectItem>
-              <SelectItem value="reject">Reject</SelectItem>
+              {decisionOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option === 'accept'
+                    ? 'Accept'
+                    : option === 'minor_revision'
+                      ? 'Minor Revision'
+                      : option === 'major_revision'
+                        ? 'Major Revision'
+                        : 'Reject'}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

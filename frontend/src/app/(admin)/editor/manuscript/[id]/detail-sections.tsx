@@ -322,6 +322,7 @@ const REVIEWER_STATE_LABELS = {
   accepted: 'Accepted',
   submitted: 'Submitted',
   declined: 'Declined',
+  cancelled: 'Cancelled',
 } as const
 
 function resolveInviteStateMeta(invite: ReviewerInviteRow | null | undefined) {
@@ -337,6 +338,8 @@ function resolveInviteStateMeta(invite: ReviewerInviteRow | null | undefined) {
             ? invite?.accepted_at || invite?.submitted_at || null
             : state === 'declined'
               ? invite?.declined_at || null
+              : state === 'cancelled'
+                ? invite?.cancelled_at || null
               : null
 
   return {
@@ -344,7 +347,7 @@ function resolveInviteStateMeta(invite: ReviewerInviteRow | null | undefined) {
     label: REVIEWER_STATE_LABELS[state],
     stateAt,
     className:
-      state === 'declined'
+      state === 'declined' || state === 'cancelled'
         ? 'font-medium text-destructive'
         : state === 'selected'
           ? 'font-medium text-muted-foreground'
@@ -372,6 +375,13 @@ function resolveReviewProgressMeta(invite: ReviewerInviteRow | null | undefined)
     return {
       label: 'Declined',
       at: invite?.declined_at || null,
+      className: 'font-medium text-destructive',
+    }
+  }
+  if (state === 'cancelled') {
+    return {
+      label: 'Cancelled',
+      at: invite?.cancelled_at || null,
       className: 'font-medium text-destructive',
     }
   }
@@ -707,6 +717,7 @@ export function ReviewerInviteSummaryCard({
       accepted: 0,
       submitted: 0,
       declined: 0,
+      cancelled: 0,
     } satisfies Record<keyof typeof REVIEWER_STATE_LABELS, number>
   )
 
@@ -837,6 +848,7 @@ type EditorialActionsCardProps = {
   manuscriptId: string
   isPostAcceptance: boolean
   canAssignReviewersStage: boolean
+  canExitReviewStage: boolean
   canOpenDecisionWorkspaceStage: boolean
   canManageReviewers: boolean
   viewerRoles: string[]
@@ -852,6 +864,7 @@ type EditorialActionsCardProps = {
   transitioning: string | null
   currentAeId: string
   onReviewerChanged: () => void
+  onOpenReviewStageExitDialog: () => void
   onOpenDecisionWorkspace: () => void
   onOpenProductionWorkspace: () => void
   onProductionStatusChange: (next: string) => void
@@ -864,6 +877,7 @@ export function EditorialActionsCard({
   manuscriptId,
   isPostAcceptance,
   canAssignReviewersStage,
+  canExitReviewStage,
   canOpenDecisionWorkspaceStage,
   canManageReviewers,
   viewerRoles,
@@ -879,6 +893,7 @@ export function EditorialActionsCard({
   transitioning,
   currentAeId,
   onReviewerChanged,
+  onOpenReviewStageExitDialog,
   onOpenDecisionWorkspace,
   onOpenProductionWorkspace,
   onProductionStatusChange,
@@ -909,6 +924,13 @@ export function EditorialActionsCard({
           </div>
         )}
 
+        {!isPostAcceptance && canExitReviewStage && (
+          <Button className="w-full justify-between" variant="outline" onClick={onOpenReviewStageExitDialog}>
+            Exit Review Stage
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        )}
+
         {!isPostAcceptance && canOpenDecisionWorkspaceStage && (
           <Button
             className="w-full justify-between"
@@ -922,7 +944,7 @@ export function EditorialActionsCard({
         )}
         {!isPostAcceptance && !canOpenDecisionWorkspaceStage && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            Decision Workspace 仅在 `under_review / resubmitted / decision / decision_done` 阶段开放。
+            Decision Workspace 仅在 `decision / decision_done` 阶段开放。外审阶段请先使用 `Exit Review Stage`。
           </div>
         )}
 

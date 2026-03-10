@@ -61,6 +61,12 @@ export type ManuscriptDetail = {
     submitted_at?: string | null
     decline_reason?: string | null
     decline_note?: string | null
+    cancelled_at?: string | null
+    cancelled_by_id?: string | null
+    cancelled_by_name?: string | null
+    cancelled_by_email?: string | null
+    cancel_reason?: string | null
+    cancel_via?: string | null
     latest_email_status?: string | null
     latest_email_at?: string | null
     latest_email_error?: string | null
@@ -107,6 +113,7 @@ export type ReviewerInviteSummaryState =
   | 'accepted'
   | 'submitted'
   | 'declined'
+  | 'cancelled'
 
 type ReviewerInviteSummaryItem = NonNullable<ManuscriptDetail['reviewer_invites']>[number]
 
@@ -114,6 +121,9 @@ export function resolveReviewerInviteSummaryState(
   invite: ReviewerInviteSummaryItem | null | undefined
 ): ReviewerInviteSummaryState {
   const statusRaw = String(invite?.status || '').trim().toLowerCase()
+  if (statusRaw === 'cancelled' || invite?.cancelled_at) {
+    return 'cancelled'
+  }
   if (statusRaw === 'declined' || statusRaw === 'decline' || invite?.declined_at) {
     return 'declined'
   }

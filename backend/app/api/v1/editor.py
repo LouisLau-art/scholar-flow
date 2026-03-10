@@ -20,7 +20,7 @@ from app.services.reviewer_service import ReviewerService, ReviewPolicyService  
 from app.services.matchmaking_service import MatchmakingService  # noqa: F401 (monkeypatch compat)
 from app.services.editor_service import EditorService  # noqa: F401 (monkeypatch compat)
 from app.services.decision_service import DecisionService
-from app.models.decision import DecisionSubmitRequest
+from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from typing import Annotated, Any
 from uuid import uuid4
 from app.api.v1.editor_internal_collaboration import router as internal_collab_router
@@ -693,6 +693,36 @@ async def submit_decision_workspace(
             _require_action_or_403(action="decision:record_first", roles=decision_roles)
 
     data = DecisionService().submit_decision(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=decision_roles,
+        request=payload,
+    )
+    return {"success": True, "data": data}
+
+
+@router.post("/manuscripts/{id}/review-stage-exit")
+async def exit_review_stage(
+    id: str,
+    payload: ReviewStageExitRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_DECISION_ROLES)),
+):
+    """
+    Reviewer Phase 2: 显式结束 under_review / resubmitted 外审阶段。
+
+    中文注释:
+    - selected/invited/opened reviewer 会自动 cancel；
+    - accepted 但未提交 reviewer 必须在 payload 中显式处理；
+    - target_stage=first -> decision，target_stage=final -> decision_done。
+    """
+    decision_roles = profile.get("roles") or []
+    can_record_first = can_perform_action(action="decision:record_first", roles=decision_roles)
+    can_submit_final = can_perform_action(action="decision:submit_final", roles=decision_roles)
+    if not (can_record_first or can_submit_final):
+        _require_action_or_403(action="decision:record_first", roles=decision_roles)
+
+    data = DecisionService().exit_review_stage(
         manuscript_id=id,
         user_id=str(current_user.get("id") or ""),
         profile_roles=decision_roles,

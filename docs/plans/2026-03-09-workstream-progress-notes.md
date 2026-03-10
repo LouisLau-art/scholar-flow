@@ -76,6 +76,22 @@
     - 稿件详情页 `Reviewer Management` 已返回 cancel 审计字段
     - reviewer history 已返回 cancel 审计字段
     - `cancelled` assignment 会立即失去 reviewer 会话访问资格
+- reviewer decision / cancel 第二阶段第二批已落地：
+  - 已新增显式动作接口：
+    - `POST /api/v1/editor/manuscripts/{id}/review-stage-exit`
+  - 行为收敛：
+    - `under_review / resubmitted` 离开外审前必须至少存在一份 submitted review
+    - `selected / invited / opened` reviewer 会在 exit 时自动 `cancel`
+    - `accepted but not submitted` reviewer 需要 AE 显式选择后才能继续退出外审
+    - `target_stage=first` 会把稿件推进到 `decision`
+    - `target_stage=final` 会串行推进到 `decision_done`
+  - 决策工作台规则同步收紧：
+    - first decision 不再允许 `accept`
+    - `Decision Workspace` 在详情页仅对 `decision / decision_done` 开放
+    - 旧的 `under_review -> save first decision draft` 绕路口子已封住
+  - reviewer 状态展示补全：
+    - 前端 reviewer summary / management 已正式识别 `cancelled`
+    - `cancelled` 不再被误显示成 `selected`
 
 ## 已写计划与说明文档
 

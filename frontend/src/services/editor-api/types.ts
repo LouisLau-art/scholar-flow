@@ -42,6 +42,18 @@ export type DecisionSubmissionPayload = {
   last_updated_at: string | null
 }
 
+export type ReviewStageExitPendingResolutionPayload = {
+  assignment_id: string
+  action: 'cancel' | 'wait'
+  reason?: string
+}
+
+export type ReviewStageExitPayload = {
+  target_stage: 'first' | 'final'
+  note?: string
+  accepted_pending_resolutions?: ReviewStageExitPendingResolutionPayload[]
+}
+
 export type ProductionCycleCreatePayload = {
   layout_editor_id: string
   collaborator_editor_ids?: string[]

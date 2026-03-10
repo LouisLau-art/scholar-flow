@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
-from app.models.decision import DecisionSubmitRequest
+from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.services.decision_service_attachments import DecisionServiceAttachmentMixin
 from app.services.decision_service_letters import DecisionServiceLettersMixin
@@ -237,6 +237,288 @@ class DecisionService(
             except Exception:
                 return
 
+    def _resolve_review_stage_assignment_state(self, row: dict[str, Any]) -> str:
+        status_raw = normalize_status(str(row.get("status") or "")) or ""
+        if status_raw == "cancelled" or row.get("cancelled_at"):
+            return "cancelled"
+        if status_raw == "declined" or row.get("declined_at"):
+            return "declined"
+        if status_raw in {"completed", "submitted"} or row.get("submitted_at"):
+            return "submitted"
+        if status_raw in {"accepted", "agree", "agreed"} or row.get("accepted_at"):
+            return "accepted"
+        if status_raw == "opened" or row.get("opened_at"):
+            return "opened"
+        if status_raw == "invited" or row.get("invited_at"):
+            return "invited"
+        return "selected"
+
+    def _list_current_round_review_assignments(
+        self,
+        *,
+        manuscript_id: str,
+        manuscript_version: int | None,
+    ) -> list[dict[str, Any]]:
+        select_variants = [
+            "id, reviewer_id, round_number, status, created_at, invited_at, opened_at, accepted_at, declined_at, submitted_at, cancelled_at",
+            "id, reviewer_id, round_number, status, created_at, invited_at, opened_at, accepted_at, declined_at, cancelled_at",
+            "id, reviewer_id, round_number, status, created_at, invited_at, opened_at, accepted_at, declined_at",
+            "id, reviewer_id, round_number, status, created_at, invited_at, opened_at, accepted_at",
+            "id, reviewer_id, round_number, status, created_at, invited_at, opened_at",
+            "id, reviewer_id, round_number, status, created_at, invited_at",
+            "id, reviewer_id, round_number, status, created_at",
+        ]
+        rows: list[dict[str, Any]] = []
+        last_error: Exception | None = None
+        for select_clause in select_variants:
+            try:
+                resp = (
+                    self.client.table("review_assignments")
+                    .select(select_clause)
+                    .eq("manuscript_id", manuscript_id)
+                    .order("created_at", desc=True)
+                    .execute()
+                )
+                rows = getattr(resp, "data", None) or []
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                if "column" not in str(exc).lower() and "does not exist" not in str(exc).lower():
+                    raise
+                continue
+        if last_error is not None:
+            raise last_error
+        if not rows:
+            return []
+
+        target_round: int | None = None
+        if manuscript_version is not None and any(
+            int(item.get("round_number") or 1) == int(manuscript_version) for item in rows
+        ):
+            target_round = int(manuscript_version)
+        else:
+            try:
+                target_round = max(int(item.get("round_number") or 1) for item in rows)
+            except Exception:
+                target_round = None
+
+        if target_round is None:
+            return rows
+        return [
+            item
+            for item in rows
+            if int(item.get("round_number") or 1) == target_round
+        ]
+
+    def _cancel_assignment_for_stage_exit(
+        self,
+        *,
+        assignment_id: str,
+        changed_by: str,
+        reason: str,
+        via: str,
+    ) -> None:
+        now_iso = _utc_now_iso()
+        payload = {
+            "status": "cancelled",
+            "cancelled_at": now_iso,
+            "cancelled_by": changed_by,
+            "cancel_reason": reason,
+            "cancel_via": via,
+        }
+        fallback_payload = {"status": "cancelled"}
+        try:
+            self.client.table("review_assignments").update(payload).eq("id", assignment_id).execute()
+        except Exception as exc:
+            lowered = str(exc).lower()
+            if "cancelled_" not in lowered and "cancel_reason" not in lowered and "cancel_via" not in lowered:
+                raise
+            self.client.table("review_assignments").update(fallback_payload).eq("id", assignment_id).execute()
+
+    def exit_review_stage(
+        self,
+        *,
+        manuscript_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        request: ReviewStageExitRequest,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        self._ensure_internal_decision_access(
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            user_id=user_id,
+            roles=roles,
+            action="decision:record_first",
+        )
+
+        current_status = normalize_status(str(manuscript.get("status") or "")) or ""
+        if current_status not in {
+            ManuscriptStatus.UNDER_REVIEW.value,
+            ManuscriptStatus.RESUBMITTED.value,
+        }:
+            raise HTTPException(
+                status_code=422,
+                detail="Review-stage exit is only allowed in under_review/resubmitted stage",
+            )
+
+        reports = self._list_submitted_reports(manuscript_id)
+        if len(reports) == 0:
+            raise HTTPException(
+                status_code=422,
+                detail="At least one submitted review report is required before leaving under_review",
+            )
+
+        assignments = self._list_current_round_review_assignments(
+            manuscript_id=manuscript_id,
+            manuscript_version=int(manuscript.get("version") or 1),
+        )
+
+        accepted_pending = [
+            row
+            for row in assignments
+            if self._resolve_review_stage_assignment_state(row) == "accepted"
+        ]
+        auto_cancel_candidates = [
+            row
+            for row in assignments
+            if self._resolve_review_stage_assignment_state(row) in {"selected", "invited", "opened"}
+        ]
+
+        resolution_map: dict[str, dict[str, str]] = {}
+        for item in list(request.accepted_pending_resolutions or []):
+            assignment_id = str(item.assignment_id or "").strip()
+            if assignment_id:
+                resolution_map[assignment_id] = {
+                    "action": str(item.action or "").strip().lower(),
+                    "reason": str(item.reason or "").strip(),
+                }
+
+        accepted_pending_ids = {str(row.get("id") or "").strip() for row in accepted_pending if row.get("id")}
+        unresolved_ids = sorted(
+            assignment_id for assignment_id in accepted_pending_ids if assignment_id not in resolution_map
+        )
+        if unresolved_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="All accepted-but-not-submitted reviewers must be explicitly handled before leaving under_review",
+            )
+
+        waiting_ids = sorted(
+            assignment_id
+            for assignment_id, item in resolution_map.items()
+            if assignment_id in accepted_pending_ids and item.get("action") == "wait"
+        )
+        if waiting_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="Review-stage exit is blocked because some accepted reviewers are marked to continue waiting",
+            )
+
+        auto_cancelled_ids: list[str] = []
+        manually_cancelled_ids: list[str] = []
+        stage_note = str(request.note or "").strip()
+
+        for row in auto_cancel_candidates:
+            assignment_id = str(row.get("id") or "").strip()
+            if not assignment_id:
+                continue
+            state = self._resolve_review_stage_assignment_state(row)
+            reason = (
+                stage_note
+                or f"Review stage exited to {request.target_stage} decision; {state} reviewer assignment closed automatically"
+            )
+            self._cancel_assignment_for_stage_exit(
+                assignment_id=assignment_id,
+                changed_by=user_id,
+                reason=reason,
+                via="auto_stage_exit",
+            )
+            auto_cancelled_ids.append(assignment_id)
+
+        for row in accepted_pending:
+            assignment_id = str(row.get("id") or "").strip()
+            if not assignment_id:
+                continue
+            resolution = resolution_map.get(assignment_id) or {}
+            action = str(resolution.get("action") or "").strip().lower()
+            if action != "cancel":
+                continue
+            reason = resolution.get("reason") or stage_note or (
+                f"Review stage exited to {request.target_stage} decision after sufficient reviews were received"
+            )
+            self._cancel_assignment_for_stage_exit(
+                assignment_id=assignment_id,
+                changed_by=user_id,
+                reason=str(reason).strip(),
+                via="post_acceptance_cleanup",
+            )
+            manually_cancelled_ids.append(assignment_id)
+
+        remaining_pending_ids = sorted(
+            assignment_id
+            for assignment_id in accepted_pending_ids
+            if assignment_id not in set(manually_cancelled_ids)
+        )
+        if remaining_pending_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="Accepted reviewers remain active; stay in under_review or cancel them before proceeding",
+            )
+
+        target_stage = str(request.target_stage or "").strip().lower()
+        exit_note = stage_note or (
+            "review stage exited with sufficient reviewer feedback"
+        )
+        transition_payload = {
+            "action": "review_stage_exit",
+            "source": "editor_detail",
+            "reason": "editor_exit_review_stage",
+            "target_stage": target_stage,
+            "auto_cancelled_assignment_ids": auto_cancelled_ids,
+            "manually_cancelled_assignment_ids": manually_cancelled_ids,
+            "before": {"status": current_status},
+        }
+
+        if target_stage == "first":
+            updated = self.editorial.update_status(
+                manuscript_id=manuscript_id,
+                to_status=ManuscriptStatus.DECISION.value,
+                changed_by=user_id,
+                comment=exit_note,
+                allow_skip=False,
+                payload={**transition_payload, "after": {"status": ManuscriptStatus.DECISION.value}},
+            )
+            new_status = str(updated.get("status") or ManuscriptStatus.DECISION.value)
+        else:
+            if current_status != ManuscriptStatus.DECISION.value:
+                self.editorial.update_status(
+                    manuscript_id=manuscript_id,
+                    to_status=ManuscriptStatus.DECISION.value,
+                    changed_by=user_id,
+                    comment="review stage exit auto step",
+                    allow_skip=False,
+                )
+            updated = self.editorial.update_status(
+                manuscript_id=manuscript_id,
+                to_status=ManuscriptStatus.DECISION_DONE.value,
+                changed_by=user_id,
+                comment=exit_note,
+                allow_skip=False,
+                payload={**transition_payload, "after": {"status": ManuscriptStatus.DECISION_DONE.value}},
+            )
+            new_status = str(updated.get("status") or ManuscriptStatus.DECISION_DONE.value)
+
+        return {
+            "manuscript_status": new_status,
+            "target_stage": target_stage,
+            "auto_cancelled_assignment_ids": auto_cancelled_ids,
+            "manually_cancelled_assignment_ids": manually_cancelled_ids,
+            "remaining_pending_assignment_ids": remaining_pending_ids,
+        }
+
     def get_decision_context(
         self, *, manuscript_id: str, user_id: str, profile_roles: list[str] | None
     ) -> dict[str, Any]:
@@ -354,6 +636,11 @@ class DecisionService(
         decision = str(request.decision).strip().lower()
         if decision not in {"accept", "reject", "major_revision", "minor_revision"}:
             raise HTTPException(status_code=422, detail="Invalid decision")
+        if not request.is_final and decision == "accept":
+            raise HTTPException(
+                status_code=422,
+                detail="First decision does not allow accept; route manuscript to final decision instead",
+            )
 
         content = str(request.content or "").strip()
         if request.is_final and not content:
@@ -366,6 +653,11 @@ class DecisionService(
             )
 
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
+        if not request.is_final and current_status != ManuscriptStatus.DECISION.value:
+            raise HTTPException(
+                status_code=422,
+                detail="Exit review stage first; first decision draft is only available in decision stage",
+            )
         if request.is_final:
             if decision in {"major_revision", "minor_revision"}:
                 if current_status not in {
@@ -395,10 +687,15 @@ class DecisionService(
                         ),
                     )
                 has_submitted_revision = self._has_submitted_author_revision(manuscript_id)
-                if not has_submitted_revision:
+                if decision == "accept" and current_status != ManuscriptStatus.DECISION_DONE.value and not has_submitted_revision:
                     raise HTTPException(
                         status_code=422,
                         detail="Final decision requires at least one submitted author revision",
+                    )
+                if decision == "accept" and current_status == ManuscriptStatus.DECISION.value:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Accept is only allowed in final decision queue (decision_done) or after author resubmission",
                     )
 
         existing = self._get_latest_letter(manuscript_id=manuscript_id, editor_id=user_id, status=None)
@@ -440,54 +737,6 @@ class DecisionService(
                 manuscript=manuscript, manuscript_id=manuscript_id, decision=decision
             )
         else:
-            # 中文注释:
-            # - first decision 草稿默认只记录审计；
-            # - 但若当前仍在 under_review/resubmitted，则自动推进到 decision，
-            #   形成 AE -> EIC 的显式交接队列，避免“草稿已保存但 EIC 看不到”。
-            if current_status in {
-                ManuscriptStatus.UNDER_REVIEW.value,
-                ManuscriptStatus.RESUBMITTED.value,
-            }:
-                try:
-                    transitioned = self.editorial.update_status(
-                        manuscript_id=manuscript_id,
-                        to_status=ManuscriptStatus.DECISION.value,
-                        changed_by=user_id,
-                        comment="first decision saved, routed to decision queue",
-                        allow_skip=False,
-                        payload={
-                            "action": "first_decision_to_queue",
-                            "source": "decision_workspace",
-                            "reason": "ae_or_me_saved_first_decision",
-                            "decision_letter_id": row.get("id"),
-                            "before": {"status": current_status},
-                            "after": {"status": ManuscriptStatus.DECISION.value},
-                        },
-                    )
-                    new_status = str(
-                        transitioned.get("status") or ManuscriptStatus.DECISION.value
-                    )
-                except HTTPException as transition_error:
-                    # 中文注释:
-                    # - 禁止使用 allow_skip=True 绕过状态机；
-                    # - 若自动推进被状态机拦截，仅保留草稿并记录审计，不强行改稿件状态。
-                    self._safe_insert_audit_log(
-                        manuscript_id=manuscript_id,
-                        from_status=current_status,
-                        to_status=current_status,
-                        changed_by=user_id,
-                        comment="first decision saved but transition to decision queue blocked",
-                        payload={
-                            "action": "first_decision_to_queue_blocked",
-                            "source": "decision_workspace",
-                            "reason": "state_machine_blocked",
-                            "decision_letter_id": row.get("id"),
-                            "before": {"status": current_status},
-                            "after": {"status": current_status},
-                            "error_detail": str(getattr(transition_error, "detail", "") or "transition blocked"),
-                        },
-                    )
-
             self._safe_insert_audit_log(
                 manuscript_id=manuscript_id,
                 from_status=current_status,

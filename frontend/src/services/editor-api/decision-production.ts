@@ -2,6 +2,7 @@ import type {
   DecisionSubmissionPayload,
   ProductionCycleCreatePayload,
   ProductionCycleEditorsUpdatePayload,
+  ReviewStageExitPayload,
 } from './types'
 
 type DecisionProductionApiDeps = {
@@ -26,6 +27,20 @@ export function createDecisionProductionApi(deps: DecisionProductionApiDeps) {
         body: JSON.stringify(payload),
       })
       return res.json()
+    },
+
+    async exitReviewStage(manuscriptId: string, payload: ReviewStageExitPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/review-stage-exit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        invalidateProcessRowsCache()
+        invalidateManuscriptDetailCache(manuscriptId)
+      }
+      return json
     },
 
     async uploadDecisionAttachment(manuscriptId: string, file: File) {

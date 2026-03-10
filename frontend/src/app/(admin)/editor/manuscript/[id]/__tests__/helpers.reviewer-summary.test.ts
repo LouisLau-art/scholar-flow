@@ -58,4 +58,14 @@ describe('resolveReviewerInviteSummaryState', () => {
       })
     ).toBe('declined')
   })
+
+  it('returns cancelled when reviewer assignment was cancelled', () => {
+    expect(
+      resolveReviewerInviteSummaryState({
+        id: 'ra-cancelled',
+        status: 'cancelled',
+        cancelled_at: '2026-03-09T00:00:00Z',
+      })
+    ).toBe('cancelled')
+  })
 })

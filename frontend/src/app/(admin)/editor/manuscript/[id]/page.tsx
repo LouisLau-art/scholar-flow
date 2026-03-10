@@ -8,6 +8,9 @@ import { EditorApi } from '@/services/editorApi'
 import { authService } from '@/services/auth'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, ArrowLeft } from 'lucide-react'
@@ -25,6 +28,7 @@ import {
   formatReviewerEmailEventLabel,
   getNextActionCard,
   normalizeWorkflowStatus,
+  resolveReviewerInviteSummaryState,
   type ManuscriptDetail,
 } from './helpers'
 import {
@@ -102,6 +106,13 @@ export default function EditorManuscriptDetailPage() {
   const [pendingTransition, setPendingTransition] = useState<string | null>(null)
   const [transitionDialogOpen, setTransitionDialogOpen] = useState(false)
   const [transitionReason, setTransitionReason] = useState('')
+  const [reviewStageExitDialogOpen, setReviewStageExitDialogOpen] = useState(false)
+  const [reviewStageExitTarget, setReviewStageExitTarget] = useState<'first' | 'final'>('first')
+  const [reviewStageExitNote, setReviewStageExitNote] = useState('')
+  const [reviewStageExitSubmitting, setReviewStageExitSubmitting] = useState(false)
+  const [acceptedPendingResolutionByAssignment, setAcceptedPendingResolutionByAssignment] = useState<
+    Record<string, 'cancel' | 'wait'>
+  >({})
   const [viewerEmail, setViewerEmail] = useState<string>('')
   const [reviewReports, setReviewReports] = useState<ReviewerFeedbackItem[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
@@ -596,7 +607,14 @@ export default function EditorManuscriptDetailPage() {
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(() => allowedNext(status), [status])
   const canAssignReviewersStage = ['under_review', 'resubmitted'].includes(statusLower)
-  const canOpenDecisionWorkspaceStage = ['under_review', 'resubmitted', 'decision', 'decision_done'].includes(statusLower)
+  const canExitReviewStage =
+    ['under_review', 'resubmitted'].includes(statusLower) &&
+    (capability.canManageReviewers || capability.canRecordFirstDecision || capability.canSubmitFinalDecision)
+  const canOpenDecisionWorkspaceStage = ['decision', 'decision_done'].includes(statusLower)
+  const manualNextStatuses = useMemo(
+    () => nextStatuses.filter((item) => !(canExitReviewStage && String(item || '').toLowerCase() === 'decision')),
+    [canExitReviewStage, nextStatuses]
+  )
   const showDirectStatusTransitions = !isPostAcceptance && !['published', 'rejected'].includes(statusLower)
   const displayAuthors =
     String(invoiceForm.authors || '').trim() ||
@@ -606,6 +624,19 @@ export default function EditorManuscriptDetailPage() {
     String(ms?.owner?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])
+  const acceptedPendingInvites = useMemo(
+    () =>
+      (ms?.reviewer_invites || []).filter((invite) => resolveReviewerInviteSummaryState(invite) === 'accepted'),
+    [ms?.reviewer_invites]
+  )
+  const autoCancelledReviewStageInvites = useMemo(
+    () =>
+      (ms?.reviewer_invites || []).filter((invite) => {
+        const state = resolveReviewerInviteSummaryState(invite)
+        return state === 'selected' || state === 'invited' || state === 'opened'
+      }),
+    [ms?.reviewer_invites]
+  )
   const authorResponseHistory = useMemo(() => buildAuthorResponseHistory(ms), [ms])
   const latestAuthorResponse = authorResponseHistory[0] || null
   const roleQueueAssigneeText =
@@ -692,6 +723,70 @@ export default function EditorManuscriptDetailPage() {
   const handleOpenDecisionWorkspace = useCallback(() => {
     router.push(`/editor/decision/${encodeURIComponent(id)}`)
   }, [id, router])
+
+  const handleOpenReviewStageExitDialog = useCallback(() => {
+    setReviewStageExitTarget('first')
+    setReviewStageExitNote('')
+    setAcceptedPendingResolutionByAssignment({})
+    setReviewStageExitDialogOpen(true)
+  }, [])
+
+  const handleSubmitReviewStageExit = useCallback(async () => {
+    if (acceptedPendingInvites.length > 0) {
+      const unresolved = acceptedPendingInvites.filter(
+        (invite) => !acceptedPendingResolutionByAssignment[String(invite.id || '').trim()]
+      )
+      if (unresolved.length > 0) {
+        toast.error('Please explicitly handle every accepted reviewer before leaving under_review.')
+        return
+      }
+      const waiting = acceptedPendingInvites.filter(
+        (invite) => acceptedPendingResolutionByAssignment[String(invite.id || '').trim()] === 'wait'
+      )
+      if (waiting.length > 0) {
+        toast.error('Some accepted reviewers are still marked as waiting. Close this dialog and stay in under_review.')
+        return
+      }
+    }
+
+    setReviewStageExitSubmitting(true)
+    try {
+      const res = await EditorApi.exitReviewStage(id, {
+        target_stage: reviewStageExitTarget,
+        note: reviewStageExitNote.trim() || undefined,
+        accepted_pending_resolutions: acceptedPendingInvites.map((invite) => ({
+          assignment_id: String(invite.id || ''),
+          action: acceptedPendingResolutionByAssignment[String(invite.id || '').trim()] || 'wait',
+          reason:
+            acceptedPendingResolutionByAssignment[String(invite.id || '').trim()] === 'cancel'
+              ? reviewStageExitNote.trim() || undefined
+              : undefined,
+        })),
+      })
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || 'Failed to exit review stage')
+      }
+      const targetLabel = reviewStageExitTarget === 'first' ? 'First Decision' : 'Final Decision'
+      toast.success(
+        `Moved manuscript to ${targetLabel}. Auto-cancelled ${res?.data?.auto_cancelled_assignment_ids?.length || 0} reviewer(s).`
+      )
+      setReviewStageExitDialogOpen(false)
+      setReviewStageExitNote('')
+      setAcceptedPendingResolutionByAssignment({})
+      await refreshDetail({ force: true })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to exit review stage')
+    } finally {
+      setReviewStageExitSubmitting(false)
+    }
+  }, [
+    acceptedPendingInvites,
+    acceptedPendingResolutionByAssignment,
+    id,
+    refreshDetail,
+    reviewStageExitNote,
+    reviewStageExitTarget,
+  ])
 
   const handleOpenProductionWorkspace = useCallback(() => {
     router.push(`/editor/production/${encodeURIComponent(id)}`)
@@ -933,6 +1028,7 @@ export default function EditorManuscriptDetailPage() {
             manuscriptId={id}
             isPostAcceptance={isPostAcceptance}
             canAssignReviewersStage={canAssignReviewersStage}
+            canExitReviewStage={canExitReviewStage}
             canOpenDecisionWorkspaceStage={canOpenDecisionWorkspaceStage}
             canManageReviewers={capability.canManageReviewers}
             viewerRoles={normalizedRoles}
@@ -944,10 +1040,11 @@ export default function EditorManuscriptDetailPage() {
             invoice={ms.invoice}
             showDirectStatusTransitions={showDirectStatusTransitions}
             canManualStatusTransition={canManualStatusTransition}
-            nextStatuses={nextStatuses}
+            nextStatuses={manualNextStatuses}
             transitioning={transitioning}
             currentAeId={currentAeId}
             onReviewerChanged={() => void refreshDetail({ force: true })}
+            onOpenReviewStageExitDialog={handleOpenReviewStageExitDialog}
             onOpenDecisionWorkspace={handleOpenDecisionWorkspace}
             onOpenProductionWorkspace={handleOpenProductionWorkspace}
             onProductionStatusChange={handleProductionStatusChange}
@@ -1016,6 +1113,147 @@ export default function EditorManuscriptDetailPage() {
           }
         }}
       />
+
+      <SafeDialog
+        open={reviewStageExitDialogOpen}
+        onClose={() => {
+          if (reviewStageExitSubmitting) return
+          setReviewStageExitDialogOpen(false)
+        }}
+        closeDisabled={reviewStageExitSubmitting}
+      >
+        <SafeDialogContent className="sm:max-w-2xl" closeDisabled={reviewStageExitSubmitting}>
+          <DialogHeader>
+            <DialogTitle>Exit Review Stage</DialogTitle>
+            <DialogDescription>
+              离开 `under_review / resubmitted` 前，系统会自动终止未接受邀请的 reviewer；已接受但未提交的 reviewer 需要你显式处理。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-foreground">Next decision stage</div>
+              <RadioGroup
+                value={reviewStageExitTarget}
+                onValueChange={(value) => setReviewStageExitTarget(value as 'first' | 'final')}
+                className="grid gap-2"
+              >
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                  <RadioGroupItem id="review-stage-target-first" value="first" className="mt-1" />
+                  <div className="space-y-1">
+                    <Label htmlFor="review-stage-target-first" className="cursor-pointer font-medium">
+                      First Decision
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      进入 `decision` 队列，只允许 major revision / minor revision / reject。
+                    </div>
+                  </div>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                  <RadioGroupItem id="review-stage-target-final" value="final" className="mt-1" />
+                  <div className="space-y-1">
+                    <Label htmlFor="review-stage-target-final" className="cursor-pointer font-medium">
+                      Final Decision
+                    </Label>
+                    <div className="text-xs text-muted-foreground">
+                      直接进入 `decision_done` 队列，可供终轮决策使用。
+                    </div>
+                  </div>
+                </label>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+              <div className="text-sm font-medium text-foreground">Automatic cleanup</div>
+              <div className="text-sm text-muted-foreground">
+                {autoCancelledReviewStageInvites.length === 0
+                  ? '当前没有 selected / invited / opened reviewer 需要自动 cancel。'
+                  : `系统会自动 cancel ${autoCancelledReviewStageInvites.length} 位 selected / invited / opened reviewer。`}
+              </div>
+            </div>
+
+            {acceptedPendingInvites.length > 0 ? (
+              <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-foreground">Accepted but not submitted</div>
+                  <div className="text-xs text-muted-foreground">
+                    这些 reviewer 已接受邀请。若要离开当前外审阶段，必须明确将其取消；若仍要等待，请关闭此弹窗并继续停留在 under_review。
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {acceptedPendingInvites.map((invite) => {
+                    const assignmentId = String(invite.id || '').trim()
+                    const selectedAction = acceptedPendingResolutionByAssignment[assignmentId] || ''
+                    return (
+                      <div key={assignmentId} className="rounded-md border border-border bg-background px-3 py-3">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-foreground">
+                              {invite.reviewer_name || invite.reviewer_email || 'Reviewer'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {invite.reviewer_email || 'No email'} · Due {invite.due_at ? formatDateTimeLocal(invite.due_at) : '—'}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={selectedAction === 'cancel' ? 'default' : 'outline'}
+                              onClick={() =>
+                                setAcceptedPendingResolutionByAssignment((prev) => ({ ...prev, [assignmentId]: 'cancel' }))
+                              }
+                            >
+                              Cancel reviewer
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={selectedAction === 'wait' ? 'default' : 'outline'}
+                              onClick={() =>
+                                setAcceptedPendingResolutionByAssignment((prev) => ({ ...prev, [assignmentId]: 'wait' }))
+                              }
+                            >
+                              Keep waiting
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-foreground">Audit note / cancel reason</div>
+              <Textarea
+                value={reviewStageExitNote}
+                onChange={(event) => setReviewStageExitNote(event.target.value)}
+                rows={4}
+                placeholder="Explain why review stage is being closed and why any accepted reviewers are being cancelled..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (reviewStageExitSubmitting) return
+                setReviewStageExitDialogOpen(false)
+              }}
+              disabled={reviewStageExitSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSubmitReviewStageExit()} disabled={reviewStageExitSubmitting}>
+              {reviewStageExitSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Continue
+            </Button>
+          </DialogFooter>
+        </SafeDialogContent>
+      </SafeDialog>
 
       <Dialog open={transitionDialogOpen} onOpenChange={setTransitionDialogOpen}>
         <DialogContent className="sm:max-w-lg">

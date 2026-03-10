@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, model_validator
 
 DecisionValue = Literal["accept", "reject", "major_revision", "minor_revision"]
 DecisionLetterStatus = Literal["draft", "final"]
+ReviewStageExitTarget = Literal["first", "final"]
+ReviewStageExitPendingAction = Literal["cancel", "wait"]
 
 
 class DecisionSubmitRequest(BaseModel):
@@ -37,6 +39,29 @@ class DecisionSubmitRequest(BaseModel):
         if self.decision_stage != inferred:
             raise ValueError("decision_stage and is_final are inconsistent")
         return self
+
+
+class ReviewStageExitPendingResolution(BaseModel):
+    assignment_id: str = Field(..., min_length=1, description="待处理 reviewer assignment id")
+    action: ReviewStageExitPendingAction = Field(..., description="离开外审前对已接受未提交审稿人的处理动作")
+    reason: str = Field("", max_length=500, description="显式取消该 reviewer 的原因（仅 action=cancel 时使用）")
+
+
+class ReviewStageExitRequest(BaseModel):
+    target_stage: ReviewStageExitTarget = Field(..., description="外审结束后进入的决策阶段")
+    note: str = Field("", max_length=1000, description="本次离开外审的说明，会写入审计")
+    accepted_pending_resolutions: list[ReviewStageExitPendingResolution] = Field(
+        default_factory=list,
+        description="针对 accepted 但未提交 reviewer 的显式处理清单",
+    )
+
+
+class ReviewStageExitResponse(BaseModel):
+    manuscript_status: str
+    target_stage: ReviewStageExitTarget
+    auto_cancelled_assignment_ids: list[str] = Field(default_factory=list)
+    manually_cancelled_assignment_ids: list[str] = Field(default_factory=list)
+    remaining_pending_assignment_ids: list[str] = Field(default_factory=list)
 
 
 class DecisionLetterPayload(BaseModel):

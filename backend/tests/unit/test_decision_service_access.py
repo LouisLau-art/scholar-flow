@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.models.decision import DecisionSubmitRequest
+from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from app.services.decision_service import DecisionService
 
 
@@ -306,6 +306,192 @@ def test_submit_decision_blocks_accept_without_submitted_author_revision(
             ),
         )
     assert exc.value.status_code == 422
+
+
+def test_submit_decision_blocks_first_decision_accept(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_decision(
+            manuscript_id="ms-1",
+            user_id="ae-1",
+            profile_roles=["assistant_editor"],
+            request=DecisionSubmitRequest(
+                content="Looks good",
+                decision="accept",
+                is_final=False,
+                attachment_paths=[],
+                last_updated_at=None,
+            ),
+        )
+    assert exc.value.status_code == 422
+
+
+def test_submit_decision_allows_accept_in_decision_done_without_author_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision_done",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_has_submitted_author_revision", lambda _id: False)
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **_kwargs: {"id": "dl-1", "status": "final", "updated_at": "2026-02-12T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(svc, "_transition_for_final_decision", lambda **_kwargs: "approved")
+    monkeypatch.setattr(svc, "_notify_author", lambda **_kwargs: None)
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="eic-1",
+        profile_roles=["editor_in_chief"],
+        request=DecisionSubmitRequest(
+            content="Accept",
+            decision="accept",
+            is_final=True,
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+    assert out["manuscript_status"] == "approved"
+
+
+def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_list_current_round_review_assignments",
+        lambda **_kwargs: [
+            {"id": "sel-1", "status": "selected"},
+            {"id": "inv-1", "status": "invited", "invited_at": "2026-03-09T00:00:00Z"},
+            {"id": "opn-1", "status": "opened", "opened_at": "2026-03-09T01:00:00Z"},
+            {"id": "acc-1", "status": "pending", "accepted_at": "2026-03-09T02:00:00Z"},
+            {"id": "sub-1", "status": "completed", "submitted_at": "2026-03-09T03:00:00Z"},
+        ],
+    )
+    cancelled: list[tuple[str, str, str]] = []
+
+    def _cancel(**kwargs):
+        cancelled.append((kwargs["assignment_id"], kwargs["reason"], kwargs["via"]))
+
+    monkeypatch.setattr(svc, "_cancel_assignment_for_stage_exit", _cancel)
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(update_status=lambda **kwargs: {"status": kwargs["to_status"]}),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            note="Enough evidence collected",
+            accepted_pending_resolutions=[
+                {"assignment_id": "acc-1", "action": "cancel", "reason": "AE decided two reviews are enough"}
+            ],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert out["auto_cancelled_assignment_ids"] == ["sel-1", "inv-1", "opn-1"]
+    assert out["manually_cancelled_assignment_ids"] == ["acc-1"]
+    assert out["remaining_pending_assignment_ids"] == []
+    assert cancelled == [
+        ("sel-1", "Enough evidence collected", "auto_stage_exit"),
+        ("inv-1", "Enough evidence collected", "auto_stage_exit"),
+        ("opn-1", "Enough evidence collected", "auto_stage_exit"),
+        ("acc-1", "AE decided two reviews are enough", "post_acceptance_cleanup"),
+    ]
+
+
+def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 1,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_list_current_round_review_assignments",
+        lambda **_kwargs: [
+            {"id": "acc-1", "status": "pending", "accepted_at": "2026-03-09T02:00:00Z"},
+        ],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        svc.exit_review_stage(
+            manuscript_id="ms-1",
+            user_id="ae-1",
+            profile_roles=["assistant_editor"],
+            request=ReviewStageExitRequest(
+                target_stage="final",
+                note="Need to hold",
+                accepted_pending_resolutions=[
+                    {"assignment_id": "acc-1", "action": "wait", "reason": ""}
+                ],
+            ),
+        )
+    assert exc.value.status_code == 409
 
 
 def test_transition_final_revision_from_decision_done_never_uses_allow_skip(
