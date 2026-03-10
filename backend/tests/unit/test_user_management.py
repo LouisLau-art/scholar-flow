@@ -5,9 +5,8 @@ Coverage target: 80%+
 
 import pytest
 import logging
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID
-from datetime import datetime
 
 from app.services.user_management import UserManagementService
 
@@ -96,7 +95,7 @@ class TestUserManagementServiceInit:
 
         with patch("app.services.user_management.create_client") as mock_create:
             mock_create.return_value = MagicMock()
-            service = UserManagementService()
+            UserManagementService()
 
             captured = capsys.readouterr()
             assert "WARNING" in captured.out or mock_create.called
@@ -874,8 +873,7 @@ class TestCreateInternalUser:
             # Mock table operations
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(
                 data=None
             )  # No existing user
@@ -910,8 +908,7 @@ class TestCreateInternalUser:
             mock_client = MagicMock()
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(
                 data={"id": "existing"}
             )
@@ -930,14 +927,36 @@ class TestCreateInternalUser:
 
             assert "already exists" in str(exc_info.value)
 
+    def test_create_internal_user_normalizes_email_before_uniqueness_check(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(data=[{"id": "existing"}])
+            mock_client.table.return_value = mock_table
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+
+            with pytest.raises(ValueError) as exc_info:
+                service.create_internal_user(
+                    email=" Existing@Test.COM ",
+                    full_name="Existing User",
+                    role="managing_editor",
+                    created_by=UUID("00000000-0000-0000-0000-000000000001"),
+                )
+
+            assert "already exists" in str(exc_info.value)
+            mock_table.ilike.assert_called_once_with("email", "existing@test.com")
+
     def test_create_internal_user_auth_fails(self, mock_env):
         """Test user creation when auth fails"""
         with patch("app.services.user_management.create_client") as mock_create:
             mock_client = MagicMock()
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(data=None)
             mock_client.table.return_value = mock_table
 
@@ -975,8 +994,7 @@ class TestInviteReviewer:
             # Mock table for checking existence
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(data=None)
             mock_table.upsert.return_value = mock_table
             mock_table.insert.return_value = mock_table
@@ -1001,7 +1019,15 @@ class TestInviteReviewer:
 
             mock_create.return_value = mock_client
 
-            with patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+            with patch.object(
+                UserManagementService,
+                "_load_email_template",
+                return_value={
+                    "body_html_template": "<p>{{ activation_link }}</p>",
+                    "body_text_template": "{{ activation_link }}",
+                    "subject_template": "Reviewer activation",
+                },
+            ), patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
                 "app.services.user_management.email_service.send_email", return_value=True
             ) as mock_send_email:
                 service = UserManagementService()
@@ -1032,8 +1058,7 @@ class TestInviteReviewer:
             mock_client = MagicMock()
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(
                 data={"id": "existing"}
             )
@@ -1051,14 +1076,60 @@ class TestInviteReviewer:
 
             assert "already exists" in str(exc_info.value)
 
+    def test_invite_reviewer_normalizes_email_before_auth_create(self, mock_env):
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_table.select.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
+            mock_table.execute.return_value = MockSupabaseResponse(data=None)
+            mock_table.upsert.return_value = mock_table
+            mock_table.insert.return_value = mock_table
+            mock_client.table.return_value = mock_table
+
+            mock_user = MagicMock()
+            mock_user.id = "00000000-0000-0000-0000-000000000098"
+            mock_auth_response = MagicMock()
+            mock_auth_response.user = mock_user
+            mock_client.auth.admin.create_user.return_value = mock_auth_response
+            mock_client.auth.admin.get_user_by_id.return_value = MagicMock(
+                user=MagicMock(user_metadata={"sf_reviewer_activation_required": True})
+            )
+            mock_link_response = MagicMock()
+            mock_link_response.properties = {"action_link": "https://test.com/magic-link"}
+            mock_client.auth.admin.generate_link.return_value = mock_link_response
+            mock_create.return_value = mock_client
+
+            with patch.object(
+                UserManagementService,
+                "_load_email_template",
+                return_value={
+                    "body_html_template": "<p>{{ activation_link }}</p>",
+                    "body_text_template": "{{ activation_link }}",
+                    "subject_template": "Reviewer activation",
+                },
+            ), patch("app.services.user_management.email_service.is_configured", return_value=True), patch(
+                "app.services.user_management.email_service.send_email", return_value=True
+            ):
+                service = UserManagementService()
+                result = service.invite_reviewer(
+                    email=" Reviewer@Test.COM ",
+                    full_name="New Reviewer",
+                    invited_by=UUID("00000000-0000-0000-0000-000000000001"),
+                )
+
+            assert result["email"] == "reviewer@test.com"
+            create_payload = mock_client.auth.admin.create_user.call_args.args[0]
+            assert create_payload["email"] == "reviewer@test.com"
+            mock_table.ilike.assert_called_once_with("email", "reviewer@test.com")
+
     def test_invite_reviewer_auth_fails(self, mock_env):
         """Test invite when auth user creation fails"""
         with patch("app.services.user_management.create_client") as mock_create:
             mock_client = MagicMock()
             mock_table = MagicMock()
             mock_table.select.return_value = mock_table
-            mock_table.eq.return_value = mock_table
-            mock_table.maybe_single.return_value = mock_table
+            mock_table.ilike.return_value = mock_table
             mock_table.execute.return_value = MockSupabaseResponse(data=None)
             mock_client.table.return_value = mock_table
 

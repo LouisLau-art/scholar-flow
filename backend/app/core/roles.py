@@ -4,6 +4,7 @@ from typing import Callable, Iterable, Optional, Set
 from fastapi import Depends, HTTPException
 
 from app.core.auth_utils import get_current_user
+from app.core.email_normalization import normalize_email
 from app.lib.api_client import supabase
 
 
@@ -28,7 +29,7 @@ async def get_current_profile(current_user: dict = Depends(get_current_user)) ->
     3) 若 email 在 ADMIN_EMAILS 中，则自动补齐 admin/managing_editor/reviewer 权限，便于本地/演示测试。
     """
     user_id = current_user["id"]
-    email = current_user.get("email")
+    email = normalize_email(current_user.get("email"))
 
     roles = ["author"]
     if _is_admin_email(email):
@@ -40,11 +41,18 @@ async def get_current_profile(current_user: dict = Depends(get_current_user)) ->
         if existing:
             # 若配置了 ADMIN_EMAILS，确保 admin 用户拥有对应角色（便于演示）
             existing_roles = existing.get("roles") or []
+            update_payload = {}
             if _is_admin_email(email):
                 merged = list(dict.fromkeys([*roles, *existing_roles]))
                 if merged != existing_roles:
-                    supabase.table("user_profiles").update({"roles": merged}).eq("id", user_id).execute()
+                    update_payload["roles"] = merged
                     existing["roles"] = merged
+            existing_email = normalize_email(existing.get("email"))
+            if email and email != existing_email:
+                update_payload["email"] = email
+                existing["email"] = email
+            if update_payload:
+                supabase.table("user_profiles").update(update_payload).eq("id", user_id).execute()
             return existing
 
         inserted = (

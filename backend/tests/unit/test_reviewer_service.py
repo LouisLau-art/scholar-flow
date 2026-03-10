@@ -111,6 +111,41 @@ def test_add_to_library_creates_auth_user_and_upserts_profile(supabase_admin):
     assert profiles.upsert.called is True
 
 
+def test_add_to_library_normalizes_email_before_lookup_and_create(supabase_admin):
+    svc = reviewer_service_module.ReviewerService()
+
+    profiles = supabase_admin.table("user_profiles")
+    profiles.execute.return_value = _Resp(data=[])
+    supabase_admin.auth.admin.create_user.return_value = SimpleNamespace(user=SimpleNamespace(id="new-id"))
+
+    payload = ReviewerCreate(email=" Reviewer@Example.COM ", full_name="X", title="Prof.")
+    out = svc.add_to_library(payload)
+
+    assert out["email"] == "reviewer@example.com"
+    profiles.ilike.assert_called_once_with("email", "reviewer@example.com")
+    create_payload = supabase_admin.auth.admin.create_user.call_args.args[0]
+    assert create_payload["email"] == "reviewer@example.com"
+
+
+def test_add_to_library_rejects_duplicate_profiles_for_same_email(supabase_admin):
+    svc = reviewer_service_module.ReviewerService()
+
+    profiles = supabase_admin.table("user_profiles")
+    profiles.execute.return_value = _Resp(
+        data=[
+            {"id": "u1", "email": "reviewer@example.com"},
+            {"id": "u2", "email": "reviewer@example.com"},
+        ]
+    )
+
+    payload = ReviewerCreate(email="reviewer@example.com", full_name="X", title="Prof.")
+
+    with pytest.raises(ValueError) as exc_info:
+        svc.add_to_library(payload)
+
+    assert "Multiple profiles" in str(exc_info.value)
+
+
 def test_search_fallbacks_when_generated_column_missing(supabase_admin):
     svc = reviewer_service_module.ReviewerService()
 

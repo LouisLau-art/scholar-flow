@@ -36,24 +36,19 @@
 
 ### 2. 邮箱唯一性与重复用户问题
 
-现象：
+当前状态：
 
-- 同一邮箱可被重复邀请/创建，导致数据库里出现两条不同用户记录但邮箱相同
+- 已修复
 
-风险：
+结果：
 
-- 认证、通知、权限、审稿邀请、User Management 全部会出现歧义
+- `user_profiles.email` 已建立归一化唯一约束
+- Admin invite / internal user create / reviewer library / profile fallback insert 已统一做 email normalize
+- 云端重复邮箱已清零
 
-待做：
+后续仅保留：
 
-- 先确认重复发生在：
-  - `auth.users`
-  - `public.user_profiles`
-  - 还是二者映射失配
-- 然后补：
-  - 数据清理脚本
-  - 创建/邀请路径唯一性校验
-  - 数据库约束或应用层保护
+- 若业务确认不再需要这些历史 orphan profile，可补一条安全清理脚本，处理已被改写为 `@example.invalid` 的占位邮箱记录
 
 ### 3. Academic Editor 正式模型与稿件绑定
 
@@ -115,6 +110,11 @@
 待做：
 
 - 基于真实 UAT 数据继续复测和补 E2E
+- 继续按最新业务口径扩展：
+  - AE 可在 `under_review` 阶段直接给出 `major/minor`
+  - AE 不可直接 `reject`，但可 `send_first_decision`
+  - `send_first_decision` 的接收邮箱默认主编/编委，但允许改成 AE 自己
+  - 作者在进入下一阶段后仍应能看到后续新到达的审稿意见
 
 ## 四、UI / 交互稳定性问题
 
@@ -147,8 +147,8 @@
 
 ## 六、建议执行顺序
 
-1. 提交并发布投稿作者元数据这条线
-2. 修邮箱唯一性问题
-3. 设计并落地 academic editor 正式模型
-4. 做 reviewer 邀请邮件预览弹窗
+1. 继续收尾投稿作者元数据通知链路
+2. 设计并落地 academic editor 正式模型
+3. 做 reviewer 邀请邮件预览弹窗
+4. 继续收口 `under_review -> send_first_decision / direct revision`
 5. 继续 reviewer history / reminder / 邮件可信度收尾

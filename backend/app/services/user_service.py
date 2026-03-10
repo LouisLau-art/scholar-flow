@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime, timezone
+from app.core.email_normalization import normalize_email
 from app.lib.api_client import supabase_admin, create_user_supabase_client
 from app.schemas.user import UserProfileUpdate
 
@@ -35,7 +36,7 @@ class UserService:
                 
                 insert_data = data.copy()
                 insert_data['id'] = str(user_id)
-                insert_data['email'] = email
+                insert_data['email'] = normalize_email(email)
                 # Default roles if creating new? DB defaults to ['author']
                 
                 resp = user_client.table("user_profiles").insert(insert_data).execute()

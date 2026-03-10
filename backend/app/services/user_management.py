@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List, Iterable
 from supabase import create_client, Client
 
 from app.core.default_password import get_default_bootstrap_password
+from app.core.email_normalization import normalize_email
 from app.core.mail import email_service
 
 ALLOWED_USER_ROLES = {
@@ -219,6 +220,21 @@ class UserManagementService:
             page += 1
 
         return user_ids
+
+    def _find_profiles_by_email(self, email: str) -> list[dict[str, Any]]:
+        normalized = normalize_email(email)
+        if not normalized:
+            return []
+        resp = (
+            self.admin_client.table("user_profiles")
+            .select("id,email")
+            .ilike("email", normalized)
+            .execute()
+        )
+        rows = getattr(resp, "data", None) or []
+        if isinstance(rows, dict):
+            return [rows]
+        return list(rows)
 
     @staticmethod
     def _is_hidden_test_profile(item: Dict[str, Any], auth_user_ids: set[str]) -> bool:
@@ -766,13 +782,10 @@ class UserManagementService:
         T086: Send notification.
         """
         try:
-            try:
-                existing = self.admin_client.table("user_profiles").select("id").eq("email", email).maybe_single().execute()
-                if existing.data:
-                    raise ValueError("User with this email already exists")
-            except Exception as e:
-                if "User with this email already exists" in str(e):
-                    raise e
+            email = normalize_email(email)
+            existing_profiles = self._find_profiles_by_email(email)
+            if existing_profiles:
+                raise ValueError("User with this email already exists")
 
             user_response = self.admin_client.auth.admin.create_user(
                 {
@@ -876,13 +889,10 @@ class UserManagementService:
         T106: Invite reviewer and deliver onboarding email.
         """
         try:
-            try:
-                existing = self.admin_client.table("user_profiles").select("id").eq("email", email).maybe_single().execute()
-                if existing.data:
-                    raise ValueError("User with this email already exists")
-            except Exception as e:
-                if "User with this email already exists" in str(e):
-                    raise e
+            email = normalize_email(email)
+            existing_profiles = self._find_profiles_by_email(email)
+            if existing_profiles:
+                raise ValueError("User with this email already exists")
 
             user_response = self.admin_client.auth.admin.create_user(
                 {

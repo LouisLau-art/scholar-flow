@@ -6,7 +6,6 @@ Coverage target: 80%+
 import pytest
 from unittest.mock import MagicMock, patch
 from uuid import UUID
-from datetime import datetime, timezone
 
 from app.services.user_service import UserService
 from app.schemas.user import UserProfileUpdate
@@ -152,6 +151,48 @@ class TestUserServiceUpdateProfile:
             )
 
             assert result["email"] == "new@example.com"
+
+    def test_update_profile_normalizes_email_when_creating_new_profile(self):
+        new_profile = {
+            "id": "user-1",
+            "email": "new@example.com",
+            "full_name": "New User",
+        }
+
+        with patch(
+            "app.services.user_service.create_user_supabase_client"
+        ) as mock_create:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+
+            call_count = [0]
+
+            def execute_side_effect():
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return MockSupabaseResponse(data=[])
+                return MockSupabaseResponse(data=[new_profile])
+
+            mock_table.update.return_value = mock_table
+            mock_table.insert.return_value = mock_table
+            mock_table.eq.return_value = mock_table
+            mock_table.execute.side_effect = execute_side_effect
+            mock_client.table.return_value = mock_table
+            mock_create.return_value = mock_client
+
+            service = UserService()
+            update_data = UserProfileUpdate(full_name="New User")
+
+            result = service.update_profile(
+                user_id=UUID("00000000-0000-0000-0000-000000000001"),
+                update_data=update_data,
+                access_token="test-token",
+                email=" New@Example.COM ",
+            )
+
+            assert result["email"] == "new@example.com"
+            inserted_payload = mock_table.insert.call_args.args[0]
+            assert inserted_payload["email"] == "new@example.com"
 
     def test_update_profile_no_email_for_new(self):
         """Test that email is required for creating new profile"""

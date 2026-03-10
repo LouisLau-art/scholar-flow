@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
+
+from app.core.email_normalization import normalize_email
 
 
 ReviewerTitle = Literal[
@@ -26,6 +28,11 @@ class ReviewerCreate(BaseModel):
     homepage_url: Optional[HttpUrl] = None
     research_interests: List[str] = Field(default_factory=list, max_length=50)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_request_email(cls, v):
+        return normalize_email(v)
+
 
 class ReviewerUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -46,4 +53,3 @@ class ReviewerLibraryItem(BaseModel):
     research_interests: List[str] = Field(default_factory=list)
     roles: List[str] = Field(default_factory=list)
     is_reviewer_active: bool = True
-

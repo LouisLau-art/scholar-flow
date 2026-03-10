@@ -539,7 +539,6 @@ async def test_upsert_journal_scope_success(client: AsyncClient, auth_token, moc
     with patch("app.api.v1.admin.users.supabase_admin") as mock_db:
         table = MagicMock()
         upsert_q = MagicMock()
-        execute_q = MagicMock()
         mock_db.table.return_value = table
         table.upsert.return_value = upsert_q
         upsert_q.execute.return_value = MagicMock(data=[row])

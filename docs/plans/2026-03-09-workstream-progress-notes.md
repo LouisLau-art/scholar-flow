@@ -130,6 +130,58 @@
 - `docs/plans/2026-03-06-reviewer-invitation-state-machine-notes.md`
 - `docs/plans/2026-03-09-reviewer-decision-cancel-design.md`
 - `docs/plans/2026-03-09-reviewer-decision-cancel-plan.md`
+- `docs/plans/2026-03-10-open-work-items.md`
+
+## 2026-03-10 继续推进：投稿作者/通讯作者结构化
+
+- 投稿表单已支持：
+  - `submission_email`
+  - `author_contacts[]`
+  - 多作者
+  - 唯一通讯作者
+- 作者不要求预先存在 ScholarFlow 账号。
+- 后端 `ManuscriptBase / ManuscriptCreate` 已接入：
+  - `submission_email`
+  - `author_contacts`
+  - `special_issue`
+- 云端 Supabase 已新增并推送：
+  - `public.manuscripts.authors`
+  - `public.manuscripts.submission_email`
+  - `public.manuscripts.author_contacts`
+  - `public.manuscripts.special_issue`
+- 编辑稿件详情页已开始展示：
+  - Authors
+  - Corresponding Author
+  - Submission Email
+  - Special Issue
+- 仍待继续：
+  - 把其它作者通知链路统一切到 `submission_email / 对应通讯作者邮箱`
+  - 决定作者侧稿件详情是否同步展示结构化作者信息
+
+## 2026-03-10 修复：邮箱唯一性与历史重复 profile 清理
+
+- 新增统一 email 归一化 helper：`backend/app/core/email_normalization.py`
+- 以下写路径已统一改为 `strip().lower()`：
+  - `UserManagementService.create_internal_user()`
+  - `UserManagementService.invite_reviewer()`
+  - `ReviewerService.add_to_library()`
+  - `UserService.update_profile()` 的 fallback insert
+  - `get_current_profile()` 自动建 profile
+- Admin 创建用户 / 邀请 reviewer / reviewer library 现在都会先按归一化邮箱查重，再写入。
+- 新增 migration：
+  - `supabase/migrations/20260310203000_user_profiles_email_uniqueness.sql`
+- migration 已完成：
+  - 归一化 `public.user_profiles.email`
+  - 为 `user_profiles` 新增 email normalize trigger
+  - 收紧 `auth.users -> user_profiles` 的邮箱同步 trigger
+  - 建立唯一索引 `user_profiles_email_unique_idx`
+- 为避免 FK 链路上的历史 orphan profile 直接删除失败，migration 对重复 orphan profile 改写为唯一占位邮箱：
+  - `dedup+<id>@example.invalid`
+- 云端执行结果：
+  - `duplicate_email_count = 0`
+  - `placeholder_rewritten_count = 844`
+- 仍待继续：
+  - 若业务确认不再需要这些占位 orphan profile，可再补安全清理脚本
 
 ## 当前尚未完成的 reviewer 相关工作
 

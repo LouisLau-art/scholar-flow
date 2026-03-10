@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from app.core.email_normalization import normalize_email
 from app.lib.api_client import supabase_admin
 from app.schemas.review import (
     InviteAcceptPayload,
@@ -254,18 +255,28 @@ class ReviewerService:
     - Profile update
     """
 
-    def _get_profile_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        e = (email or "").strip().lower()
+    def _find_profiles_by_email(self, email: str) -> list[Dict[str, Any]]:
+        e = normalize_email(email)
         if not e:
-            return None
+            return []
         resp = (
             supabase_admin.table("user_profiles")
             .select("id,email,full_name,title,affiliation,homepage_url,research_interests,roles,is_reviewer_active,created_at,updated_at")
             .ilike("email", e)
-            .maybe_single()
             .execute()
         )
-        return getattr(resp, "data", None) or None
+        rows = getattr(resp, "data", None) or []
+        if isinstance(rows, dict):
+            return [rows]
+        return list(rows)
+
+    def _get_profile_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        rows = self._find_profiles_by_email(email)
+        if not rows:
+            return None
+        if len(rows) > 1:
+            raise ValueError("Multiple profiles found for reviewer email")
+        return rows[0]
 
     def _find_auth_user_id_by_email(self, email: str) -> Optional[str]:
         """
@@ -288,7 +299,7 @@ class ReviewerService:
         return None
 
     def add_to_library(self, payload: ReviewerCreate) -> Dict[str, Any]:
-        email = str(payload.email).strip().lower()
+        email = normalize_email(payload.email)
         now = _utc_now_iso()
 
         # 1) If profile exists: update metadata, ensure reviewer role, activate.

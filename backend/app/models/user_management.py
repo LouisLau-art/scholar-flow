@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
+
+from app.core.email_normalization import normalize_email
 
 # --- Enums & Shared Types ---
 # (User roles are typically strings in Supabase: "author", "reviewer", "managing_editor", "admin")
@@ -107,6 +109,11 @@ class CreateUserRequest(BaseModel):
         pattern="^(reviewer|owner|managing_editor|assistant_editor|production_editor|editor_in_chief|admin)$",
     )
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_request_email(cls, v):
+        return normalize_email(v)
+
 class UpdateRoleRequest(BaseModel):
     """
     T012: 修改用户角色请求
@@ -149,6 +156,11 @@ class InviteReviewerRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=100)
     manuscript_id: Optional[UUID] = None  # Context for the invitation
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_request_email(cls, v):
+        return normalize_email(v)
 
 
 class ResetPasswordRequest(BaseModel):
