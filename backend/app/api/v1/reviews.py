@@ -322,6 +322,29 @@ def _build_assignment_email_audit_context(
     }
 
 
+def _derive_assignment_state(row: dict[str, Any]) -> str:
+    """
+    中文注释:
+    reviewer history 需要展示业务态，而不是直接暴露底层 status。
+    这里沿用 reviewer summary 的优先级：
+    cancelled > declined > submitted > accepted > opened > invited > selected
+    """
+    status_raw = str(row.get("status") or "").strip().lower()
+    if status_raw == "cancelled" or row.get("cancelled_at"):
+        return "cancelled"
+    if status_raw in {"declined", "decline"} or row.get("declined_at"):
+        return "declined"
+    if status_raw in {"completed", "submitted"} or row.get("report_submitted_at"):
+        return "submitted"
+    if status_raw in {"accepted", "agree", "agreed", "pending"} or row.get("accepted_at"):
+        return "accepted"
+    if status_raw == "opened" or row.get("opened_at"):
+        return "opened"
+    if status_raw == "invited" or row.get("invited_at"):
+        return "invited"
+    return "selected"
+
+
 def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "assignment_id": row.get("assignment_id"),
@@ -1282,6 +1305,12 @@ async def get_reviewer_history(
                 "manuscript_title": manuscript.get("title"),
                 "manuscript_status": manuscript.get("status"),
                 "assignment_status": row.get("status"),
+                "assignment_state": _derive_assignment_state(
+                    {
+                        **row,
+                        "report_submitted_at": report.get("created_at"),
+                    }
+                ),
                 "round_number": row.get("round_number"),
                 "added_on": row.get("created_at"),
                 "added_by": (

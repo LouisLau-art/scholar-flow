@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { type EditorCapability } from '@/lib/rbac'
 import type { FileItem } from '@/components/editor/FileHubCard'
 import { filterFilesByType, type ManuscriptFile } from './utils'
+import type { ReviewerHistoryItem } from './types'
 
 export type ManuscriptDetail = {
   id: string
@@ -214,6 +215,74 @@ export function formatReviewerEmailEventLabel(event: {
               ? humanizeReviewerToken(status)?.toLowerCase() || 'updated'
               : 'updated'
   return `${eventLabel} ${statusLabel}`.trim()
+}
+
+function humanizeReviewerState(raw: unknown): string {
+  const value = String(raw || '').trim().toLowerCase()
+  const mapping: Record<string, string> = {
+    selected: 'Selected',
+    invited: 'Invited',
+    opened: 'Opened',
+    accepted: 'Accepted',
+    submitted: 'Submitted',
+    completed: 'Submitted',
+    declined: 'Declined',
+    cancelled: 'Cancelled',
+  }
+  return mapping[value] || humanizeReviewerToken(value) || '—'
+}
+
+export function formatReviewerHistoryAssignmentState(
+  row: Pick<
+    ReviewerHistoryItem,
+    'assignment_state' | 'assignment_status' | 'accepted_at' | 'opened_at' | 'invited_at' | 'declined_at' | 'cancelled_at' | 'report_submitted_at'
+  >
+): string {
+  const derivedState = String(row?.assignment_state || '').trim().toLowerCase()
+  if (derivedState) {
+    return humanizeReviewerState(derivedState)
+  }
+  let fallbackState: ReviewerInviteSummaryState = 'selected'
+  const statusRaw = String(row?.assignment_status || '').trim().toLowerCase()
+  if (statusRaw === 'cancelled' || row?.cancelled_at) {
+    fallbackState = 'cancelled'
+  } else if (statusRaw === 'declined' || statusRaw === 'decline' || row?.declined_at) {
+    fallbackState = 'declined'
+  } else if (statusRaw === 'completed' || statusRaw === 'submitted' || row?.report_submitted_at) {
+    fallbackState = 'submitted'
+  } else if (
+    statusRaw === 'accepted' ||
+    statusRaw === 'agree' ||
+    statusRaw === 'agreed' ||
+    statusRaw === 'pending' ||
+    row?.accepted_at
+  ) {
+    fallbackState = 'accepted'
+  } else if (statusRaw === 'opened' || row?.opened_at) {
+    fallbackState = 'opened'
+  } else if (statusRaw === 'invited' || row?.invited_at) {
+    fallbackState = 'invited'
+  }
+  return humanizeReviewerState(fallbackState)
+}
+
+export function formatReviewerHistoryDecisionSummary(
+  row: Pick<
+    ReviewerHistoryItem,
+    'assignment_state' | 'assignment_status' | 'decline_reason' | 'decline_note' | 'cancel_reason' | 'cancelled_at' | 'report_status'
+  >
+): string {
+  const derivedState = String(row?.assignment_state || row?.assignment_status || '').trim().toLowerCase()
+  if (derivedState === 'cancelled') {
+    return row?.cancel_reason ? `Cancelled · ${String(row.cancel_reason).trim()}` : 'Cancelled'
+  }
+  if (derivedState === 'declined') {
+    const reason = formatReviewerDeclineReason(row?.decline_reason) || 'Declined'
+    const note = String(row?.decline_note || '').trim()
+    return note ? `${reason} · ${note}` : reason
+  }
+  const reportStatus = String(row?.report_status || '').trim()
+  return reportStatus || '—'
 }
 
 export function normalizeResponseLetterText(raw: unknown): string {

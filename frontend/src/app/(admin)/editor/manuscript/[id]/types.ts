@@ -19,6 +19,7 @@ export type ReviewerHistoryItem = {
   manuscript_title?: string | null
   manuscript_status?: string | null
   assignment_status?: string | null
+  assignment_state?: string | null
   round_number?: number | null
   added_on?: string | null
   added_by?: {

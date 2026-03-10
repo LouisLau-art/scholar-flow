@@ -24,8 +24,9 @@ import {
   buildAuthorResponseHistory,
   buildFileHubProps,
   formatReviewerAuditVia,
-  formatReviewerDeclineReason,
   formatReviewerEmailEventLabel,
+  formatReviewerHistoryAssignmentState,
+  formatReviewerHistoryDecisionSummary,
   getNextActionCard,
   normalizeWorkflowStatus,
   resolveReviewerInviteSummaryState,
@@ -1382,20 +1383,14 @@ export default function EditorManuscriptDetailPage() {
                           ? `Round ${Number(row.round_number)}`
                           : '—'
                     const dueText = row.due_at ? formatDateTimeLocal(row.due_at) : '—'
-                    const reviewStatusText = row.report_status ? String(row.report_status) : '—'
-                    const decisionText =
-                      row.assignment_status === 'declined'
-                        ? `${formatReviewerDeclineReason(row.decline_reason) || 'Declined'}${
-                            row.decline_note ? ` · ${row.decline_note}` : ''
-                          }`
-                        : reviewStatusText
+                    const decisionText = formatReviewerHistoryDecisionSummary(row)
                     return (
                       <tr key={rowKey} className="border-b border-border/60 last:border-0 align-top">
                         <td className="px-3 py-2.5">
                           <div className="font-medium text-foreground">{row.manuscript_title || row.manuscript_id || '—'}</div>
                           {row.manuscript_id ? <div className="text-xs text-muted-foreground">{row.manuscript_id}</div> : null}
                         </td>
-                        <td className="px-3 py-2.5">{row.assignment_status || '—'}</td>
+                        <td className="px-3 py-2.5">{formatReviewerHistoryAssignmentState(row)}</td>
                         <td className="px-3 py-2.5">
                           <div>{roundText}</div>
                           <div className="text-xs text-muted-foreground">Due {dueText}</div>

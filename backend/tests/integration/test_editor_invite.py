@@ -1587,3 +1587,84 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
     assert rows[0]["invited_by"]["full_name"] == "Inviter User"
     assert rows[0]["invited_via"] == "template_invitation"
     assert [event["status"] for event in rows[0]["email_events"]] == ["sent", "queued"]
+    assert rows[0]["assignment_state"] == "invited"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_history_derives_accepted_state_from_pending_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2")
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccc2")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                [
+                    {
+                        "id": str(assignment_id),
+                        "manuscript_id": str(manuscript_id),
+                        "reviewer_id": str(reviewer_id),
+                        "status": "pending",
+                        "due_at": "2026-03-20T00:00:00+00:00",
+                        "invited_at": "2026-03-10T00:00:00+00:00",
+                        "opened_at": "2026-03-10T00:05:00+00:00",
+                        "accepted_at": "2026-03-10T00:06:00+00:00",
+                        "declined_at": None,
+                        "decline_reason": None,
+                        "decline_note": None,
+                        "last_reminded_at": None,
+                        "created_at": "2026-03-10T00:00:00+00:00",
+                        "round_number": 2,
+                    }
+                ],
+            ],
+            "manuscripts": [
+                [
+                    {
+                        "id": str(manuscript_id),
+                        "title": "Accepted State Manuscript",
+                        "status": "under_review",
+                        "journal_id": "journal-1",
+                        "assistant_editor_id": editor_id,
+                    }
+                ]
+            ],
+            "review_reports": [[]],
+            "email_logs": [[]],
+            "user_profiles": [[]],
+        }
+    )
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+    ):
+        resp = await client.get(
+            f"/api/v1/reviews/reviewer-history/{reviewer_id}?limit=20",
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    rows = payload.get("data") or []
+    assert len(rows) == 1
+    assert rows[0]["assignment_status"] == "pending"
+    assert rows[0]["assignment_state"] == "accepted"
