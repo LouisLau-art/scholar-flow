@@ -390,13 +390,6 @@ class DecisionService(
                 detail="Review-stage exit is only allowed in under_review/resubmitted stage",
             )
 
-        reports = self._list_submitted_reports(manuscript_id)
-        if len(reports) == 0:
-            raise HTTPException(
-                status_code=422,
-                detail="At least one submitted review report is required before leaving under_review",
-            )
-
         assignments = self._list_current_round_review_assignments(
             manuscript_id=manuscript_id,
             manuscript_version=int(manuscript.get("version") or 1),
@@ -485,7 +478,7 @@ class DecisionService(
             if action != "cancel":
                 continue
             reason = resolution.get("reason") or stage_note or (
-                f"Review stage exited to {request.target_stage} decision after sufficient reviews were received"
+                f"Review stage exited to {request.target_stage} decision by editor decision"
             )
             self._cancel_assignment_for_stage_exit(
                 assignment_id=assignment_id,
@@ -517,7 +510,7 @@ class DecisionService(
 
         target_stage = str(request.target_stage or "").strip().lower()
         exit_note = stage_note or (
-            "review stage exited with sufficient reviewer feedback"
+            "review stage exited by editor decision"
         )
         transition_payload = {
             "action": "review_stage_exit",

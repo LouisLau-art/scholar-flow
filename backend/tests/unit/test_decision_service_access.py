@@ -550,6 +550,70 @@ def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
     assert out["cancellation_email_failed_assignment_ids"] == []
 
 
+def test_exit_review_stage_allows_zero_submitted_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
+    monkeypatch.setattr(
+        svc,
+        "_list_current_round_review_assignments",
+        lambda **_kwargs: [
+            {"id": "sel-1", "status": "selected"},
+            {"id": "inv-1", "status": "invited", "invited_at": "2026-03-09T00:00:00Z"},
+        ],
+    )
+    cancelled: list[tuple[str, str, str]] = []
+
+    def _cancel(**kwargs):
+        cancelled.append((kwargs["assignment_id"], kwargs["reason"], kwargs["via"]))
+
+    monkeypatch.setattr(svc, "_cancel_assignment_for_stage_exit", _cancel)
+    monkeypatch.setattr(
+        svc,
+        "_send_cancellation_email_for_stage_exit",
+        lambda **kwargs: {"status": "sent"},
+    )
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(update_status=lambda **kwargs: {"status": kwargs["to_status"]}),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            note="Proceed without waiting for reviewer reports",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert out["auto_cancelled_assignment_ids"] == ["sel-1", "inv-1"]
+    assert out["manually_cancelled_assignment_ids"] == []
+    assert out["remaining_pending_assignment_ids"] == []
+    assert cancelled == [
+        ("sel-1", "Proceed without waiting for reviewer reports", "auto_stage_exit"),
+        ("inv-1", "Proceed without waiting for reviewer reports", "auto_stage_exit"),
+    ]
+
+
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

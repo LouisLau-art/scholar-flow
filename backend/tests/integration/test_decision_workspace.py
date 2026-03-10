@@ -384,3 +384,88 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
         assert status_map[reviewer_submitted.id] == "completed"
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_stage_exit_allows_zero_submitted_reports(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+):
+    editor = make_user(email="decision_editor_zero_reports@example.com")
+    author = make_user(email="decision_author_zero_reports@example.com")
+    reviewer_selected = make_user(email="decision_reviewer_zero_selected@example.com")
+    reviewer_invited = make_user(email="decision_reviewer_zero_invited@example.com")
+    set_admin_emails([editor.email])
+    _require_decision_schema(supabase_admin_client)
+    _require_review_assignment_schema(supabase_admin_client)
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="under_review",
+        title="Review Stage Exit Without Reports Manuscript",
+        version=2,
+        file_path=f"manuscripts/{manuscript_id}/v2.pdf",
+    )
+    supabase_admin_client.table("review_assignments").insert(
+        [
+            {
+                "manuscript_id": manuscript_id,
+                "reviewer_id": reviewer_selected.id,
+                "round_number": 2,
+                "status": "selected",
+            },
+            {
+                "manuscript_id": manuscript_id,
+                "reviewer_id": reviewer_invited.id,
+                "round_number": 2,
+                "status": "invited",
+                "invited_at": datetime.now(timezone.utc).isoformat(),
+            },
+        ]
+    ).execute()
+
+    try:
+        res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/review-stage-exit",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "target_stage": "first",
+                "note": "Proceed without waiting for reviewer reports",
+                "accepted_pending_resolutions": [],
+            },
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["success"] is True
+        assert payload["data"]["manuscript_status"] == "decision"
+        assert payload["data"]["auto_cancelled_assignment_ids"]
+        assert payload["data"]["manually_cancelled_assignment_ids"] == []
+
+        manuscript = (
+            supabase_admin_client.table("manuscripts")
+            .select("status")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert manuscript["status"] == "decision"
+
+        rows = (
+            supabase_admin_client.table("review_assignments")
+            .select("reviewer_id,status")
+            .eq("manuscript_id", manuscript_id)
+            .execute()
+            .data
+            or []
+        )
+        status_map = {row["reviewer_id"]: row["status"] for row in rows}
+        assert status_map[reviewer_selected.id] == "cancelled"
+        assert status_map[reviewer_invited.id] == "cancelled"
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id)
