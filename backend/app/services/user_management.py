@@ -241,7 +241,12 @@ class UserManagementService:
     def _is_hidden_test_profile(item: Dict[str, Any], auth_user_ids: set[str]) -> bool:
         email = str(item.get("email") or "").strip().lower()
         profile_id = str(item.get("id") or "").strip()
-        return bool(email.endswith("@example.com") and profile_id and profile_id not in auth_user_ids)
+        hidden_domains = ("@example.com", "@example.invalid")
+        return bool(
+            profile_id
+            and profile_id not in auth_user_ids
+            and any(email.endswith(domain) for domain in hidden_domains)
+        )
 
     def send_reviewer_activation_email(
         self,

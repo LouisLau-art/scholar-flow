@@ -91,6 +91,34 @@ async def test_get_users_can_request_hidden_test_profiles(
     mock_admin_service.get_users.assert_called_once()
     assert mock_admin_service.get_users.call_args.kwargs["include_test_profiles"] is True
 
+
+@pytest.mark.asyncio
+async def test_get_users_response_allows_placeholder_dedup_emails(
+    client: AsyncClient, auth_token, mock_admin_role, mock_admin_service
+):
+    mock_admin_service.get_users.return_value = {
+        "data": [
+            {
+                "id": str(uuid4()),
+                "email": "dedup+abc123@example.invalid",
+                "full_name": None,
+                "roles": ["author"],
+                "created_at": "2026-03-10T09:48:49.088915+00:00",
+                "is_verified": True,
+            }
+        ],
+        "pagination": {"total": 1, "page": 1, "per_page": 25, "total_pages": 1},
+    }
+
+    response = await client.get(
+        "/api/v1/admin/users?include_test_profiles=true",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data"][0]["email"] == "dedup+abc123@example.invalid"
+
 @pytest.mark.asyncio
 async def test_get_users_invalid_pagination(client: AsyncClient, auth_token, mock_admin_role, mock_admin_service):
     """T028: Validation test: Verify pagination parameters"""

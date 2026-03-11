@@ -72,7 +72,7 @@ class UserResponse(BaseModel):
     T011: 用户详情响应
     """
     id: UUID
-    email: EmailStr
+    email: str
     full_name: Optional[str] = None
     roles: List[str] = []
     created_at: datetime

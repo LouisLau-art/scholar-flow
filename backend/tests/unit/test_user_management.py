@@ -451,6 +451,39 @@ class TestGetUsers:
             assert result["pagination"]["total"] == 1
             assert [item["email"] for item in result["data"]] == ["real@example.com"]
 
+    def test_get_users_hides_orphan_example_invalid_profiles_by_default(self, mock_env):
+        users_data = [
+            {
+                "id": "auth-user-1",
+                "email": "real@test.com",
+                "full_name": "Real User",
+                "roles": ["author"],
+                "created_at": "2024-01-02",
+            },
+            {
+                "id": "orphan-user-1",
+                "email": "dedup+orphan@example.invalid",
+                "full_name": "Orphan Placeholder User",
+                "roles": ["managing_editor"],
+                "created_at": "2024-01-01",
+            },
+        ]
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_query = MockQueryBuilder(return_data=users_data)
+            mock_query._count = 2
+            mock_client = MockAdminClient(mock_query)
+            mock_client.auth.admin.list_users.return_value = [
+                type("AuthUser", (), {"id": "auth-user-1"})()
+            ]
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            result = service.get_users()
+
+            assert result["pagination"]["total"] == 1
+            assert [item["email"] for item in result["data"]] == ["real@test.com"]
+
     def test_get_users_can_include_hidden_test_profiles(self, mock_env):
         users_data = [
             {
@@ -480,6 +513,39 @@ class TestGetUsers:
 
             assert result["pagination"]["total"] == 2
             assert [item["email"] for item in result["data"]] == ["real@test.com", "editor_e2e@example.com"]
+
+    def test_get_users_can_include_placeholder_profiles(self, mock_env):
+        users_data = [
+            {
+                "id": "auth-user-1",
+                "email": "real@test.com",
+                "full_name": "Real User",
+                "roles": ["author"],
+                "created_at": "2024-01-02",
+            },
+            {
+                "id": "orphan-user-1",
+                "email": "dedup+orphan@example.invalid",
+                "full_name": "Orphan Placeholder User",
+                "roles": ["managing_editor"],
+                "created_at": "2024-01-01",
+            },
+        ]
+
+        with patch("app.services.user_management.create_client") as mock_create:
+            mock_query = MockQueryBuilder(return_data=users_data)
+            mock_query._count = 2
+            mock_client = MockAdminClient(mock_query)
+            mock_create.return_value = mock_client
+
+            service = UserManagementService()
+            result = service.get_users(include_test_profiles=True)
+
+            assert result["pagination"]["total"] == 2
+            assert [item["email"] for item in result["data"]] == [
+                "real@test.com",
+                "dedup+orphan@example.invalid",
+            ]
 
 
 class TestUpdateUserRole:
