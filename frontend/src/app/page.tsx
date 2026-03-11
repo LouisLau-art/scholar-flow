@@ -152,12 +152,14 @@ function OverlayImage({
   overlayClassName,
   sizes = '100vw',
   eager = false,
+  unoptimized = true,
 }: {
   src: string
   className?: string
   overlayClassName: string
   sizes?: string
   eager?: boolean
+  unoptimized?: boolean
 }) {
   return (
     <div className={cn('relative overflow-hidden bg-muted', className)}>
@@ -168,6 +170,7 @@ function OverlayImage({
         fill
         sizes={sizes}
         priority={eager}
+        unoptimized={unoptimized}
         className="object-cover"
       />
       <div className={cn('pointer-events-none absolute inset-0', overlayClassName)} />
