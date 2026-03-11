@@ -318,3 +318,80 @@ async def test_production_editor_can_read_reviews_for_assigned_historical_cycle(
         safe_delete_by_id(supabase_admin_client, "user_profiles", admin_user.id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", assigned_pe.id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", other_pe.id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_author_context_keeps_late_public_review_visible_after_manuscript_leaves_under_review(
+    client: AsyncClient,
+    supabase_admin_client,
+):
+    _require_schema(supabase_admin_client)
+
+    author = make_user(email=f"author_ctx_{uuid4().hex[:8]}@example.com")
+    reviewer = make_user(email=f"reviewer_ctx_{uuid4().hex[:8]}@example.com")
+
+    manuscript_id = str(uuid4())
+    review_report_id = str(uuid4())
+    token = "tok_" + uuid4().hex
+    expiry = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+
+    for identity, name, roles in (
+        (author, "Author", ["author"]),
+        (reviewer, "Reviewer", ["reviewer"]),
+    ):
+        supabase_admin_client.table("user_profiles").upsert(
+            {
+                "id": identity.id,
+                "email": identity.email,
+                "full_name": name,
+                "roles": roles,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="id",
+        ).execute()
+
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="major_revision",
+        title="Author Context Late Review Visibility",
+    )
+
+    supabase_admin_client.table("review_reports").insert(
+        {
+            "id": review_report_id,
+            "manuscript_id": manuscript_id,
+            "reviewer_id": reviewer.id,
+            "token": token,
+            "expiry_date": expiry,
+            "status": "completed",
+            "content": "Late public feedback after stage exit",
+            "comments_for_author": "Late public feedback after stage exit",
+            "confidential_comments_to_editor": "Internal only",
+            "attachment_path": "",
+            "score": 5,
+        }
+    ).execute()
+
+    try:
+        res = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/author-context",
+            headers={"Authorization": f"Bearer {author.token}"},
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["success"] is True
+        timeline = body["data"]["timeline"]
+        review_events = [event for event in timeline if str(event.get("actor")) == "reviewer"]
+        assert review_events, "Expected late reviewer feedback to remain visible in author context"
+        assert any(
+            str(event.get("message") or "").strip() == "Late public feedback after stage exit"
+            for event in review_events
+        )
+    finally:
+        safe_delete_by_id(supabase_admin_client, "review_reports", review_report_id)
+        safe_delete_by_id(supabase_admin_client, "manuscripts", manuscript_id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", author.id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", reviewer.id)

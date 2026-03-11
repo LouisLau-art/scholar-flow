@@ -214,6 +214,26 @@
     - `bunx tsc --noEmit`
     - `bun run lint`
 
+## 2026-03-11 继续推进：review-stage-exit First Decision 收件人语义
+
+- `review-stage-exit` 在 `target_stage=first` 时，现已支持正式持久化 `recipient_emails`
+- 收件人输入规则：
+  - 前端弹窗默认预填当前稿件所属期刊的 `academic_editor / editor_in_chief` 邮箱
+  - AE 可直接改成自己的邮箱或其他明确收件人
+  - 后端统一做 `strip/lower/dedup`
+- `recipient_emails` 已写入 `status_transition_logs.payload`
+- Decision Workspace 右侧 `AE recommendation` 卡片现会显示：
+  - recommendation
+  - recipient emails
+  - AE note
+- 作者侧时间线可见性已补集成测试锁定：
+  - 即使稿件已经离开 `under_review`
+  - 后续新到达的 reviewer 公开意见仍应继续出现在 `/api/v1/manuscripts/{id}/author-context` 的 `timeline` 中
+- 相关验证已通过：
+  - backend：`tests/unit/test_decision_service_access.py`、`tests/integration/test_manuscript_reviews_access.py`
+  - frontend：`tests/e2e/specs/decision_workspace.spec.ts`、`tests/e2e/specs/reviewer_management_delivery.spec.ts`
+  - `ruff / tsc / lint` 全通过
+
 ## 当前尚未完成的 reviewer 相关工作
 
 ### P1

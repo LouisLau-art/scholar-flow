@@ -51,6 +51,7 @@ export type ReviewStageExitPendingResolutionPayload = {
 export type ReviewStageExitPayload = {
   target_stage: 'first' | 'final' | 'major_revision' | 'minor_revision'
   requested_outcome?: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
+  recipient_emails?: string[]
   note?: string
   accepted_pending_resolutions?: ReviewStageExitPendingResolutionPayload[]
 }

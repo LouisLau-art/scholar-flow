@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 DecisionSubmissionValue = Literal["accept", "reject", "major_revision", "minor_revision", "add_reviewer"]
@@ -58,11 +58,39 @@ class ReviewStageExitRequest(BaseModel):
         default=None,
         description="当 target_stage=first 时，AE 提交给学术编辑/主编的推荐处理结论",
     )
+    recipient_emails: list[str] = Field(
+        default_factory=list,
+        description="当 target_stage=first 时，First Decision 默认收件人列表；可由 AE 手动修改",
+    )
     note: str = Field("", max_length=1000, description="本次离开外审的说明，会写入审计")
     accepted_pending_resolutions: list[ReviewStageExitPendingResolution] = Field(
         default_factory=list,
         description="针对 accepted 但未提交 reviewer 的显式处理清单",
     )
+
+    @field_validator("recipient_emails", mode="before")
+    @classmethod
+    def _normalize_recipient_emails(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        raw_items: list[str] = []
+        if isinstance(value, str):
+            normalized = value.replace(";", ",").replace("\n", ",")
+            raw_items = [part.strip() for part in normalized.split(",")]
+        elif isinstance(value, (list, tuple, set)):
+            raw_items = [str(item or "").strip() for item in value]
+        else:
+            raw_items = [str(value).strip()]
+
+        seen: set[str] = set()
+        normalized_items: list[str] = []
+        for item in raw_items:
+            candidate = str(item or "").strip().lower()
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            normalized_items.append(candidate)
+        return normalized_items
 
     @model_validator(mode="after")
     def _validate_requested_outcome(self) -> "ReviewStageExitRequest":
@@ -70,6 +98,8 @@ class ReviewStageExitRequest(BaseModel):
             raise ValueError("requested_outcome is required when target_stage is first")
         if self.target_stage != "first" and self.requested_outcome is not None:
             raise ValueError("requested_outcome is only allowed when target_stage is first")
+        if self.target_stage != "first" and self.recipient_emails:
+            raise ValueError("recipient_emails is only allowed when target_stage is first")
         return self
 
 
@@ -86,6 +116,7 @@ class ReviewStageExitResponse(BaseModel):
 class ReviewStageExitRequestSummary(BaseModel):
     target_stage: ReviewStageExitTarget
     requested_outcome: ReviewStageExitRequestedOutcome | None = None
+    recipient_emails: list[str] = Field(default_factory=list)
     note: str = ""
     changed_at: datetime | None = None
     changed_by: str | None = None

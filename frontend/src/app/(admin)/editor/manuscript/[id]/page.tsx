@@ -88,6 +88,17 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 type ReviewStageExitTarget = 'first' | 'final' | 'major_revision' | 'minor_revision'
 type ReviewStageExitRequestedOutcome = 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
 
+function normalizeRecipientEmails(value: string): string[] {
+  const normalized = String(value || '')
+    .replace(/;/g, ',')
+    .replace(/\n/g, ',')
+  const parts = normalized
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  return Array.from(new Set(parts))
+}
+
 function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
   switch (target) {
     case 'major_revision':
@@ -146,6 +157,9 @@ export default function EditorManuscriptDetailPage() {
   const [reviewStageExitRequestedOutcome, setReviewStageExitRequestedOutcome] =
     useState<ReviewStageExitRequestedOutcome>('major_revision')
   const [reviewStageExitNote, setReviewStageExitNote] = useState('')
+  const [reviewStageExitRecipientsRaw, setReviewStageExitRecipientsRaw] = useState('')
+  const [reviewStageExitRecipientsLoading, setReviewStageExitRecipientsLoading] = useState(false)
+  const [reviewStageExitRecipientsHydrated, setReviewStageExitRecipientsHydrated] = useState(false)
   const [reviewStageExitSubmitting, setReviewStageExitSubmitting] = useState(false)
   const [acceptedPendingResolutionByAssignment, setAcceptedPendingResolutionByAssignment] = useState<
     Record<string, 'cancel' | 'wait'>
@@ -806,9 +820,48 @@ export default function EditorManuscriptDetailPage() {
     setReviewStageExitTarget('first')
     setReviewStageExitRequestedOutcome('major_revision')
     setReviewStageExitNote('')
+    setReviewStageExitRecipientsRaw('')
+    setReviewStageExitRecipientsHydrated(false)
     setAcceptedPendingResolutionByAssignment({})
     setReviewStageExitDialogOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (!reviewStageExitDialogOpen || reviewStageExitTarget !== 'first' || reviewStageExitRecipientsHydrated) return
+    let alive = true
+
+    const loadAcademicRecipients = async () => {
+      try {
+        setReviewStageExitRecipientsLoading(true)
+        const res = await EditorApi.listAcademicEditors(id)
+        if (!alive) return
+        if (!res?.success) {
+          throw new Error(res?.detail || res?.message || 'Failed to load academic decision recipients')
+        }
+        const emails = Array.from(
+          new Set(
+            ((res.data as Array<{ email?: string | null }> | undefined) || [])
+              .map((item) => String(item?.email || '').trim().toLowerCase())
+              .filter(Boolean)
+          )
+        )
+        setReviewStageExitRecipientsRaw(emails.join(', '))
+      } catch (e) {
+        if (!alive) return
+        toast.error(e instanceof Error ? e.message : 'Failed to load academic decision recipients')
+      } finally {
+        if (!alive) return
+        setReviewStageExitRecipientsLoading(false)
+        setReviewStageExitRecipientsHydrated(true)
+      }
+    }
+
+    void loadAcademicRecipients()
+
+    return () => {
+      alive = false
+    }
+  }, [id, reviewStageExitDialogOpen, reviewStageExitRecipientsHydrated, reviewStageExitTarget])
 
   const handleSubmitReviewStageExit = useCallback(async () => {
     if (acceptedPendingInvites.length > 0) {
@@ -834,9 +887,12 @@ export default function EditorManuscriptDetailPage() {
         toast.error('Please select an AE recommendation before sending to First Decision.')
         return
       }
+      const recipientEmails =
+        reviewStageExitTarget === 'first' ? normalizeRecipientEmails(reviewStageExitRecipientsRaw) : []
       const res = await EditorApi.exitReviewStage(id, {
         target_stage: reviewStageExitTarget,
         requested_outcome: reviewStageExitTarget === 'first' ? reviewStageExitRequestedOutcome : undefined,
+        recipient_emails: reviewStageExitTarget === 'first' ? recipientEmails : undefined,
         note: reviewStageExitNote.trim() || undefined,
         accepted_pending_resolutions: acceptedPendingInvites.map((invite) => ({
           assignment_id: String(invite.id || ''),
@@ -869,6 +925,8 @@ export default function EditorManuscriptDetailPage() {
       setReviewStageExitDialogOpen(false)
       setReviewStageExitRequestedOutcome('major_revision')
       setReviewStageExitNote('')
+      setReviewStageExitRecipientsRaw('')
+      setReviewStageExitRecipientsHydrated(false)
       setAcceptedPendingResolutionByAssignment({})
       await refreshDetail({ force: true })
     } catch (e) {
@@ -882,6 +940,7 @@ export default function EditorManuscriptDetailPage() {
     id,
     refreshDetail,
     reviewStageExitNote,
+    reviewStageExitRecipientsRaw,
     reviewStageExitRequestedOutcome,
     reviewStageExitTarget,
   ])
@@ -1413,6 +1472,23 @@ export default function EditorManuscriptDetailPage() {
                     </div>
                   </label>
                 </RadioGroup>
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="review-stage-first-recipients" className="text-sm font-medium text-foreground">
+                    First Decision recipients
+                  </Label>
+                  <Textarea
+                    id="review-stage-first-recipients"
+                    value={reviewStageExitRecipientsRaw}
+                    onChange={(event) => setReviewStageExitRecipientsRaw(event.target.value)}
+                    placeholder="chief@example.com, board@example.com"
+                    rows={3}
+                    className="resize-y"
+                    disabled={reviewStageExitRecipientsLoading}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    默认带出当前期刊的学术编辑/主编邮箱；可手动改成 AE 自己或其他需要接收 First Decision 的邮箱。
+                  </div>
+                </div>
               </div>
             ) : null}
 

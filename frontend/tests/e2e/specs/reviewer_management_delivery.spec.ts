@@ -414,6 +414,16 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
         })
       }
 
+      if (pathname === '/api/v1/editor/academic-editors' && req.method() === 'GET') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: [
+            { id: 'academic-1', full_name: 'Academic Editor', email: 'academic@example.com' },
+            { id: 'eic-1', full_name: 'Editor in Chief', email: 'chief@example.com' },
+          ],
+        })
+      }
+
       return fulfillJson(route, 200, { success: true, data: [] })
     })
 
@@ -431,6 +441,9 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
     await expect(exitDialog.getByText(/Accepted but not submitted/i)).toBeVisible()
     await expect(exitDialog.getByText('Accepted Reviewer', { exact: true })).toBeVisible()
     await expect(exitDialog.getByText(/AE recommendation for First Decision/i)).toBeVisible()
+    await expect(exitDialog.getByLabel('First Decision recipients')).toHaveValue(
+      'academic@example.com, chief@example.com'
+    )
 
     await page.getByRole('button', { name: 'Continue' }).click()
     await expect(page.getByText(/Please explicitly handle every accepted reviewer/i)).toBeVisible()
@@ -452,6 +465,7 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
     expect(exitPayload).toEqual({
       target_stage: 'first',
       requested_outcome: 'major_revision',
+      recipient_emails: ['academic@example.com', 'chief@example.com'],
       note: 'Two completed reviews are enough for first decision.',
       accepted_pending_resolutions: [
         {

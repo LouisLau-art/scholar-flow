@@ -259,6 +259,9 @@ class DecisionService(
             return {
                 "target_stage": target_stage,
                 "requested_outcome": payload.get("requested_outcome"),
+                "recipient_emails": payload.get("recipient_emails")
+                if isinstance(payload.get("recipient_emails"), list)
+                else [],
                 "note": str(row.get("comment") or ""),
                 "changed_at": row.get("created_at"),
                 "changed_by": row.get("changed_by"),
@@ -566,6 +569,7 @@ class DecisionService(
             "reason": "editor_exit_review_stage",
             "target_stage": target_stage,
             "requested_outcome": request.requested_outcome,
+            "recipient_emails": request.recipient_emails,
             "auto_cancelled_assignment_ids": auto_cancelled_ids,
             "manually_cancelled_assignment_ids": manually_cancelled_ids,
             "before": {"status": current_status},

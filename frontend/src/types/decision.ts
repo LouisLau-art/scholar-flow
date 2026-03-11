@@ -46,6 +46,7 @@ export type DecisionContext = {
   review_stage_exit_request?: {
     target_stage: 'first' | 'final' | 'major_revision' | 'minor_revision'
     requested_outcome?: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer' | null
+    recipient_emails?: string[] | null
     note?: string | null
     changed_at?: string | null
     changed_by?: string | null

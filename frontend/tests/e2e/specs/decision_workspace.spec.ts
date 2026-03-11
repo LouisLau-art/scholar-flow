@@ -38,6 +38,12 @@ test.describe('Decision Workspace flow (mocked)', () => {
               },
             ],
             draft: null,
+            review_stage_exit_request: {
+              target_stage: 'first',
+              requested_outcome: 'add_reviewer',
+              recipient_emails: ['chief@example.com', 'board@example.com'],
+              note: 'AE requests more reviewers before a formal decision.',
+            },
             templates: [{ id: 'default', name: 'Default', content: 'Template from backend' }],
             permissions: {
               can_submit: true,
@@ -85,6 +91,8 @@ test.describe('Decision Workspace flow (mocked)', () => {
     await expect(page.getByRole('heading', { name: 'Decision Workspace Mock Manuscript' })).toBeVisible()
     await expect(page.getByText('Review Reports')).toBeVisible()
     await expect(page.getByText('Decision Letter')).toBeVisible()
+    await expect(page.getByText('AE recommendation')).toBeVisible()
+    await expect(page.getByText(/Recipients: chief@example.com, board@example.com/)).toBeVisible()
 
     await page.getByRole('button', { name: 'Generate Letter Draft' }).click()
     await page.getByRole('button', { name: 'Save First Decision Draft' }).click()

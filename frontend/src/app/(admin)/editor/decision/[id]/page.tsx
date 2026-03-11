@@ -127,6 +127,12 @@ export default function DecisionWorkspacePage() {
                   ? getReviewStageExitRequestedOutcomeLabel(context.review_stage_exit_request.requested_outcome)
                   : 'No recommendation recorded'}
               </div>
+              {Array.isArray(context.review_stage_exit_request.recipient_emails) &&
+              context.review_stage_exit_request.recipient_emails.length > 0 ? (
+                <div className="mt-1 text-[11px] text-amber-100/80">
+                  Recipients: {context.review_stage_exit_request.recipient_emails.join(', ')}
+                </div>
+              ) : null}
               {context.review_stage_exit_request.note ? (
                 <div className="mt-1 text-[11px] text-amber-100/80">{context.review_stage_exit_request.note}</div>
               ) : null}

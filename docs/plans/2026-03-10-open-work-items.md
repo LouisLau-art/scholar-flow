@@ -161,8 +161,8 @@
 - 继续按最新业务口径扩展：
   - AE 可在 `under_review` 阶段直接给出 `major/minor`
   - AE 不可直接 `reject`，但可 `send_first_decision`
-  - `send_first_decision` 的接收邮箱默认主编/编委，但允许改成 AE 自己
-  - 作者在进入下一阶段后仍应能看到后续新到达的审稿意见
+  - `send_first_decision` 的接收邮箱默认主编/编委，但允许改成 AE 自己（已完成 payload 持久化与 Decision Workspace 展示，仍待真正发信动作）
+  - 作者在进入下一阶段后仍应能看到后续新到达的审稿意见（已由 author-context 集成测试锁定）
 
 ## 四、UI / 交互稳定性问题
 

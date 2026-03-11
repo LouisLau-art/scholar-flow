@@ -174,6 +174,7 @@ def test_get_decision_context_returns_role_based_permission_flags(
             "target_stage": "first",
             "requested_outcome": "major_revision",
             "note": "AE recommends major revision",
+            "recipient_emails": ["chief@example.com", "board@example.com"],
             "changed_at": "2026-03-10T00:00:00+00:00",
             "changed_by": "ae-1",
         },
@@ -192,6 +193,10 @@ def test_get_decision_context_returns_role_based_permission_flags(
     assert permissions.get("can_submit_final") is False
     assert permissions.get("can_submit") is True
     assert context.get("review_stage_exit_request", {}).get("requested_outcome") == "major_revision"
+    assert context.get("review_stage_exit_request", {}).get("recipient_emails") == [
+        "chief@example.com",
+        "board@example.com",
+    ]
 
 
 def test_review_stage_exit_request_requires_requested_outcome_for_first_target() -> None:
@@ -209,6 +214,28 @@ def test_review_stage_exit_request_rejects_requested_outcome_for_non_first_targe
             target_stage="major_revision",
             requested_outcome="reject",
             note="AE direct major revision",
+            accepted_pending_resolutions=[],
+        )
+
+
+def test_review_stage_exit_request_normalizes_first_decision_recipient_emails() -> None:
+    request = ReviewStageExitRequest(
+        target_stage="first",
+        requested_outcome="major_revision",
+        recipient_emails=" Chief@example.com ; board@example.com\nchief@example.com ",
+        note="Send to academic decision",
+        accepted_pending_resolutions=[],
+    )
+
+    assert request.recipient_emails == ["chief@example.com", "board@example.com"]
+
+
+def test_review_stage_exit_request_rejects_recipient_emails_for_non_first_target() -> None:
+    with pytest.raises(ValueError, match="recipient_emails is only allowed"):
+        ReviewStageExitRequest(
+            target_stage="major_revision",
+            recipient_emails=["chief@example.com"],
+            note="Direct revision should not carry academic recipients",
             accepted_pending_resolutions=[],
         )
 
@@ -1014,6 +1041,7 @@ def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
         request=ReviewStageExitRequest(
             target_stage="first",
             requested_outcome="reject",
+            recipient_emails=["chief@example.com", "board@example.com"],
             note="AE recommends reject but escalates for first decision",
             accepted_pending_resolutions=[],
         ),
@@ -1025,6 +1053,7 @@ def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
     assert isinstance(payload, dict)
     assert payload["target_stage"] == "first"
     assert payload["requested_outcome"] == "reject"
+    assert payload["recipient_emails"] == ["chief@example.com", "board@example.com"]
 
 
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
