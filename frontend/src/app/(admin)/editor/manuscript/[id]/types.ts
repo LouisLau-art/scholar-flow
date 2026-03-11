@@ -78,3 +78,19 @@ export type ReviewEmailTemplateOption = {
   scene: string
   event_type: 'none' | 'invitation' | 'reminder'
 }
+
+export type ReviewerEmailPreviewData = {
+  assignment_id: string
+  template_key: string
+  template_display_name?: string | null
+  event_type: 'none' | 'invitation' | 'reminder'
+  reviewer_email: string
+  reviewer_name?: string | null
+  recipient_email: string
+  recipient_overridden: boolean
+  journal_title?: string | null
+  review_url: string
+  subject: string
+  html: string
+  text: string
+}

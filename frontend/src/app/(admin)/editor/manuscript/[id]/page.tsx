@@ -12,11 +12,13 @@ import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ReviewerEmailPreviewDialog } from '@/components/editor/ReviewerEmailPreviewDialog'
 import { toast } from 'sonner'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { getStatusLabel } from '@/lib/statusStyles'
 import { formatDateTimeLocal } from '@/lib/date-display'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 import type { EditorRbacContext } from '@/types/rbac'
 import { deriveEditorCapability } from '@/lib/rbac'
 import {
@@ -45,7 +47,7 @@ import {
   ReviewerFeedbackSummaryCard,
   TaskSlaSummaryCard,
 } from './detail-sections'
-import type { ReviewerFeedbackItem, ReviewerHistoryItem, ReviewEmailTemplateOption } from './types'
+import type { ReviewerEmailPreviewData, ReviewerFeedbackItem, ReviewerHistoryItem, ReviewEmailTemplateOption } from './types'
 
 const InternalNotebook = dynamic(
   () => import('@/components/editor/InternalNotebook').then((mod) => mod.InternalNotebook),
@@ -157,6 +159,12 @@ export default function EditorManuscriptDetailPage() {
   const [selectedReviewerTemplateByAssignment, setSelectedReviewerTemplateByAssignment] = useState<
     Record<string, string>
   >({})
+  const [reviewerEmailPreviewOpen, setReviewerEmailPreviewOpen] = useState(false)
+  const [reviewerEmailPreviewLoading, setReviewerEmailPreviewLoading] = useState(false)
+  const [reviewerEmailPreviewSending, setReviewerEmailPreviewSending] = useState(false)
+  const [reviewerEmailPreviewData, setReviewerEmailPreviewData] = useState<ReviewerEmailPreviewData | null>(null)
+  const [reviewerEmailPreviewRecipient, setReviewerEmailPreviewRecipient] = useState('')
+  const [reviewerEmailPreviewAssignmentId, setReviewerEmailPreviewAssignmentId] = useState('')
   const [reviewerHistoryOpen, setReviewerHistoryOpen] = useState(false)
   const [reviewerHistoryLoading, setReviewerHistoryLoading] = useState(false)
   const [reviewerHistoryError, setReviewerHistoryError] = useState<string | null>(null)
@@ -899,30 +907,87 @@ export default function EditorManuscriptDetailPage() {
         toast.error('Please select an email template.')
         return
       }
+      setReviewerEmailPreviewAssignmentId(assignmentId)
+      setReviewerEmailPreviewOpen(true)
+      setReviewerEmailPreviewLoading(true)
       setSendingReviewerEmailAssignmentId(assignmentId)
       try {
-        const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, { template_key: templateKey })
+        const res = await EditorApi.previewReviewerAssignmentEmail(assignmentId, { template_key: templateKey })
         if (!res?.success) {
-          throw new Error(res?.detail || res?.message || 'Failed to send reviewer email')
+          throw new Error(normalizeApiErrorMessage(res, 'Failed to preview reviewer email'))
         }
-        const deliveryStatus = String(res?.data?.delivery_status || '').trim().toLowerCase()
-        const templateLabel = res?.data?.template_display_name || templateKey
-        if (deliveryStatus === 'sent') {
-          toast.success(`Template "${templateLabel}" sent.`)
-        } else if (deliveryStatus === 'failed') {
-          toast.error(res?.data?.delivery_error || `Template "${templateLabel}" failed to send.`)
-        } else {
-          toast.message(`Template "${templateLabel}" accepted. Delivery pending.`)
-        }
-        await refreshDetail({ force: true })
+        setReviewerEmailPreviewData((res.data as ReviewerEmailPreviewData) || null)
+        setReviewerEmailPreviewRecipient(String(res?.data?.recipient_email || '').trim())
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to send reviewer email')
+        setReviewerEmailPreviewOpen(false)
+        setReviewerEmailPreviewData(null)
+        setReviewerEmailPreviewRecipient('')
+        setReviewerEmailPreviewAssignmentId('')
+        toast.error(e instanceof Error ? e.message : 'Failed to preview reviewer email')
       } finally {
+        setReviewerEmailPreviewLoading(false)
         setSendingReviewerEmailAssignmentId(null)
       }
     },
-    [refreshDetail]
+    []
   )
+
+  const handleCloseReviewerEmailPreview = useCallback(() => {
+    if (reviewerEmailPreviewSending) return
+    setReviewerEmailPreviewOpen(false)
+    setReviewerEmailPreviewLoading(false)
+    setReviewerEmailPreviewData(null)
+    setReviewerEmailPreviewRecipient('')
+    setReviewerEmailPreviewAssignmentId('')
+  }, [reviewerEmailPreviewSending])
+
+  const handleConfirmReviewerTemplateEmail = useCallback(async () => {
+    const assignmentId = String(reviewerEmailPreviewAssignmentId || '').trim()
+    const templateKey = String(reviewerEmailPreviewData?.template_key || '').trim()
+    const recipientEmail = String(reviewerEmailPreviewRecipient || '').trim()
+    if (!assignmentId || !templateKey || !recipientEmail) {
+      toast.error('Reviewer email preview is incomplete.')
+      return
+    }
+    setReviewerEmailPreviewSending(true)
+    setSendingReviewerEmailAssignmentId(assignmentId)
+    try {
+      const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, {
+        template_key: templateKey,
+        recipient_email: recipientEmail,
+      })
+      if (!res?.success) {
+        throw new Error(normalizeApiErrorMessage(res, 'Failed to send reviewer email'))
+      }
+      const deliveryStatus = String(res?.data?.delivery_status || '').trim().toLowerCase()
+      const templateLabel = res?.data?.template_display_name || templateKey
+      const previewSend = Boolean(res?.data?.preview_send)
+      if (deliveryStatus === 'sent') {
+        if (previewSend) {
+          toast.success(`Preview email "${templateLabel}" sent to ${recipientEmail}. Assignment status unchanged.`)
+        } else {
+          toast.success(`Template "${templateLabel}" sent.`)
+        }
+      } else if (deliveryStatus === 'failed') {
+        toast.error(res?.data?.delivery_error || `Template "${templateLabel}" failed to send.`)
+      } else {
+        toast.message(`Template "${templateLabel}" accepted. Delivery pending.`)
+      }
+      handleCloseReviewerEmailPreview()
+      await refreshDetail({ force: true })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send reviewer email')
+    } finally {
+      setReviewerEmailPreviewSending(false)
+      setSendingReviewerEmailAssignmentId(null)
+    }
+  }, [
+    handleCloseReviewerEmailPreview,
+    refreshDetail,
+    reviewerEmailPreviewAssignmentId,
+    reviewerEmailPreviewData?.template_key,
+    reviewerEmailPreviewRecipient,
+  ])
 
   const handleReviewerTemplateChange = useCallback((args: { assignmentId: string; templateKey: string }) => {
     const assignmentId = String(args.assignmentId || '').trim()
@@ -1202,6 +1267,17 @@ export default function EditorManuscriptDetailPage() {
             setInvoiceSaving(false)
           }
         }}
+      />
+
+      <ReviewerEmailPreviewDialog
+        open={reviewerEmailPreviewOpen}
+        loading={reviewerEmailPreviewLoading}
+        sending={reviewerEmailPreviewSending}
+        preview={reviewerEmailPreviewData}
+        recipientEmail={reviewerEmailPreviewRecipient}
+        onRecipientEmailChange={setReviewerEmailPreviewRecipient}
+        onClose={handleCloseReviewerEmailPreview}
+        onSend={handleConfirmReviewerTemplateEmail}
       />
 
       <SafeDialog

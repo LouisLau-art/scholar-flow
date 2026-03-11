@@ -700,7 +700,7 @@ export function ReviewerManagementCard({
                                 ) : (
                                   <Mail className="mr-1 h-3.5 w-3.5" />
                                 )}
-                                Send Email
+                                Preview &amp; Send
                               </Button>
                               <Button
                                 size="sm"

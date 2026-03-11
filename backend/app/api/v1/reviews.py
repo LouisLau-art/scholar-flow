@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Depends, Body, UploadFile, File, Form, Response, Query
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
 from app.core.roles import require_any_role
 from app.core.role_matrix import normalize_roles
+from app.core.email_normalization import normalize_email
 from app.core.storage_filename import sanitize_storage_filename
 from uuid import UUID
 from typing import Any, Dict, Optional
@@ -111,6 +113,21 @@ _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES: dict[str, dict[str, Any]] = {
         "is_active": True,
     },
 }
+
+
+class AssignmentEmailActionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    template_key: str | None = None
+    template: str | None = None
+    recipient_email: EmailStr | None = None
+    idempotency_key: str | None = None
+
+    @field_validator("recipient_email", mode="before")
+    @classmethod
+    def _normalize_recipient_email(cls, value: Any) -> Any:
+        normalized = normalize_email(value)
+        return normalized or None
 
 
 def _is_missing_assignment_audit_column_error(error: Exception | str) -> bool:
@@ -319,6 +336,148 @@ def _build_assignment_email_audit_context(
         "scene": _REVIEW_ASSIGNMENT_SCENE,
         "event_type": event_type,
         "idempotency_key": idempotency_key,
+    }
+
+
+def _build_assignment_preview_email_audit_context(
+    *,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    return {
+        "scene": "reviewer_assignment_preview",
+        "event_type": "preview",
+        "idempotency_key": idempotency_key,
+    }
+
+
+def _resolve_assignment_email_frontend_base_url() -> str:
+    return (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
+
+
+def _build_review_assignment_url(*, token: str | None) -> str:
+    frontend_base_url = _resolve_assignment_email_frontend_base_url()
+    return f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
+
+
+def _build_assignment_email_context(
+    *,
+    reviewer_name: str,
+    manuscript_title: str,
+    manuscript_id: str,
+    journal_title: str,
+    due_at: str,
+    review_url: str,
+) -> dict[str, str]:
+    return {
+        "review_url": review_url,
+        "reviewer_name": reviewer_name,
+        "recipient_name": reviewer_name,
+        "manuscript_title": manuscript_title,
+        "manuscript_id": manuscript_id,
+        "journal_title": journal_title,
+        "due_at": due_at or "",
+        "due_date": str(due_at).split("T")[0] if due_at else "",
+    }
+
+
+def _resolve_assignment_email_payload_template_key(payload: AssignmentEmailActionPayload) -> str:
+    return str(payload.template_key or payload.template or "reviewer_invitation_standard")
+
+
+def _prepare_assignment_email_resources(
+    *,
+    assignment_id: UUID,
+    payload: AssignmentEmailActionPayload,
+    current_user: dict[str, Any],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    template_key_raw = _resolve_assignment_email_payload_template_key(payload)
+    template_row = _load_review_assignment_template(template_key_raw)
+    if not template_row:
+        raise HTTPException(status_code=404, detail=f"Email template not found: {template_key_raw}")
+
+    assignment = _load_assignment_for_send_email(str(assignment_id))
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if str(assignment.get("status") or "").strip().lower() == "cancelled":
+        raise HTTPException(status_code=409, detail="Assignment is cancelled")
+
+    manuscript_res = (
+        supabase_admin.table("manuscripts")
+        .select("id, title, journal_id, assistant_editor_id, status")
+        .eq("id", str(assignment.get("manuscript_id") or ""))
+        .single()
+        .execute()
+    )
+    manuscript = getattr(manuscript_res, "data", None) or {}
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    roles = set(normalize_roles(_parse_roles(profile)))
+    _ensure_review_management_access(
+        manuscript=manuscript,
+        user_id=str(current_user.get("id") or ""),
+        roles=roles,
+    )
+
+    template_key = str(template_row.get("template_key") or "").strip() or _normalize_template_key(str(template_key_raw))
+    subject_template = str(template_row.get("subject_template") or "").strip()
+    body_html_template = str(template_row.get("body_html_template") or "").strip()
+    body_text_template = str(template_row.get("body_text_template") or "").strip() or None
+    if not subject_template or not body_html_template:
+        raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
+    event_type = str(template_row.get("event_type") or "none").strip().lower()
+    if event_type not in {"none", "invitation", "reminder"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Only invitation/reminder reviewer templates can be sent from this action",
+        )
+
+    assignment_status = str(assignment.get("status") or "").strip().lower()
+    assignment_is_declined = assignment_status == "declined" or bool(assignment.get("declined_at"))
+    if assignment_is_declined and event_type == "reminder":
+        raise HTTPException(status_code=409, detail="Cannot send reminder for declined assignment")
+
+    reviewer_id = str(assignment.get("reviewer_id") or "").strip()
+    reviewer_profile_res = (
+        supabase_admin.table("user_profiles")
+        .select("email, full_name")
+        .eq("id", reviewer_id)
+        .single()
+        .execute()
+    )
+    reviewer_profile = getattr(reviewer_profile_res, "data", None) or {}
+    reviewer_email = normalize_email(reviewer_profile.get("email"))
+    reviewer_name = str(reviewer_profile.get("full_name") or "").strip() or "Reviewer"
+    if not reviewer_email:
+        raise HTTPException(status_code=400, detail="Reviewer email is missing")
+
+    manuscript_id = str(manuscript.get("id") or "").strip()
+    manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
+    journal_title = _resolve_journal_title_for_assignment(manuscript)
+    requested_recipient_email = normalize_email(payload.recipient_email)
+    recipient_email = requested_recipient_email or reviewer_email
+    recipient_overridden = bool(requested_recipient_email and requested_recipient_email != reviewer_email)
+
+    return {
+        "template_row": template_row,
+        "template_key": template_key,
+        "subject_template": subject_template,
+        "body_html_template": body_html_template,
+        "body_text_template": body_text_template,
+        "event_type": event_type,
+        "assignment": assignment,
+        "assignment_status": assignment_status,
+        "assignment_is_declined": assignment_is_declined,
+        "manuscript": manuscript,
+        "manuscript_id": manuscript_id,
+        "manuscript_title": manuscript_title,
+        "journal_title": journal_title,
+        "reviewer_id": reviewer_id,
+        "reviewer_email": reviewer_email,
+        "reviewer_name": reviewer_name,
+        "recipient_email": recipient_email,
+        "recipient_overridden": recipient_overridden,
     }
 
 
@@ -896,10 +1055,69 @@ async def list_review_email_templates(
     return {"success": True, "data": rows}
 
 
+@router.post("/reviews/assignments/{assignment_id}/preview-email")
+async def preview_assignment_email(
+    assignment_id: UUID,
+    payload: AssignmentEmailActionPayload | None = Body(default=None),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    发送前预览审稿邮件（已完成模板变量注入）。
+    """
+    body = payload or AssignmentEmailActionPayload()
+    prepared = _prepare_assignment_email_resources(
+        assignment_id=assignment_id,
+        payload=body,
+        current_user=current_user,
+        profile=profile,
+    )
+
+    assignment = prepared["assignment"]
+    due_at = str(assignment.get("due_at") or "").strip()
+    token = _safe_create_assignment_magic_link(
+        reviewer_id=prepared["reviewer_id"],
+        manuscript_id=prepared["manuscript_id"],
+        assignment_id=str(assignment.get("id") or assignment_id),
+    )
+    context = _build_assignment_email_context(
+        reviewer_name=prepared["reviewer_name"],
+        manuscript_title=prepared["manuscript_title"],
+        manuscript_id=prepared["manuscript_id"],
+        journal_title=prepared["journal_title"],
+        due_at=due_at,
+        review_url=_build_review_assignment_url(token=token),
+    )
+    preview = email_service.render_inline_email_preview(
+        subject_template=prepared["subject_template"],
+        body_html_template=prepared["body_html_template"],
+        body_text_template=prepared["body_text_template"],
+        context=context,
+    )
+    return {
+        "success": True,
+        "data": {
+            "assignment_id": str(assignment.get("id") or assignment_id),
+            "template_key": prepared["template_key"],
+            "template_display_name": prepared["template_row"].get("display_name"),
+            "event_type": prepared["event_type"],
+            "reviewer_email": prepared["reviewer_email"],
+            "reviewer_name": prepared["reviewer_name"],
+            "recipient_email": prepared["recipient_email"],
+            "recipient_overridden": prepared["recipient_overridden"],
+            "journal_title": prepared["journal_title"],
+            "review_url": context["review_url"],
+            "subject": preview["subject"],
+            "html": preview["html"],
+            "text": preview["text"],
+        },
+    }
+
+
 @router.post("/reviews/assignments/{assignment_id}/send-email")
 async def send_assignment_email(
     assignment_id: UUID,
-    payload: dict[str, Any] | None = Body(default=None),
+    payload: AssignmentEmailActionPayload | None = Body(default=None),
     current_user: dict = Depends(get_current_user),
     profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
 ):
@@ -911,144 +1129,111 @@ async def send_assignment_email(
     - 自动注入 manuscript/reviewer/journal 变量；
     - 现在同步返回真实投递结果（sent/failed），避免前端把 queued 误判成“已发成功”。
     """
-    body = payload or {}
-    template_key_raw = body.get("template_key") or body.get("template") or "reviewer_invitation_standard"
-    template_row = _load_review_assignment_template(str(template_key_raw))
-    if not template_row:
-        raise HTTPException(status_code=404, detail=f"Email template not found: {template_key_raw}")
-
-    assignment = _load_assignment_for_send_email(str(assignment_id))
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    if str(assignment.get("status") or "").strip().lower() == "cancelled":
-        raise HTTPException(status_code=409, detail="Assignment is cancelled")
-
-    manuscript_res = (
-        supabase_admin.table("manuscripts")
-        .select("id, title, journal_id, assistant_editor_id, status")
-        .eq("id", str(assignment.get("manuscript_id") or ""))
-        .single()
-        .execute()
-    )
-    manuscript = getattr(manuscript_res, "data", None) or {}
-    if not manuscript:
-        raise HTTPException(status_code=404, detail="Manuscript not found")
-
-    roles = set(normalize_roles(_parse_roles(profile)))
-    _ensure_review_management_access(
-        manuscript=manuscript,
-        user_id=str(current_user.get("id") or ""),
-        roles=roles,
+    body = payload or AssignmentEmailActionPayload()
+    prepared = _prepare_assignment_email_resources(
+        assignment_id=assignment_id,
+        payload=body,
+        current_user=current_user,
+        profile=profile,
     )
 
-    template_key = str(template_row.get("template_key") or "").strip() or _normalize_template_key(str(template_key_raw))
-    subject_template = str(template_row.get("subject_template") or "").strip()
-    body_html_template = str(template_row.get("body_html_template") or "").strip()
-    body_text_template = str(template_row.get("body_text_template") or "").strip() or None
-    if not subject_template or not body_html_template:
-        raise HTTPException(status_code=422, detail=f"Email template is invalid: {template_key}")
-    event_type = str(template_row.get("event_type") or "none").strip().lower()
-    if event_type not in {"none", "invitation", "reminder"}:
-        raise HTTPException(
-            status_code=422,
-            detail="Only invitation/reminder reviewer templates can be sent from this action",
-        )
-
+    template_row = prepared["template_row"]
+    template_key = prepared["template_key"]
+    subject_template = prepared["subject_template"]
+    body_html_template = prepared["body_html_template"]
+    body_text_template = prepared["body_text_template"]
+    event_type = prepared["event_type"]
+    assignment = prepared["assignment"]
+    manuscript = prepared["manuscript"]
+    manuscript_id = prepared["manuscript_id"]
+    journal_title = prepared["journal_title"]
+    reviewer_id = prepared["reviewer_id"]
+    reviewer_email = prepared["reviewer_email"]
+    reviewer_name = prepared["reviewer_name"]
+    recipient_email = prepared["recipient_email"]
+    recipient_overridden = prepared["recipient_overridden"]
     now_dt = datetime.now(timezone.utc)
     now_iso = now_dt.isoformat()
     current_user_id = str(current_user.get("id") or "").strip()
-    assignment_status = str(assignment.get("status") or "").strip().lower()
-    assignment_is_declined = assignment_status == "declined" or bool(assignment.get("declined_at"))
+    assignment_status = prepared["assignment_status"]
+    assignment_is_declined = prepared["assignment_is_declined"]
     effective_assignment = assignment
     if assignment_is_declined:
         if event_type == "reminder":
             raise HTTPException(status_code=409, detail="Cannot send reminder for declined assignment")
-
-    reviewer_id = str(assignment.get("reviewer_id") or "").strip()
-    reviewer_profile_res = (
-        supabase_admin.table("user_profiles")
-        .select("email, full_name")
-        .eq("id", reviewer_id)
-        .single()
-        .execute()
-    )
-    reviewer_profile = getattr(reviewer_profile_res, "data", None) or {}
-    reviewer_email = str(reviewer_profile.get("email") or "").strip()
-    reviewer_name = str(reviewer_profile.get("full_name") or "").strip() or "Reviewer"
-    if not reviewer_email:
-        raise HTTPException(status_code=400, detail="Reviewer email is missing")
-
-    manuscript_id = str(manuscript.get("id") or "").strip()
-    manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
-    due_at = str(assignment.get("due_at") or "").strip()
-    if assignment_is_declined and event_type == "invitation":
+    if assignment_is_declined and event_type == "invitation" and not recipient_overridden:
         effective_assignment = _insert_reinvite_assignment_attempt(
             assignment=assignment,
             current_user_id=current_user_id,
         )
-
-    journal_title = _resolve_journal_title_for_assignment(manuscript)
-    context = {
-        "review_url": "",
-        "reviewer_name": reviewer_name,
-        "recipient_name": reviewer_name,
-        "manuscript_title": manuscript_title,
-        "manuscript_id": manuscript_id,
-        "journal_title": journal_title,
-        "due_at": due_at or "",
-        "due_date": str(due_at).split("T")[0] if due_at else "",
-    }
     effective_assignment_id = str(effective_assignment.get("id") or assignment_id).strip()
     if not effective_assignment_id:
         raise HTTPException(status_code=500, detail="Failed to resolve assignment id for reviewer email")
-    effective_due_at = str(effective_assignment.get("due_at") or due_at).strip()
+    effective_due_at = str(effective_assignment.get("due_at") or assignment.get("due_at") or "").strip()
     effective_assignment_status = str(effective_assignment.get("status") or assignment_status).strip().lower()
-    idempotency_key = str(body.get("idempotency_key") or "").strip() or _build_assignment_email_idempotency_key(
-        assignment_id=effective_assignment_id,
-        template_key=template_key,
-        event_type=event_type,
-        now=now_dt,
-        assignment_status=effective_assignment_status,
-    )
-    email_tags = _build_assignment_email_tags(
-        assignment_id=effective_assignment_id,
-        manuscript_id=manuscript_id,
-        template_key=template_key,
-        event_type=event_type,
-        journal_title=journal_title,
-    )
-    email_headers = {
-        "X-SF-Assignment-ID": effective_assignment_id,
-        "X-SF-Manuscript-ID": manuscript_id,
-        "X-SF-Template-Key": template_key,
-        "X-SF-Event-Type": event_type,
-    }
-    audit_context = _build_assignment_email_audit_context(
-        assignment_id=effective_assignment_id,
-        manuscript_id=manuscript_id,
-        event_type=event_type,
-        idempotency_key=idempotency_key,
-    )
+    send_is_preview = recipient_overridden
+    if send_is_preview:
+        idempotency_key = str(body.idempotency_key or "").strip() or (
+            f"reviewer-email-preview/{effective_assignment_id}/{template_key}/{now_dt.strftime('%Y%m%d%H%M%S%f')}"
+        )
+        email_tags = [
+            {"name": "scene", "value": "reviewer_assignment_preview"},
+            {"name": "event", "value": "preview"},
+            {"name": "template", "value": template_key},
+        ]
+        email_headers = {
+            "X-SF-Template-Key": template_key,
+            "X-SF-Event-Type": "preview",
+        }
+        audit_context = _build_assignment_preview_email_audit_context(idempotency_key=idempotency_key)
+    else:
+        idempotency_key = str(body.idempotency_key or "").strip() or _build_assignment_email_idempotency_key(
+            assignment_id=effective_assignment_id,
+            template_key=template_key,
+            event_type=event_type,
+            now=now_dt,
+            assignment_status=effective_assignment_status,
+        )
+        email_tags = _build_assignment_email_tags(
+            assignment_id=effective_assignment_id,
+            manuscript_id=manuscript_id,
+            template_key=template_key,
+            event_type=event_type,
+            journal_title=journal_title,
+        )
+        email_headers = {
+            "X-SF-Assignment-ID": effective_assignment_id,
+            "X-SF-Manuscript-ID": manuscript_id,
+            "X-SF-Template-Key": template_key,
+            "X-SF-Event-Type": event_type,
+        }
+        audit_context = _build_assignment_email_audit_context(
+            assignment_id=effective_assignment_id,
+            manuscript_id=manuscript_id,
+            event_type=event_type,
+            idempotency_key=idempotency_key,
+        )
 
     token = _safe_create_assignment_magic_link(
         reviewer_id=reviewer_id,
         manuscript_id=manuscript_id,
         assignment_id=effective_assignment_id,
     )
-    frontend_base_url = (os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000").rstrip("/")
-    review_url = (
-        f"{frontend_base_url}/review/invite?token={quote(str(token))}" if token else f"{frontend_base_url}/dashboard"
+    context = _build_assignment_email_context(
+        reviewer_name=reviewer_name,
+        manuscript_title=prepared["manuscript_title"],
+        manuscript_id=manuscript_id,
+        journal_title=journal_title,
+        due_at=effective_due_at,
+        review_url=_build_review_assignment_url(token=token),
     )
-    context["review_url"] = review_url
-    context["due_at"] = effective_due_at or ""
-    context["due_date"] = str(effective_due_at).split("T")[0] if effective_due_at else ""
     try:
         subject_preview = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
     except Exception:
         subject_preview = subject_template or "(queued)"
 
     delivery = email_service.send_inline_email(
-        to_email=reviewer_email,
+        to_email=recipient_email,
         template_key=template_key,
         subject_template=subject_template,
         body_html_template=body_html_template,
@@ -1065,7 +1250,7 @@ async def send_assignment_email(
 
     try:
         patch: dict[str, Any] = {}
-        if event_type == "invitation" and delivery_status == EmailStatus.SENT.value:
+        if not send_is_preview and event_type == "invitation" and delivery_status == EmailStatus.SENT.value:
             if not assignment_is_declined:
                 patch["invited_at"] = now_iso
                 if assignment_status in {"selected", "pending", "invited", "opened"}:
@@ -1080,7 +1265,7 @@ async def send_assignment_email(
                 if current_user_id:
                     patch["invited_by"] = current_user_id
                 patch["invited_via"] = "template_invitation"
-        elif event_type == "reminder" and delivery_status == EmailStatus.SENT.value:
+        elif not send_is_preview and event_type == "reminder" and delivery_status == EmailStatus.SENT.value:
             patch["last_reminded_at"] = now_iso
         if patch:
             try:
@@ -1094,6 +1279,8 @@ async def send_assignment_email(
 
         manuscript_status = str(manuscript.get("status") or "").strip().lower()
         if (
+            not send_is_preview
+            and
             event_type == "invitation"
             and delivery_status == EmailStatus.SENT.value
             and manuscript_status in {"pre_check", "resubmitted"}
@@ -1110,7 +1297,10 @@ async def send_assignment_email(
             "template_key": template_key,
             "template_display_name": template_row.get("display_name"),
             "event_type": event_type,
-            "recipient": reviewer_email,
+            "recipient": recipient_email,
+            "reviewer_email": reviewer_email,
+            "recipient_overridden": send_is_preview,
+            "preview_send": send_is_preview,
             "journal_title": journal_title,
             "idempotency_key": idempotency_key,
             "delivery_status": delivery_status,

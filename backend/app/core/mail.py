@@ -197,6 +197,36 @@ class EmailService:
         cleaned = _SPACE_RE.sub(" ", cleaned).strip()
         return cleaned[:10_000]
 
+    def render_inline_email_preview(
+        self,
+        *,
+        subject_template: str,
+        body_html_template: str,
+        context: Dict[str, Any],
+        body_text_template: str | None = None,
+    ) -> dict[str, str]:
+        """
+        渲染 inline 邮件模板，返回最终 subject/html/text。
+
+        中文注释:
+        - 供“发送前预览”场景复用，避免前端自行拼接模板变量。
+        - 发送链路也会复用这段逻辑，确保预览和真实发送内容一致。
+        """
+        subject = self.render_inline_template(subject_template, context).strip()
+        html = self.render_inline_template(body_html_template, context)
+        text = (
+            self.render_inline_template(body_text_template, context)
+            if body_text_template and str(body_text_template).strip()
+            else self._build_plain_text_from_html(html)
+        )
+        if not subject:
+            subject = "(no subject)"
+        return {
+            "subject": subject,
+            "html": html,
+            "text": text,
+        }
+
     # === Legacy-compatible API (tests + scheduler/worker) ===
     def render_html(self, template_name: str, context: Dict[str, Any]) -> str:
         return self.render_template(template_name, context)
@@ -433,15 +463,15 @@ class EmailService:
             return result
 
         try:
-            subject = self.render_inline_template(subject_template, context).strip()
-            html = self.render_inline_template(body_html_template, context)
-            text = (
-                self.render_inline_template(body_text_template, context)
-                if body_text_template and str(body_text_template).strip()
-                else self._build_plain_text_from_html(html)
+            preview = self.render_inline_email_preview(
+                subject_template=subject_template,
+                body_html_template=body_html_template,
+                context=context,
+                body_text_template=body_text_template,
             )
-            if not subject:
-                subject = "(no subject)"
+            subject = preview["subject"]
+            html = preview["html"]
+            text = preview["text"]
             result["subject"] = subject
         except Exception as e:
             logger.warning("[Email] inline template render failed: %s", e)

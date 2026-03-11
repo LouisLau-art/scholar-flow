@@ -388,7 +388,7 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
 
     async sendReviewerAssignmentEmail(
       assignmentId: string,
-      payload: { template_key: string }
+      payload: { template_key: string; recipient_email?: string }
     ) {
       const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/send-email`, {
         method: 'POST',
@@ -396,6 +396,18 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
         body: JSON.stringify(payload),
       })
       return res.json().catch(() => ({ success: false, detail: 'Failed to send reviewer email' }))
+    },
+
+    async previewReviewerAssignmentEmail(
+      assignmentId: string,
+      payload: { template_key: string; recipient_email?: string }
+    ) {
+      const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/preview-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to preview reviewer email' }))
     },
 
     async getReviewEmailTemplates(scene = 'reviewer_assignment', options?: CachedGetOptions) {
