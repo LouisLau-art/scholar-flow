@@ -69,20 +69,20 @@ export default function SubmissionForm() {
         onEthicsConsentChange={form.onEthicsConsentChange}
       />
 
-      <SubmissionWordUploadCard
-        isUploadingWordFile={form.isUploadingWordFile}
-        wordFilePath={form.wordFilePath}
-        wordFileName={form.wordFileName}
-        wordFileUploadError={form.wordFileUploadError}
-        onWordFileChange={form.handleWordFileUpload}
-      />
-
       <SubmissionCoverLetterCard
         isUploadingCoverLetter={form.isUploadingCoverLetter}
         coverLetterPath={form.coverLetterPath}
         coverLetterFileName={form.coverLetterFileName}
         coverLetterUploadError={form.coverLetterUploadError}
         onCoverLetterChange={form.handleCoverLetterUpload}
+      />
+
+      <SubmissionWordUploadCard
+        isUploadingWordFile={form.isUploadingWordFile}
+        wordFilePath={form.wordFilePath}
+        wordFileName={form.wordFileName}
+        wordFileUploadError={form.wordFileUploadError}
+        onWordFileChange={form.handleWordFileUpload}
       />
 
       <SubmissionFileUploadCard

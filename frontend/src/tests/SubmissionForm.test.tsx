@@ -212,6 +212,21 @@ describe('SubmissionForm Component', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders cover letter before word and pdf upload sections', () => {
+    render(<SubmissionForm />)
+
+    const coverLetterHeading = screen.getByText('Cover Letter (Required)')
+    const wordHeading = screen.getByText('Upload Manuscript (Word) (Required)')
+    const pdfHeading = screen.getByText('Upload Manuscript (PDF) (Required)')
+
+    expect(
+      coverLetterHeading.compareDocumentPosition(wordHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      wordHeading.compareDocumentPosition(pdfHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('handles file upload success and populates metadata', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
