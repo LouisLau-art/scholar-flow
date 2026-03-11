@@ -397,6 +397,7 @@ async def submit_academic_check(
             request.decision,
             request.comment,
             changed_by=current_user.get("id"),
+            actor_roles=profile.get("roles") or [],
             idempotency_key=request.idempotency_key,
         )
         return {"message": "Academic check submitted", "data": updated}

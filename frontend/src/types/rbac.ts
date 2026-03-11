@@ -3,6 +3,7 @@ export type EditorAction =
   | 'process:view'
   | 'manuscript:view_detail'
   | 'manuscript:bind_owner'
+  | 'manuscript:bind_academic_editor'
   | 'invoice:update_info'
   | 'invoice:override_apc'
   | 'decision:record_first'

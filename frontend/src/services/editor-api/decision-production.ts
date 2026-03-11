@@ -221,6 +221,23 @@ export function createDecisionProductionApi(deps: DecisionProductionApiDeps) {
       return json
     },
 
+    async bindAcademicEditor(
+      manuscriptId: string,
+      payload: { academic_editor_id: string; reason?: string; source?: string }
+    ) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/bind-academic-editor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        invalidateProcessRowsCache()
+        invalidateManuscriptDetailCache(manuscriptId)
+      }
+      return json
+    },
+
     // Feature 032: Quick Actions
     async quickPrecheck(manuscriptId: string, payload: { decision: 'approve' | 'revision'; comment?: string }) {
       const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/quick-precheck`, {

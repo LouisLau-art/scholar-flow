@@ -459,6 +459,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         comment: str | None = None,
         *,
         changed_by: UUID | str | None = None,
+        actor_roles: Iterable[str] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -482,6 +483,17 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             raise HTTPException(status_code=409, detail="Academic check conflict: manuscript state changed")
         if pre != PreCheckStatus.ACADEMIC.value:
             raise HTTPException(status_code=409, detail=f"Academic check only allowed in academic stage, current={pre}")
+
+        actor_id = str(actor or "").strip()
+        normalized_actor_roles = set(normalize_roles(actor_roles))
+        bound_academic_editor_id = str(ms.get("academic_editor_id") or "").strip()
+        if (
+            actor_id
+            and "admin" not in normalized_actor_roles
+            and "editor_in_chief" not in normalized_actor_roles
+            and bound_academic_editor_id != actor_id
+        ):
+            raise HTTPException(status_code=403, detail="Only the bound academic editor can submit academic check")
 
         payload_action = "precheck_academic_to_review" if d == "review" else "precheck_academic_to_decision"
         updated = self.editorial.update_status(
@@ -534,22 +546,94 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             raise HTTPException(status_code=422, detail="academic_editor_id profile not found")
 
         role_set = set(normalize_roles(profile.get("roles") or []))
-        if not role_set.intersection({"academic_editor", "editor_in_chief", "admin"}):
+        if not role_set.intersection({"academic_editor", "editor_in_chief"}):
             raise HTTPException(
                 status_code=422,
                 detail="academic_editor_id must have academic_editor or editor_in_chief role",
             )
 
         journal_id = str(manuscript_journal_id or "").strip()
-        if journal_id and "admin" not in role_set:
+        if journal_id:
             scoped_journal_ids = get_user_scope_journal_ids(
                 user_id=academic_editor_id_str,
                 roles=role_set,
             )
-            if scoped_journal_ids and journal_id not in scoped_journal_ids:
+            if journal_id not in scoped_journal_ids:
                 raise HTTPException(
                     status_code=422,
                     detail="academic_editor_id is not scoped to this journal",
                 )
 
         return profile
+
+    def bind_academic_editor(
+        self,
+        manuscript_id: UUID | str,
+        *,
+        academic_editor_id: UUID | str,
+        changed_by: UUID | str | None,
+        reason: str | None = None,
+        source: str | None = None,
+    ) -> dict[str, Any]:
+        manuscript_id_str = str(manuscript_id)
+        academic_editor_id_str = str(academic_editor_id or "").strip()
+        changed_by_str = str(changed_by or "").strip() or None
+        reason_clean = str(reason or "").strip() or None
+        source_clean = str(source or "editor_manuscript_detail").strip() or "editor_manuscript_detail"
+
+        ms = self._get_manuscript(manuscript_id_str)
+        validated_profile = self._validate_academic_editor_assignment(
+            academic_editor_id=academic_editor_id_str,
+            manuscript_journal_id=str(ms.get("journal_id") or "").strip() or None,
+        )
+        before_academic_editor_id = str(ms.get("academic_editor_id") or "").strip() or None
+        if before_academic_editor_id == academic_editor_id_str:
+            return dict(ms)
+
+        now = self._now()
+        update_payload = {
+            "academic_editor_id": academic_editor_id_str,
+            "updated_at": now,
+        }
+        if (
+            normalize_status(str(ms.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+            and self._normalize_precheck_status(ms.get("pre_check_status")) == PreCheckStatus.ACADEMIC.value
+            and not str(ms.get("academic_submitted_at") or "").strip()
+        ):
+            update_payload["academic_submitted_at"] = now
+
+        try:
+            resp = (
+                self.client.table("manuscripts")
+                .update(update_payload)
+                .eq("id", manuscript_id_str)
+                .execute()
+            )
+        except Exception as e:
+            logger.error("[AcademicEditorBinding] update manuscript academic_editor_id failed: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to bind academic editor") from e
+
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+        updated = rows[0]
+        self._safe_insert_transition_log(
+            manuscript_id=manuscript_id_str,
+            from_status=str(ms.get("status") or ""),
+            to_status=str(updated.get("status") or ms.get("status") or ""),
+            changed_by=changed_by_str,
+            comment=reason_clean or "academic editor bound",
+            payload={
+                "action": "bind_academic_editor",
+                "source": source_clean,
+                "reason": reason_clean,
+                "before": {"academic_editor_id": before_academic_editor_id},
+                "after": {
+                    "academic_editor_id": academic_editor_id_str,
+                    "academic_editor_name": validated_profile.get("full_name"),
+                    "academic_editor_email": validated_profile.get("email"),
+                },
+            },
+            created_at=now,
+        )
+        return updated

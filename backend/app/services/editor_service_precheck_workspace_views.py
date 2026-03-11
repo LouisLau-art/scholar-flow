@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
+
+from fastapi import HTTPException
 
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import normalize_roles
@@ -21,13 +24,22 @@ class EditorServicePrecheckWorkspaceViewMixin:
         search: str | None = None,
     ) -> list[dict[str, Any]]:
         manuscript_id_str = str(manuscript_id)
+        manuscript = self._get_manuscript(manuscript_id_str)
+        normalized_viewer_roles = set(normalize_roles(viewer_roles or []))
+        viewer_id_str = str(viewer_user_id or "").strip()
+        pure_assistant_editor = (
+            "assistant_editor" in normalized_viewer_roles
+            and not bool({"admin", "managing_editor", "editor_in_chief"} & normalized_viewer_roles)
+        )
+        assigned_ae_id = str(manuscript.get("assistant_editor_id") or "").strip()
+        if pure_assistant_editor and assigned_ae_id != viewer_id_str:
+            raise HTTPException(status_code=403, detail="Only the assigned assistant editor can view academic editor candidates")
         ensure_manuscript_scope_access(
             manuscript_id=manuscript_id_str,
-            user_id=str(viewer_user_id or ""),
+            user_id=viewer_id_str,
             roles=viewer_roles or [],
             allow_admin_bypass=True,
         )
-        manuscript = self._get_manuscript(manuscript_id_str)
         journal_id = str(manuscript.get("journal_id") or "").strip()
         bound_academic_editor_id = str(manuscript.get("academic_editor_id") or "").strip()
         allowed_roles = {"academic_editor", "editor_in_chief"}
@@ -58,12 +70,7 @@ class EditorServicePrecheckWorkspaceViewMixin:
                 .execute()
             )
         else:
-            profile_resp = (
-                self.client.table("user_profiles")
-                .select("id,email,full_name,roles")
-                .or_("roles.cs.{academic_editor},roles.cs.{editor_in_chief}")
-                .execute()
-            )
+            profile_resp = SimpleNamespace(data=[])
 
         candidates: list[dict[str, Any]] = []
         seen_ids: set[str] = set()

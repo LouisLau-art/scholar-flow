@@ -443,6 +443,16 @@ async def get_editor_manuscript_detail_impl(
         if aeid
         else None
     )
+    academic_editor_id = str(ms.get("academic_editor_id") or "").strip()
+    ms["academic_editor"] = (
+        {
+            "id": academic_editor_id,
+            "full_name": (profiles_map.get(academic_editor_id) or {}).get("full_name"),
+            "email": (profiles_map.get(academic_editor_id) or {}).get("email"),
+        }
+        if academic_editor_id
+        else None
+    )
 
     # 作者元信息兜底：若 invoice_metadata 未填写，详情页仍可回显作者姓名与机构。
     meta = ms.get("invoice_metadata")

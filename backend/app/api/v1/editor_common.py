@@ -121,6 +121,12 @@ class AcademicCheckRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=64)
 
 
+class BindAcademicEditorRequest(BaseModel):
+    academic_editor_id: UUID
+    reason: str | None = Field(default=None, max_length=2000)
+    source: str | None = Field(default=None, max_length=100)
+
+
 class ConfirmInvoicePaidPayload(BaseModel):
     manuscript_id: str
     expected_status: Literal["unpaid", "paid", "waived"] | None = None

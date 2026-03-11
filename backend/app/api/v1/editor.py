@@ -31,6 +31,7 @@ from app.api.v1.editor_finance import router as editor_finance_router
 from app.api.v1.editor_reviewer_library import router as editor_reviewer_library_router
 from app.api.v1.editor_common import (
     InvoiceInfoUpdatePayload,
+    BindAcademicEditorRequest,
     auth_user_exists as _auth_user_exists,
     ensure_bucket_exists as _ensure_bucket_exists,
     get_signed_url as _get_signed_url,
@@ -463,6 +464,45 @@ async def bind_internal_owner(
     return {"success": True, "data": updated}
 
 
+@router.post("/manuscripts/{id}/bind-academic-editor")
+async def bind_academic_editor(
+    id: str,
+    payload: BindAcademicEditorRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+):
+    """
+    显式改派稿件 Academic Editor。
+
+    中文注释：
+    - 仅 managing_editor / editor_in_chief / admin 可操作；
+    - 目标人员必须具备 academic_editor 或 editor_in_chief 角色，并匹配稿件 journal scope。
+    """
+    _require_action_or_403(action="manuscript:bind_academic_editor", roles=profile.get("roles") or [])
+    ensure_manuscript_scope_access(
+        manuscript_id=id,
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+
+    try:
+        updated = EditorService().bind_academic_editor(
+            id,
+            academic_editor_id=payload.academic_editor_id,
+            changed_by=current_user.get("id"),
+            reason=payload.reason,
+            source=payload.source,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[AcademicEditorBinding] bind academic editor failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to bind academic editor")
+
+    return {"success": True, "data": updated}
+
+
 @router.get("/internal-staff")
 async def list_internal_staff(
     search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
@@ -551,7 +591,7 @@ async def list_academic_editors(
     manuscript_id: UUID,
     search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["assistant_editor", "managing_editor", "admin"])),
+    profile: dict = Depends(require_any_role(["assistant_editor", "managing_editor", "editor_in_chief", "admin"])),
 ):
     """
     提供 AE/ME 送 Academic 预审时的候选学术编辑列表。

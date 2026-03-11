@@ -194,6 +194,10 @@ def _authorize_manuscript_detail_access(
     if assigned_ae_id and assigned_ae_id == viewer_user_id:
         return
 
+    assigned_academic_editor_id = str(manuscript.get("academic_editor_id") or "").strip()
+    if assigned_academic_editor_id and assigned_academic_editor_id == viewer_user_id:
+        return
+
     allowed = False
     if viewer_role_set.intersection({"managing_editor", "editor_in_chief"}):
         ensure_manuscript_scope_access(

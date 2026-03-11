@@ -554,3 +554,30 @@
   - `cd frontend && bun run test:e2e tests/e2e/specs/decision_workspace.spec.ts`
   - `cd frontend && bunx tsc --noEmit`
   - `cd frontend && bun run lint`
+
+## 2026-03-11 继续推进：Academic Editor 第二阶段（真实绑定 + 改派）
+
+- 后端权限与绑定模型继续收紧：
+  - 新增动作 `manuscript:bind_academic_editor`
+  - `POST /api/v1/editor/manuscripts/{id}/bind-academic-editor`
+  - 仅 `managing_editor / editor_in_chief / admin` 可改派
+  - 绑定目标必须具备 `academic_editor / editor_in_chief` 且匹配当前期刊 scope
+
+- 安全修正：
+  - 纯 `assistant_editor` 不再能查看非本人稿件的 academic editor 候选列表
+  - 候选列表已去掉“无 scope 时回退到全局 profiles 模糊匹配”的 fail-open 逻辑
+  - 非当前绑定学术编辑不能代替真正 assignee 提交 academic check
+  - 稿件详情访问已显式允许绑定的 `academic_editor_id`
+
+- 前端：
+  - 稿件详情页 `Metadata & Staff` 新增 `Academic Editor`
+  - 支持在详情页直接改派 academic editor
+  - RBAC capability 已补齐 `canBindAcademicEditor`
+
+- 测试：
+  - `tests/unit/test_precheck_role_service.py`
+  - `tests/integration/test_precheck_flow.py`
+  - `tests/unit/test_editor_detail_runtime.py`
+  - `frontend/src/lib/rbac.test.ts`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bun run lint`

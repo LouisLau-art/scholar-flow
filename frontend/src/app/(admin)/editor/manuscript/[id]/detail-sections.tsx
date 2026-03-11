@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowRight, Calendar, DollarSign, History, Loader2, Mail, User } from 'lucide-react'
 import type { RefObject } from 'react'
 
+import { BindingAcademicEditorDropdown } from '@/components/editor/BindingAcademicEditorDropdown'
 import { BindingAssistantEditorDropdown } from '@/components/editor/BindingAssistantEditorDropdown'
 import { BindingOwnerDropdown } from '@/components/editor/BindingOwnerDropdown'
 import { ProductionStatusCard } from '@/components/editor/ProductionStatusCard'
@@ -87,6 +88,9 @@ type MetadataStaffCardProps = {
   owner: ManuscriptDetail['owner']
   canBindOwner: boolean
   onOwnerBound: () => void
+  currentAcademicEditor: ManuscriptDetail['academic_editor']
+  canBindAcademicEditor: boolean
+  onAcademicEditorBound: () => void
   currentAeId: string
   currentAeName: string
   canAssignAE: boolean
@@ -109,6 +113,9 @@ export function MetadataStaffCard({
   owner,
   canBindOwner,
   onOwnerBound,
+  currentAcademicEditor,
+  canBindAcademicEditor,
+  onAcademicEditorBound,
   currentAeId,
   currentAeName,
   canAssignAE,
@@ -146,7 +153,7 @@ export function MetadataStaffCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-muted/40 p-4 rounded-lg border border-border/60">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 bg-muted/40 p-4 rounded-lg border border-border/60">
           <div>
             <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Owner (Sales)</div>
             <div className="mb-2 min-h-6 text-sm font-medium text-foreground">
@@ -193,6 +200,23 @@ export function MetadataStaffCard({
                 )}
               </div>
             )}
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Academic Editor</div>
+            <div className="mb-2 min-h-6 text-sm font-medium text-foreground">
+              {currentAcademicEditor ? (
+                currentAcademicEditor.full_name || currentAcademicEditor.email
+              ) : (
+                <span className="italic text-muted-foreground">Unassigned</span>
+              )}
+            </div>
+            <BindingAcademicEditorDropdown
+              manuscriptId={manuscriptId}
+              currentAcademicEditor={currentAcademicEditor as any}
+              onBound={onAcademicEditorBound}
+              disabled={!canBindAcademicEditor}
+            />
           </div>
 
           <div

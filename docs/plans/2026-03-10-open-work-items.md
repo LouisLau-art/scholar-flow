@@ -60,7 +60,7 @@
 
 当前状态：
 
-- 第一阶段已完成：
+- 第一阶段已完成，第二阶段已完成核心路径：
   - 新增正式角色 `academic_editor`
   - `journal_role_scopes` 已支持 `academic_editor`
   - `manuscripts` 已落地：
@@ -69,13 +69,17 @@
     - `academic_completed_at`
   - AE 在 `送 Academic 预审` 时必须指定具体学术编辑
   - academic queue / detail / decision access 已开始基于真实 assignee 工作
+  - 稿件详情页已支持显式改派 `Academic Editor`
+  - 绑定校验已收紧：
+    - 仅允许具备 `academic_editor / editor_in_chief` 且匹配期刊 scope 的用户
+    - 纯 `assistant_editor` 不能查看非本人稿件的 academic 候选列表
+    - 非绑定学术编辑不能代替当前 academic assignee 提交 academic check
 
 待做：
 
-- 第二阶段：
-  - 把后续 first decision / academic 相关动作默认沿用同一学术编辑
-  - 增加显式改派动作
+- 收尾项：
   - User Management / journal scope 管理页补齐 `academic_editor`
+  - 再核一轮 `first decision / academic` 默认沿用同一 academic assignee 的真实 UAT 链路
 
 ### 4. Reviewer 邀请邮件预览弹窗
 

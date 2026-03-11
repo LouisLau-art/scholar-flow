@@ -217,6 +217,20 @@ export default function EditorManuscriptDetailPage() {
       ms?.assistant_editor?.email ||
       ''
   ).trim()
+  const currentAcademicEditor = useMemo(() => {
+    const fromDetail = ms?.academic_editor
+    if (fromDetail?.id || fromDetail?.full_name || fromDetail?.email) {
+      return fromDetail
+    }
+    if (ms?.role_queue?.current_role === 'academic' && ms?.role_queue?.current_assignee) {
+      return {
+        id: ms.role_queue.current_assignee.id,
+        full_name: ms.role_queue.current_assignee.full_name,
+        email: ms.role_queue.current_assignee.email,
+      }
+    }
+    return null
+  }, [ms])
   const requiresTransitionReason = useMemo(() => {
     const target = String(pendingTransition || '').toLowerCase()
     return ['minor_revision', 'major_revision', 'rejected', 'approved'].includes(target)
@@ -1022,6 +1036,9 @@ export default function EditorManuscriptDetailPage() {
             owner={ms.owner}
             canBindOwner={capability.canBindOwner}
             onOwnerBound={() => void refreshDetail({ force: true })}
+            currentAcademicEditor={currentAcademicEditor}
+            canBindAcademicEditor={capability.canBindAcademicEditor}
+            onAcademicEditorBound={() => void refreshDetail({ force: true })}
             currentAeId={currentAeId}
             currentAeName={currentAeName}
             canAssignAE={canAssignAE}

@@ -166,6 +166,30 @@ async def test_list_academic_editors_filters_by_manuscript_and_search(client, mo
     assert list_mock.call_args.kwargs["search"] == "academic"
 
 
+async def test_bind_academic_editor_passes_reason_and_source(client, mocker):
+    bind_mock = mocker.patch(
+        "app.services.editor_service.EditorService.bind_academic_editor",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "academic_editor_id": MOCK_EIC_ID,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/bind-academic-editor",
+        json={
+            "academic_editor_id": MOCK_EIC_ID,
+            "reason": "Switch to journal chair for final academic review",
+            "source": "manuscript_detail",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert bind_mock.call_args.kwargs["reason"] == "Switch to journal chair for final academic review"
+    assert bind_mock.call_args.kwargs["source"] == "manuscript_detail"
+
+
 async def test_revert_technical_check_flow(client, mocker):
     """
     AE/ME 受控回退接口集成校验。
@@ -256,6 +280,24 @@ async def test_eic_check_flow(client, mocker):
     response = await client.post(f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/academic-check", json={"decision": "review"})
     assert response.status_code == 200
     assert response.json()["message"] == "Academic check submitted"
+
+
+async def test_submit_academic_check_passes_actor_roles_to_service(client, mocker):
+    submit_mock = mocker.patch(
+        "app.services.editor_service.EditorService.submit_academic_check",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.UNDER_REVIEW.value,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/academic-check",
+        json={"decision": "review"},
+    )
+
+    assert response.status_code == 200
+    assert submit_mock.call_args.kwargs["actor_roles"] == ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
 
 
 async def test_eic_final_decision_queue_flow(client, mocker):

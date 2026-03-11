@@ -55,6 +55,54 @@ class _ClientStub:
         return _QueryStub(item["data"])
 
 
+class _StoreQueryStub:
+    def __init__(self, store: dict[str, list[dict]]):
+        self._store = store
+        self._table = ""
+        self._eq_filters: list[tuple[str, object]] = []
+        self._in_filters: list[tuple[str, set[str]]] = []
+
+    def bind(self, table_name: str):
+        self._table = table_name
+        self._eq_filters = []
+        self._in_filters = []
+        return self
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, key: str, value: object):
+        self._eq_filters.append((key, value))
+        return self
+
+    def in_(self, key: str, values):
+        self._in_filters.append((key, {str(v) for v in values}))
+        return self
+
+    def single(self):
+        return self
+
+    def execute(self):
+        rows = [dict(item) for item in self._store.get(self._table, [])]
+        for key, value in self._eq_filters:
+            rows = [row for row in rows if row.get(key) == value]
+        for key, values in self._in_filters:
+            rows = [row for row in rows if str(row.get(key)) in values]
+        if any(row.get("id") == "__raise__" for row in rows):
+            raise RuntimeError("forced failure")
+        if self._table == "user_profiles" and any(key == "id" for key, _ in self._eq_filters):
+            return SimpleNamespace(data=rows[0] if rows else None)
+        return SimpleNamespace(data=rows)
+
+
+class _StoreClientStub:
+    def __init__(self, store: dict[str, list[dict]]):
+        self._query = _StoreQueryStub(store)
+
+    def table(self, table_name: str):
+        return self._query.bind(table_name)
+
+
 def _new_service() -> EditorService:
     svc = EditorService()
     # 中文注释：测试中禁用真实日志写入，避免依赖数据库
@@ -265,6 +313,134 @@ def test_submit_technical_check_academic_routes_with_binding():
 
     assert out["pre_check_status"] == PreCheckStatus.ACADEMIC.value
     assert out["academic_editor_id"] == str(academic_editor_id)
+
+
+def test_list_academic_editor_candidates_rejects_pure_ae_on_unassigned_manuscript(monkeypatch):
+    svc = _new_service()
+    manuscript_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "assistant_editor_id": str(uuid4()),
+            "journal_id": str(uuid4()),
+            "academic_editor_id": None,
+        }
+    )
+    monkeypatch.setattr(
+        "app.services.editor_service_precheck_workspace_views.ensure_manuscript_scope_access",
+        lambda **_kwargs: "",
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.list_academic_editor_candidates(
+            manuscript_id=manuscript_id,
+            viewer_user_id=str(uuid4()),
+            viewer_roles=["assistant_editor"],
+        )
+
+    assert ei.value.status_code == 403
+
+
+def test_list_academic_editor_candidates_does_not_fallback_to_global_profiles(monkeypatch):
+    svc = _new_service()
+    manuscript_id = str(uuid4())
+    journal_id = str(uuid4())
+    bound_id = str(uuid4())
+    unrelated_id = str(uuid4())
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": manuscript_id,
+            "assistant_editor_id": str(uuid4()),
+            "journal_id": journal_id,
+            "academic_editor_id": bound_id,
+        }
+    )
+    monkeypatch.setattr(
+        "app.services.editor_service_precheck_workspace_views.ensure_manuscript_scope_access",
+        lambda **_kwargs: journal_id,
+    )
+    svc.client = _StoreClientStub(
+        {
+            "journal_role_scopes": [],
+            "user_profiles": [
+                {
+                    "id": bound_id,
+                    "full_name": "Bound Academic",
+                    "email": "bound@example.com",
+                    "roles": ["academic_editor"],
+                },
+                {
+                    "id": unrelated_id,
+                    "full_name": "Global Academic",
+                    "email": "global@example.com",
+                    "roles": ["academic_editor"],
+                },
+            ]
+        }
+    )
+
+    rows = svc.list_academic_editor_candidates(
+        manuscript_id=manuscript_id,
+        viewer_user_id=str(uuid4()),
+        viewer_roles=["managing_editor"],
+    )
+
+    assert [row["id"] for row in rows] == [bound_id]
+
+
+def test_validate_academic_editor_assignment_rejects_admin_only_target():
+    svc = _new_service()
+    academic_editor_id = str(uuid4())
+    svc.client = _StoreClientStub(
+        {
+            "user_profiles": [
+                {
+                    "id": academic_editor_id,
+                    "full_name": "Admin Only",
+                    "email": "admin@example.com",
+                    "roles": ["admin"],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc._validate_academic_editor_assignment(
+            academic_editor_id=academic_editor_id,
+            manuscript_journal_id=str(uuid4()),
+        )
+
+    assert ei.value.status_code == 422
+
+
+def test_validate_academic_editor_assignment_rejects_unscoped_target(monkeypatch):
+    svc = _new_service()
+    academic_editor_id = str(uuid4())
+    journal_id = str(uuid4())
+    svc.client = _StoreClientStub(
+        {
+            "user_profiles": [
+                {
+                    "id": academic_editor_id,
+                    "full_name": "Academic Editor",
+                    "email": "academic@example.com",
+                    "roles": ["academic_editor"],
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(
+        "app.services.editor_service_precheck_workspace_decisions.get_user_scope_journal_ids",
+        lambda **_kwargs: set(),
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc._validate_academic_editor_assignment(
+            academic_editor_id=academic_editor_id,
+            manuscript_journal_id=journal_id,
+        )
+
+    assert ei.value.status_code == 422
 
 
 def test_revert_technical_check_routes_back_to_precheck_technical():
@@ -536,6 +712,7 @@ def test_submit_academic_check_routes_to_under_review():
             "status": ManuscriptStatus.PRE_CHECK.value,
             "pre_check_status": PreCheckStatus.ACADEMIC.value,
             "assistant_editor_id": None,
+            "academic_editor_id": str(uuid4()),
         }
     )
     editorial_mock = Mock()
@@ -545,8 +722,37 @@ def test_submit_academic_check_routes_to_under_review():
     }
     svc.editorial = editorial_mock
 
-    out = svc.submit_academic_check(manuscript_id, "review", changed_by=changed_by)
+    out = svc.submit_academic_check(
+        manuscript_id,
+        "review",
+        changed_by=changed_by,
+        actor_roles=["editor_in_chief"],
+    )
     assert out["status"] == ManuscriptStatus.UNDER_REVIEW.value
     kwargs = editorial_mock.update_status.call_args.kwargs
     assert kwargs["to_status"] == ManuscriptStatus.UNDER_REVIEW.value
     assert kwargs["payload"]["action"] == "precheck_academic_to_review"
+
+
+def test_submit_academic_check_rejects_unbound_academic_editor():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    caller = str(uuid4())
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+            "academic_editor_id": str(uuid4()),
+        }
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.submit_academic_check(
+            manuscript_id,
+            "review",
+            changed_by=caller,
+            actor_roles=["academic_editor"],
+        )
+
+    assert ei.value.status_code == 403

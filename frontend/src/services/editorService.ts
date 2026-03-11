@@ -137,6 +137,21 @@ export const editorService = {
     return res.data || []
   },
 
+  bindAcademicEditor: async (
+    manuscriptId: string,
+    payload: { academicEditorId: string; reason?: string; source?: string }
+  ) => {
+    const res = await EditorApi.bindAcademicEditor(manuscriptId, {
+      academic_editor_id: payload.academicEditorId,
+      reason: payload.reason,
+      source: payload.source,
+    })
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to bind academic editor')
+    }
+    return res.data
+  },
+
   revertTechnicalCheck: async (id: string, payload: { reason: string; source?: string }) => {
     const res = await EditorApi.revertTechnicalCheck(id, {
       reason: payload.reason,
