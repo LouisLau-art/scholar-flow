@@ -12,6 +12,16 @@ class ManuscriptMetadataResult(BaseModel):
     title: str = ""
     abstract: str = ""
     authors: List[str] = Field(default_factory=list)
+    author_contacts: List["ParsedAuthorContact"] = Field(default_factory=list)
+
+
+class ParsedAuthorContact(BaseModel):
+    name: str = ""
+    email: str = ""
+    affiliation: str = ""
+    city: str = ""
+    country_or_region: str = ""
+    is_corresponding: bool = False
 
 
 def _local_parse():
@@ -60,8 +70,31 @@ def _build_response_schema() -> Dict[str, Any]:
                 "description": "Ordered list of author names only. Exclude affiliations, degrees, and emails.",
                 "items": {"type": "string"},
             },
+            "author_contacts": {
+                "type": "array",
+                "description": "Ordered structured author list with names, emails, affiliations, city, country/region, and corresponding author markers.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "email": {"type": "string"},
+                        "affiliation": {"type": "string"},
+                        "city": {"type": "string"},
+                        "country_or_region": {"type": "string"},
+                        "is_corresponding": {"type": "boolean"},
+                    },
+                    "required": [
+                        "name",
+                        "email",
+                        "affiliation",
+                        "city",
+                        "country_or_region",
+                        "is_corresponding",
+                    ],
+                },
+            },
         },
-        "required": ["title", "abstract", "authors"],
+        "required": ["title", "abstract", "authors", "author_contacts"],
     }
 
 
@@ -92,6 +125,44 @@ def _normalize_authors(values: List[Any]) -> List[str]:
     return normalized[:20]
 
 
+def _normalize_author_contacts(values: List[Any]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in values or []:
+        try:
+            item = ParsedAuthorContact.model_validate(value).model_dump(mode="python")
+        except Exception:
+            continue
+
+        name = str(item.get("name") or "").strip()
+        email = str(item.get("email") or "").strip().lower()
+        affiliation = str(item.get("affiliation") or "").strip()
+        city = str(item.get("city") or "").strip()
+        country_or_region = str(item.get("country_or_region") or "").strip()
+        is_corresponding = bool(item.get("is_corresponding"))
+
+        if not any([name, email, affiliation, city, country_or_region]):
+            continue
+
+        key = email or name.lower()
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+
+        normalized.append(
+            {
+                "name": name,
+                "email": email,
+                "affiliation": affiliation,
+                "city": city,
+                "country_or_region": country_or_region,
+                "is_corresponding": is_corresponding,
+            }
+        )
+    return normalized[:20]
+
+
 def _summarize_layout_lines(layout_lines: List[PdfLayoutLine], *, limit: int = 30) -> str:
     if not layout_lines:
         return ""
@@ -119,8 +190,9 @@ def _build_prompt(
 ) -> str:
     prompt_parts = [
         "You extract manuscript metadata for an academic submission system.",
-        "Return only the manuscript title, abstract, and ordered author names.",
-        "Do not return journal names, running headers, keywords, affiliations, emails, or section headings as title/authors.",
+        "Return the manuscript title, abstract, ordered author names, and structured author contacts.",
+        "For each author contact, include name, email, affiliation, city, country_or_region, and whether they are a corresponding author.",
+        "Do not return journal names, running headers, keywords, or section headings as title/authors.",
         "If a field is unavailable, return an empty string or empty array.",
         f"Source format: {parser_mode}.",
     ]
@@ -222,6 +294,7 @@ async def extract_metadata_with_gemini(
         "title": metadata.title.strip(),
         "abstract": metadata.abstract.strip(),
         "authors": _normalize_authors(metadata.authors),
+        "author_contacts": _normalize_author_contacts(metadata.author_contacts),
     }
 
 
@@ -253,6 +326,7 @@ async def extract_manuscript_metadata(
         title = str(gemini_metadata.get("title") or "").strip()
         abstract = str(gemini_metadata.get("abstract") or "").strip()
         authors = _normalize_authors(gemini_metadata.get("authors") or [])
+        author_contacts = _normalize_author_contacts(gemini_metadata.get("author_contacts") or [])
         parser_source = "gemini"
 
         if not title or not abstract or not authors:
@@ -267,6 +341,7 @@ async def extract_manuscript_metadata(
             "title": title,
             "abstract": abstract,
             "authors": authors,
+            "author_contacts": author_contacts,
             "parser_source": parser_source,
         }
 
@@ -275,5 +350,6 @@ async def extract_manuscript_metadata(
         "title": str(local_only.get("title") or "").strip(),
         "abstract": str(local_only.get("abstract") or "").strip(),
         "authors": _normalize_authors(local_only.get("authors") or []),
+        "author_contacts": [],
         "parser_source": "local",
     }

@@ -341,6 +341,218 @@ describe('SubmissionForm Component', () => {
     expect(fetchMock.mock.calls.filter((call) => call[0] === '/api/v1/manuscripts/upload')).toHaveLength(1)
   })
 
+  it('prefills structured author contacts from DOCX metadata and refreshes them on later DOCX uploads before manual edits', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+
+    const parseResults = [
+      {
+        success: true,
+        data: {
+          title: 'First DOCX Title',
+          abstract: 'A'.repeat(40),
+          authors: ['Alice Chen', 'Bob Li'],
+          author_contacts: [
+            {
+              name: 'Alice Chen',
+              email: 'alice.chen@example.edu',
+              affiliation: 'Central China Normal University',
+              city: 'Wuhan',
+              country_or_region: 'China',
+              is_corresponding: true,
+            },
+            {
+              name: 'Bob Li',
+              email: 'bob.li@example.edu',
+              affiliation: 'Wuhan University',
+              city: 'Wuhan',
+              country_or_region: 'China',
+              is_corresponding: false,
+            },
+          ],
+          parser_source: 'gemini',
+        },
+      },
+      {
+        success: true,
+        data: {
+          title: 'Second DOCX Title',
+          abstract: 'B'.repeat(40),
+          authors: ['Carol Wang'],
+          author_contacts: [
+            {
+              name: 'Carol Wang',
+              email: 'carol.wang@example.edu',
+              affiliation: 'Fudan University',
+              city: 'Shanghai',
+              country_or_region: 'China',
+              is_corresponding: true,
+            },
+          ],
+          parser_source: 'gemini',
+        },
+      },
+    ]
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () => JSON.stringify(parseResults.shift()),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper-v1.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Alice Chen')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('bob.li@example.edu')).toBeInTheDocument()
+    })
+
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper-v2.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Carol Wang')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByDisplayValue('Alice Chen')).not.toBeInTheDocument()
+    expect(screen.getByDisplayValue('carol.wang@example.edu')).toBeInTheDocument()
+  })
+
+  it('does not overwrite author contacts with a later DOCX upload after manual author edits', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+
+    const parseResults = [
+      {
+        success: true,
+        data: {
+          title: 'First DOCX Title',
+          abstract: 'A'.repeat(40),
+          authors: ['Alice Chen'],
+          author_contacts: [
+            {
+              name: 'Alice Chen',
+              email: 'alice.chen@example.edu',
+              affiliation: 'Central China Normal University',
+              city: 'Wuhan',
+              country_or_region: 'China',
+              is_corresponding: true,
+            },
+          ],
+          parser_source: 'gemini',
+        },
+      },
+      {
+        success: true,
+        data: {
+          title: 'Second DOCX Title',
+          abstract: 'B'.repeat(40),
+          authors: ['Carol Wang'],
+          author_contacts: [
+            {
+              name: 'Carol Wang',
+              email: 'carol.wang@example.edu',
+              affiliation: 'Fudan University',
+              city: 'Shanghai',
+              country_or_region: 'China',
+              is_corresponding: true,
+            },
+          ],
+          parser_source: 'gemini',
+        },
+      },
+    ]
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () => JSON.stringify(parseResults.shift()),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper-v1.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Alice Chen')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-author-name-0'), {
+      target: { value: 'Alice Chen (Edited)' },
+    })
+
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper-v2.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Alice Chen (Edited)')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByDisplayValue('Carol Wang')).not.toBeInTheDocument()
+  })
+
   it('handles file upload failure gracefully', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },

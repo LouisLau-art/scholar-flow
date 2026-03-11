@@ -10,6 +10,7 @@ import {
   INITIAL_TOUCHED,
   STORAGE_UPLOAD_TIMEOUT_MS,
   SUPPLEMENTAL_UPLOAD_TIMEOUT_MS,
+  buildAuthorContactsFromStructuredContacts,
   buildAuthorContactsFromNames,
   createAuthorContact,
   extractTraceId,
@@ -156,6 +157,11 @@ export function useSubmissionForm() {
     const parsedAuthors = Array.isArray(payload?.authors)
       ? payload.authors.map((item: unknown) => String(item || '').trim()).filter(Boolean).slice(0, 20)
       : []
+    const parsedAuthorContacts = Array.isArray(payload?.author_contacts)
+      ? payload.author_contacts
+          .filter((item: unknown) => item && typeof item === 'object')
+          .slice(0, 20)
+      : []
 
     setMetadata((prev) => {
       const next = { ...prev }
@@ -174,13 +180,12 @@ export function useSubmissionForm() {
           next.abstract = parsedAbstract
         }
       }
-      const hasStructuredAuthorInput = prev.authorContacts.some((author) =>
-        [author.name, author.email, author.affiliation, author.city, author.countryOrRegion].some(
-          (value) => value.trim().length > 0,
-        ),
-      )
-      if (parsedAuthors.length > 0 && !hasStructuredAuthorInput) {
-        next.authorContacts = buildAuthorContactsFromNames(parsedAuthors)
+      if (!touched.authorContacts) {
+        if (parsedAuthorContacts.length > 0) {
+          next.authorContacts = buildAuthorContactsFromStructuredContacts(parsedAuthorContacts)
+        } else if (parsedAuthors.length > 0) {
+          next.authorContacts = buildAuthorContactsFromNames(parsedAuthors)
+        }
       }
       return next
     })

@@ -135,7 +135,7 @@ async def upload_manuscript(
             content={
                 "success": False,
                 "message": "仅支持 PDF / DOCX / DOC 格式文件",
-                "data": {"title": "", "abstract": "", "authors": []},
+                "data": {"title": "", "abstract": "", "authors": [], "author_contacts": []},
             },
         )
 
@@ -199,7 +199,7 @@ async def upload_manuscript(
                     "success": True,
                     "id": manuscript_id,
                     "trace_id": trace_id,
-                    "data": {"title": "", "abstract": "", "authors": []},
+                    "data": {"title": "", "abstract": "", "authors": [], "author_contacts": []},
                     "message": f"PDF 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
                 }
         elif is_docx:
@@ -222,7 +222,7 @@ async def upload_manuscript(
                     "success": True,
                     "id": manuscript_id,
                     "trace_id": trace_id,
-                    "data": {"title": "", "abstract": "", "authors": []},
+                    "data": {"title": "", "abstract": "", "authors": [], "author_contacts": []},
                     "message": f"DOCX 解析超时（>{timeout_sec:.0f}s），已跳过 AI 解析，可手动填写。",
                 }
         else:
@@ -237,7 +237,7 @@ async def upload_manuscript(
                 "success": True,
                 "id": manuscript_id,
                 "trace_id": trace_id,
-                "data": {"title": "", "abstract": "", "authors": []},
+                "data": {"title": "", "abstract": "", "authors": [], "author_contacts": []},
                 "message": "检测到 .doc（旧格式），暂不支持自动抽取，请手动填写标题与摘要。",
             }
 
@@ -262,6 +262,7 @@ async def upload_manuscript(
                 "title": "",
                 "abstract": "",
                 "authors": [],
+                "author_contacts": [],
                 "parser_source": "timeout",
             }
             message = f"元数据解析超时（>{meta_timeout_sec:.0f}s），已跳过自动预填，可手动填写。"
@@ -295,7 +296,7 @@ async def upload_manuscript(
                 "success": False,
                 "trace_id": trace_id,
                 "message": str(e),
-                "data": {"title": "", "abstract": "", "authors": []},
+                "data": {"title": "", "abstract": "", "authors": [], "author_contacts": []},
             },
         )
     finally:

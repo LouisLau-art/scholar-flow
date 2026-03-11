@@ -113,6 +113,45 @@ export function buildAuthorContactsFromNames(names: string[]): SubmissionAuthorC
   )
 }
 
+export function buildAuthorContactsFromStructuredContacts(
+  contacts: Array<{
+    name?: unknown
+    email?: unknown
+    affiliation?: unknown
+    city?: unknown
+    country_or_region?: unknown
+    is_corresponding?: unknown
+  }>,
+): SubmissionAuthorContact[] {
+  const normalized = contacts
+    .map((item) => ({
+      name: String(item?.name || '').trim(),
+      email: String(item?.email || '').trim().toLowerCase(),
+      affiliation: String(item?.affiliation || '').trim(),
+      city: String(item?.city || '').trim(),
+      countryOrRegion: String(item?.country_or_region || '').trim(),
+      isCorresponding: Boolean(item?.is_corresponding),
+    }))
+    .filter((item) => item.name || item.email || item.affiliation || item.city || item.countryOrRegion)
+    .slice(0, 20)
+
+  if (normalized.length === 0) {
+    return [createAuthorContact({ isCorresponding: true })]
+  }
+
+  const hasCorresponding = normalized.some((item) => item.isCorresponding)
+  return normalized.map((item, index) =>
+    createAuthorContact({
+      name: item.name,
+      email: item.email,
+      affiliation: item.affiliation,
+      city: item.city,
+      countryOrRegion: item.countryOrRegion,
+      isCorresponding: hasCorresponding ? item.isCorresponding : index === 0,
+    }),
+  )
+}
+
 export function normalizeAuthorContactsForPayload(authorContacts: SubmissionAuthorContact[]) {
   return authorContacts.map((author) => ({
     name: author.name.trim(),

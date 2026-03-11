@@ -19,7 +19,7 @@ async def test_extract_manuscript_metadata_prefers_gemini(monkeypatch):
                         "content": {
                             "parts": [
                                 {
-                                    "text": '{"title":"LLM Parsed Title","abstract":"LLM Parsed Abstract","authors":["Alice","Bob"]}'
+                                    "text": '{"title":"LLM Parsed Title","abstract":"LLM Parsed Abstract","authors":["Alice","Bob"],"author_contacts":[{"name":"Alice Chen","email":"alice.chen@example.edu","affiliation":"Central China Normal University","city":"Wuhan","country_or_region":"China","is_corresponding":true},{"name":"Bob Li","email":"bob.li@example.edu","affiliation":"Wuhan University","city":"Wuhan","country_or_region":"China","is_corresponding":false}]}'
                                 }
                             ]
                         }
@@ -55,6 +55,24 @@ async def test_extract_manuscript_metadata_prefers_gemini(monkeypatch):
         "title": "LLM Parsed Title",
         "abstract": "LLM Parsed Abstract",
         "authors": ["Alice", "Bob"],
+        "author_contacts": [
+            {
+                "name": "Alice Chen",
+                "email": "alice.chen@example.edu",
+                "affiliation": "Central China Normal University",
+                "city": "Wuhan",
+                "country_or_region": "China",
+                "is_corresponding": True,
+            },
+            {
+                "name": "Bob Li",
+                "email": "bob.li@example.edu",
+                "affiliation": "Wuhan University",
+                "city": "Wuhan",
+                "country_or_region": "China",
+                "is_corresponding": False,
+            },
+        ],
         "parser_source": "gemini",
     }
 
@@ -98,6 +116,7 @@ async def test_extract_manuscript_metadata_falls_back_when_gemini_fails(monkeypa
         "title": "Local Title",
         "abstract": "Local Abstract",
         "authors": ["Local Author"],
+        "author_contacts": [],
         "parser_source": "local",
     }
 
@@ -126,7 +145,7 @@ async def test_extract_manuscript_metadata_uses_local_fill_for_missing_fields(mo
                         "content": {
                             "parts": [
                                 {
-                                    "text": '{"title":"LLM Title","abstract":"","authors":[]}'
+                                    "text": '{"title":"LLM Title","abstract":"","authors":[],"author_contacts":[{"name":"Grace Hopper","email":"grace.hopper@example.edu","affiliation":"Yale University","city":"New Haven","country_or_region":"United States","is_corresponding":true}]}'
                                 }
                             ]
                         }
@@ -160,5 +179,15 @@ async def test_extract_manuscript_metadata_uses_local_fill_for_missing_fields(mo
         "title": "LLM Title",
         "abstract": "Filled Abstract",
         "authors": ["Filled Author"],
+        "author_contacts": [
+            {
+                "name": "Grace Hopper",
+                "email": "grace.hopper@example.edu",
+                "affiliation": "Yale University",
+                "city": "New Haven",
+                "country_or_region": "United States",
+                "is_corresponding": True,
+            }
+        ],
         "parser_source": "gemini+local_fill",
     }

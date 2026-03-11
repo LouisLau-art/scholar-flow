@@ -706,6 +706,16 @@ async def test_upload_docx_success_returns_trace_id(client: AsyncClient):
             "title": "DOCX Paper",
             "abstract": "DOCX abstract",
             "authors": ["Bob"],
+            "author_contacts": [
+                {
+                    "name": "Bob Li",
+                    "email": "bob.li@example.edu",
+                    "affiliation": "Wuhan University",
+                    "city": "Wuhan",
+                    "country_or_region": "China",
+                    "is_corresponding": True,
+                }
+            ],
             "parser_source": "gemini+local_fill",
         }
 
@@ -726,6 +736,7 @@ async def test_upload_docx_success_returns_trace_id(client: AsyncClient):
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["title"] == "DOCX Paper"
+    assert payload["data"]["author_contacts"][0]["email"] == "bob.li@example.edu"
     assert payload["data"]["parser_source"] == "gemini+local_fill"
     assert isinstance(payload.get("trace_id"), str)
     assert re.fullmatch(r"[0-9a-f]{8}", payload["trace_id"]) is not None
@@ -756,6 +767,7 @@ async def test_upload_metadata_timeout_returns_manual_fill_hint(client: AsyncCli
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["parser_source"] == "timeout"
+    assert payload["data"]["author_contacts"] == []
     assert "手动填写" in payload["message"]
 
 
@@ -768,7 +780,7 @@ async def test_upload_doc_legacy_returns_manual_fill_hint(client: AsyncClient):
     assert response.status_code == 200
     payload = response.json()
     assert payload.get("success") is True
-    assert payload.get("data") == {"title": "", "abstract": "", "authors": []}
+    assert payload.get("data") == {"title": "", "abstract": "", "authors": [], "author_contacts": []}
     assert ".doc" in str(payload.get("message", ""))
 
 
