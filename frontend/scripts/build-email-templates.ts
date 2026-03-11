@@ -15,7 +15,7 @@ type EmailTemplateSeedRecord = {
   display_name: string
   description: string
   scene: string
-  event_type: 'none' | 'invitation' | 'reminder' | 'cancellation'
+  event_type: 'none' | 'invitation' | 'reminder' | 'cancellation' | 'first_decision_request'
   subject_template: string
   body_html_template: string
   body_text_template: string

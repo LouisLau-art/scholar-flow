@@ -14,9 +14,6 @@ export function ReviewerAssignmentSearch(props: {
   manuscriptId: string
   onChanged?: () => void
   disabled?: boolean
-  currentOwnerId?: string
-  currentOwnerLabel?: string
-  canBindOwner?: boolean
   viewerRoles?: string[]
 }) {
   const [open, setOpen] = useState(false)
@@ -138,9 +135,6 @@ export function ReviewerAssignmentSearch(props: {
           onClose={() => setOpen(false)}
           onAssign={handleAssign}
           manuscriptId={manuscriptId}
-          currentOwnerId={props.currentOwnerId}
-          currentOwnerLabel={props.currentOwnerLabel}
-          canBindOwner={props.canBindOwner}
           viewerRoles={normalizedViewerRoles}
         />
       )}

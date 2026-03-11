@@ -10,6 +10,7 @@ from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
 from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from app.models.manuscript import ManuscriptStatus, normalize_status
+from app.services.first_decision_request_email import send_first_decision_request_email
 from app.services.reviewer_assignment_cancellation_email import (
     send_reviewer_assignment_cancellation_email,
     should_send_reviewer_assignment_cancellation_email,
@@ -412,6 +413,41 @@ class DecisionService(
                 "error_message": str(exc),
             }
 
+    def _send_first_decision_request_emails(
+        self,
+        *,
+        manuscript: dict[str, Any],
+        recipient_emails: list[str],
+        requested_outcome: str,
+        requested_by: str,
+        ae_note: str,
+    ) -> tuple[list[str], list[str]]:
+        sent_recipients: list[str] = []
+        failed_recipients: list[str] = []
+        for recipient_email in recipient_emails:
+            try:
+                result = send_first_decision_request_email(
+                    manuscript=manuscript,
+                    recipient_email=recipient_email,
+                    requested_outcome=requested_outcome,
+                    requested_by=requested_by,
+                    ae_note=ae_note,
+                )
+            except Exception:
+                result = {
+                    "status": "failed",
+                    "recipient": recipient_email,
+                }
+            status = str(result.get("status") or "").strip().lower()
+            recipient = str(result.get("recipient") or recipient_email).strip().lower()
+            if not recipient:
+                continue
+            if status == "sent":
+                sent_recipients.append(recipient)
+            else:
+                failed_recipients.append(recipient)
+        return sent_recipients, failed_recipients
+
     def exit_review_stage(
         self,
         *,
@@ -574,6 +610,8 @@ class DecisionService(
             "manually_cancelled_assignment_ids": manually_cancelled_ids,
             "before": {"status": current_status},
         }
+        first_decision_email_sent_recipients: list[str] = []
+        first_decision_email_failed_recipients: list[str] = []
 
         if target_stage == "first":
             updated = self.editorial.update_status(
@@ -585,6 +623,15 @@ class DecisionService(
                 payload={**transition_payload, "after": {"status": ManuscriptStatus.DECISION.value}},
             )
             new_status = str(updated.get("status") or ManuscriptStatus.DECISION.value)
+            first_decision_email_sent_recipients, first_decision_email_failed_recipients = (
+                self._send_first_decision_request_emails(
+                    manuscript=manuscript,
+                    recipient_emails=request.recipient_emails,
+                    requested_outcome=str(request.requested_outcome or ""),
+                    requested_by=user_id,
+                    ae_note=exit_note,
+                )
+            )
         elif target_stage == "final":
             if current_status != ManuscriptStatus.DECISION.value:
                 self.editorial.update_status(
@@ -627,6 +674,8 @@ class DecisionService(
             "remaining_pending_assignment_ids": remaining_pending_ids,
             "cancellation_email_sent_assignment_ids": cancellation_email_sent_assignment_ids,
             "cancellation_email_failed_assignment_ids": cancellation_email_failed_assignment_ids,
+            "first_decision_email_sent_recipients": first_decision_email_sent_recipients,
+            "first_decision_email_failed_recipients": first_decision_email_failed_recipients,
         }
 
     def get_decision_context(

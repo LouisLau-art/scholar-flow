@@ -96,6 +96,8 @@ class ReviewStageExitRequest(BaseModel):
     def _validate_requested_outcome(self) -> "ReviewStageExitRequest":
         if self.target_stage == "first" and self.requested_outcome is None:
             raise ValueError("requested_outcome is required when target_stage is first")
+        if self.target_stage == "first" and not self.recipient_emails:
+            raise ValueError("recipient_emails is required when target_stage is first")
         if self.target_stage != "first" and self.requested_outcome is not None:
             raise ValueError("requested_outcome is only allowed when target_stage is first")
         if self.target_stage != "first" and self.recipient_emails:
@@ -111,6 +113,8 @@ class ReviewStageExitResponse(BaseModel):
     remaining_pending_assignment_ids: list[str] = Field(default_factory=list)
     cancellation_email_sent_assignment_ids: list[str] = Field(default_factory=list)
     cancellation_email_failed_assignment_ids: list[str] = Field(default_factory=list)
+    first_decision_email_sent_recipients: list[str] = Field(default_factory=list)
+    first_decision_email_failed_recipients: list[str] = Field(default_factory=list)
 
 
 class ReviewStageExitRequestSummary(BaseModel):

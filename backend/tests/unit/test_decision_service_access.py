@@ -208,6 +208,16 @@ def test_review_stage_exit_request_requires_requested_outcome_for_first_target()
         )
 
 
+def test_review_stage_exit_request_requires_recipients_for_first_target() -> None:
+    with pytest.raises(ValueError, match="recipient_emails is required"):
+        ReviewStageExitRequest(
+            target_stage="first",
+            requested_outcome="major_revision",
+            note="Send to academic editor",
+            accepted_pending_resolutions=[],
+        )
+
+
 def test_review_stage_exit_request_rejects_requested_outcome_for_non_first_target() -> None:
     with pytest.raises(ValueError, match="requested_outcome is only allowed"):
         ReviewStageExitRequest(
@@ -863,6 +873,7 @@ def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
         request=ReviewStageExitRequest(
             target_stage="first",
             requested_outcome="major_revision",
+            recipient_emails=["chief@example.com"],
             note="Enough evidence collected",
             accepted_pending_resolutions=[
                 {"assignment_id": "acc-1", "action": "cancel", "reason": "AE decided two reviews are enough"}
@@ -939,6 +950,7 @@ def test_exit_review_stage_allows_zero_submitted_reports(
         request=ReviewStageExitRequest(
             target_stage="first",
             requested_outcome="minor_revision",
+            recipient_emails=["chief@example.com"],
             note="Proceed without waiting for reviewer reports",
             accepted_pending_resolutions=[],
         ),
@@ -1056,6 +1068,58 @@ def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
     assert payload["recipient_emails"] == ["chief@example.com", "board@example.com"]
 
 
+def test_exit_review_stage_returns_first_decision_email_delivery_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 1,
+            "title": "Demo Manuscript",
+            "journal_id": "journal-1",
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
+    monkeypatch.setattr(svc, "_list_current_round_review_assignments", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(
+            update_status=lambda **kwargs: {"status": kwargs["to_status"]}
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_send_first_decision_request_emails",
+        lambda **_kwargs: (["chief@example.com"], ["board@example.com"]),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            requested_outcome="major_revision",
+            recipient_emails=["chief@example.com", "board@example.com"],
+            note="Route to first decision",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert out["first_decision_email_sent_recipients"] == ["chief@example.com"]
+    assert out["first_decision_email_failed_recipients"] == ["board@example.com"]
+
+
 def test_exit_review_stage_blocks_when_accepted_reviewer_marked_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1153,6 +1217,7 @@ def test_exit_review_stage_keeps_transition_when_cancellation_email_fails(
             request=ReviewStageExitRequest(
                 target_stage="first",
                 requested_outcome="major_revision",
+                recipient_emails=["chief@example.com"],
                 note="Proceed with current evidence",
                 accepted_pending_resolutions=[
                     {"assignment_id": "acc-1", "action": "cancel", "reason": "AE closed review stage"}

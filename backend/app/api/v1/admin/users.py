@@ -119,7 +119,7 @@ class EmailTemplateCreateRequest(BaseModel):
     display_name: str = Field(..., min_length=2, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
     scene: str = Field(default="general", min_length=2, max_length=64)
-    event_type: Literal["none", "invitation", "reminder", "cancellation"] = "none"
+    event_type: Literal["none", "invitation", "reminder", "cancellation", "first_decision_request"] = "none"
     subject_template: str = Field(..., min_length=1, max_length=500)
     body_html_template: str = Field(..., min_length=1, max_length=50000)
     body_text_template: Optional[str] = Field(default=None, max_length=50000)
@@ -157,7 +157,7 @@ class EmailTemplateUpdateRequest(BaseModel):
     display_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
     scene: Optional[str] = Field(default=None, min_length=2, max_length=64)
-    event_type: Optional[Literal["none", "invitation", "reminder", "cancellation"]] = None
+    event_type: Optional[Literal["none", "invitation", "reminder", "cancellation", "first_decision_request"]] = None
     subject_template: Optional[str] = Field(default=None, min_length=1, max_length=500)
     body_html_template: Optional[str] = Field(default=None, min_length=1, max_length=50000)
     body_text_template: Optional[str] = Field(default=None, max_length=50000)

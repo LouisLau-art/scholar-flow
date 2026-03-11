@@ -889,6 +889,10 @@ export default function EditorManuscriptDetailPage() {
       }
       const recipientEmails =
         reviewStageExitTarget === 'first' ? normalizeRecipientEmails(reviewStageExitRecipientsRaw) : []
+      if (reviewStageExitTarget === 'first' && recipientEmails.length === 0) {
+        toast.error('Please provide at least one recipient email for First Decision.')
+        return
+      }
       const res = await EditorApi.exitReviewStage(id, {
         target_stage: reviewStageExitTarget,
         requested_outcome: reviewStageExitTarget === 'first' ? reviewStageExitRequestedOutcome : undefined,
@@ -921,6 +925,12 @@ export default function EditorManuscriptDetailPage() {
         : 0
       if (failedCancellationEmails > 0) {
         toast.warning(`${failedCancellationEmails} cancellation email(s) failed. Reviewer access is still revoked.`)
+      }
+      const failedFirstDecisionEmails = Array.isArray(res?.data?.first_decision_email_failed_recipients)
+        ? res.data.first_decision_email_failed_recipients.length
+        : 0
+      if (failedFirstDecisionEmails > 0) {
+        toast.warning(`${failedFirstDecisionEmails} First Decision email(s) failed. Please review the recipient list and resend manually if needed.`)
       }
       setReviewStageExitDialogOpen(false)
       setReviewStageExitRequestedOutcome('major_revision')

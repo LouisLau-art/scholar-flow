@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import { ReviewerCandidateList } from '@/components/editor/reviewer-assign-modal/ReviewerCandidateList'
 import { AssignActionBar } from '@/components/editor/reviewer-assign-modal/AssignActionBar'
 import { useReviewerPolicy } from '@/components/editor/reviewer-assign-modal/useReviewerPolicy'
-import { OwnerBindingPanel } from '@/components/editor/reviewer-assign-modal/OwnerBindingPanel'
 import { ExistingReviewersPanel } from '@/components/editor/reviewer-assign-modal/ExistingReviewersPanel'
 import { AiRecommendationPanel } from '@/components/editor/reviewer-assign-modal/AiRecommendationPanel'
 import type { InvitePolicy, ReviewerWithPolicy } from '@/components/editor/reviewer-assign-modal/types'
@@ -42,13 +41,6 @@ type AssignResultPayload = {
 
 type AssignResult = boolean | void | AssignResultPayload
 
-type StaffProfile = {
-  id: string
-  email?: string | null
-  full_name?: string | null
-  roles?: string[]
-}
-
 const REVIEWER_PAGE_SIZE_DEFAULT = 20
 const REVIEWER_PAGE_SIZE_SEARCH = 40
 
@@ -68,9 +60,6 @@ interface ReviewerAssignModalProps {
   onClose: () => void
   onAssign: (reviewerIds: string[], options?: AssignOptions) => Promise<AssignResult> | AssignResult
   manuscriptId: string
-  currentOwnerId?: string
-  currentOwnerLabel?: string
-  canBindOwner?: boolean
   viewerRoles?: string[]
 }
 
@@ -106,13 +95,6 @@ export default function ReviewerAssignModal({
   const [loadingExisting, setLoadingExisting] = useState(false)
   const [pendingRemove, setPendingRemove] = useState<any | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
-
-  // Feature 023: Internal Owner Binding（KPI 归属人）
-  const [internalStaff, setInternalStaff] = useState<StaffProfile[]>([])
-  const [ownerId, setOwnerId] = useState<string>('') // '' 表示未绑定
-  const [ownerSearch, setOwnerSearch] = useState('')
-  const [loadingOwner, setLoadingOwner] = useState(false)
-  const [savingOwner, setSavingOwner] = useState(false)
   const reviewerSearchRequestSeq = useRef(0)
   const normalizedViewerRoles = useMemo(
     () =>
@@ -126,38 +108,6 @@ export default function ReviewerAssignModal({
     () => (normalizedViewerRoles.length ? normalizedViewerRoles.join(',') : myRoles.slice().sort().join(',')),
     [myRoles, normalizedViewerRoles]
   )
-
-  const fetchOwner = useCallback(async () => {
-    if (!manuscriptId) return
-    setLoadingOwner(true)
-    try {
-      // 中文注释：不能使用公开 articles 接口读取 owner（未发表稿件会 404）。
-      // 统一走 editor 私有详情接口，确保 Assign Reviewer 弹窗能读到已绑定 owner。
-      const payload = await EditorApi.getManuscriptDetail(manuscriptId, { skipCards: true })
-      const ms = payload?.data || {}
-      const raw = ms?.owner_id || ms?.owner?.id || ms?.kpi_owner_id || ''
-      setOwnerId(typeof raw === 'string' ? raw : raw ? String(raw) : '')
-    } catch (e) {
-      console.error('Failed to load manuscript owner', e)
-      // 保持现有值，避免临时请求失败把已选 owner 清空。
-    } finally {
-      setLoadingOwner(false)
-    }
-  }, [manuscriptId])
-
-  const fetchInternalStaff = useCallback(async () => {
-    try {
-      const payload = await EditorApi.listInternalStaff('', undefined, { ttlMs: 60_000 })
-      if (!payload?.success) {
-        setInternalStaff([])
-        return
-      }
-      setInternalStaff(payload.data || [])
-    } catch (e) {
-      console.error('Failed to load internal staff', e)
-      setInternalStaff([])
-    }
-  }, [])
 
   const fetchMyRoles = useCallback(async () => {
     if (normalizedViewerRoles.length) {
@@ -282,17 +232,14 @@ export default function ReviewerAssignModal({
     setAiRecommendations([])
     setAiMessage(null)
     setPendingRemove(null)
-    setOwnerSearch('')
     setPolicyMeta({})
     setReviewers([])
     setReviewerPage(1)
     setHasMoreReviewers(false)
     setIsLoadingMoreReviewers(false)
     fetchExistingReviewers()
-    fetchOwner()
-    fetchInternalStaff()
     fetchMyRoles()
-  }, [isOpen, manuscriptId, fetchExistingReviewers, fetchOwner, fetchInternalStaff, fetchMyRoles])
+  }, [isOpen, manuscriptId, fetchExistingReviewers, fetchMyRoles])
 
   useEffect(() => {
     if (!isOpen) return
@@ -328,9 +275,6 @@ export default function ReviewerAssignModal({
 
   const handleAssign = async () => {
     if (selectedReviewers.length > 0) {
-      if (!ownerId) {
-        toast.message('未绑定 Owner：将由后端自动绑定为当前操作人。')
-      }
       setIsSubmitting(true)
       try {
         const overrides: AssignOverride[] = selectedOverrideReviewers
@@ -468,56 +412,6 @@ export default function ReviewerAssignModal({
 
   if (!isOpen) return null
 
-  const currentOwnerLabel = (() => {
-    if (!ownerId) return 'Unassigned'
-    const u = internalStaff.find((x) => x.id === ownerId)
-    return u ? (u.full_name || u.email || u.id || 'Unassigned') : ownerId
-  })()
-
-  const qOwner = ownerSearch.trim().toLowerCase()
-  const filteredInternalStaff: StaffProfile[] = (qOwner
-    ? internalStaff.filter((u) => {
-        const name = (u.full_name || '').toLowerCase()
-        const email = (u.email || '').toLowerCase()
-        return name.includes(qOwner) || email.includes(qOwner)
-      })
-    : internalStaff
-  )
-    .slice()
-    .sort((a, b) => {
-      // 置顶：当前已选 owner
-      const aPinned = ownerId && a.id === ownerId
-      const bPinned = ownerId && b.id === ownerId
-      if (aPinned !== bPinned) return aPinned ? -1 : 1
-      const aName = (a.full_name || a.email || '').toLowerCase()
-      const bName = (b.full_name || b.email || '').toLowerCase()
-      return aName.localeCompare(bName)
-    })
-
-  const handleOwnerChange = async (nextOwnerId: string) => {
-    if (!manuscriptId) return
-    if (!nextOwnerId || nextOwnerId === '__unassigned') return
-    if (nextOwnerId === ownerId) return
-    const prev = ownerId
-    setOwnerId(nextOwnerId)
-    setSavingOwner(true)
-    const toastId = toast.loading('Updating owner...')
-    try {
-      // 统一走 editor bind-owner 接口，避免通用 manuscripts PATCH 的权限/语义漂移。
-      const res = await EditorApi.bindOwner(manuscriptId, nextOwnerId)
-      if (!res?.success) {
-        throw new Error(res?.detail || res?.message || 'Failed to update owner')
-      }
-      toast.success('Owner updated', { id: toastId })
-    } catch (e: any) {
-      console.error('Failed to update owner', e)
-      toast.error(e?.message || 'Failed to update owner', { id: toastId })
-      setOwnerId(prev)
-    } finally {
-      setSavingOwner(false)
-    }
-  }
-
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -556,17 +450,6 @@ export default function ReviewerAssignModal({
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
-            <OwnerBindingPanel
-              loadingOwner={loadingOwner}
-              savingOwner={savingOwner}
-              ownerId={ownerId}
-              ownerSearch={ownerSearch}
-              filteredInternalStaff={filteredInternalStaff}
-              currentOwnerLabel={currentOwnerLabel}
-              onOwnerSearchChange={setOwnerSearch}
-              onOwnerChange={handleOwnerChange}
-            />
-
             <ExistingReviewersPanel
               existingReviewers={existingReviewers}
               onRequestRemove={(reviewer) => setPendingRemove(reviewer)}

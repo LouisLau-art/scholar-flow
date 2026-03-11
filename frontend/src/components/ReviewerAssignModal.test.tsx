@@ -120,10 +120,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       />
     )
 
-    await screen.findByTestId('owner-select')
-    await waitFor(() => {
-      expect(screen.getByText(/Current:/)).toHaveTextContent('Owner User')
-    })
+    await screen.findByTestId('reviewer-search')
 
     const analyzeBtn = await screen.findByTestId('ai-analyze')
     fireEvent.click(analyzeBtn)
@@ -155,10 +152,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       />
     )
 
-    await screen.findByTestId('owner-select')
-    await waitFor(() => {
-      expect(screen.getByText(/Current:/)).toHaveTextContent('Owner User')
-    })
+    await screen.findByTestId('reviewer-search')
 
     // Initial load fetches reviewers
     expect(await screen.findByText('Manual Reviewer')).toBeInTheDocument()
@@ -514,7 +508,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
 
     render(<ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" />)
 
-    await screen.findByTestId('owner-select')
+    await screen.findByTestId('reviewer-search')
     await waitFor(() => {
       expect(
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((call) =>
@@ -546,7 +540,7 @@ describe('ReviewerAssignModal AI Recommendations', () => {
       <ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" viewerRoles={['admin']} />
     )
 
-    await screen.findByTestId('owner-select')
+    await screen.findByTestId('reviewer-search')
     await waitFor(() => {
       expect(
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((call) =>

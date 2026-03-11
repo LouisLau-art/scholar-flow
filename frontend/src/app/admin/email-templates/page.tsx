@@ -515,6 +515,7 @@ export default function EmailTemplateManagementPage() {
                   <option value="invitation">invitation</option>
                   <option value="reminder">reminder</option>
                   <option value="cancellation">cancellation</option>
+                  <option value="first_decision_request">first_decision_request</option>
                 </select>
               </div>
               <div className="space-y-1.5">
