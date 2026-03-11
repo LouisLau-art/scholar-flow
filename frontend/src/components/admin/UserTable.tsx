@@ -3,6 +3,7 @@
 import { User } from '@/types/user';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatDateLocal } from '@/lib/date-display';
 
 interface UserTableProps {
   users: User[];
@@ -120,7 +121,7 @@ export function UserTable({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  {new Date(user.created_at).toLocaleDateString()}
+                  {formatDateLocal(user.created_at)}
                 </td>
                 <td className="px-6 py-4">
                   {user.id ? (
