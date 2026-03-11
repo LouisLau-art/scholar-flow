@@ -903,6 +903,7 @@ class UserManagementService:
             user_response = self.admin_client.auth.admin.create_user(
                 {
                     "email": email,
+                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
                     "user_metadata": {
                         "full_name": full_name,

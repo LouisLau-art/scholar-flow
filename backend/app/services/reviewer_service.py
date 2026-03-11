@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from app.core.email_normalization import normalize_email
+from app.core.default_password import get_default_bootstrap_password
 from app.lib.api_client import supabase_admin
 from app.schemas.review import (
     InviteAcceptPayload,
@@ -329,6 +330,7 @@ class ReviewerService:
             res = supabase_admin.auth.admin.create_user(
                 {
                     "email": email,
+                    "password": get_default_bootstrap_password(),
                     "email_confirm": True,
                     "user_metadata": {
                         "full_name": payload.full_name,

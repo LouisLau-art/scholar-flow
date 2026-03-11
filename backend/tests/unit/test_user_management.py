@@ -1106,7 +1106,7 @@ class TestInviteReviewer:
             assert result["email"] == "reviewer@test.com"
             assert result["roles"] == ["reviewer"]
             create_payload = mock_client.auth.admin.create_user.call_args.args[0]
-            assert "password" not in create_payload
+            assert create_payload["password"] == "12345678"
             assert create_payload["email_confirm"] is True
             assert create_payload["user_metadata"]["sf_reviewer_activation_required"] is True
             mock_client.auth.admin.generate_link.assert_called_once()
