@@ -233,6 +233,11 @@ export function useSubmissionForm() {
         throw new Error(`Upload failed: ${uploadErrorResult.message}`)
       }
       setUploadedPath(uploadPath)
+      if (hasDocxAutoMetadata) {
+        toast.success('PDF uploaded. Word metadata remains the primary source.', { id: toastId })
+        return
+      }
+
       toast.loading('File uploaded. Extracting metadata...', { id: toastId })
 
       const { response, raw, result, traceId: parseTraceId } = await parseManuscriptMetadataWithFallback(selectedFile)

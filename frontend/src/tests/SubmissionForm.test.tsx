@@ -268,6 +268,79 @@ describe('SubmissionForm Component', () => {
     expect(toast.success).toHaveBeenCalled()
   })
 
+  it('treats DOCX metadata as primary and skips PDF parsing after DOCX succeeds', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+
+    const uploadResponse = {
+      ok: true,
+      json: async () => ({ success: true }),
+    } as any
+
+    const parseResults = [
+      {
+        success: true,
+        data: { title: 'Word First Title', abstract: 'W'.repeat(40), authors: ['Alice'] },
+      },
+    ]
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        const next = parseResults.shift()
+        return {
+          ok: true,
+          text: async () => JSON.stringify(next || { success: true, data: { title: 'PDF Title', abstract: 'P'.repeat(40), authors: [] } }),
+        } as any
+      }
+      return uploadResponse
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Word First Title')).toBeInTheDocument()
+    })
+
+    const pdfInput = screen.getByTestId('submission-file') as HTMLInputElement
+    fireEvent.change(pdfInput, {
+      target: {
+        files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })],
+      },
+    })
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        'PDF uploaded. Word metadata remains the primary source.',
+        expect.any(Object),
+      )
+    })
+
+    expect(screen.getByDisplayValue('Word First Title')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter((call) => call[0] === '/api/v1/manuscripts/upload')).toHaveLength(1)
+  })
+
   it('handles file upload failure gracefully', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
