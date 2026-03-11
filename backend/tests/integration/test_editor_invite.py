@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -188,7 +189,7 @@ async def test_editor_assign_allows_cooldown_without_override(
     reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")
     editor_id = "00000000-0000-0000-0000-000000000000"
 
-    now_iso = "2026-02-09T00:00:00+00:00"
+    now_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     cooldown_ms_id = "99999999-9999-9999-9999-999999999999"
 
     supabase = _Client(
@@ -268,7 +269,7 @@ async def test_editor_assign_allows_cooldown_override_for_high_privilege_role(
     editor_id = "00000000-0000-0000-0000-000000000000"
     assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccd")
 
-    now_iso = "2026-02-09T00:00:00+00:00"
+    now_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     cooldown_ms_id = "99999999-9999-9999-9999-999999999998"
 
     supabase = _Client(
@@ -378,7 +379,7 @@ async def test_editor_assign_allows_cooldown_override_for_assistant_editor_when_
     editor_id = "00000000-0000-0000-0000-000000000000"
     assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccce")
 
-    now_iso = "2026-02-09T00:00:00+00:00"
+    now_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     cooldown_ms_id = "99999999-9999-9999-9999-999999999997"
 
     supabase = _Client(
