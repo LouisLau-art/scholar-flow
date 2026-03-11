@@ -84,7 +84,6 @@
 待做：
 
 - 收尾项：
-  - User Management / journal scope 管理页补齐 `academic_editor`
   - 再核一轮 `first decision / academic` 默认沿用同一 academic assignee 的真实 UAT 链路
 
 ### 4. Reviewer 邀请邮件预览弹窗
@@ -172,7 +171,7 @@
 
 ## 六、建议执行顺序
 
-1. 收尾 academic editor 的 User Management / scope 管理页接入与真实 UAT
+1. 跑一轮 `academic editor -> first decision` 真实 UAT，确认默认 assignee 沿用
 2. 继续收口 `under_review -> send_first_decision / direct revision`
 3. 继续 reviewer history / reminder / 邮件可信度收尾
 4. 继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径

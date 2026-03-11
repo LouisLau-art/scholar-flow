@@ -9,6 +9,7 @@ export type UserRole =
   | 'managing_editor'
   | 'assistant_editor'
   | 'production_editor'
+  | 'academic_editor'
   | 'editor_in_chief';
 
 export interface User {
@@ -62,7 +63,7 @@ export interface JournalScopeItem {
   id: string;
   user_id: string;
   journal_id: string;
-  role: 'managing_editor' | 'editor_in_chief';
+  role: 'managing_editor' | 'academic_editor' | 'editor_in_chief';
   is_active: boolean;
   created_by?: string | null;
   created_at: string;

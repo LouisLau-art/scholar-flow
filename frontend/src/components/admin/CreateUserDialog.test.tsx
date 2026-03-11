@@ -59,4 +59,18 @@ describe('CreateUserDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('可选择 Academic Editor 角色创建账号', async () => {
+    render(
+      <CreateUserDialog
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('combobox'))
+
+    expect((await screen.findAllByText('Academic Editor')).length).toBeGreaterThan(0)
+  })
 })

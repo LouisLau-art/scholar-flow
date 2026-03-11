@@ -107,6 +107,7 @@ export function UserTable({
                         role === 'admin' ? 'bg-destructive/10 text-destructive' :
                         role === 'managing_editor' ? 'bg-primary/10 text-primary' :
                         role === 'assistant_editor' ? 'bg-indigo-100 text-indigo-700' :
+                        role === 'academic_editor' ? 'bg-cyan-100 text-cyan-700' :
                         role === 'editor_in_chief' ? 'bg-purple-100 text-purple-700' :
                         role === 'owner' ? 'bg-emerald-100 text-emerald-700' :
                         role === 'production_editor' ? 'bg-amber-100 text-amber-700' :

@@ -37,11 +37,12 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = 
   { value: 'assistant_editor', label: 'Assistant Editor', helper: '仅可处理分配到自己的稿件' },
   { value: 'production_editor', label: 'Production Editor', helper: '排版与校对协作（仅可处理分配到自己的 Production Cycle）' },
   { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配（必须绑定期刊）' },
-  { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: '学术决策（必须绑定期刊）' },
+  { value: 'academic_editor', label: 'Academic Editor', helper: '学术预审与 First Decision（必须绑定期刊）' },
+  { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: '主编终审与期刊学术把关（必须绑定期刊）' },
   { value: 'admin', label: 'Admin', helper: '全局管理权限' },
 ]
 
-const SCOPE_REQUIRED_ROLES = new Set<UserRole>(['managing_editor', 'editor_in_chief'])
+const SCOPE_REQUIRED_ROLES = new Set<UserRole>(['managing_editor', 'academic_editor', 'editor_in_chief'])
 
 export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDialogProps) {
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>(['author'])
@@ -82,7 +83,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
 
         const journalIdSet = new Set<string>()
         for (const row of scopeRows || []) {
-          if (row.role === 'managing_editor' || row.role === 'editor_in_chief') {
+          if (row.role === 'managing_editor' || row.role === 'academic_editor' || row.role === 'editor_in_chief') {
             journalIdSet.add(String(row.journal_id))
           }
         }
@@ -198,7 +199,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
 
           {scopeRequired && (
             <div className="space-y-2">
-              <Label>Journal Scope (Required for ME/EIC)</Label>
+              <Label>Journal Scope (Required for ME/Academic/EIC)</Label>
               {loadingScopeData ? (
                 <div className="flex items-center gap-2 rounded-md border p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />

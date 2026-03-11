@@ -615,3 +615,30 @@
   - `cd backend && pytest -q -o addopts= tests/integration/test_editor_http_methods.py`
   - `cd backend && python -m py_compile app/api/v1/editor_common.py app/api/v1/editor_precheck.py app/api/v1/editor_heavy_revision.py app/api/v1/editor_decision.py app/api/v1/editor_heavy_decision.py app/api/v1/editor_heavy_publish.py`
   - `cd backend && uvx ruff check app/api/v1/editor_common.py app/api/v1/editor_precheck.py app/api/v1/editor_heavy_revision.py app/api/v1/editor_decision.py app/api/v1/editor_heavy_decision.py app/api/v1/editor_heavy_publish.py tests/unit/test_author_notification_target.py --select=E9,F63,F7,F82`
+
+## 2026-03-11 继续推进：Academic Editor 管理面收口
+
+- 前端 User Management 已补齐 `academic_editor` 全链路入口：
+  - `frontend/src/types/user.ts`
+  - `frontend/src/components/admin/CreateUserDialog.tsx`
+  - `frontend/src/components/admin/UserFilters.tsx`
+  - `frontend/src/components/admin/UserRoleDialog.tsx`
+  - `frontend/src/components/admin/UserTable.tsx`
+
+- 现在已支持：
+  - 创建内部账号时直接选择 `Academic Editor`
+  - User Management 角色筛选里按 `Academic Editor` 过滤
+  - Edit Role 弹窗里勾选 `Academic Editor`
+  - `academic_editor` 与 `managing_editor/editor_in_chief` 一样要求绑定 journal scope
+  - 用户列表角色 badge 正常展示 `academic_editor`
+
+- 新增前端回归测试：
+  - `frontend/src/components/admin/CreateUserDialog.test.tsx`
+  - `frontend/src/components/admin/UserFilters.test.tsx`
+  - `frontend/src/components/admin/UserRoleDialog.test.tsx`
+  - `frontend/src/components/admin/UserTable.test.tsx`
+
+- 本轮验证：
+  - `cd frontend && bun run test:run src/components/admin/CreateUserDialog.test.tsx src/components/admin/UserTable.test.tsx src/components/admin/UserRoleDialog.test.tsx src/components/admin/UserFilters.test.tsx`
+  - `cd frontend && bun run lint`
+  - `cd frontend && bunx tsc --noEmit`

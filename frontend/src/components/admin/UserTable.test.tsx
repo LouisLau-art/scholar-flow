@@ -85,4 +85,27 @@ describe('UserTable', () => {
     expect(onPageChange).toHaveBeenNthCalledWith(2, 4)
     expect(onPageChange).toHaveBeenNthCalledWith(3, 11)
   })
+
+  it('renders academic editor role badge in user rows', () => {
+    render(
+      <UserTable
+        users={[
+          {
+            ...makeUsers(1)[0],
+            roles: ['academic_editor'],
+          },
+        ]}
+        isLoading={false}
+        page={1}
+        perPage={25}
+        total={1}
+        onPageChange={vi.fn()}
+        onPerPageChange={vi.fn()}
+        onEdit={vi.fn()}
+        onResetPassword={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('academic_editor')).toBeInTheDocument()
+  })
 })
