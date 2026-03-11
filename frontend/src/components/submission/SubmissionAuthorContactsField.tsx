@@ -12,7 +12,7 @@ type SubmissionAuthorContactsFieldProps = {
   onSubmissionEmailBlur: () => void
   onAuthorContactChange: (
     authorId: string,
-    field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation'>,
+    field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation' | 'city' | 'countryOrRegion'>,
     value: string,
   ) => void
   onAuthorContactsBlur: () => void
@@ -29,7 +29,7 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
         <div>
           <h3 className="text-sm font-semibold text-foreground">Author Contacts</h3>
           <p className="mt-1 text-xs text-foreground/70">
-            Add all manuscript authors here. Authors do not need ScholarFlow accounts. Keep exactly one corresponding author.
+            Add all manuscript authors here. Authors do not need ScholarFlow accounts. Select one or more corresponding authors.
           </p>
         </div>
         <Button
@@ -157,7 +157,8 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
                 </div>
               </div>
 
-              <div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
                 <label
                   htmlFor={`submission-author-affiliation-${index}`}
                   className="mb-2 block text-sm font-semibold text-foreground"
@@ -174,12 +175,50 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
                   placeholder="e.g., Central China Normal University"
                   data-testid={`submission-author-affiliation-${index}`}
                 />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor={`submission-author-city-${index}`}
+                    className="mb-2 block text-sm font-semibold text-foreground"
+                  >
+                    City
+                  </label>
+                  <Input
+                    id={`submission-author-city-${index}`}
+                    type="text"
+                    value={author.city}
+                    onChange={(event) => props.onAuthorContactChange(author.id, 'city', event.target.value)}
+                    onBlur={props.onAuthorContactsBlur}
+                    className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="e.g., Wuhan"
+                    data-testid={`submission-author-city-${index}`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor={`submission-author-country-${index}`}
+                  className="mb-2 block text-sm font-semibold text-foreground"
+                >
+                  Country or Region
+                </label>
+                <Input
+                  id={`submission-author-country-${index}`}
+                  type="text"
+                  value={author.countryOrRegion}
+                  onChange={(event) => props.onAuthorContactChange(author.id, 'countryOrRegion', event.target.value)}
+                  onBlur={props.onAuthorContactsBlur}
+                  className="w-full rounded-md border border-border/80 bg-background px-4 py-2 text-foreground placeholder:text-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="e.g., China"
+                  data-testid={`submission-author-country-${index}`}
+                />
               </div>
 
               <label className="flex cursor-pointer items-center gap-3 text-sm text-foreground/90">
                 <input
-                  type="radio"
-                  name="submission-corresponding-author"
+                  type="checkbox"
                   checked={author.isCorresponding}
                   onChange={() => props.onSelectCorrespondingAuthor(author.id)}
                   onBlur={props.onAuthorContactsBlur}
@@ -195,7 +234,7 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
 
       {props.showAuthorContactsError ? (
         <InlineNotice tone="danger" size="sm" data-testid="submission-author-contacts-error">
-          Every author must include name, email, and affiliation. Keep exactly one corresponding author.
+          Every author must include name, email, affiliation, city, and country or region. Select at least one corresponding author.
         </InlineNotice>
       ) : null}
     </div>

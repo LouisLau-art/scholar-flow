@@ -55,7 +55,7 @@ type SubmissionMetadataFormProps = {
   onSubmissionEmailBlur: () => void
   onAuthorContactChange: (
     authorId: string,
-    field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation'>,
+    field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation' | 'city' | 'countryOrRegion'>,
     value: string,
   ) => void
   onAuthorContactsBlur: () => void

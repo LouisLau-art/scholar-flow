@@ -55,12 +55,16 @@ def required_author_contacts():
             "name": "Alice Author",
             "email": "alice.author@example.org",
             "affiliation": "Example University",
+            "city": "Wuhan",
+            "country_or_region": "China",
             "is_corresponding": True,
         },
         {
             "name": "Bob Author",
             "email": "bob.author@example.org",
             "affiliation": "Example Institute",
+            "city": "Beijing",
+            "country_or_region": "China",
             "is_corresponding": False,
         },
     ]
@@ -263,7 +267,7 @@ async def test_create_manuscript_with_journal_binding(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_manuscript_requires_exactly_one_corresponding_author(client: AsyncClient):
+async def test_create_manuscript_requires_at_least_one_corresponding_author(client: AsyncClient):
     mock = get_full_mock([])
     mock_token = generate_test_token()
 
@@ -280,12 +284,16 @@ async def test_create_manuscript_requires_exactly_one_corresponding_author(clien
                         "name": "Alice Author",
                         "email": "alice.author@example.org",
                         "affiliation": "Example University",
+                        "city": "Wuhan",
+                        "country_or_region": "China",
                         "is_corresponding": False,
                     },
                     {
                         "name": "Bob Author",
                         "email": "bob.author@example.org",
                         "affiliation": "Example Institute",
+                        "city": "Beijing",
+                        "country_or_region": "China",
                         "is_corresponding": False,
                     },
                 ],
@@ -297,6 +305,110 @@ async def test_create_manuscript_requires_exactly_one_corresponding_author(clien
 
         assert response.status_code == 422
         assert "corresponding" in response.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_allows_multiple_corresponding_authors(client: AsyncClient):
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Structured Author Manuscript",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "submissions@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": [
+            {
+                "name": "Alice Author",
+                "email": "alice.author@example.org",
+                "affiliation": "Example University",
+                "city": "Wuhan",
+                "country_or_region": "China",
+                "is_corresponding": True,
+            },
+            {
+                "name": "Bob Author",
+                "email": "bob.author@example.org",
+                "affiliation": "Example Institute",
+                "city": "Beijing",
+                "country_or_region": "China",
+                "is_corresponding": True,
+            },
+        ],
+        "author_id": "00000000-0000-0000-0000-000000000000",
+        "status": "pre_check",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00",
+    }
+    mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Structured Author Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "submissions@example.org",
+                "author_contacts": [
+                    {
+                        "name": "Alice Author",
+                        "email": "alice.author@example.org",
+                        "affiliation": "Example University",
+                        "city": "Wuhan",
+                        "country_or_region": "China",
+                        "is_corresponding": True,
+                    },
+                    {
+                        "name": "Bob Author",
+                        "email": "bob.author@example.org",
+                        "affiliation": "Example Institute",
+                        "city": "Beijing",
+                        "country_or_region": "China",
+                        "is_corresponding": True,
+                    },
+                ],
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_requires_city_and_country_for_each_author(client: AsyncClient):
+    mock = get_full_mock([])
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Structured Author Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "submissions@example.org",
+                "author_contacts": [
+                    {
+                        "name": "Alice Author",
+                        "email": "alice.author@example.org",
+                        "affiliation": "Example University",
+                        "city": "",
+                        "country_or_region": "China",
+                        "is_corresponding": True,
+                    }
+                ],
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

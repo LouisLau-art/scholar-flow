@@ -12,9 +12,11 @@ class ManuscriptAuthorContact(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="作者姓名")
     email: EmailStr = Field(..., description="作者邮箱")
     affiliation: str = Field(..., min_length=1, max_length=500, description="作者机构")
+    city: str = Field(..., min_length=1, max_length=200, description="作者城市")
+    country_or_region: str = Field(..., min_length=1, max_length=200, description="作者国家或地区")
     is_corresponding: bool = Field(False, description="是否为通讯作者")
 
-    @field_validator("name", "affiliation")
+    @field_validator("name", "affiliation", "city", "country_or_region")
     @classmethod
     def validate_non_empty_strings(cls, value: str) -> str:
         trimmed = value.strip()
@@ -109,8 +111,8 @@ class ManuscriptBase(BaseModel):
     @model_validator(mode="after")
     def validate_author_contacts(self):
         corresponding_count = sum(1 for item in self.author_contacts if item.is_corresponding)
-        if corresponding_count != 1:
-            raise ValueError("exactly one corresponding author is required")
+        if corresponding_count < 1:
+            raise ValueError("at least one corresponding author is required")
         return self
 
 class ManuscriptCreate(ManuscriptBase):

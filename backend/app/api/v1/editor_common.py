@@ -23,10 +23,14 @@ def _normalize_author_contact(raw: Any) -> dict[str, Any] | None:
     name = str(raw.get('name') or '').strip()
     email = normalize_email(raw.get('email'))
     affiliation = str(raw.get('affiliation') or '').strip()
+    city = str(raw.get('city') or '').strip()
+    country_or_region = str(raw.get('country_or_region') or '').strip()
     return {
         'name': name,
         'email': email,
         'affiliation': affiliation,
+        'city': city,
+        'country_or_region': country_or_region,
         'is_corresponding': bool(raw.get('is_corresponding')),
     }
 

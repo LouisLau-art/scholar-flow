@@ -18,6 +18,8 @@ export type SubmissionAuthorContact = {
   name: string
   email: string
   affiliation: string
+  city: string
+  countryOrRegion: string
   isCorresponding: boolean
 }
 
@@ -67,6 +69,8 @@ export function createAuthorContact(overrides: Partial<Omit<SubmissionAuthorCont
     name: '',
     email: '',
     affiliation: '',
+    city: '',
+    countryOrRegion: '',
     isCorresponding: false,
     ...overrides,
   }
@@ -82,16 +86,18 @@ export function isAuthorContactComplete(author: SubmissionAuthorContact): boolea
     author.name.trim().length > 0 &&
     author.email.trim().length > 0 &&
     author.affiliation.trim().length > 0 &&
+    author.city.trim().length > 0 &&
+    author.countryOrRegion.trim().length > 0 &&
     isValidEmail(author.email)
   )
 }
 
-export function hasExactlyOneCorrespondingAuthor(authorContacts: SubmissionAuthorContact[]): boolean {
-  return authorContacts.filter((author) => author.isCorresponding).length === 1
+export function hasAtLeastOneCorrespondingAuthor(authorContacts: SubmissionAuthorContact[]): boolean {
+  return authorContacts.some((author) => author.isCorresponding)
 }
 
 export function hasValidAuthorContacts(authorContacts: SubmissionAuthorContact[]): boolean {
-  return authorContacts.length > 0 && hasExactlyOneCorrespondingAuthor(authorContacts) && authorContacts.every(isAuthorContactComplete)
+  return authorContacts.length > 0 && hasAtLeastOneCorrespondingAuthor(authorContacts) && authorContacts.every(isAuthorContactComplete)
 }
 
 export function buildAuthorContactsFromNames(names: string[]): SubmissionAuthorContact[] {
@@ -112,6 +118,8 @@ export function normalizeAuthorContactsForPayload(authorContacts: SubmissionAuth
     name: author.name.trim(),
     email: author.email.trim(),
     affiliation: author.affiliation.trim(),
+    city: author.city.trim(),
+    country_or_region: author.countryOrRegion.trim(),
     is_corresponding: author.isCorresponding,
   }))
 }

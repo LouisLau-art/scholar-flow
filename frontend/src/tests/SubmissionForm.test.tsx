@@ -100,6 +100,12 @@ function fillRequiredAuthorFields() {
   fireEvent.change(screen.getByTestId('submission-author-affiliation-0'), {
     target: { value: 'Central China Normal University' },
   })
+  fireEvent.change(screen.getByTestId('submission-author-city-0'), {
+    target: { value: 'Wuhan' },
+  })
+  fireEvent.change(screen.getByTestId('submission-author-country-0'), {
+    target: { value: 'China' },
+  })
 }
 
 describe('SubmissionForm Component', () => {
@@ -178,7 +184,7 @@ describe('SubmissionForm Component', () => {
     expect(screen.getByTestId('submission-email')).toHaveValue('user@example.com')
   })
 
-  it('supports multiple author contacts while keeping exactly one corresponding author', async () => {
+  it('supports multiple author contacts and allows multiple corresponding authors', async () => {
     render(<SubmissionForm />)
 
     expect(screen.getByTestId('submission-author-card-0')).toBeInTheDocument()
@@ -192,7 +198,7 @@ describe('SubmissionForm Component', () => {
 
     fireEvent.click(screen.getByTestId('submission-author-corresponding-1'))
 
-    expect(screen.getByTestId('submission-author-corresponding-0')).not.toBeChecked()
+    expect(screen.getByTestId('submission-author-corresponding-0')).toBeChecked()
     expect(screen.getByTestId('submission-author-corresponding-1')).toBeChecked()
   })
 
@@ -543,6 +549,8 @@ describe('SubmissionForm Component', () => {
           name: 'Alice Zhang',
           email: 'alice.zhang@example.com',
           affiliation: 'Central China Normal University',
+          city: 'Wuhan',
+          country_or_region: 'China',
           is_corresponding: true,
         },
       ])
@@ -637,6 +645,12 @@ describe('SubmissionForm Component', () => {
     fireEvent.change(screen.getByTestId('submission-author-affiliation-0'), {
       target: { value: 'CCNU' },
     })
+    fireEvent.change(screen.getByTestId('submission-author-city-0'), {
+      target: { value: 'Wuhan' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-country-0'), {
+      target: { value: 'China' },
+    })
 
     fireEvent.click(screen.getByTestId('submission-add-author'))
     fireEvent.change(screen.getByTestId('submission-author-name-1'), {
@@ -647,6 +661,12 @@ describe('SubmissionForm Component', () => {
     })
     fireEvent.change(screen.getByTestId('submission-author-affiliation-1'), {
       target: { value: 'Wuhan University' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-city-1'), {
+      target: { value: 'Wuhan' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-country-1'), {
+      target: { value: 'China' },
     })
     fireEvent.click(screen.getByTestId('submission-author-corresponding-1'))
     fireEvent.click(screen.getByTestId('submission-move-author-up-1'))
@@ -675,13 +695,17 @@ describe('SubmissionForm Component', () => {
           name: 'Bob Li',
           email: 'bob@example.com',
           affiliation: 'Wuhan University',
+          city: 'Wuhan',
+          country_or_region: 'China',
           is_corresponding: true,
         },
         {
           name: 'Alice Zhang',
           email: 'alice@example.com',
           affiliation: 'CCNU',
-          is_corresponding: false,
+          city: 'Wuhan',
+          country_or_region: 'China',
+          is_corresponding: true,
         },
       ])
     })

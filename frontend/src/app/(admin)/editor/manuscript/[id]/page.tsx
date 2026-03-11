@@ -681,18 +681,24 @@ export default function EditorManuscriptDetailPage() {
     String(ms?.owner?.full_name || '').trim() ||
     String(ms?.owner?.email || '').trim() ||
     '—'
-  const correspondingAuthor = Array.isArray(ms?.author_contacts)
-    ? ms.author_contacts.find((item) => item?.is_corresponding) || ms.author_contacts[0] || null
-    : null
+  const correspondingAuthors = Array.isArray(ms?.author_contacts)
+    ? ms.author_contacts.filter((item) => item?.is_corresponding)
+    : []
+  const correspondingAuthorFallback = Array.isArray(ms?.author_contacts) ? ms.author_contacts[0] || null : null
   const correspondingAuthorLabel =
-    String(correspondingAuthor?.name || '').trim() ||
-    String(correspondingAuthor?.email || '').trim() ||
+    correspondingAuthors
+      .map((item) => String(item?.name || item?.email || '').trim())
+      .filter(Boolean)
+      .join(', ') ||
+    String(correspondingAuthorFallback?.name || '').trim() ||
+    String(correspondingAuthorFallback?.email || '').trim() ||
     String(ms?.author?.full_name || '').trim() ||
     String(ms?.author?.email || '').trim() ||
     '—'
   const submissionEmail =
     String(ms?.submission_email || '').trim() ||
-    String(correspondingAuthor?.email || '').trim() ||
+    String(correspondingAuthors[0]?.email || '').trim() ||
+    String(correspondingAuthorFallback?.email || '').trim() ||
     String(ms?.author?.email || '').trim() ||
     '—'
   const nextAction = useMemo(() => getNextActionCard((ms || {}) as ManuscriptDetail, capability), [ms, capability])

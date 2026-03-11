@@ -13,7 +13,7 @@ import {
   buildAuthorContactsFromNames,
   createAuthorContact,
   extractTraceId,
-  hasExactlyOneCorrespondingAuthor,
+  hasAtLeastOneCorrespondingAuthor,
   hasValidAuthorContacts,
   hasJournalSelection,
   isHttpUrl,
@@ -175,7 +175,9 @@ export function useSubmissionForm() {
         }
       }
       const hasStructuredAuthorInput = prev.authorContacts.some((author) =>
-        [author.name, author.email, author.affiliation].some((value) => value.trim().length > 0),
+        [author.name, author.email, author.affiliation, author.city, author.countryOrRegion].some(
+          (value) => value.trim().length > 0,
+        ),
       )
       if (parsedAuthors.length > 0 && !hasStructuredAuthorInput) {
         next.authorContacts = buildAuthorContactsFromNames(parsedAuthors)
@@ -467,10 +469,10 @@ export function useSubmissionForm() {
       return
     }
     if (!authorContactsValid) {
-      if (!hasExactlyOneCorrespondingAuthor(metadata.authorContacts)) {
-        toast.error('Please keep exactly one corresponding author.')
+      if (!hasAtLeastOneCorrespondingAuthor(metadata.authorContacts)) {
+        toast.error('Please select at least one corresponding author.')
       } else {
-        toast.error('Please complete every author with name, email, and affiliation.')
+        toast.error('Please complete every author with name, email, affiliation, city, and country or region.')
       }
       return
     }
@@ -655,7 +657,7 @@ export function useSubmissionForm() {
     authorContacts: metadata.authorContacts,
     onAuthorContactChange: (
       authorId: string,
-      field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation'>,
+      field: keyof Pick<SubmissionAuthorContact, 'name' | 'email' | 'affiliation' | 'city' | 'countryOrRegion'>,
       value: string,
     ) => {
       setMetadata((prev) => ({
@@ -699,10 +701,9 @@ export function useSubmissionForm() {
     onSelectCorrespondingAuthor: (authorId: string) => {
       setMetadata((prev) => ({
         ...prev,
-        authorContacts: prev.authorContacts.map((author) => ({
-          ...author,
-          isCorresponding: author.id === authorId,
-        })),
+        authorContacts: prev.authorContacts.map((author) =>
+          author.id === authorId ? { ...author, isCorresponding: !author.isCorresponding } : author,
+        ),
       }))
       markTouched('authorContacts')
     },

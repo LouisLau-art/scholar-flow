@@ -140,7 +140,7 @@ export function MetadataStaffCard({
             <div className="font-medium text-foreground text-sm">{displayAuthors}</div>
             <div className="text-xs text-muted-foreground mt-1">{affiliation || 'No affiliation'}</div>
             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-              <div>Corresponding Author: <span className="text-foreground">{correspondingAuthorLabel || '—'}</span></div>
+              <div>Corresponding Author(s): <span className="text-foreground">{correspondingAuthorLabel || '—'}</span></div>
               <div>Submission Email: <span className="text-foreground">{submissionEmail || '—'}</span></div>
               {specialIssue ? <div>Special Issue: <span className="text-foreground">{specialIssue}</span></div> : null}
             </div>
