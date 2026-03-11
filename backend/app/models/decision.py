@@ -115,6 +115,8 @@ class ReviewStageExitResponse(BaseModel):
     cancellation_email_failed_assignment_ids: list[str] = Field(default_factory=list)
     first_decision_email_sent_recipients: list[str] = Field(default_factory=list)
     first_decision_email_failed_recipients: list[str] = Field(default_factory=list)
+    author_revision_email_sent_recipient: str | None = None
+    author_revision_email_failed_recipient: str | None = None
 
 
 class ReviewStageExitRequestSummary(BaseModel):

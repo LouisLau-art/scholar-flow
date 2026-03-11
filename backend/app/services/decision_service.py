@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
 
+from app.api.v1.editor_common import resolve_author_notification_target
 from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.mail import email_service
 from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
 from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
@@ -20,6 +23,7 @@ from app.services.decision_service_letters import DecisionServiceLettersMixin
 from app.services.decision_service_transitions import DecisionServiceTransitionsMixin
 from app.services.editorial_service import EditorialService
 from app.services.notification_service import NotificationService
+from app.services.revision_service import RevisionService
 
 
 def _utc_now_iso() -> str:
@@ -448,6 +452,112 @@ class DecisionService(
                 failed_recipients.append(recipient)
         return sent_recipients, failed_recipients
 
+    def _send_direct_revision_request_email(
+        self,
+        *,
+        manuscript: dict[str, Any],
+        decision_type: str,
+        requested_by: str,
+        editor_comment: str,
+        revision_id: str | None,
+        round_number: int | None,
+    ) -> tuple[str | None, str | None]:
+        target = resolve_author_notification_target(
+            manuscript=manuscript,
+            manuscript_id=str(manuscript.get("id") or ""),
+            supabase_client=self.client,
+        )
+        recipient_email = str(target.get("recipient_email") or "").strip().lower()
+        if not recipient_email:
+            return None, None
+
+        recipient_name = str(target.get("recipient_name") or "Author").strip() or "Author"
+        manuscript_id = str(manuscript.get("id") or "").strip()
+        manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
+        decision_type_value = str(decision_type or "").strip().lower()
+        decision_label = (
+            "Major Revision Requested"
+            if decision_type_value == "major"
+            else "Minor Revision Requested"
+        )
+        requested_by_name = "Editorial Team"
+        try:
+            profile = (
+                self.client.table("user_profiles")
+                .select("full_name,email")
+                .eq("id", str(requested_by or "").strip())
+                .single()
+                .execute()
+            )
+            profile_data = getattr(profile, "data", None) or {}
+            requested_by_name = (
+                str(profile_data.get("full_name") or "").strip()
+                or str(profile_data.get("email") or "").strip()
+                or "Editorial Team"
+            )
+        except Exception:
+            requested_by_name = "Editorial Team"
+
+        frontend_base_url = (
+            os.environ.get("FRONTEND_BASE_URL")
+            or os.environ.get("FRONTEND_ORIGIN")
+            or "http://localhost:3000"
+        )
+        revision_url = f"{str(frontend_base_url).strip().rstrip('/')}/submit-revision/{manuscript_id}"
+        revision_token = str(revision_id or f"round-{int(round_number or 0)}").strip() or "revision"
+        idempotency_key = f"direct-revision-request/{revision_token}/{recipient_email}"
+        delivery = email_service.send_inline_email(
+            to_email=recipient_email,
+            template_key="direct_revision_request",
+            subject_template="[{{ manuscript_title }}] {{ decision_label }}",
+            body_html_template=(
+                "<p>Dear {{ recipient_name }},</p>"
+                "<p>The manuscript <strong>{{ manuscript_title }}</strong> now requires "
+                "<strong>{{ decision_label }}</strong>.</p>"
+                "<p>Revision round: <strong>{{ round_number_label }}</strong><br/>"
+                "Requested by: <strong>{{ requested_by_name }}</strong></p>"
+                "<p>Editor note: {{ editor_comment or 'Please review the revision request in the portal.' }}</p>"
+                "<p>Submit your revision here: <a href=\"{{ revision_url }}\">{{ revision_url }}</a></p>"
+            ),
+            body_text_template=(
+                "Dear {{ recipient_name }}, the manuscript \"{{ manuscript_title }}\" now requires "
+                "{{ decision_label }}. Revision round: {{ round_number_label }}. "
+                "Requested by: {{ requested_by_name }}. "
+                "Editor note: {{ editor_comment or 'Please review the revision request in the portal.' }}. "
+                "Submit your revision here: {{ revision_url }}."
+            ),
+            context={
+                "recipient_name": recipient_name,
+                "manuscript_title": manuscript_title,
+                "decision_label": decision_label,
+                "round_number_label": str(round_number or 1),
+                "requested_by_name": requested_by_name,
+                "editor_comment": str(editor_comment or "").strip(),
+                "revision_url": revision_url,
+            },
+            idempotency_key=idempotency_key,
+            tags=[
+                {"name": "scene", "value": "decision_workflow"},
+                {"name": "event", "value": "direct_revision_request"},
+                {"name": "manuscript_id", "value": manuscript_id},
+                {"name": "decision_type", "value": decision_type_value or "minor"},
+            ],
+            headers={
+                "X-SF-Manuscript-ID": manuscript_id,
+                "X-SF-Event-Type": "direct_revision_request",
+            },
+            audit_context={
+                "manuscript_id": manuscript_id or None,
+                "scene": "decision_workflow",
+                "event_type": "direct_revision_request",
+                "idempotency_key": idempotency_key,
+            },
+        )
+        status = str(delivery.get("status") or "").strip().lower()
+        if status == "sent":
+            return recipient_email, None
+        return None, recipient_email
+
     def exit_review_stage(
         self,
         *,
@@ -612,6 +722,8 @@ class DecisionService(
         }
         first_decision_email_sent_recipients: list[str] = []
         first_decision_email_failed_recipients: list[str] = []
+        author_revision_email_sent_recipient: str | None = None
+        author_revision_email_failed_recipient: str | None = None
 
         if target_stage == "first":
             updated = self.editorial.update_status(
@@ -654,15 +766,51 @@ class DecisionService(
             ManuscriptStatus.MAJOR_REVISION.value,
             ManuscriptStatus.MINOR_REVISION.value,
         }:
-            updated = self.editorial.update_status(
+            decision_type = (
+                "major"
+                if target_stage == ManuscriptStatus.MAJOR_REVISION.value
+                else "minor"
+            )
+            revision_result = RevisionService().create_revision_request(
                 manuscript_id=manuscript_id,
-                to_status=target_stage,
+                decision_type=decision_type,
+                editor_comment=exit_note,
+            )
+            if not revision_result.get("success"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=str(revision_result.get("error") or "Failed to create revision request"),
+                )
+            revision_data = revision_result.get("data") if isinstance(revision_result.get("data"), dict) else {}
+            new_status = str(revision_data.get("manuscript_status") or target_stage)
+            self._safe_insert_audit_log(
+                manuscript_id=manuscript_id,
+                from_status=current_status,
+                to_status=new_status,
                 changed_by=user_id,
                 comment=exit_note,
-                allow_skip=False,
-                payload={**transition_payload, "after": {"status": target_stage}},
+                payload={**transition_payload, "after": {"status": new_status}},
             )
-            new_status = str(updated.get("status") or target_stage)
+            try:
+                self.notification.create_notification(
+                    user_id=str(manuscript.get("author_id") or ""),
+                    manuscript_id=manuscript_id,
+                    type="decision",
+                    title="Revision Requested",
+                    content=f"Editor has requested a {decision_type} revision for '{str(manuscript.get('title') or 'Manuscript')}'.",
+                )
+            except Exception:
+                pass
+            author_revision_email_sent_recipient, author_revision_email_failed_recipient = (
+                self._send_direct_revision_request_email(
+                    manuscript=manuscript,
+                    decision_type=decision_type,
+                    requested_by=user_id,
+                    editor_comment=exit_note,
+                    revision_id=str(revision_data.get("revision", {}).get("id") or "").strip() or None,
+                    round_number=int(revision_data.get("round_number") or 0) or None,
+                )
+            )
         else:
             raise HTTPException(status_code=422, detail="Invalid review-stage exit target")
 
@@ -676,6 +824,8 @@ class DecisionService(
             "cancellation_email_failed_assignment_ids": cancellation_email_failed_assignment_ids,
             "first_decision_email_sent_recipients": first_decision_email_sent_recipients,
             "first_decision_email_failed_recipients": first_decision_email_failed_recipients,
+            "author_revision_email_sent_recipient": author_revision_email_sent_recipient,
+            "author_revision_email_failed_recipient": author_revision_email_failed_recipient,
         }
 
     def get_decision_context(

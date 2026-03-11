@@ -1001,6 +1001,23 @@ def test_exit_review_stage_allows_direct_revision_targets(
             update_status=lambda **kwargs: transitions.append(kwargs) or {"status": kwargs["to_status"]}
         ),
     )
+    monkeypatch.setattr(
+        "app.services.decision_service.RevisionService",
+        lambda: SimpleNamespace(
+            create_revision_request=lambda **_kwargs: {
+                "success": True,
+                "data": {
+                    "revision": {"id": "rev-1"},
+                    "manuscript_status": expected_status,
+                    "round_number": 3,
+                },
+            }
+        ),
+    )
+    monkeypatch.setattr(svc, "_send_direct_revision_request_email", lambda **_kwargs: (None, None))
+    monkeypatch.setattr(svc.notification, "create_notification", lambda **_kwargs: None)
+    audit_logs: list[dict[str, object]] = []
+    monkeypatch.setattr(svc, "_safe_insert_audit_log", lambda **kwargs: audit_logs.append(kwargs))
 
     out = svc.exit_review_stage(
         manuscript_id="ms-1",
@@ -1014,9 +1031,115 @@ def test_exit_review_stage_allows_direct_revision_targets(
     )
 
     assert out["manuscript_status"] == expected_status
-    assert len(transitions) == 1
-    assert transitions[0]["to_status"] == expected_status
-    assert transitions[0]["allow_skip"] is False
+    assert transitions == []
+    assert len(audit_logs) == 1
+    assert audit_logs[0]["to_status"] == expected_status
+
+
+@pytest.mark.parametrize(
+    ("target_stage", "decision_type", "expected_status"),
+    [
+        ("major_revision", "major", "major_revision"),
+        ("minor_revision", "minor", "minor_revision"),
+    ],
+)
+def test_exit_review_stage_direct_revision_uses_revision_service_and_returns_author_email_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    target_stage: str,
+    decision_type: str,
+    expected_status: str,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "title": "Demo Manuscript",
+            "journal_id": "journal-1",
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_current_round_review_assignments", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(
+            update_status=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("direct revision exit should not use editorial.update_status")
+            )
+        ),
+    )
+
+    revision_calls: list[dict[str, object]] = []
+
+    class _FakeRevisionService:
+        def create_revision_request(
+            self,
+            manuscript_id: str,
+            decision_type: str,
+            editor_comment: str,
+        ) -> dict[str, object]:
+            revision_calls.append(
+                {
+                    "manuscript_id": manuscript_id,
+                    "decision_type": decision_type,
+                    "editor_comment": editor_comment,
+                }
+            )
+            return {
+                "success": True,
+                "data": {
+                    "revision": {"id": "rev-1"},
+                    "manuscript_status": expected_status,
+                    "round_number": 3,
+                },
+            }
+
+    monkeypatch.setattr("app.services.decision_service.RevisionService", lambda: _FakeRevisionService())
+
+    audit_logs: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_safe_insert_audit_log",
+        lambda **kwargs: audit_logs.append(kwargs),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_send_direct_revision_request_email",
+        lambda **_kwargs: ("submission@example.org", None),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage=target_stage,  # type: ignore[arg-type]
+            note=f"AE requested {target_stage}",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert revision_calls == [
+        {
+            "manuscript_id": "ms-1",
+            "decision_type": decision_type,
+            "editor_comment": f"AE requested {target_stage}",
+        }
+    ]
+    assert out["manuscript_status"] == expected_status
+    assert out["author_revision_email_sent_recipient"] == "submission@example.org"
+    assert out["author_revision_email_failed_recipient"] is None
+    assert len(audit_logs) == 1
+    assert audit_logs[0]["to_status"] == expected_status
+    assert isinstance(audit_logs[0]["payload"], dict)
+    assert audit_logs[0]["payload"]["action"] == "review_stage_exit"
 
 
 def test_exit_review_stage_persists_requested_outcome_in_transition_payload(

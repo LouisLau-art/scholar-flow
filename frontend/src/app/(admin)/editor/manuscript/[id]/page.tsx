@@ -932,6 +932,11 @@ export default function EditorManuscriptDetailPage() {
       if (failedFirstDecisionEmails > 0) {
         toast.warning(`${failedFirstDecisionEmails} First Decision email(s) failed. Please review the recipient list and resend manually if needed.`)
       }
+      if (res?.data?.author_revision_email_failed_recipient) {
+        toast.warning(
+          `Revision request email to ${res.data.author_revision_email_failed_recipient} failed. Please resend manually if needed.`
+        )
+      }
       setReviewStageExitDialogOpen(false)
       setReviewStageExitRequestedOutcome('major_revision')
       setReviewStageExitNote('')
