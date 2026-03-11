@@ -364,8 +364,9 @@ export function getNextActionCard(
     if ((manuscript.reviewer_invites || []).length === 0) blockers.push('尚未发出审稿邀请')
     return {
       phase: 'External Review',
-      title: '推进外审并收集可决策意见',
-      description: 'AE 需跟进邀请接受率与审稿提交率，达到阈值后进入 Decision。',
+      title: '使用 Exit Review Stage 收口当前外审并决定下一步',
+      description:
+        'AE 可继续邀请 reviewer，也可通过 Exit Review Stage 直接给出 major/minor revision，或将稿件送入 First / Final Decision。',
       blockers,
     }
   }

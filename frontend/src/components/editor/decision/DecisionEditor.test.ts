@@ -5,15 +5,15 @@ import { getDecisionOptionsForStage } from '@/components/editor/decision/Decisio
 describe('getDecisionOptionsForStage', () => {
   it('shows add reviewer in first decision queue but still hides accept', () => {
     expect(getDecisionOptionsForStage('decision')).toEqual(['minor_revision', 'major_revision', 'reject', 'add_reviewer'])
-    expect(getDecisionOptionsForStage('under_review')).toEqual(['minor_revision', 'major_revision', 'reject'])
   })
 
   it('allows accept in final decision contexts but not add reviewer', () => {
     expect(getDecisionOptionsForStage('decision_done')).toEqual(['accept', 'minor_revision', 'major_revision', 'reject'])
   })
 
-  it('does not expose accept before manuscript enters final decision queue', () => {
-    expect(getDecisionOptionsForStage('resubmitted')).toEqual(['minor_revision', 'major_revision', 'reject'])
-    expect(getDecisionOptionsForStage('under_review')).toEqual(['minor_revision', 'major_revision', 'reject'])
+  it('does not expose decision workspace options before manuscript enters decision queues', () => {
+    expect(getDecisionOptionsForStage('resubmitted')).toEqual([])
+    expect(getDecisionOptionsForStage('under_review')).toEqual([])
+    expect(getDecisionOptionsForStage('pre_check')).toEqual([])
   })
 })

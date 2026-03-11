@@ -37,7 +37,7 @@ export function getDecisionOptionsForStage(manuscriptStatus?: string | null): Fi
   if (normalizedStatus === 'decision') {
     return ['minor_revision', 'major_revision', 'reject', 'add_reviewer']
   }
-  return ['minor_revision', 'major_revision', 'reject']
+  return []
 }
 
 function toAttachmentRef(attachment: DecisionAttachment): string {
@@ -77,9 +77,15 @@ export function DecisionEditor({
   const baselineRef = useRef('')
 
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  const isDecisionWorkspaceStage = ['decision', 'decision_done'].includes(normalizedStatus)
   const currentDecisionStage: 'first' | 'final' = normalizedStatus === 'decision_done' ? 'final' : 'first'
   const canEditDraft = (canRecordFirst || canSubmitFinal) && normalizedStatus === 'decision'
   const decisionOptions = useMemo(() => getDecisionOptionsForStage(manuscriptStatus), [manuscriptStatus])
+  const decisionSelectValue = decisionOptions.includes(decision)
+    ? decision
+    : decisionOptions.length === 0
+      ? '__decision-stage-only__'
+      : decisionOptions[0]
   const decisionSpecificBlockingReasons = useMemo(() => {
     const reasons = [...finalBlockingReasons]
     if (currentDecisionStage === 'first') {
@@ -121,9 +127,12 @@ export function DecisionEditor({
 
   useEffect(() => {
     const availableOptions = getDecisionOptionsForStage(manuscriptStatus)
+    const fallbackDecision: FinalDecision = normalizedStatus === 'decision_done' ? 'accept' : 'minor_revision'
     const fromDraft = initialDraft
       ? {
-          decision: availableOptions.includes(initialDraft.decision) ? initialDraft.decision : availableOptions[0],
+          decision: availableOptions.includes(initialDraft.decision)
+            ? initialDraft.decision
+            : availableOptions[0] || fallbackDecision,
           content: initialDraft.content || '',
           lastUpdatedAt: initialDraft.last_updated_at || null,
           attachments: (initialDraft.attachments || []).map((item) =>
@@ -131,7 +140,7 @@ export function DecisionEditor({
           ),
         }
       : {
-          decision: availableOptions[0],
+          decision: availableOptions[0] || fallbackDecision,
           content: templateContent || '',
           lastUpdatedAt: null,
           attachments: [] as LocalAttachment[],
@@ -149,7 +158,7 @@ export function DecisionEditor({
       attachments: fromDraft.attachments.map((item) => ({ id: item.id, path: item.path, ref: item.ref })),
     })
     onDirtyChange(false)
-  }, [initialDraft, manuscriptStatus, templateContent, onDirtyChange])
+  }, [initialDraft, manuscriptStatus, normalizedStatus, templateContent, onDirtyChange])
 
   useEffect(() => {
     onDirtyChange(snapshot !== baselineRef.current && !isReadOnly)
@@ -270,6 +279,11 @@ export function DecisionEditor({
           ? 'First decision can be saved as a draft in the decision queue. Submitting add reviewer will immediately return the manuscript to under review.'
           : 'Final decision is only available in the final decision queue and will trigger the manuscript state transition.'}
       </p>
+      {!isDecisionWorkspaceStage ? (
+        <p className="mt-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+          当前稿件尚未进入 `decision / decision_done`，请先通过 `Exit Review Stage` 推进流程。
+        </p>
+      ) : null}
       {!canSubmitFinal ? (
         <p className="mt-1 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
           当前账号仅可记录 First Decision 草稿；提交决策动作需由 Editor-in-Chief/Admin 执行。
@@ -290,27 +304,33 @@ export function DecisionEditor({
         <div>
           <label htmlFor="decision-letter-select" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Decision</label>
           <Select
-            value={decision}
+            value={decisionSelectValue}
             onValueChange={(value) => setDecision(value as FinalDecision)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || decisionOptions.length === 0}
           >
             <SelectTrigger id="decision-letter-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {decisionOptions.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option === 'accept'
-                    ? 'Accept'
-                    : option === 'add_reviewer'
-                      ? 'Add Reviewer'
-                    : option === 'minor_revision'
-                      ? 'Minor Revision'
-                      : option === 'major_revision'
-                        ? 'Major Revision'
-                        : 'Reject'}
+              {decisionOptions.length > 0 ? (
+                decisionOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option === 'accept'
+                      ? 'Accept'
+                      : option === 'add_reviewer'
+                        ? 'Add Reviewer'
+                      : option === 'minor_revision'
+                        ? 'Minor Revision'
+                        : option === 'major_revision'
+                          ? 'Major Revision'
+                          : 'Reject'}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="__decision-stage-only__" disabled>
+                  Decision workspace only available in decision / decision_done
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
         </div>
