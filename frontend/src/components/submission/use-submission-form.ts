@@ -190,6 +190,15 @@ export function useSubmissionForm() {
     }
   }
 
+  const describeParserSource = (parserSource: unknown) => {
+    const value = String(parserSource || '').trim().toLowerCase()
+    if (value === 'gemini') return 'Metadata parsed with Gemini.'
+    if (value === 'gemini+local_fill') return 'Metadata parsed with Gemini and local fallback.'
+    if (value === 'local') return 'Metadata parsed with the local fallback parser.'
+    if (value === 'timeout') return 'Metadata parsing timed out. Please review manually.'
+    return ''
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
@@ -261,7 +270,9 @@ export function useSubmissionForm() {
           const info = parseTraceId ? `${result.message}（trace: ${parseTraceId}）` : result.message
           toast.success(info, { id: toastId })
         } else {
-          const info = parseTraceId ? `AI parsing successful!（trace: ${parseTraceId}）` : 'AI parsing successful!'
+          const parserInfo = describeParserSource(result?.data?.parser_source)
+          const baseInfo = parserInfo || 'AI parsing successful!'
+          const info = parseTraceId ? `${baseInfo}（trace: ${parseTraceId}）` : baseInfo
           toast.success(info, { id: toastId })
         }
       } else {
@@ -347,12 +358,16 @@ export function useSubmissionForm() {
           applyParsedMetadata(result?.data || {}, 'docx')
           const parsedTitle = String(result?.data?.title || '').trim()
           const parsedAbstract = String(result?.data?.abstract || '').trim()
+          const parserInfo = describeParserSource(result?.data?.parser_source)
           if (parsedTitle || parsedAbstract) {
+            const baseInfo = parserInfo || 'Metadata parsed from DOCX.'
             successMessage = parseTraceId
-              ? `Word manuscript uploaded. Metadata parsed from DOCX（trace: ${parseTraceId}）`
-              : 'Word manuscript uploaded. Metadata parsed from DOCX.'
+              ? `Word manuscript uploaded. ${baseInfo}（trace: ${parseTraceId}）`
+              : `Word manuscript uploaded. ${baseInfo}`
           } else if (result?.message) {
             successMessage = `Word manuscript uploaded. ${String(result.message)}`
+          } else if (parserInfo) {
+            successMessage = `Word manuscript uploaded. ${parserInfo}`
           }
         }
       } catch (parseError) {

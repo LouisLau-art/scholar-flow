@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from httpx import AsyncClient
 from unittest.mock import patch, MagicMock
@@ -670,13 +671,19 @@ async def test_upload_rejects_non_pdf(client: AsyncClient):
 async def test_upload_success_returns_trace_id(client: AsyncClient):
     """验证上传成功时返回 trace_id，便于线上日志排查"""
 
-    async def fake_parse(_text: str, *, layout_lines=None):
-        return {"title": "AI Paper", "abstract": "A study", "authors": ["Alice"]}
+    async def fake_parse(_text: str, *, parser_mode: str, layout_lines=None):
+        assert parser_mode == "pdf"
+        return {
+            "title": "AI Paper",
+            "abstract": "A study",
+            "authors": ["Alice"],
+            "parser_source": "gemini",
+        }
 
     with patch(
         "app.api.v1.manuscripts.extract_text_and_layout_from_pdf",
         return_value=("mocked text", []),
-    ), patch("app.api.v1.manuscripts.parse_manuscript_metadata", fake_parse):
+    ), patch("app.api.v1.manuscripts.extract_manuscript_metadata", fake_parse):
         files = {"file": ("paper.pdf", b"%PDF-1.4\n%mocked", "application/pdf")}
         response = await client.post("/api/v1/manuscripts/upload", files=files)
 
@@ -684,6 +691,7 @@ async def test_upload_success_returns_trace_id(client: AsyncClient):
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["title"] == "AI Paper"
+    assert payload["data"]["parser_source"] == "gemini"
     assert isinstance(payload.get("trace_id"), str)
     assert re.fullmatch(r"[0-9a-f]{8}", payload["trace_id"]) is not None
 
@@ -692,13 +700,19 @@ async def test_upload_success_returns_trace_id(client: AsyncClient):
 async def test_upload_docx_success_returns_trace_id(client: AsyncClient):
     """验证 DOCX 上传也可返回自动解析结果（用于预填标题/摘要）"""
 
-    async def fake_parse(_text: str, *, layout_lines=None):
-        return {"title": "DOCX Paper", "abstract": "DOCX abstract", "authors": ["Bob"]}
+    async def fake_parse(_text: str, *, parser_mode: str, layout_lines=None):
+        assert parser_mode == "docx"
+        return {
+            "title": "DOCX Paper",
+            "abstract": "DOCX abstract",
+            "authors": ["Bob"],
+            "parser_source": "gemini+local_fill",
+        }
 
     with patch(
         "app.api.v1.manuscripts.extract_text_from_docx",
         return_value="mocked docx text",
-    ), patch("app.api.v1.manuscripts.parse_manuscript_metadata", fake_parse):
+    ), patch("app.api.v1.manuscripts.extract_manuscript_metadata", fake_parse):
         files = {
             "file": (
                 "paper.docx",
@@ -712,8 +726,37 @@ async def test_upload_docx_success_returns_trace_id(client: AsyncClient):
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["title"] == "DOCX Paper"
+    assert payload["data"]["parser_source"] == "gemini+local_fill"
     assert isinstance(payload.get("trace_id"), str)
     assert re.fullmatch(r"[0-9a-f]{8}", payload["trace_id"]) is not None
+
+
+@pytest.mark.asyncio
+async def test_upload_metadata_timeout_returns_manual_fill_hint(client: AsyncClient, monkeypatch):
+    monkeypatch.setenv("MANUSCRIPT_METADATA_TIMEOUT_SEC", "0.01")
+
+    async def slow_extract(*args, **kwargs):
+        await asyncio.sleep(0.1)
+        return {"title": "Late"}
+
+    with patch(
+        "app.api.v1.manuscripts.extract_text_from_docx",
+        return_value="mocked docx text",
+    ), patch("app.api.v1.manuscripts.extract_manuscript_metadata", side_effect=slow_extract):
+        files = {
+            "file": (
+                "paper.docx",
+                b"PK\x03\x04mocked-docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        response = await client.post("/api/v1/manuscripts/upload", files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["parser_source"] == "timeout"
+    assert "手动填写" in payload["message"]
 
 
 @pytest.mark.asyncio

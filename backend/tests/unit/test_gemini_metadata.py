@@ -55,6 +55,7 @@ async def test_extract_manuscript_metadata_prefers_gemini(monkeypatch):
         "title": "LLM Parsed Title",
         "abstract": "LLM Parsed Abstract",
         "authors": ["Alice", "Bob"],
+        "parser_source": "gemini",
     }
 
 
@@ -97,6 +98,7 @@ async def test_extract_manuscript_metadata_falls_back_when_gemini_fails(monkeypa
         "title": "Local Title",
         "abstract": "Local Abstract",
         "authors": ["Local Author"],
+        "parser_source": "local",
     }
 
 
@@ -158,4 +160,5 @@ async def test_extract_manuscript_metadata_uses_local_fill_for_missing_fields(mo
         "title": "LLM Title",
         "abstract": "Filled Abstract",
         "authors": ["Filled Author"],
+        "parser_source": "gemini+local_fill",
     }

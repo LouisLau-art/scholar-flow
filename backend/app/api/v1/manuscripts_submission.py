@@ -31,6 +31,36 @@ def _m():
     return manuscripts_api
 
 
+def _resolve_metadata_timeout_sec() -> float:
+    """
+    中文注释:
+    - 历史变量 `PDF_METADATA_TIMEOUT_SEC` 之前统一控制上传后的元数据解析超时，默认仅 4 秒。
+    - 接入 Gemini 后，外层超时若仍保持 4 秒，会在模型返回前被直接截断，表现为“总是空结果”。
+    - 这里增加更通用的 `MANUSCRIPT_METADATA_TIMEOUT_SEC`，并在配置了 Gemini key 时，至少放宽到
+      `GEMINI_METADATA_TIMEOUT_SEC + 2`，避免外层比模型超时还短。
+    """
+    try:
+        base_timeout = float(
+            os.environ.get("MANUSCRIPT_METADATA_TIMEOUT_SEC")
+            or os.environ.get("PDF_METADATA_TIMEOUT_SEC", "4")
+        )
+    except Exception:
+        base_timeout = 4.0
+
+    has_gemini_key = bool(
+        str(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    )
+    if not has_gemini_key:
+        return base_timeout
+
+    try:
+        gemini_timeout = float(os.environ.get("GEMINI_METADATA_TIMEOUT_SEC", "12"))
+    except Exception:
+        gemini_timeout = 12.0
+
+    return max(base_timeout, gemini_timeout + 2.0)
+
+
 def _ensure_author_role_membership(user_id: str, email: str | None) -> None:
     """
     投稿成功后，确保当前用户具备 author 角色。
@@ -212,10 +242,7 @@ async def upload_manuscript(
             }
 
         meta_start = time.monotonic()
-        try:
-            meta_timeout_sec = float(os.environ.get("PDF_METADATA_TIMEOUT_SEC", "4"))
-        except Exception:
-            meta_timeout_sec = 4.0
+        meta_timeout_sec = _resolve_metadata_timeout_sec()
 
         try:
             metadata = await asyncio.wait_for(
@@ -231,13 +258,21 @@ async def upload_manuscript(
                 f"[UploadManuscript:{trace_id}] timeout in metadata parsing (> {meta_timeout_sec:.1f}s), fallback manual fill",
                 flush=True,
             )
-            metadata = {"title": "", "abstract": "", "authors": []}
+            metadata = {
+                "title": "",
+                "abstract": "",
+                "authors": [],
+                "parser_source": "timeout",
+            }
+            message = f"元数据解析超时（>{meta_timeout_sec:.0f}s），已跳过自动预填，可手动填写。"
+        else:
+            message = ""
         meta_cost = time.monotonic() - meta_start
         total_cost = time.monotonic() - start
         print(
             f"[UploadManuscript:{trace_id}] parsed: mode={parser_mode} parse_timeout={timeout_sec:.1f}s max_pages={max_pages} "
             f"max_chars={max_chars} layout_override={layout_max_pages_override} meta_time={meta_cost:.2f}s total={total_cost:.2f}s"
-            f" text_len={len(text or '')} layout_lines={len(layout_lines or [])}",
+            f" text_len={len(text or '')} layout_lines={len(layout_lines or [])} parser_source={str(metadata.get('parser_source') or 'unknown')}",
             flush=True,
         )
 
@@ -248,7 +283,10 @@ async def upload_manuscript(
                 print(f"[UploadManuscript:{trace_id}] init plagiarism report failed (ignored): {e}", flush=True)
             background_tasks.add_task(_m().plagiarism_check_worker, str(manuscript_id))
         print(f"[UploadManuscript:{trace_id}] done", flush=True)
-        return {"success": True, "id": manuscript_id, "trace_id": trace_id, "data": metadata}
+        response_payload = {"success": True, "id": manuscript_id, "trace_id": trace_id, "data": metadata}
+        if message:
+            response_payload["message"] = message
+        return response_payload
     except Exception as e:
         print(f"[UploadManuscript:{trace_id}] failed: {e}", flush=True)
         return JSONResponse(

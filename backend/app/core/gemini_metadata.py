@@ -253,9 +253,11 @@ async def extract_manuscript_metadata(
         title = str(gemini_metadata.get("title") or "").strip()
         abstract = str(gemini_metadata.get("abstract") or "").strip()
         authors = _normalize_authors(gemini_metadata.get("authors") or [])
+        parser_source = "gemini"
 
         if not title or not abstract or not authors:
             local_metadata = await _local_parse()(content or "", layout_lines=layout_lines or [])
+            parser_source = "gemini+local_fill"
         if local_metadata:
             title = title or str(local_metadata.get("title") or "").strip()
             abstract = abstract or str(local_metadata.get("abstract") or "").strip()
@@ -265,6 +267,13 @@ async def extract_manuscript_metadata(
             "title": title,
             "abstract": abstract,
             "authors": authors,
+            "parser_source": parser_source,
         }
 
-    return await _local_parse()(content or "", layout_lines=layout_lines or [])
+    local_only = await _local_parse()(content or "", layout_lines=layout_lines or [])
+    return {
+        "title": str(local_only.get("title") or "").strip(),
+        "abstract": str(local_only.get("abstract") or "").strip(),
+        "authors": _normalize_authors(local_only.get("authors") or []),
+        "parser_source": "local",
+    }
