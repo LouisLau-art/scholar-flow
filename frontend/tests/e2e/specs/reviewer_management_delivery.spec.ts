@@ -476,4 +476,152 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
       ],
     })
   })
+
+  ;([
+    { targetStage: 'major_revision', label: 'Major Revision' },
+    { targetStage: 'minor_revision', label: 'Minor Revision' },
+  ] as const).forEach(({ targetStage, label }) => {
+    test(`allows direct ${label.toLowerCase()} via Exit Review Stage`, async ({ page }) => {
+      await enableE2EAuthBypass(page)
+      await seedSession(page, buildSession('00000000-0000-0000-0000-000000000001', 'editor@example.com'))
+
+      const manuscriptId = `00000000-0000-0000-0000-0000000003${targetStage === 'major_revision' ? '03' : '04'}`
+      let exitPayload: Record<string, unknown> | null = null
+
+      const detailState = {
+        id: manuscriptId,
+        title: `${label} Exit Manuscript`,
+        status: 'under_review',
+        updated_at: '2026-03-10T12:00:00Z',
+        created_at: '2026-03-10T10:00:00Z',
+        is_deferred_context_loaded: true,
+        journals: { title: 'Journal C' },
+        owner: { full_name: 'Owner User', email: 'owner@example.com' },
+        editor: { full_name: 'Editor User', email: 'editor@example.com' },
+        assistant_editor: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+        assistant_editor_id: 'ae-1',
+        role_queue: {
+          current_role: 'assistant_editor',
+          current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+        },
+        files: [],
+        signed_files: {},
+        task_summary: {
+          open_tasks_count: 0,
+          overdue_tasks_count: 0,
+          is_overdue: false,
+          nearest_due_at: null,
+        },
+        reviewer_invites: [],
+        author_response_history: [],
+      }
+
+      await page.route('**/api/v1/**', async (route) => {
+        const req = route.request()
+        const pathname = new URL(req.url()).pathname
+
+        if (pathname === '/api/v1/cms/menu') {
+          return fulfillJson(route, 200, { success: true, data: [] })
+        }
+        if (pathname === '/api/v1/user/profile') {
+          return fulfillJson(route, 200, {
+            success: true,
+            data: { roles: ['admin', 'managing_editor', 'assistant_editor'] },
+          })
+        }
+        if (pathname === '/api/v1/notifications') {
+          return fulfillJson(route, 200, { success: true, data: [] })
+        }
+        if (pathname === '/api/v1/editor/rbac/context') {
+          return fulfillJson(route, 200, {
+            success: true,
+            data: {
+              user_id: '00000000-0000-0000-0000-000000000001',
+              roles: ['admin', 'managing_editor', 'assistant_editor'],
+              normalized_roles: ['admin', 'managing_editor', 'assistant_editor'],
+              allowed_actions: [
+                'process:view',
+                'manuscript:view_detail',
+                'review:assign',
+                'review:view_assignments',
+                'review:unassign',
+                'decision:record_first',
+              ],
+              journal_scope: {
+                enforcement_enabled: false,
+                allowed_journal_ids: [],
+                is_admin: true,
+              },
+            },
+          })
+        }
+        if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}` && req.method() === 'GET') {
+          return fulfillJson(route, 200, { success: true, data: detailState })
+        }
+        if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/cards-context`) {
+          return fulfillJson(route, 200, {
+            success: true,
+            data: {
+              task_summary: detailState.task_summary,
+              role_queue: {
+                current_role: 'assistant_editor',
+                current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+                current_assignee_label: null,
+                assigned_at: '2026-03-10T10:00:00Z',
+                technical_completed_at: null,
+                academic_completed_at: null,
+              },
+            },
+          })
+        }
+        if (pathname === `/api/v1/manuscripts/${manuscriptId}/reviews`) {
+          return fulfillJson(route, 200, { success: true, data: [] })
+        }
+        if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/review-stage-exit` && req.method() === 'POST') {
+          exitPayload = (req.postDataJSON() as Record<string, unknown>) || null
+          detailState.status = targetStage
+          detailState.updated_at = '2026-03-10T12:05:00Z'
+          return fulfillJson(route, 200, {
+            success: true,
+            data: {
+              manuscript_status: targetStage,
+              target_stage: targetStage,
+              auto_cancelled_assignment_ids: [],
+              manually_cancelled_assignment_ids: [],
+              remaining_pending_assignment_ids: [],
+              cancellation_email_sent_assignment_ids: [],
+              cancellation_email_failed_assignment_ids: [],
+              author_revision_email_failed_recipient: null,
+            },
+          })
+        }
+
+        return fulfillJson(route, 200, { success: true, data: [] })
+      })
+
+      await page.goto(`/editor/manuscript/${manuscriptId}`, { waitUntil: 'domcontentloaded' })
+
+      await expect(page.getByRole('heading', { name: `${label} Exit Manuscript` })).toBeVisible({ timeout: 15000 })
+      await page.getByRole('button', { name: /Exit Review Stage/i }).click()
+
+      const exitDialog = page.getByRole('dialog')
+      await expect(exitDialog).toBeVisible()
+      await page
+        .getByRole('radio', { name: new RegExp(`Direct\\s+${label}`, 'i') })
+        .click()
+      await page
+        .getByPlaceholder('Explain why review stage is being closed and why any accepted reviewers are being cancelled...')
+        .fill(`Move directly to ${label}.`)
+      await page.getByRole('button', { name: 'Continue' }).click()
+
+      await expect(page.getByText(new RegExp(`Moved manuscript to ${label}`, 'i'))).toBeVisible()
+      await expect(page.getByRole('button', { name: /Exit Review Stage/i })).toBeHidden()
+
+      expect(exitPayload).toEqual({
+        target_stage: targetStage,
+        note: `Move directly to ${label}.`,
+        accepted_pending_resolutions: [],
+      })
+    })
+  })
 })
