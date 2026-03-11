@@ -116,6 +116,22 @@ export function normalizeAuthorContactsForPayload(authorContacts: SubmissionAuth
   }))
 }
 
+export function moveAuthorContact(
+  authorContacts: SubmissionAuthorContact[],
+  authorId: string,
+  direction: 'up' | 'down',
+): SubmissionAuthorContact[] {
+  const currentIndex = authorContacts.findIndex((author) => author.id === authorId)
+  if (currentIndex < 0) return authorContacts
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+  if (targetIndex < 0 || targetIndex >= authorContacts.length) return authorContacts
+
+  const next = [...authorContacts]
+  const [current] = next.splice(currentIndex, 1)
+  next.splice(targetIndex, 0, current)
+  return next
+}
+
 export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => {

@@ -58,6 +58,7 @@ EXPECTED_ROUTES = {
     ("POST", "/api/v1/plagiarism/retry"),
     ("POST", "/api/v1/reviews/assign"),
     ("GET", "/api/v1/reviews/my-tasks"),
+    ("GET", "/api/v1/reviews/my-history"),
     ("POST", "/api/v1/reviews/submit"),
     ("GET", "/api/v1/stats/author"),
     ("GET", "/api/v1/stats/editor"),

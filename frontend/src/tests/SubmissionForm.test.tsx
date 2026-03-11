@@ -196,6 +196,16 @@ describe('SubmissionForm Component', () => {
     expect(screen.getByTestId('submission-author-corresponding-1')).toBeChecked()
   })
 
+  it('explains that submission email can differ from listed author emails', () => {
+    render(<SubmissionForm />)
+
+    expect(
+      screen.getByText(
+        'This address can belong to a student or assistant submitting on behalf of the authors. It does not need to match any listed author email.'
+      )
+    ).toBeInTheDocument()
+  })
+
   it('handles file upload success and populates metadata', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
@@ -539,6 +549,142 @@ describe('SubmissionForm Component', () => {
     })
 
     expect(storageUploadMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('submits author_contacts in the reordered author order', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    const manuscriptInput = screen.getByTestId('submission-file') as HTMLInputElement
+    fireEvent.change(manuscriptInput, {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
+    fireEvent.change(wordInput, {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    const coverInput = screen.getByTestId('submission-cover-letter-file') as HTMLInputElement
+    fireEvent.change(coverInput, {
+      target: {
+        files: [
+          new File(['cover'], 'cover-letter.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-email'), {
+      target: { value: 'assistant-submission@example.com' },
+    })
+
+    fireEvent.change(screen.getByTestId('submission-author-name-0'), {
+      target: { value: 'Alice Zhang' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-email-0'), {
+      target: { value: 'alice@example.com' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-affiliation-0'), {
+      target: { value: 'CCNU' },
+    })
+
+    fireEvent.click(screen.getByTestId('submission-add-author'))
+    fireEvent.change(screen.getByTestId('submission-author-name-1'), {
+      target: { value: 'Bob Li' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-email-1'), {
+      target: { value: 'bob@example.com' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-affiliation-1'), {
+      target: { value: 'Wuhan University' },
+    })
+    fireEvent.click(screen.getByTestId('submission-author-corresponding-1'))
+    fireEvent.click(screen.getByTestId('submission-move-author-up-1'))
+
+    expect(screen.getByTestId('submission-author-name-0')).toHaveValue('Bob Li')
+    expect(screen.getByTestId('submission-author-name-1')).toHaveValue('Alice Zhang')
+
+    acceptRequiredDeclarations()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
+    })
+
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        (call) => call[0] === '/api/v1/manuscripts'
+      ) as [unknown, RequestInit?] | undefined
+      expect(createCall).toBeTruthy()
+      const requestInit = createCall?.[1] as RequestInit | undefined
+      const body = JSON.parse(String(requestInit?.body || ''))
+      expect(body.submission_email).toBe('assistant-submission@example.com')
+      expect(body.author_contacts).toEqual([
+        {
+          name: 'Bob Li',
+          email: 'bob@example.com',
+          affiliation: 'Wuhan University',
+          is_corresponding: true,
+        },
+        {
+          name: 'Alice Zhang',
+          email: 'alice@example.com',
+          affiliation: 'CCNU',
+          is_corresponding: false,
+        },
+      ])
+    })
   })
 
   it('shows error when submission fails', async () => {

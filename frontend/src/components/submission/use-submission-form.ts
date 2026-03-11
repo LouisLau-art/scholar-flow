@@ -21,6 +21,7 @@ import {
   isSupportedWordDocument,
   isValidEmail,
   normalizeAuthorContactsForPayload,
+  moveAuthorContact,
   parseManuscriptMetadataWithFallback,
   sanitizeFilename,
   type MetadataState,
@@ -686,6 +687,13 @@ export function useSubmissionForm() {
           authorContacts: remaining,
         }
       })
+      markTouched('authorContacts')
+    },
+    onMoveAuthorContact: (authorId: string, direction: 'up' | 'down') => {
+      setMetadata((prev) => ({
+        ...prev,
+        authorContacts: moveAuthorContact(prev.authorContacts, authorId, direction),
+      }))
       markTouched('authorContacts')
     },
     onSelectCorrespondingAuthor: (authorId: string) => {

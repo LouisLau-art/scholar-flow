@@ -54,6 +54,39 @@ describe('ReviewerDashboard', () => {
         } as any
       }
 
+      if (String(url).startsWith('/api/v1/reviews/my-history')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                assignment_id: 'history-1',
+                manuscript_id: 'ms-history-1',
+                manuscript_title: 'Archived Review',
+                manuscript_abstract: 'Archived abstract',
+                assignment_state: 'submitted',
+                round_number: 2,
+                invited_at: '2026-03-11T08:00:00+00:00',
+                accepted_at: '2026-03-11T08:30:00+00:00',
+                due_at: '2026-03-18T00:00:00+00:00',
+                report_submitted_at: '2026-03-11T09:00:00+00:00',
+                comments_for_author: 'Looks solid.',
+                confidential_comments_to_editor: 'Keep an eye on the methods section.',
+                email_events: [
+                  {
+                    status: 'sent',
+                    event_type: 'invitation',
+                    template_name: 'standard_invitation',
+                    created_at: '2026-03-11T08:00:00+00:00',
+                  },
+                ],
+              },
+            ],
+          }),
+        } as any
+      }
+
       if (String(url).startsWith('/api/v1/manuscripts/ms-1/pdf-signed')) {
         return {
           ok: true,
@@ -257,5 +290,83 @@ describe('ReviewerDashboard', () => {
       expect(toast.error).toHaveBeenCalledWith('Failed to determine next reviewer step.', { id: 'toast-id' })
     })
     expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('renders reviewer history and shows read-only archived details', async () => {
+    render(<ReviewerDashboard />)
+
+    expect(await screen.findByText('My Review History')).toBeInTheDocument()
+    expect(await screen.findByText('Archived Review')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /view details/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /view details/i }))
+
+    expect(await screen.findByText('Comments for Authors')).toBeInTheDocument()
+    expect(screen.getByText('Looks solid.')).toBeInTheDocument()
+    expect(screen.getByText('Keep an eye on the methods section.')).toBeInTheDocument()
+    expect(screen.getByText('Communication Timeline')).toBeInTheDocument()
+    expect(screen.getByText('Invitation email processed')).toBeInTheDocument()
+  })
+
+  it('opens submitted review from history through the reviewer session bridge', async () => {
+    globalThis.fetch = vi.fn(async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.url
+
+      if (String(url).startsWith('/api/v1/reviews/my-tasks')) {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: [] }),
+        } as any
+      }
+
+      if (String(url).startsWith('/api/v1/reviews/my-history')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [
+              {
+                assignment_id: 'history-submitted-1',
+                manuscript_id: 'ms-history-submitted',
+                manuscript_title: 'Submitted Review History',
+                assignment_state: 'submitted',
+                report_submitted_at: '2026-03-11T09:00:00+00:00',
+              },
+            ],
+          }),
+        } as any
+      }
+
+      if (String(url) === '/api/v1/reviewer/assignments/history-submitted-1/session') {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { redirect_url: '/reviewer/workspace/history-submitted-1' },
+          }),
+        } as any
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      } as any
+    }) as any
+
+    render(<ReviewerDashboard />)
+
+    const openButton = await screen.findByRole('button', { name: /view submitted review/i })
+    fireEvent.click(openButton)
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/reviewer/assignments/history-submitted-1/session',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        })
+      )
+    })
+    expect(pushMock).toHaveBeenCalledWith('/reviewer/workspace/history-submitted-1')
   })
 })

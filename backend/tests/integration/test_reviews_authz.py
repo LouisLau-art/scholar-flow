@@ -45,6 +45,82 @@ async def test_my_tasks_ok_for_self(client: AsyncClient, auth_token: str, monkey
 
 
 @pytest.mark.asyncio
+async def test_my_history_forbidden_for_other_user(client: AsyncClient, auth_token: str, monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    resp = await client.get(
+        "/api/v1/reviews/my-history?user_id=11111111-1111-1111-1111-111111111111",
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_my_history_ok_for_self(client: AsyncClient, auth_token: str, monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    mock = MagicMock()
+    mock.table.return_value = mock
+    mock.select.return_value = mock
+    mock.eq.return_value = mock
+    mock.order.return_value = mock
+    mock.limit.return_value = mock
+    mock.in_.return_value = mock
+
+    assignments_resp = MagicMock()
+    assignments_resp.data = [
+        {
+            "id": "assign-1",
+            "manuscript_id": "ms-1",
+            "reviewer_id": "00000000-0000-0000-0000-000000000000",
+            "status": "completed",
+            "created_at": "2026-03-11T08:00:00+00:00",
+            "round_number": 1,
+        }
+    ]
+    manuscripts_resp = MagicMock()
+    manuscripts_resp.data = [
+        {
+            "id": "ms-1",
+            "title": "History Manuscript",
+            "abstract": "History abstract",
+            "status": "decision",
+        }
+    ]
+    reports_resp = MagicMock()
+    reports_resp.data = [
+        {
+            "manuscript_id": "ms-1",
+            "reviewer_id": "00000000-0000-0000-0000-000000000000",
+            "status": "completed",
+            "comments_for_author": "Strong paper",
+            "confidential_comments_to_editor": "Minor concerns",
+            "attachment_path": None,
+            "created_at": "2026-03-11T09:00:00+00:00",
+            "updated_at": "2026-03-11T09:00:00+00:00",
+        }
+    ]
+    email_logs_resp = MagicMock()
+    email_logs_resp.data = []
+    mock.execute.side_effect = [assignments_resp, manuscripts_resp, reports_resp, email_logs_resp]
+
+    with patch("app.api.v1.reviews.supabase_admin", mock):
+        resp = await client.get(
+            "/api/v1/reviews/my-history?user_id=00000000-0000-0000-0000-000000000000",
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    assert payload["data"][0]["assignment_state"] == "submitted"
+    assert payload["data"][0]["manuscript_title"] == "History Manuscript"
+    assert payload["data"][0]["comments_for_author"] == "Strong paper"
+
+
+@pytest.mark.asyncio
 async def test_reviewer_workspace_session_ok(client: AsyncClient, auth_token: str, monkeypatch):
     monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
     headers = {"Authorization": f"Bearer {auth_token}"}

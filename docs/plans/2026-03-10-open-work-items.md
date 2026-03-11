@@ -20,6 +20,7 @@
 当前状态：
 
 - 前端投稿表单已支持 `submission_email + author_contacts[]`
+- 作者顺序已支持前端调整（`Move Up / Move Down`）
 - 后端模型、写库逻辑、远端 Supabase migration 已完成
 - 稿件详情页已开始展示：
   - Authors
@@ -37,6 +38,29 @@
 剩余收尾：
 
 - 继续检查作者详情、作者看板、导出/决策信中是否还在默认使用账号邮箱
+
+### 1.1 Reviewer Dashboard 个人历史归档
+
+当前状态：
+
+- 已完成
+
+结果：
+
+- Reviewer dashboard 现在同时展示：
+  - 当前活跃审稿任务
+  - 自己的历史归档（`submitted / declined / cancelled`）
+- 历史详情弹窗可查看：
+  - 稿件标题与摘要
+  - 自己提交给作者的评论
+  - 只给编辑的 confidential note
+  - 自己 assignment 的 communication timeline
+- 已提交历史项支持通过 session bridge 重新进入只读 reviewer workspace
+
+边界：
+
+- 仅展示 reviewer 自己的记录
+- 不暴露其他 reviewer、编辑内部备注或内部决策流
 
 ## 二、高优先级未完成
 

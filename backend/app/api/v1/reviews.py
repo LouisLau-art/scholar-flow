@@ -1589,6 +1589,155 @@ async def get_my_review_tasks(
         }
 
 
+@router.get("/reviews/my-history")
+async def get_my_review_history(
+    user_id: UUID,
+    manuscript_id: UUID | None = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+    _profile: dict = Depends(require_any_role(["reviewer", "admin"])),
+):
+    """
+    审稿人获取自己的历史记录（仅返回 reviewer 自己可见的数据）。
+    """
+    if str(user_id) != str(current_user["id"]):
+        raise HTTPException(status_code=403, detail="Cannot access other user's review history")
+
+    reviewer_id_str = str(user_id)
+
+    try:
+        query = (
+            supabase_admin.table("review_assignments")
+            .select(
+                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number, cancelled_at, cancel_reason, cancel_via"
+            )
+            .eq("reviewer_id", reviewer_id_str)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if manuscript_id is not None:
+            query = query.eq("manuscript_id", str(manuscript_id))
+        assignments_res = query.execute()
+    except Exception as exc:
+        if not _is_missing_assignment_audit_column_error(exc):
+            raise
+        query = (
+            supabase_admin.table("review_assignments")
+            .select(
+                "id, manuscript_id, reviewer_id, status, due_at, invited_at, opened_at, accepted_at, declined_at, decline_reason, decline_note, last_reminded_at, created_at, round_number"
+            )
+            .eq("reviewer_id", reviewer_id_str)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if manuscript_id is not None:
+            query = query.eq("manuscript_id", str(manuscript_id))
+        assignments_res = query.execute()
+
+    assignment_rows = getattr(assignments_res, "data", None) or []
+    if not assignment_rows:
+        return {"success": True, "data": []}
+
+    manuscript_ids = sorted(
+        {
+            str(row.get("manuscript_id") or "").strip()
+            for row in assignment_rows
+            if str(row.get("manuscript_id") or "").strip()
+        }
+    )
+    manuscript_map: dict[str, dict[str, Any]] = {}
+    if manuscript_ids:
+        ms_res = (
+            supabase_admin.table("manuscripts")
+            .select("id, title, abstract, status")
+            .in_("id", manuscript_ids)
+            .execute()
+        )
+        for row in (getattr(ms_res, "data", None) or []):
+            manuscript_map[str(row.get("id"))] = row
+
+    assignment_counts_by_manuscript: dict[str, int] = {}
+    for row in assignment_rows:
+        mid = str(row.get("manuscript_id") or "").strip()
+        if not mid:
+            continue
+        assignment_counts_by_manuscript[mid] = assignment_counts_by_manuscript.get(mid, 0) + 1
+
+    report_map: dict[str, dict[str, Any]] = {}
+    try:
+        rr_res = (
+            supabase_admin.table("review_reports")
+            .select(
+                "manuscript_id, reviewer_id, status, comments_for_author, content, confidential_comments_to_editor, attachment_path, created_at, updated_at"
+            )
+            .eq("reviewer_id", reviewer_id_str)
+            .in_("manuscript_id", manuscript_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        for row in (getattr(rr_res, "data", None) or []):
+            mid = str(row.get("manuscript_id") or "").strip()
+            if mid and assignment_counts_by_manuscript.get(mid, 0) == 1 and mid not in report_map:
+                report_map[mid] = row
+    except Exception:
+        report_map = {}
+
+    assignment_ids = [
+        str(row.get("id") or "").strip() for row in assignment_rows if str(row.get("id") or "").strip()
+    ]
+    email_events_by_assignment = _load_assignment_email_events(assignment_ids=assignment_ids)
+
+    out: list[dict[str, Any]] = []
+    for row in assignment_rows:
+        assignment_id_value = str(row.get("id") or "").strip()
+        manuscript_id_value = str(row.get("manuscript_id") or "").strip()
+        manuscript = manuscript_map.get(manuscript_id_value) or {}
+        report = report_map.get(manuscript_id_value) or {}
+        report_submitted_at = report.get("updated_at") or report.get("created_at")
+        assignment_state = _derive_assignment_state({**row, "report_submitted_at": report_submitted_at})
+        if assignment_state not in {"submitted", "declined", "cancelled"}:
+            continue
+        email_events = email_events_by_assignment.get(assignment_id_value, [])
+        latest_email = email_events[0] if email_events else {}
+        attachment_path = str(report.get("attachment_path") or "").strip() or None
+        out.append(
+            {
+                "assignment_id": assignment_id_value or row.get("id"),
+                "reviewer_id": reviewer_id_str,
+                "manuscript_id": manuscript_id_value,
+                "manuscript_title": manuscript.get("title"),
+                "manuscript_abstract": manuscript.get("abstract"),
+                "manuscript_status": manuscript.get("status"),
+                "assignment_status": row.get("status"),
+                "assignment_state": assignment_state,
+                "round_number": row.get("round_number"),
+                "added_on": row.get("created_at"),
+                "invited_at": row.get("invited_at"),
+                "opened_at": row.get("opened_at"),
+                "accepted_at": row.get("accepted_at"),
+                "declined_at": row.get("declined_at"),
+                "decline_reason": row.get("decline_reason"),
+                "decline_note": row.get("decline_note"),
+                "cancelled_at": row.get("cancelled_at"),
+                "cancel_reason": row.get("cancel_reason"),
+                "cancel_via": row.get("cancel_via"),
+                "last_reminded_at": row.get("last_reminded_at"),
+                "due_at": row.get("due_at"),
+                "report_status": report.get("status"),
+                "report_submitted_at": report_submitted_at,
+                "comments_for_author": report.get("comments_for_author") or report.get("content"),
+                "confidential_comments_to_editor": report.get("confidential_comments_to_editor"),
+                "report_attachment_filename": attachment_path.rsplit("/", 1)[-1] if attachment_path else None,
+                "latest_email_status": latest_email.get("status"),
+                "latest_email_at": latest_email.get("created_at"),
+                "latest_email_error": latest_email.get("error_message"),
+                "email_events": email_events,
+            }
+        )
+
+    return {"success": True, "data": out}
+
+
 # === 3. 提交多维度评价 (Submission) ===
 @router.post("/reviews/submit")
 async def submit_review(

@@ -61,6 +61,7 @@ type SubmissionMetadataFormProps = {
   onAuthorContactsBlur: () => void
   onAddAuthorContact: () => void
   onRemoveAuthorContact: (authorId: string) => void
+  onMoveAuthorContact: (authorId: string, direction: 'up' | 'down') => void
   onSelectCorrespondingAuthor: (authorId: string) => void
   onDatasetUrlChange: (value: string) => void
   onDatasetUrlBlur: () => void
@@ -191,6 +192,7 @@ export function SubmissionMetadataForm(props: SubmissionMetadataFormProps) {
         onAuthorContactsBlur={props.onAuthorContactsBlur}
         onAddAuthorContact={props.onAddAuthorContact}
         onRemoveAuthorContact={props.onRemoveAuthorContact}
+        onMoveAuthorContact={props.onMoveAuthorContact}
         onSelectCorrespondingAuthor={props.onSelectCorrespondingAuthor}
       />
 

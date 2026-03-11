@@ -18,6 +18,7 @@ type SubmissionAuthorContactsFieldProps = {
   onAuthorContactsBlur: () => void
   onAddAuthorContact: () => void
   onRemoveAuthorContact: (authorId: string) => void
+  onMoveAuthorContact: (authorId: string, direction: 'up' | 'down') => void
   onSelectCorrespondingAuthor: (authorId: string) => void
 }
 
@@ -56,6 +57,9 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
           placeholder="submission-contact@example.com"
           data-testid="submission-email"
         />
+        <p className="mt-2 text-xs text-foreground/65">
+          This address can belong to a student or assistant submitting on behalf of the authors. It does not need to match any listed author email.
+        </p>
         {props.showSubmissionEmailError ? (
           <InlineNotice tone="danger" size="sm" className="mt-2" data-testid="submission-email-error">
             Please provide a valid submission email address.
@@ -79,16 +83,38 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
                     {author.isCorresponding ? 'Corresponding author' : 'Co-author'}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={deleteDisabled}
-                  onClick={() => props.onRemoveAuthorContact(author.id)}
-                  data-testid={`submission-remove-author-${index}`}
-                >
-                  Remove
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === 0}
+                    onClick={() => props.onMoveAuthorContact(author.id, 'up')}
+                    data-testid={`submission-move-author-up-${index}`}
+                  >
+                    Move Up
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === props.authorContacts.length - 1}
+                    onClick={() => props.onMoveAuthorContact(author.id, 'down')}
+                    data-testid={`submission-move-author-down-${index}`}
+                  >
+                    Move Down
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={deleteDisabled}
+                    onClick={() => props.onRemoveAuthorContact(author.id)}
+                    data-testid={`submission-remove-author-${index}`}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

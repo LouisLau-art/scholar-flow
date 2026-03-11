@@ -59,6 +59,7 @@ export default function SubmissionForm() {
         onAuthorContactsBlur={form.onAuthorContactsBlur}
         onAddAuthorContact={form.onAddAuthorContact}
         onRemoveAuthorContact={form.onRemoveAuthorContact}
+        onMoveAuthorContact={form.onMoveAuthorContact}
         onSelectCorrespondingAuthor={form.onSelectCorrespondingAuthor}
         onDatasetUrlChange={form.onDatasetUrlChange}
         onDatasetUrlBlur={form.onDatasetUrlBlur}

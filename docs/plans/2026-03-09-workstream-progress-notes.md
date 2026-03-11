@@ -638,6 +638,34 @@
   - `frontend/src/components/admin/UserRoleDialog.test.tsx`
   - `frontend/src/components/admin/UserTable.test.tsx`
 
+## 2026-03-11 继续推进：Reviewer Dashboard 历史归档 + 投稿作者顺序
+
+- Reviewer Dashboard 新增 reviewer 自己的历史归档接口与前端展示：
+  - 后端：`GET /api/v1/reviews/my-history`
+  - 前端：活跃任务下方增加 `My Review History`
+  - 仅返回 reviewer 自己可见的数据，不暴露编辑内部信息
+
+- 历史详情弹窗现在可查看：
+  - 稿件标题/摘要
+  - `Comments for Authors`
+  - `Confidential Comments to Editor`
+  - assignment 级 communication timeline
+
+- 已提交历史项支持经现有 reviewer session bridge 重新进入只读 workspace
+
+- 投稿表单新增作者顺序调整：
+  - `Move Up / Move Down`
+  - 按稳定 author `id` 调整，不使用数组 index 作为身份标识
+  - 提交 payload 中 `author_contacts[]` 顺序与前端调整结果保持一致
+
+- 投稿联系邮箱帮助文案已明确：
+  - 可由学生/助理代投
+  - 不要求与任一作者邮箱一致
+
+- 回归测试：
+  - `frontend/src/components/ReviewerDashboard.test.tsx`
+  - `frontend/src/tests/SubmissionForm.test.tsx`
+
 - 本轮验证：
   - `cd frontend && bun run test:run src/components/admin/CreateUserDialog.test.tsx src/components/admin/UserTable.test.tsx src/components/admin/UserRoleDialog.test.tsx src/components/admin/UserFilters.test.tsx`
   - `cd frontend && bun run lint`
