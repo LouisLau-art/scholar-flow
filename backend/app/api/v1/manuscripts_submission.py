@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPE
 from fastapi.responses import JSONResponse
 
 from app.core.auth_utils import get_current_user
+from app.core.email_normalization import normalize_email
 from app.core.mail import EmailService
 from app.models.revision import RevisionSubmitResponse
 from app.models.schemas import ManuscriptCreate
@@ -28,6 +29,63 @@ def _m():
     from app.api.v1 import manuscripts as manuscripts_api
 
     return manuscripts_api
+
+
+def _ensure_author_role_membership(user_id: str, email: str | None) -> None:
+    """
+    投稿成功后，确保当前用户具备 author 角色。
+
+    中文注释:
+    - 历史上存在 reviewer-only 账号也可投稿的情况。
+    - 若不在这里补 author，Dashboard 会因为 roles 缺 author 而不显示作者视图。
+    - 这里做“幂等补齐”，不阻塞投稿主流程。
+    """
+    target_user_id = str(user_id or "").strip()
+    if not target_user_id:
+        return
+
+    normalized_email = normalize_email(email)
+
+    try:
+        resp = (
+            _m().supabase_admin.table("user_profiles")
+            .select("id,email,roles")
+            .eq("id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        existing = ((getattr(resp, "data", None) or [None])[0]) or None
+
+        if existing:
+            existing_roles = [str(role).strip() for role in (existing.get("roles") or []) if str(role).strip()]
+            payload: dict[str, object] = {}
+            if "author" not in existing_roles:
+                payload["roles"] = [*existing_roles, "author"]
+            existing_email = normalize_email(existing.get("email"))
+            if normalized_email and normalized_email != existing_email:
+                payload["email"] = normalized_email
+            if payload:
+                (
+                    _m().supabase_admin.table("user_profiles")
+                    .update(payload)
+                    .eq("id", target_user_id)
+                    .execute()
+                )
+            return
+
+        (
+            _m().supabase_admin.table("user_profiles")
+            .insert(
+                {
+                    "id": target_user_id,
+                    "email": normalized_email,
+                    "roles": ["author"],
+                }
+            )
+            .execute()
+        )
+    except Exception as e:
+        print(f"[SubmissionAuthorRole] failed to ensure author role: {e}", flush=True)
 
 
 @router.post("/manuscripts/upload")
@@ -557,6 +615,8 @@ async def create_manuscript(
 
         if response.data:
             created = response.data[0]
+
+            _ensure_author_role_membership(current_user_id, current_user.get("email"))
 
             supplemental_files = [
                 {

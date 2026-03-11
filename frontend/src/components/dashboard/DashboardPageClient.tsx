@@ -243,7 +243,8 @@ function DashboardPageContent({
   const normalizedRoles = useMemo(() => normalizeRoleTokens(roles || []), [roles])
   const roleSet = new Set(normalizedRoles)
   const canSeeAdmin = roleSet.has('admin')
-  const canSeeAuthor = canSeeAdmin || roleSet.has('author')
+  const hasAuthorActivity = Boolean((stats?.total_submissions ?? 0) > 0 || submissions.length > 0)
+  const canSeeAuthor = canSeeAdmin || roleSet.has('author') || hasAuthorActivity
   const canSeeReviewer = canSeeAdmin || roleSet.has('reviewer')
   const canSeeManagingEditor = canSeeAdmin || roleSet.has('managing_editor')
   const canSeeAssistantEditor = canSeeAdmin || roleSet.has('assistant_editor')

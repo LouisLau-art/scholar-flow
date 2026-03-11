@@ -148,6 +148,63 @@ async def test_create_manuscript_success(client: AsyncClient):
         assert insert_payload["authors"] == ["Alice Author", "Bob Author"]
         assert insert_payload["author_contacts"][0]["is_corresponding"] is True
 
+
+def test_ensure_author_role_membership_appends_author_role():
+    from app.api.v1 import manuscripts_submission
+
+    admin_mock = MagicMock()
+    admin_mock.table.return_value = admin_mock
+    admin_mock.select.return_value = admin_mock
+    admin_mock.eq.return_value = admin_mock
+    admin_mock.limit.return_value = admin_mock
+    admin_mock.update.return_value = admin_mock
+
+    select_resp = MagicMock()
+    select_resp.data = [
+        {
+            "id": "user-1",
+            "email": "reviewer@example.com",
+            "roles": ["reviewer"],
+        }
+    ]
+    update_resp = MagicMock()
+    update_resp.data = [{"id": "user-1"}]
+    admin_mock.execute.side_effect = [select_resp, update_resp]
+
+    with patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        manuscripts_submission._ensure_author_role_membership("user-1", "reviewer@example.com")
+
+    admin_mock.table.assert_any_call("user_profiles")
+    admin_mock.update.assert_called_once()
+    update_payload = admin_mock.update.call_args[0][0]
+    assert update_payload["roles"] == ["reviewer", "author"]
+
+
+def test_ensure_author_role_membership_inserts_missing_profile():
+    from app.api.v1 import manuscripts_submission
+
+    admin_mock = MagicMock()
+    admin_mock.table.return_value = admin_mock
+    admin_mock.select.return_value = admin_mock
+    admin_mock.eq.return_value = admin_mock
+    admin_mock.limit.return_value = admin_mock
+    admin_mock.insert.return_value = admin_mock
+
+    select_resp = MagicMock()
+    select_resp.data = []
+    insert_resp = MagicMock()
+    insert_resp.data = [{"id": "user-2"}]
+    admin_mock.execute.side_effect = [select_resp, insert_resp]
+
+    with patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        manuscripts_submission._ensure_author_role_membership("user-2", "Reviewer@Example.com")
+
+    admin_mock.insert.assert_called_once()
+    insert_payload = admin_mock.insert.call_args[0][0]
+    assert insert_payload["id"] == "user-2"
+    assert insert_payload["email"] == "reviewer@example.com"
+    assert insert_payload["roles"] == ["author"]
+
 @pytest.mark.asyncio
 async def test_create_manuscript_invalid_data(client: AsyncClient):
     """验证创建稿件接口的参数验证"""

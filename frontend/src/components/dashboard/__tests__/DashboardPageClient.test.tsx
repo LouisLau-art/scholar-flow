@@ -120,4 +120,28 @@ describe('DashboardPageClient role normalization', () => {
       screen.queryByText('当前账号未分配可访问的 Dashboard 角色，请联系管理员在 User Management 中补齐角色。')
     ).not.toBeInTheDocument()
   })
+
+  it('shows author tab when the user already has submissions even if author role is missing', async () => {
+    render(
+      <DashboardPageClient
+        initialStats={{ total_submissions: 1 }}
+        initialSubmissions={[
+          {
+            id: 'm-1',
+            title: 'Reviewer Submitted Paper',
+            status: 'pre_check',
+            created_at: '2026-03-11T00:00:00.000000+00:00',
+          },
+        ]}
+        initialRoles={['reviewer']}
+        initialStatsLoaded={true}
+        initialSubmissionsLoaded={true}
+        initialRolesLoaded={true}
+      />
+    )
+
+    expect(await screen.findByRole('tab', { name: /Author/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Reviewer/i })).toBeInTheDocument()
+    expect(screen.getByText('Reviewer Submitted Paper')).toBeInTheDocument()
+  })
 })
