@@ -4,6 +4,7 @@ export type DecisionAttachment = {
   id: string
   path: string
   name: string
+  signed_url?: string | null
 }
 
 export type DecisionReport = {

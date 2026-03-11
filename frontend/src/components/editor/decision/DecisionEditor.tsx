@@ -50,6 +50,7 @@ function normalizeAttachment(raw: LocalAttachment): LocalAttachment {
     path: raw.path,
     name: raw.name,
     ref: raw.ref || `${raw.id}|${raw.path}`,
+    signed_url: raw.signed_url || null,
   }
 }
 
@@ -195,6 +196,7 @@ export function DecisionEditor({
         path: String(res.data.path),
         name: file.name,
         ref: String(res.data.ref || `${res.data.attachment_id}|${res.data.path}`),
+        signed_url: typeof res.data.signed_url === 'string' ? res.data.signed_url : null,
       }
       setAttachments((prev) => [...prev, next])
       toast.success('Attachment uploaded')
@@ -205,9 +207,14 @@ export function DecisionEditor({
     }
   }
 
-  const openAttachment = async (attachmentId: string) => {
+  const openAttachment = async (attachment: LocalAttachment) => {
     try {
-      const res = await EditorApi.getDecisionAttachmentSignedUrl(manuscriptId, attachmentId)
+      const signedUrl = attachment.signed_url
+      if (signedUrl) {
+        window.open(String(signedUrl), '_blank', 'noopener,noreferrer')
+        return
+      }
+      const res = await EditorApi.getDecisionAttachmentSignedUrl(manuscriptId, attachment.id)
       if (!res?.success || !res?.data?.signed_url) {
         throw new Error(res?.detail || res?.message || 'Failed to open attachment')
       }
@@ -215,6 +222,11 @@ export function DecisionEditor({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to open attachment')
     }
+  }
+
+  const removeAttachment = (attachmentId: string) => {
+    setAttachments((prev) => prev.filter((item) => item.id !== attachmentId))
+    toast.success('Attachment removed from current draft')
   }
 
   const submit = async (isFinal: boolean) => {
@@ -376,12 +388,22 @@ export function DecisionEditor({
                   <span className="truncate">{item.name}</span>
                   <Button
                     type="button"
-                    onClick={() => void openAttachment(item.id)}
+                    onClick={() => void openAttachment(item)}
                     variant="link"
                     className="shrink-0 px-0 font-semibold text-primary hover:underline"
                   >
                     Open
                   </Button>
+                  {!isReadOnly && canEditDraft ? (
+                    <Button
+                      type="button"
+                      onClick={() => removeAttachment(item.id)}
+                      variant="link"
+                      className="shrink-0 px-0 font-semibold text-destructive hover:underline"
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>

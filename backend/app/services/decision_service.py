@@ -887,6 +887,7 @@ class DecisionService(
                         "id": attachment_id,
                         "path": path,
                         "name": path.split("/")[-1] if path else attachment_id,
+                        "signed_url": self._signed_url("decision-attachments", path) if path else None,
                     }
                 )
             draft_payload = {

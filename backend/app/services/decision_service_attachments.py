@@ -67,6 +67,7 @@ class DecisionServiceAttachmentMixin:
             "attachment_id": attachment_id,
             "path": object_path,
             "ref": _encode_attachment_ref(attachment_id, object_path),
+            "signed_url": self._signed_url("decision-attachments", object_path),
         }
 
     def _find_attachment(

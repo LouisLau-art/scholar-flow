@@ -21,12 +21,15 @@ export function DecisionWorkspaceLayout({
   middle,
   right,
 }: DecisionWorkspaceLayoutProps) {
+  const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  const workspaceTitle = normalizedStatus === 'decision_done' ? 'Final Decision Workspace' : 'Decision Workspace'
+
   return (
     <main className="min-h-screen bg-muted/40">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex sf-max-w-1700 items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Final Decision Workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{workspaceTitle}</p>
             <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{manuscriptTitle}</h1>
             {manuscriptStatus ? (
               <p className="text-xs text-muted-foreground">Current status: {manuscriptStatus}</p>

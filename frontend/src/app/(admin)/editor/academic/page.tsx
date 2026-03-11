@@ -182,8 +182,8 @@ export default function EICAcademicQueuePage() {
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="border-b border-border bg-muted/40 px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">Final Decision Queue</h2>
-            <p className="mt-1 text-xs text-muted-foreground">仅展示已进入终审队列的稿件（decision / decision_done）；under_review 稿件必须先完成 Exit Review Stage。</p>
+            <h2 className="text-sm font-semibold text-foreground">Decision Queue</h2>
+            <p className="mt-1 text-xs text-muted-foreground">展示已进入决策工作台的稿件（decision / decision_done）；其中 `decision` 为 first decision 阶段，`decision_done` 为 final decision 阶段。</p>
           </div>
           <table className="w-full table-fixed">
             <thead className="bg-muted/40">
