@@ -637,6 +637,7 @@ class EmailService:
                 "status": status.value,
                 "assignment_id": str(context.get("assignment_id") or "").strip() or None,
                 "manuscript_id": str(context.get("manuscript_id") or "").strip() or None,
+                "actor_user_id": str(context.get("actor_user_id") or "").strip() or None,
                 "idempotency_key": str(context.get("idempotency_key") or "").strip() or None,
                 "scene": str(context.get("scene") or "").strip() or None,
                 "event_type": str(context.get("event_type") or "").strip() or None,
@@ -651,6 +652,7 @@ class EmailService:
             if (
                 "email_logs.assignment_id" in lowered
                 or "email_logs.manuscript_id" in lowered
+                or "email_logs.actor_user_id" in lowered
                 or "email_logs.idempotency_key" in lowered
                 or "email_logs.scene" in lowered
                 or "email_logs.event_type" in lowered

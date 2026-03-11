@@ -25,7 +25,29 @@ def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
         "error_message": row.get("error_message"),
         "provider_id": row.get("provider_id"),
         "idempotency_key": row.get("idempotency_key"),
+        "actor": row.get("actor"),
     }
+
+
+def _load_actor_profiles(actor_ids: list[str]) -> dict[str, dict[str, Any]]:
+    normalized_ids = [str(item or "").strip() for item in actor_ids if str(item or "").strip()]
+    if not normalized_ids:
+        return {}
+    try:
+        actor_res = (
+            runtime.supabase_admin.table("user_profiles")
+            .select("id, email, full_name")
+            .in_("id", normalized_ids)
+            .execute()
+        )
+        actor_profiles: dict[str, dict[str, Any]] = {}
+        for row in (getattr(actor_res, "data", None) or []):
+            actor_id = str(row.get("id") or "").strip()
+            if actor_id:
+                actor_profiles[actor_id] = row
+        return actor_profiles
+    except Exception:
+        return {}
 
 
 def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
@@ -33,21 +55,58 @@ def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, lis
     if not normalized_ids:
         return {}
     try:
-        rows = (
-            runtime.supabase_admin.table("email_logs")
-            .select(
-                "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+        try:
+            rows = (
+                runtime.supabase_admin.table("email_logs")
+                .select(
+                    "assignment_id, manuscript_id, actor_user_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                )
+                .in_("assignment_id", normalized_ids)
+                .order("created_at", desc=True)
+                .execute()
             )
-            .in_("assignment_id", normalized_ids)
-            .order("created_at", desc=True)
-            .execute()
+        except Exception as exc:
+            if not runtime._is_schema_compat_error(exc):
+                raise
+            rows = (
+                runtime.supabase_admin.table("email_logs")
+                .select(
+                    "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                )
+                .in_("assignment_id", normalized_ids)
+                .order("created_at", desc=True)
+                .execute()
+            )
+        raw_rows = list(getattr(rows, "data", None) or [])
+        actor_profiles = _load_actor_profiles(
+            [
+                str(row.get("actor_user_id") or "").strip()
+                for row in raw_rows
+                if str(row.get("actor_user_id") or "").strip()
+            ]
         )
         out: dict[str, list[dict[str, Any]]] = {}
-        for row in (getattr(rows, "data", None) or []):
+        for row in raw_rows:
             assignment_id = str(row.get("assignment_id") or "").strip()
             if not assignment_id:
                 continue
-            out.setdefault(assignment_id, []).append(_serialize_assignment_email_event(row))
+            actor_id = str(row.get("actor_user_id") or "").strip()
+            actor_profile = actor_profiles.get(actor_id) or {}
+            serialized = _serialize_assignment_email_event(
+                {
+                    **row,
+                    "actor": (
+                        {
+                            "id": actor_id or None,
+                            "full_name": actor_profile.get("full_name"),
+                            "email": actor_profile.get("email"),
+                        }
+                        if actor_id or actor_profile
+                        else None
+                    ),
+                }
+            )
+            out.setdefault(assignment_id, []).append(serialized)
         return out
     except Exception:
         return {}

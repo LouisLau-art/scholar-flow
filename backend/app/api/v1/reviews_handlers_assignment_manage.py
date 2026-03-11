@@ -237,6 +237,7 @@ async def cancel_reviewer_impl(
             roles=set(normalize_roles_fn(parse_roles_fn(profile))),
         )
 
+        current_user_id = str(current_user.get("id") or "").strip() or None
         status_raw = str(assignment.get("status") or "").strip().lower()
         if status_raw in {"completed", "submitted"}:
             raise HTTPException(status_code=409, detail="Completed reviewer assignment cannot be cancelled")
@@ -251,6 +252,7 @@ async def cancel_reviewer_impl(
                             assignment={**assignment, "id": str(assignment_id)},
                             manuscript=manuscript,
                             cancel_reason=reason.strip() or str(assignment.get("cancel_reason") or "").strip(),
+                            cancelled_by=current_user_id,
                         )
                     except Exception as exc:
                         email_result = {
@@ -275,7 +277,6 @@ async def cancel_reviewer_impl(
             }
 
         now_iso = _utc_now_iso()
-        current_user_id = str(current_user.get("id") or "").strip() or None
         update_payload = {
             "status": "cancelled",
             "cancelled_at": now_iso,
@@ -320,6 +321,7 @@ async def cancel_reviewer_impl(
                         assignment={**assignment, "id": str(assignment_id)},
                         manuscript=manuscript,
                         cancel_reason=reason.strip(),
+                        cancelled_by=current_user_id,
                     )
                 except Exception as exc:
                     email_result = {

@@ -119,6 +119,7 @@ def send_reviewer_assignment_cancellation_email(
     assignment: dict[str, Any],
     manuscript: dict[str, Any],
     cancel_reason: str,
+    cancelled_by: str | None = None,
 ) -> dict[str, Any]:
     reviewer_id = str(assignment.get("reviewer_id") or "").strip()
     if not reviewer_id:
@@ -160,6 +161,7 @@ def send_reviewer_assignment_cancellation_email(
     audit_context = {
         "assignment_id": assignment_id or None,
         "manuscript_id": manuscript_id or None,
+        "actor_user_id": str(cancelled_by or "").strip() or None,
         "scene": _REVIEW_ASSIGNMENT_SCENE,
         "event_type": _CANCELLATION_EVENT_TYPE,
         "idempotency_key": idempotency_key,

@@ -329,10 +329,12 @@ def _build_assignment_email_audit_context(
     manuscript_id: str,
     event_type: str,
     idempotency_key: str,
+    actor_user_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "assignment_id": assignment_id,
         "manuscript_id": manuscript_id,
+        "actor_user_id": str(actor_user_id or "").strip() or None,
         "scene": _REVIEW_ASSIGNMENT_SCENE,
         "event_type": event_type,
         "idempotency_key": idempotency_key,
@@ -515,32 +517,105 @@ def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
         "error_message": row.get("error_message"),
         "provider_id": row.get("provider_id"),
         "idempotency_key": row.get("idempotency_key"),
+        "actor": row.get("actor"),
     }
 
 
-def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-    normalized_ids = [str(item or "").strip() for item in assignment_ids if str(item or "").strip()]
+def _load_actor_profiles(actor_ids: list[str]) -> dict[str, dict[str, Any]]:
+    normalized_ids = [str(item or "").strip() for item in actor_ids if str(item or "").strip()]
     if not normalized_ids:
         return {}
     try:
-        rows = (
-            supabase_admin.table("email_logs")
-            .select(
-                "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
-            )
-            .in_("assignment_id", normalized_ids)
-            .order("created_at", desc=True)
+        actor_res = (
+            supabase_admin.table("user_profiles")
+            .select("id, email, full_name")
+            .in_("id", normalized_ids)
             .execute()
         )
-        out: dict[str, list[dict[str, Any]]] = {}
-        for row in (getattr(rows, "data", None) or []):
-            assignment_id = str(row.get("assignment_id") or "").strip()
-            if not assignment_id:
-                continue
-            out.setdefault(assignment_id, []).append(_serialize_assignment_email_event(row))
-        return out
+        actor_profiles: dict[str, dict[str, Any]] = {}
+        for row in (getattr(actor_res, "data", None) or []):
+            actor_id = str(row.get("id") or "").strip()
+            if actor_id:
+                actor_profiles[actor_id] = row
+        return actor_profiles
     except Exception:
         return {}
+
+
+def _fetch_assignment_email_event_rows(*, assignment_ids: list[str]) -> list[dict[str, Any]]:
+    normalized_ids = [str(item or "").strip() for item in assignment_ids if str(item or "").strip()]
+    if not normalized_ids:
+        return []
+    try:
+        try:
+            rows = (
+                supabase_admin.table("email_logs")
+                .select(
+                    "assignment_id, manuscript_id, actor_user_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                )
+                .in_("assignment_id", normalized_ids)
+                .order("created_at", desc=True)
+                .execute()
+            )
+        except Exception as exc:
+            if not _is_missing_review_assignment_column_error(exc, "actor_user_id"):
+                raise
+            rows = (
+                supabase_admin.table("email_logs")
+                .select(
+                    "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                )
+                .in_("assignment_id", normalized_ids)
+                .order("created_at", desc=True)
+                .execute()
+            )
+        return list(getattr(rows, "data", None) or [])
+    except Exception:
+        return []
+
+
+def _group_assignment_email_events(
+    raw_rows: list[dict[str, Any]],
+    *,
+    actor_profiles: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    if not raw_rows:
+        return {}
+    profiles_map = actor_profiles or _load_actor_profiles(
+        [
+            str(row.get("actor_user_id") or "").strip()
+            for row in raw_rows
+            if str(row.get("actor_user_id") or "").strip()
+        ]
+    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    for row in raw_rows:
+        assignment_id = str(row.get("assignment_id") or "").strip()
+        if not assignment_id:
+            continue
+        actor_id = str(row.get("actor_user_id") or "").strip()
+        actor_profile = profiles_map.get(actor_id) or {}
+        serialized = _serialize_assignment_email_event(
+            {
+                **row,
+                "actor": (
+                    {
+                        "id": actor_id or None,
+                        "full_name": actor_profile.get("full_name"),
+                        "email": actor_profile.get("email"),
+                    }
+                    if actor_id or actor_profile
+                    else None
+                ),
+            }
+        )
+        out.setdefault(assignment_id, []).append(serialized)
+    return out
+
+
+def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    raw_rows = _fetch_assignment_email_event_rows(assignment_ids=assignment_ids)
+    return _group_assignment_email_events(raw_rows)
 
 
 def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 60 * 10) -> str:
@@ -1212,6 +1287,7 @@ async def send_assignment_email(
             manuscript_id=manuscript_id,
             event_type=event_type,
             idempotency_key=idempotency_key,
+            actor_user_id=current_user_id,
         )
 
     token = _safe_create_assignment_magic_link(
@@ -1415,7 +1491,7 @@ async def get_reviewer_history(
         return {"success": True, "data": []}
 
     assignment_ids = [str(row.get("id") or "").strip() for row in filtered_rows if str(row.get("id") or "").strip()]
-    email_events_by_assignment = _load_assignment_email_events(assignment_ids=assignment_ids)
+    email_event_rows = _fetch_assignment_email_event_rows(assignment_ids=assignment_ids)
     actor_ids = sorted(
         {
             str(row.get("selected_by") or "").strip()
@@ -1432,22 +1508,17 @@ async def get_reviewer_history(
             for row in filtered_rows
             if str(row.get("cancelled_by") or "").strip()
         }
+        | {
+            str(row.get("actor_user_id") or "").strip()
+            for row in email_event_rows
+            if str(row.get("actor_user_id") or "").strip()
+        }
     )
-    actor_profiles: dict[str, dict[str, Any]] = {}
-    if actor_ids:
-        try:
-            actor_res = (
-                supabase_admin.table("user_profiles")
-                .select("id, email, full_name")
-                .in_("id", actor_ids)
-                .execute()
-            )
-            for row in (getattr(actor_res, "data", None) or []):
-                actor_id = str(row.get("id") or "").strip()
-                if actor_id:
-                    actor_profiles[actor_id] = row
-        except Exception:
-            actor_profiles = {}
+    actor_profiles = _load_actor_profiles(actor_ids)
+    email_events_by_assignment = _group_assignment_email_events(
+        email_event_rows,
+        actor_profiles=actor_profiles,
+    )
 
     assignment_counts_by_manuscript: dict[str, int] = {}
     for row in filtered_rows:

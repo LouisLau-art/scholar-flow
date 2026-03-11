@@ -23,6 +23,7 @@ class EmailLog(BaseModel):
     status: EmailStatus
     assignment_id: Optional[UUID] = None
     manuscript_id: Optional[UUID] = None
+    actor_user_id: Optional[UUID] = None
     idempotency_key: Optional[str] = None
     scene: Optional[str] = None
     event_type: Optional[str] = None
@@ -41,6 +42,7 @@ class EmailLogCreate(BaseModel):
     status: EmailStatus = EmailStatus.SENT
     assignment_id: Optional[UUID] = None
     manuscript_id: Optional[UUID] = None
+    actor_user_id: Optional[UUID] = None
     idempotency_key: Optional[str] = None
     scene: Optional[str] = None
     event_type: Optional[str] = None

@@ -60,6 +60,10 @@ describe('Reviewer summary cards', () => {
                 status: 'sent',
                 event_type: 'invitation',
                 created_at: '2026-03-05T00:00:00Z',
+                actor: {
+                  full_name: 'Inviter User',
+                  email: 'inviter@example.com',
+                },
               },
             ],
           },
@@ -87,7 +91,7 @@ describe('Reviewer summary cards', () => {
     expect(screen.getByText(/Delivery: sent/i)).toBeInTheDocument()
     expect(screen.getByText(/Selected by Selector User via Editor shortlist/i)).toBeInTheDocument()
     expect(screen.getByText(/Invited by Inviter User via Invitation template/i)).toBeInTheDocument()
-    expect(screen.getByText(/Invitation sent/i)).toBeInTheDocument()
+    expect(screen.getByText(/Invitation sent by Inviter User/i)).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('reviewer-history-ra-1'))
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
   })

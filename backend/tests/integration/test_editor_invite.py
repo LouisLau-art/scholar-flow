@@ -1785,6 +1785,7 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
                         "template_name": "reviewer_invitation_standard",
                         "status": "sent",
                         "event_type": "invitation",
+                        "actor_user_id": inviter_id,
                         "error_message": None,
                         "created_at": "2026-03-10T00:00:03+00:00",
                     },
@@ -1794,6 +1795,7 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
                         "template_name": "reviewer_invitation_standard",
                         "status": "queued",
                         "event_type": "invitation",
+                        "actor_user_id": inviter_id,
                         "error_message": None,
                         "created_at": "2026-03-10T00:00:01+00:00",
                     },
@@ -1833,6 +1835,7 @@ async def test_reviewer_history_includes_assignment_email_delivery_events(
     assert rows[0]["invited_by"]["full_name"] == "Inviter User"
     assert rows[0]["invited_via"] == "template_invitation"
     assert [event["status"] for event in rows[0]["email_events"]] == ["sent", "queued"]
+    assert rows[0]["email_events"][0]["actor"]["full_name"] == "Inviter User"
     assert rows[0]["assignment_state"] == "invited"
 
 

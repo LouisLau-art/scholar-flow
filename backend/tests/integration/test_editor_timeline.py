@@ -131,6 +131,7 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
                     "template_name": "reviewer_invitation_standard",
                     "status": "sent",
                     "event_type": "invitation",
+                    "actor_user_id": "inviter-1",
                     "created_at": "2026-02-01T00:00:12Z",
                     "error_message": None,
                     "provider_id": "email-1",
@@ -142,6 +143,7 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
                     "template_name": "reviewer_invitation_standard",
                     "status": "queued",
                     "event_type": "invitation",
+                    "actor_user_id": "inviter-1",
                     "created_at": "2026-02-01T00:00:10Z",
                     "error_message": None,
                     "provider_id": None,
@@ -178,6 +180,7 @@ async def test_editor_detail_returns_reviewer_timeline(client, auth_token, monke
     assert invites[0]["latest_email_status"] == "sent"
     assert invites[0]["latest_email_at"] == "2026-02-01T00:00:12Z"
     assert [event["status"] for event in invites[0]["email_events"]] == ["sent", "queued"]
+    assert invites[0]["email_events"][0]["actor"]["full_name"] == "Inviter User"
 
 
 @pytest.mark.integration

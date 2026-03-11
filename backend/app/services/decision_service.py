@@ -404,12 +404,14 @@ class DecisionService(
         assignment: dict[str, Any],
         manuscript: dict[str, Any],
         cancel_reason: str,
+        cancelled_by: str | None = None,
     ) -> dict[str, Any]:
         try:
             return send_reviewer_assignment_cancellation_email(
                 assignment=assignment,
                 manuscript=manuscript,
                 cancel_reason=cancel_reason,
+                cancelled_by=cancelled_by,
             )
         except Exception as exc:
             return {
@@ -548,6 +550,7 @@ class DecisionService(
             },
             audit_context={
                 "manuscript_id": manuscript_id or None,
+                "actor_user_id": str(requested_by or "").strip() or None,
                 "scene": "decision_workflow",
                 "event_type": "direct_revision_request",
                 "idempotency_key": idempotency_key,
@@ -660,6 +663,7 @@ class DecisionService(
                     assignment=row,
                     manuscript=manuscript,
                     cancel_reason=reason,
+                    cancelled_by=user_id,
                 )
                 if str(email_result.get("status") or "").strip().lower() == "sent":
                     cancellation_email_sent_assignment_ids.append(assignment_id)
@@ -688,6 +692,7 @@ class DecisionService(
                 assignment=row,
                 manuscript=manuscript,
                 cancel_reason=str(reason).strip(),
+                cancelled_by=user_id,
             )
             if str(email_result.get("status") or "").strip().lower() == "sent":
                 cancellation_email_sent_assignment_ids.append(assignment_id)

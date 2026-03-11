@@ -69,6 +69,11 @@ export type ReviewerEmailEvent = {
   error_message?: string | null
   provider_id?: string | null
   idempotency_key?: string | null
+  actor?: {
+    id?: string | null
+    full_name?: string | null
+    email?: string | null
+  } | null
 }
 
 export type ReviewEmailTemplateOption = {

@@ -174,6 +174,7 @@ def send_first_decision_request_email(
     idempotency_key = f"first-decision-request/{manuscript_id}/{to_email}"
     audit_context = {
         "manuscript_id": manuscript_id or None,
+        "actor_user_id": str(requested_by or "").strip() or None,
         "scene": _DECISION_SCENE,
         "event_type": _FIRST_DECISION_EVENT_TYPE,
         "idempotency_key": idempotency_key,

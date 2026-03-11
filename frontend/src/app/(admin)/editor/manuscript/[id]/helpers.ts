@@ -93,6 +93,11 @@ export type ManuscriptDetail = {
       error_message?: string | null
       provider_id?: string | null
       idempotency_key?: string | null
+      actor?: {
+        id?: string | null
+        full_name?: string | null
+        email?: string | null
+      } | null
     }> | null
   }> | null
   task_summary?: {
@@ -203,6 +208,10 @@ export function formatReviewerDeclineReason(raw: unknown): string | null {
 export function formatReviewerEmailEventLabel(event: {
   status?: string | null
   event_type?: string | null
+  actor?: {
+    full_name?: string | null
+    email?: string | null
+  } | null
 } | null | undefined): string {
   const status = String(event?.status || '').trim().toLowerCase()
   const eventType = String(event?.event_type || '').trim().toLowerCase()
@@ -226,7 +235,9 @@ export function formatReviewerEmailEventLabel(event: {
             : status
               ? humanizeReviewerToken(status)?.toLowerCase() || 'updated'
               : 'updated'
-  return `${eventLabel} ${statusLabel}`.trim()
+  const actorLabel =
+    String(event?.actor?.full_name || '').trim() || String(event?.actor?.email || '').trim()
+  return `${eventLabel} ${statusLabel}${actorLabel ? ` by ${actorLabel}` : ''}`.trim()
 }
 
 function humanizeReviewerState(raw: unknown): string {
