@@ -27,6 +27,9 @@ export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
         className="block w-full rounded-md border border-border/80 bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
       />
       <div className="mt-2 text-xs text-foreground/75">Accepted formats: `.doc`, `.docx`.</div>
+      <div className="mt-1 text-xs text-foreground/65">
+        Word metadata is parsed first and becomes the primary source for title and abstract autofill.
+      </div>
       {props.isUploadingWordFile ? (
         <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -13,7 +13,8 @@
 - **测试**: pytest, pytest-cov, Playwright, Vitest (017-super-admin-management)
 - **AI/ML**:
   - **PDF 文本提取（本地）**：`pdfplumber`（仅前几页 + 字符截断，见 `backend/app/core/pdf_processor.py`）
-  - **元数据抽取（本地）**：优先用 PDF 版面信息（字号/位置）+ 轻量规则/正则（`backend/app/core/ai_engine.py`），不依赖 OpenAI/豆包/火山等远程大模型（可用 `PDF_LAYOUT_MAX_PAGES` / `PDF_LAYOUT_MAX_LINES` 调整版面扫描范围）
+  - **DOCX 文本提取（本地）**：基于 `word/document.xml` 的轻量解析（见 `backend/app/core/docx_processor.py`）
+  - **元数据抽取（本地）**：当前执行口径为 **DOCX-first, PDF-fallback**。若 Word 稿成功解析出标题/摘要，则以后续 PDF 上传为准文件但不再参与元数据竞争；若 Word 缺失或解析失败，再退回 PDF 版面信息（字号/位置）+ 轻量规则/正则（`backend/app/core/ai_engine.py`），不依赖 OpenAI/豆包/火山等远程大模型（可用 `PDF_LAYOUT_MAX_PAGES` / `PDF_LAYOUT_MAX_LINES` 调整版面扫描范围）
   - **匹配**：轻量 TF‑IDF（纯 Python，无 sklearn 依赖）
 - PostgreSQL (Supabase) (009-test-coverage)
 - Python 3.14+ (后端), TypeScript 5.x (前端) (011-notification-center)

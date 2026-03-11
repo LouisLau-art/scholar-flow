@@ -158,6 +158,15 @@
   - 把其它作者通知链路统一切到 `submission_email / 对应通讯作者邮箱`
   - 决定作者侧稿件详情是否同步展示结构化作者信息
 
+## 2026-03-11 继续推进：投稿元数据解析切到 Word-first
+
+- 投稿页元数据自动预填现已明确收敛为 **DOCX-first, PDF-fallback**：
+  - 作者先上传 Word 稿并成功解析出 `title/abstract` 后，Word 成为主元数据来源
+  - 后续再上传 PDF 时，仅作为必需的 review-ready 文件上传，不再重新触发元数据解析竞争
+  - 若 Word 缺失或解析失败，系统才退回使用 PDF 解析作为兜底
+- 前端已补回归测试，锁定行为：
+  - `DOCX 成功解析后，PDF 上传不会再次请求 /api/v1/manuscripts/upload`
+
 ## 2026-03-10 修复：邮箱唯一性与历史重复 profile 清理
 
 - 新增统一 email 归一化 helper：`backend/app/core/email_normalization.py`

@@ -25,6 +25,9 @@ export function SubmissionFileUploadCard(props: SubmissionFileUploadCardProps) {
         data-testid="submission-file"
       />
       <div className="mt-2 text-xs text-foreground/75">Accepted format: `.pdf`.</div>
+      <div className="mt-1 text-xs text-foreground/65">
+        PDF remains required for review-ready output, but metadata autofill falls back to PDF only when Word parsing is unavailable.
+      </div>
       {props.isUploading ? (
         <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
