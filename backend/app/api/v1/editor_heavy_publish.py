@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
 
+from app.api.v1.editor_common import resolve_author_notification_target
 from app.services.notification_service import NotificationService
 
 
@@ -53,7 +54,7 @@ async def publish_manuscript_dev_impl(
         try:
             ms_res = (
                 supabase_admin_client.table("manuscripts")
-                .select("author_id, title")
+                .select("author_id, title, submission_email, author_contacts")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
@@ -74,16 +75,13 @@ async def publish_manuscript_dev_impl(
 
                 if background_tasks is not None:
                     try:
-                        prof = (
-                            supabase_admin_client.table("user_profiles")
-                            .select("email, full_name")
-                            .eq("id", str(author_id))
-                            .single()
-                            .execute()
+                        target = resolve_author_notification_target(
+                            manuscript=ms,
+                            manuscript_id=manuscript_id,
+                            supabase_client=supabase_admin_client,
                         )
-                        pdata = getattr(prof, "data", None) or {}
-                        author_email = pdata.get("email")
-                        author_name = pdata.get("full_name") or (author_email.split("@")[0] if author_email else "Author")
+                        author_email = target.get("recipient_email")
+                        author_name = target.get("recipient_name") or "Author"
                     except Exception:
                         author_email = None
                         author_name = "Author"

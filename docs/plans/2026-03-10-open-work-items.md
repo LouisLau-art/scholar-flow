@@ -26,10 +26,16 @@
   - Corresponding Author
   - Submission Email
   - Special Issue
+- 作者侧关键邮件入口已完成统一：
+  - 技术退回
+  - 修回请求
+  - 最终决定
+  - 发票邮件
+  - 发表通知
+  现在全部优先使用 `submission_email / corresponding author email`
 
 剩余收尾：
 
-- 把其余作者侧通知邮件统一切到优先使用 `submission_email / corresponding author email`
 - 继续检查作者详情、作者看板、导出/决策信中是否还在默认使用账号邮箱
 
 ## 二、高优先级未完成
@@ -93,7 +99,11 @@
 
 当前状态：
 
-- 目前仍为模板选择后一键发送
+- 已完成：
+  - 发送前先预览
+  - 支持改收件人
+  - 支持查看变量已渲染后的 HTML
+  - override 收件人时按 preview/test-send 处理，不推进 reviewer 状态机
 
 ## 三、Reviewer / Decision 仍需继续收口
 
@@ -162,8 +172,7 @@
 
 ## 六、建议执行顺序
 
-1. 继续收尾投稿作者元数据通知链路
-2. 设计并落地 academic editor 正式模型
-3. 做 reviewer 邀请邮件预览弹窗
-4. 继续收口 `under_review -> send_first_decision / direct revision`
-5. 继续 reviewer history / reminder / 邮件可信度收尾
+1. 收尾 academic editor 的 User Management / scope 管理页接入与真实 UAT
+2. 继续收口 `under_review -> send_first_decision / direct revision`
+3. 继续 reviewer history / reminder / 邮件可信度收尾
+4. 继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径

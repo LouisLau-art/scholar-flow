@@ -581,3 +581,37 @@
   - `frontend/src/lib/rbac.test.ts`
   - `cd frontend && bunx tsc --noEmit`
   - `cd frontend && bun run lint`
+
+## 2026-03-11 继续推进：投稿作者通知链路统一
+
+- 新增统一 helper：`backend/app/api/v1/editor_common.py -> resolve_author_notification_target(...)`
+  - 作者邮件收件人优先级统一为：
+    - `submission_email`
+    - `corresponding author email`
+    - `author profile email`
+  - `recipient_name` 统一优先取通讯作者姓名，再回退到首位作者 / profile / 邮箱 local-part
+
+- 已切换的作者侧发信入口：
+  - `backend/app/api/v1/editor_precheck.py`
+  - `backend/app/api/v1/editor_heavy_revision.py`
+  - `backend/app/api/v1/editor_decision.py`
+  - `backend/app/api/v1/editor_heavy_decision.py`
+  - `backend/app/api/v1/editor_heavy_publish.py`
+
+- 结果：
+  - 技术退回
+  - 修回请求
+  - 最终决定
+  - 发票邮件
+  - 发表通知
+  均不再默认只发作者账号邮箱，而是优先走投稿联系邮箱 / 通讯作者邮箱
+
+- 新增回归测试：
+  - `backend/tests/unit/test_author_notification_target.py`
+  - 覆盖作者收件人优先级与技术退回 / 修回请求 / 最终决定 / 发表通知四条关键发信路径
+
+- 本轮验证：
+  - `cd backend && pytest -q -o addopts= tests/unit/test_author_notification_target.py`
+  - `cd backend && pytest -q -o addopts= tests/integration/test_editor_http_methods.py`
+  - `cd backend && python -m py_compile app/api/v1/editor_common.py app/api/v1/editor_precheck.py app/api/v1/editor_heavy_revision.py app/api/v1/editor_decision.py app/api/v1/editor_heavy_decision.py app/api/v1/editor_heavy_publish.py`
+  - `cd backend && uvx ruff check app/api/v1/editor_common.py app/api/v1/editor_precheck.py app/api/v1/editor_heavy_revision.py app/api/v1/editor_decision.py app/api/v1/editor_heavy_decision.py app/api/v1/editor_heavy_publish.py tests/unit/test_author_notification_target.py --select=E9,F63,F7,F82`

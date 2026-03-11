@@ -11,6 +11,7 @@ from app.api.v1.editor_common import (
     QuickPrecheckPayload,
     RevertTechnicalCheckRequest,
     TechnicalCheckRequest,
+    resolve_author_notification_target,
 )
 from app.core.auth_utils import get_current_user
 from app.core.journal_scope import ensure_manuscript_scope_access
@@ -148,16 +149,13 @@ async def submit_intake_revision(
 
                 if background_tasks:
                     try:
-                        prof = (
-                            supabase_admin.table("user_profiles")
-                            .select("email, full_name")
-                            .eq("id", author_id)
-                            .single()
-                            .execute()
+                        target = resolve_author_notification_target(
+                            manuscript=updated,
+                            manuscript_id=str(id),
+                            supabase_client=supabase_admin,
                         )
-                        pdata = getattr(prof, "data", None) or {}
-                        author_email = pdata.get("email")
-                        recipient_name = pdata.get("full_name") or "Author"
+                        author_email = target.get("recipient_email")
+                        recipient_name = target.get("recipient_name") or "Author"
                         if author_email:
                             from app.core.mail import email_service
 

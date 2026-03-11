@@ -3,10 +3,131 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.email_normalization import normalize_email
 from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
 from app.models.internal_task import InternalTaskPriority, InternalTaskStatus
 from uuid import UUID
+
+
+
+
+def _titleize_email_local_part(email: str | None) -> str:
+    local = str(email or '').split('@', 1)[0].replace('.', ' ').replace('_', ' ').strip()
+    return local.title() if local else 'Author'
+
+
+def _normalize_author_contact(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get('name') or '').strip()
+    email = normalize_email(raw.get('email'))
+    affiliation = str(raw.get('affiliation') or '').strip()
+    return {
+        'name': name,
+        'email': email,
+        'affiliation': affiliation,
+        'is_corresponding': bool(raw.get('is_corresponding')),
+    }
+
+
+def resolve_author_notification_target(
+    *,
+    manuscript: dict[str, Any] | None,
+    manuscript_id: str | None = None,
+    supabase_client: Any | None = None,
+    author_profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    统一解析作者侧邮件接收目标。
+
+    优先级：
+    1. manuscripts.submission_email
+    2. author_contacts 中的通讯作者邮箱
+    3. user_profiles.email（作者账号邮箱）
+    """
+    manuscript_data = dict(manuscript or {})
+    author_id = str(manuscript_data.get('author_id') or '').strip()
+
+    need_fetch = bool(supabase_client and manuscript_id and (
+        not manuscript_data.get('submission_email') or not isinstance(manuscript_data.get('author_contacts'), list)
+    ))
+    if need_fetch:
+        try:
+            fetched = (
+                supabase_client.table('manuscripts')
+                .select('author_id, submission_email, author_contacts')
+                .eq('id', str(manuscript_id))
+                .single()
+                .execute()
+            )
+            fetched_data = getattr(fetched, 'data', None) or {}
+            if isinstance(fetched_data, dict):
+                for key in ('author_id', 'submission_email', 'author_contacts'):
+                    if manuscript_data.get(key) in (None, '', []):
+                        manuscript_data[key] = fetched_data.get(key)
+                author_id = str(manuscript_data.get('author_id') or '').strip()
+        except Exception:
+            pass
+
+    contacts: list[dict[str, Any]] = []
+    raw_contacts = manuscript_data.get('author_contacts')
+    if isinstance(raw_contacts, list):
+        for item in raw_contacts:
+            normalized = _normalize_author_contact(item)
+            if normalized is not None:
+                contacts.append(normalized)
+
+    corresponding = next((item for item in contacts if item.get('is_corresponding')), None)
+    first_contact = contacts[0] if contacts else None
+
+    profile_data = dict(author_profile or {})
+    need_profile = bool(supabase_client and author_id and not profile_data and (not corresponding or not corresponding.get('name')) )
+    if need_profile or (supabase_client and author_id and not normalize_email(profile_data.get('email'))):
+        try:
+            prof = (
+                supabase_client.table('user_profiles')
+                .select('email, full_name')
+                .eq('id', author_id)
+                .single()
+                .execute()
+            )
+            pdata = getattr(prof, 'data', None) or {}
+            if isinstance(pdata, dict):
+                profile_data.update({k: v for k, v in pdata.items() if v not in (None, '')})
+        except Exception:
+            pass
+
+    submission_email = normalize_email(manuscript_data.get('submission_email'))
+    corresponding_email = normalize_email((corresponding or {}).get('email'))
+    profile_email = normalize_email(profile_data.get('email'))
+
+    recipient_email = ''
+    source = 'none'
+    if submission_email:
+        recipient_email = submission_email
+        source = 'submission_email'
+    elif corresponding_email:
+        recipient_email = corresponding_email
+        source = 'corresponding_author_email'
+    elif profile_email:
+        recipient_email = profile_email
+        source = 'author_profile_email'
+
+    recipient_name = (
+        str((corresponding or {}).get('name') or '').strip()
+        or str((first_contact or {}).get('name') or '').strip()
+        or str(profile_data.get('full_name') or '').strip()
+        or _titleize_email_local_part(recipient_email)
+    )
+
+    return {
+        'recipient_email': recipient_email or None,
+        'recipient_name': recipient_name or 'Author',
+        'corresponding_author': corresponding,
+        'source': source,
+        'author_profile': profile_data or None,
+    }
 
 
 def extract_supabase_data(response: Any) -> Any:

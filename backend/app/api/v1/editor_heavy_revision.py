@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
 
+from app.api.v1.editor_common import resolve_author_notification_target
 from app.services.notification_service import NotificationService
 from app.services.revision_service import RevisionService
 
@@ -71,10 +72,13 @@ async def request_revision_impl(
             # Feature 025: Send Email
             if background_tasks:
                 try:
-                    prof = supabase_admin_client.table("user_profiles").select("email, full_name").eq("id", str(author_id)).single().execute()
-                    pdata = getattr(prof, "data", None) or {}
-                    author_email = pdata.get("email")
-                    recipient_name = pdata.get("full_name") or "Author"
+                    target = resolve_author_notification_target(
+                        manuscript=manuscript,
+                        manuscript_id=str(request.manuscript_id),
+                        supabase_client=supabase_admin_client,
+                    )
+                    author_email = target.get("recipient_email")
+                    recipient_name = target.get("recipient_name") or "Author"
 
                     if author_email:
                         from app.core.mail import email_service

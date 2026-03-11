@@ -17,6 +17,7 @@ from app.api.v1.editor_common import (
     extract_supabase_data,
     extract_supabase_error,
     require_action_or_403,
+    resolve_author_notification_target,
 )
 from app.core.auth_utils import get_current_user
 from app.core.journal_scope import ensure_manuscript_scope_access
@@ -216,16 +217,13 @@ async def request_revision(
             # Feature 025: Send Email
             if background_tasks:
                 try:
-                    prof = (
-                        supabase_admin.table("user_profiles")
-                        .select("email, full_name")
-                        .eq("id", str(author_id))
-                        .single()
-                        .execute()
+                    target = resolve_author_notification_target(
+                        manuscript=manuscript,
+                        manuscript_id=str(request.manuscript_id),
+                        supabase_client=supabase_admin,
                     )
-                    pdata = getattr(prof, "data", None) or {}
-                    author_email = pdata.get("email")
-                    recipient_name = pdata.get("full_name") or "Author"
+                    author_email = target.get("recipient_email")
+                    recipient_name = target.get("recipient_name") or "Author"
 
                     if author_email:
                         from app.core.mail import email_service
@@ -407,7 +405,7 @@ async def submit_final_decision(
         try:
             ms_res = (
                 supabase_admin.table("manuscripts")
-                .select("author_id, title")
+                .select("author_id, title, submission_email, author_contacts")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
@@ -432,12 +430,16 @@ async def submit_final_decision(
             )
 
             try:
-                author_profile = (
-                    supabase_admin.table("user_profiles").select("email").eq("id", str(author_id)).single().execute()
+                target = resolve_author_notification_target(
+                    manuscript=ms,
+                    manuscript_id=manuscript_id,
+                    supabase_client=supabase_admin,
                 )
-                author_email = (getattr(author_profile, "data", None) or {}).get("email")
+                author_email = target.get("recipient_email")
+                recipient_name = target.get("recipient_name") or "Author"
             except Exception:
                 author_email = None
+                recipient_name = "Author"
 
             if author_email and background_tasks is not None:
                 from app.core.mail import email_service
@@ -448,7 +450,7 @@ async def submit_final_decision(
                     subject=decision_title,
                     template_name="status_update.html",
                     context={
-                        "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                        "recipient_name": recipient_name,
                         "manuscript_title": manuscript_title,
                         "decision_label": decision_label,
                         "comment": comment or "",
@@ -464,7 +466,7 @@ async def submit_final_decision(
                         subject="Invoice Generated",
                         template_name="invoice.html",
                         context={
-                            "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                            "recipient_name": recipient_name,
                             "manuscript_title": manuscript_title,
                             "amount": f"{apc_amount:,.2f}",
                             "link": invoice_link,

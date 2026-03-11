@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
 
+from app.api.v1.editor_common import resolve_author_notification_target
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.services.notification_service import NotificationService
 
@@ -184,7 +185,7 @@ async def submit_final_decision_impl(
         try:
             ms_res = (
                 supabase_admin_client.table("manuscripts")
-                .select("author_id, title")
+                .select("author_id, title, submission_email, author_contacts")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
@@ -213,16 +214,16 @@ async def submit_final_decision_impl(
             )
 
             try:
-                author_profile = (
-                    supabase_admin_client.table("user_profiles")
-                    .select("email")
-                    .eq("id", str(author_id))
-                    .single()
-                    .execute()
+                target = resolve_author_notification_target(
+                    manuscript=ms,
+                    manuscript_id=manuscript_id,
+                    supabase_client=supabase_admin_client,
                 )
-                author_email = (getattr(author_profile, "data", None) or {}).get("email")
+                author_email = target.get("recipient_email")
+                recipient_name = target.get("recipient_name") or "Author"
             except Exception:
                 author_email = None
+                recipient_name = "Author"
 
             if author_email and background_tasks is not None:
                 from app.core.mail import email_service
@@ -234,7 +235,7 @@ async def submit_final_decision_impl(
                     subject=decision_title,
                     template_name="status_update.html",
                     context={
-                        "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                        "recipient_name": recipient_name,
                         "manuscript_title": manuscript_title,
                         "decision_label": decision_label,
                         "comment": comment or "",
@@ -252,7 +253,7 @@ async def submit_final_decision_impl(
                         subject="Invoice Generated",
                         template_name="invoice.html",
                         context={
-                            "recipient_name": author_email.split("@")[0].replace(".", " ").title(),
+                            "recipient_name": recipient_name,
                             "manuscript_title": manuscript_title,
                             "amount": f"{apc_amount:,.2f}",
                             "link": invoice_link,
