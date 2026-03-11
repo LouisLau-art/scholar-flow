@@ -2,8 +2,6 @@ const APP_ENV = (process.env.NEXT_PUBLIC_APP_ENV || 'development').trim().toLowe
 
 const DEPLOY_HOST_HINTS = [
   process.env.NEXT_PUBLIC_SITE_URL,
-  process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  process.env.VERCEL_URL,
 ]
   .filter(Boolean)
   .map((value) => String(value).trim().toLowerCase())

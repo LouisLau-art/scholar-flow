@@ -56,6 +56,17 @@ describe('env staging detection', () => {
     expect(mod.IS_STAGING).toBe(true)
   })
 
+  it('does not rely on server-only Vercel env vars for client staging detection', async () => {
+    const mod = await loadEnvModule({
+      NEXT_PUBLIC_APP_ENV: 'production',
+      NEXT_PUBLIC_SITE_URL: undefined,
+      VERCEL_PROJECT_PRODUCTION_URL: 'scholar-flow-q1yw.vercel.app',
+      VERCEL_URL: 'scholar-flow-q1yw.vercel.app',
+    })
+
+    expect(mod.IS_STAGING).toBe(false)
+  })
+
   it('stays false for normal production hostnames', async () => {
     const mod = await loadEnvModule({
       NEXT_PUBLIC_APP_ENV: 'production',

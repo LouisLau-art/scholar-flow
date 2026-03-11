@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { IS_STAGING } from "@/lib/env"
+import { IS_SERVER_STAGING } from "@/lib/env.server"
 import { FeedbackTable } from "./_components/FeedbackTable"
 import { PageHeader } from "@/components/layout/PageHeader"
 import SiteHeader from "@/components/layout/SiteHeader"
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 }
 
 export default function AdminFeedbackPage() {
-  if (!IS_STAGING) {
+  if (!IS_SERVER_STAGING) {
     notFound()
   }
 

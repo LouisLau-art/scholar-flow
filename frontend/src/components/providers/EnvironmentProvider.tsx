@@ -14,10 +14,14 @@ const FeedbackWidget = dynamic(() => import("@/components/uat/FeedbackWidget"), 
 })
 
 export function EnvironmentProvider({ children }: { children: React.ReactNode }) {
-  const [isStaging, setIsStaging] = React.useState(IS_STAGING)
+  const [isStaging, setIsStaging] = React.useState(false)
 
   React.useEffect(() => {
-    if (IS_STAGING || typeof window === "undefined") return
+    if (typeof window === "undefined") return
+    if (IS_STAGING) {
+      setIsStaging(true)
+      return
+    }
     const runtimeHost = `${window.location.hostname} ${window.location.href}`
     if (isRuntimeStagingHost(runtimeHost)) {
       setIsStaging(true)
