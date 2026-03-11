@@ -139,6 +139,32 @@ class _FinalDecisionClient:
         raise AssertionError(f"unexpected table: {name}")
 
 
+class _ProfileQuery:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def in_(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(data=self._rows)
+
+
+class _EnrichClient:
+    def __init__(self, profile_rows: list[dict]) -> None:
+        self._profile_rows = profile_rows
+
+    def table(self, name: str):
+        if name == "user_profiles":
+            return _ProfileQuery(self._profile_rows)
+        raise AssertionError(f"unexpected table: {name}")
+
+
 def test_attach_overdue_snapshot_marks_overdue_and_counts():
     now = datetime.now(timezone.utc)
     overdue_due = (now - timedelta(hours=2)).isoformat()
@@ -200,7 +226,7 @@ def test_final_decision_queue_excludes_under_review_even_with_first_decision_dra
         ],
     )
     monkeypatch.setattr("app.services.editor_service_precheck_workspace_decisions.is_scope_enforcement_enabled", lambda: False)
-    monkeypatch.setattr("app.services.editor_service_precheck_workspace_decisions.get_user_scope_journal_ids", lambda **_kwargs: [])
+    monkeypatch.setattr("app.services.editor_service_precheck_workspace_decisions.get_user_scope_journal_ids", lambda **_kwargs: {"j1"})
 
     rows = svc.get_final_decision_queue(
         viewer_user_id="admin-1",
@@ -210,3 +236,93 @@ def test_final_decision_queue_excludes_under_review_even_with_first_decision_dra
     ids = [row["id"] for row in rows]
     assert "ms-under-review" not in ids
     assert ids == ["ms-decision-done"]
+
+
+def test_enrich_precheck_rows_uses_academic_editor_as_current_assignee(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    svc = EditorService()
+    svc.client = _EnrichClient(
+        [
+            {
+                "id": "academic-1",
+                "full_name": "Academic Editor One",
+                "email": "academic@example.com",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        svc,
+        "_load_precheck_timeline_index",
+        lambda manuscript_ids: {
+            manuscript_ids[0]: {
+                "assigned_at": "2026-03-11T09:00:00Z",
+                "academic_completed_at": None,
+            }
+        },
+    )
+
+    rows = svc._enrich_precheck_rows(
+        [
+            {
+                "id": "ms-academic",
+                "status": "pre_check",
+                "pre_check_status": "academic",
+                "assistant_editor_id": "ae-1",
+                "academic_editor_id": "academic-1",
+            }
+        ]
+    )
+
+    assert rows[0]["current_role"] == "academic_editor"
+    assert rows[0]["current_assignee"] == {
+        "id": "academic-1",
+        "full_name": "Academic Editor One",
+        "email": "academic@example.com",
+    }
+    assert rows[0]["assigned_at"] == "2026-03-11T09:00:00Z"
+
+
+def test_final_decision_queue_filters_to_bound_academic_editor(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    svc = EditorService()
+    svc.client = _FinalDecisionClient(
+        manuscript_rows=[
+            {
+                "id": "ms-owned",
+                "title": "Owned Decision Manuscript",
+                "status": "decision",
+                "updated_at": "2026-03-11T10:00:00Z",
+                "journal_id": "j1",
+                "journals": {"title": "Journal A", "slug": "journal-a"},
+                "assistant_editor_id": "ae-1",
+                "academic_editor_id": "academic-1",
+                "owner_id": "me-1",
+            },
+            {
+                "id": "ms-other",
+                "title": "Other Decision Manuscript",
+                "status": "decision_done",
+                "updated_at": "2026-03-11T09:00:00Z",
+                "journal_id": "j1",
+                "journals": {"title": "Journal A", "slug": "journal-a"},
+                "assistant_editor_id": "ae-2",
+                "academic_editor_id": "academic-2",
+                "owner_id": "me-1",
+            },
+        ],
+        draft_rows=[],
+    )
+    monkeypatch.setattr("app.services.editor_service_precheck_workspace_decisions.is_scope_enforcement_enabled", lambda: False)
+    monkeypatch.setattr(
+        "app.services.editor_service_precheck_workspace_decisions.get_user_scope_journal_ids",
+        lambda **_kwargs: {"j1"},
+    )
+
+    rows = svc.get_final_decision_queue(
+        viewer_user_id="academic-1",
+        viewer_roles=["academic_editor"],
+    )
+
+    assert [row["id"] for row in rows] == ["ms-owned"]

@@ -36,5 +36,13 @@ export function createRbacApi(deps: RbacApiDeps) {
       const res = await authedFetch(`/api/v1/editor/assistant-editors${qs}`)
       return res.json()
     },
+
+    async listAcademicEditors(manuscriptId: string, search?: string) {
+      const params = new URLSearchParams()
+      params.set('manuscript_id', manuscriptId)
+      if (search) params.set('search', search)
+      const res = await authedFetch(`/api/v1/editor/academic-editors?${params.toString()}`)
+      return res.json()
+    },
   }
 }

@@ -183,6 +183,37 @@
 - 仍待继续：
   - 若业务确认不再需要这些占位 orphan profile，可再补安全清理脚本
 
+## 2026-03-11 继续推进：Academic Editor 正式模型第一阶段
+
+- 已新增正式角色：`academic_editor`
+- `journal_role_scopes` 已支持 `academic_editor`
+- 云端 Supabase 已执行：
+  - `supabase/migrations/20260310214500_academic_editor_binding.sql`
+- `public.manuscripts` 已新增并接入：
+  - `academic_editor_id`
+  - `academic_submitted_at`
+  - `academic_completed_at`
+- AE 技术检查在选择 `送 Academic 预审（可选）` 时，现已必须指定具体学术编辑
+- 新增后端候选接口：
+  - `GET /api/v1/editor/academic-editors?manuscript_id=...&search=...`
+- 候选来源规则：
+  - 优先取当前期刊下具备 `academic_editor / editor_in_chief` scope 的用户
+  - 若稿件已绑定学术编辑，则无论是否仍在 scope 查询结果里，都会保证回显
+- Academic queue / 稿件详情 / decision access 已开始基于真实 `academic_editor_id` 工作：
+  - 学术编辑默认只看分配给自己的 academic 稿件
+  - `admin / editor_in_chief` 仍保留全局视图
+  - 决策上下文已允许“已绑定的 academic editor”访问
+- 前端已接入：
+  - AE workspace `Submit Technical Check` 弹窗新增 `Academic Editor（必选）`
+  - `/editor/academic` 标题已明确为 `Academic Editor Workspace`
+- 相关验证已通过：
+  - backend：`83 passed`
+  - frontend：
+    - Vitest 定向测试通过
+    - `tests/e2e/specs/precheck_workflow.spec.ts` 通过
+    - `bunx tsc --noEmit`
+    - `bun run lint`
+
 ## 当前尚未完成的 reviewer 相关工作
 
 ### P1

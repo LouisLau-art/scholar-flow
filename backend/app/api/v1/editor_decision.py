@@ -32,7 +32,7 @@ from app.services.revision_service import RevisionService
 
 
 # 与 editor.py 保持一致：这些角色可进入 Decision Workspace 相关端点。
-EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "editor_in_chief"]
 
 router = APIRouter(tags=["Editor Command Center"])
 
@@ -510,4 +510,3 @@ async def submit_final_decision(
     except Exception as e:
         print(f"Decision submission failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit decision")
-

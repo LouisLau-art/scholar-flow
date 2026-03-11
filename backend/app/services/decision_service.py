@@ -74,10 +74,10 @@ class DecisionService(
     def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
         select_candidates = [
             # 首选：完整字段（含 version + assistant_editor_id）
-            "id,title,abstract,status,file_path,version,author_id,editor_id,assistant_editor_id,journal_id,updated_at",
+            "id,title,abstract,status,file_path,version,author_id,editor_id,assistant_editor_id,academic_editor_id,journal_id,updated_at",
             # 兼容：旧 schema 缺少 version
-            "id,title,abstract,status,file_path,author_id,editor_id,assistant_editor_id,journal_id,updated_at",
-            # 兼容：更旧 schema 缺少 version + assistant_editor_id
+            "id,title,abstract,status,file_path,author_id,editor_id,assistant_editor_id,academic_editor_id,journal_id,updated_at",
+            # 兼容：更旧 schema 缺少 version + assistant_editor_id + academic_editor_id
             "id,title,abstract,status,file_path,author_id,editor_id,journal_id,updated_at",
             # 兼容：极旧 schema 缺少 journal_id
             "id,title,abstract,status,file_path,author_id,editor_id,updated_at",
@@ -110,6 +110,7 @@ class DecisionService(
         if row.get("version") is None:
             row["version"] = 1
         row.setdefault("assistant_editor_id", None)
+        row.setdefault("academic_editor_id", None)
         row.setdefault("journal_id", None)
         return row
 
@@ -124,6 +125,9 @@ class DecisionService(
             return
         assigned_ae_id = str(manuscript.get("assistant_editor_id") or "")
         if assigned_ae_id and assigned_ae_id == str(user_id):
+            return
+        assigned_academic_id = str(manuscript.get("academic_editor_id") or "")
+        if assigned_academic_id and assigned_academic_id == str(user_id):
             return
         raise HTTPException(status_code=403, detail="Forbidden")
 

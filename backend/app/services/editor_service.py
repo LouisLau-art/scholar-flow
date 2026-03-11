@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import os
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -390,14 +389,16 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
             if pre == PreCheckStatus.INTAKE.value
             else "assistant_editor"
             if pre == PreCheckStatus.TECHNICAL.value
-            else "editor_in_chief"
+            else "academic_editor"
         )
         out["pre_check_status"] = pre
         out["current_role"] = current_role
 
         ae_id = str(row.get("assistant_editor_id") or "")
-        if ae_id:
-            out["current_assignee"] = {"id": ae_id}
+        academic_editor_id = str(row.get("academic_editor_id") or "")
+        current_assignee_id = academic_editor_id if pre == PreCheckStatus.ACADEMIC.value else ae_id
+        if current_assignee_id:
+            out["current_assignee"] = {"id": current_assignee_id}
         else:
             out["current_assignee"] = None
         return out
@@ -494,9 +495,10 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
         timeline_index = self._load_precheck_timeline_index(ids) if include_timeline else {}
         assignee_ids = sorted(
             {
-                str(r.get("assistant_editor_id") or "")
+                str(assignee_id)
                 for r in out
-                if str(r.get("assistant_editor_id") or "")
+                for assignee_id in (r.get("assistant_editor_id"), r.get("academic_editor_id"))
+                if str(assignee_id or "").strip()
             }
         )
         assignee_map: dict[str, dict[str, Any]] = {}
@@ -521,17 +523,23 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
             row["assigned_at"] = stamp.get("assigned_at") if include_timeline else None
             row["technical_completed_at"] = stamp.get("technical_completed_at") if include_timeline else None
             row["academic_completed_at"] = stamp.get("academic_completed_at") if include_timeline else None
-            ae_id = str(row.get("assistant_editor_id") or "")
-            if ae_id:
+            row["academic_submitted_at"] = row.get("academic_submitted_at")
+            precheck_status = str(row.get("pre_check_status") or "").strip().lower()
+            assignee_id = (
+                str(row.get("academic_editor_id") or "").strip()
+                if precheck_status == PreCheckStatus.ACADEMIC.value
+                else str(row.get("assistant_editor_id") or "").strip()
+            )
+            if assignee_id:
                 if include_assignee_profiles:
-                    prof = assignee_map.get(ae_id) or {}
+                    prof = assignee_map.get(assignee_id) or {}
                     row["current_assignee"] = {
-                        "id": ae_id,
+                        "id": assignee_id,
                         "full_name": prof.get("full_name"),
                         "email": prof.get("email"),
                     }
                 else:
-                    row["current_assignee"] = {"id": ae_id}
+                    row["current_assignee"] = {"id": assignee_id}
             else:
                 row["current_assignee"] = None
         return out
@@ -540,7 +548,7 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
         try:
             resp = (
                 self.client.table("manuscripts")
-                .select("id,status,pre_check_status,assistant_editor_id,updated_at")
+                .select("id,status,pre_check_status,assistant_editor_id,academic_editor_id,journal_id,updated_at")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()

@@ -105,6 +105,7 @@ class IntakeRevisionRequest(BaseModel):
 class TechnicalCheckRequest(BaseModel):
     decision: Literal["pass", "revision", "academic"]
     comment: str | None = Field(default=None, max_length=2000)
+    academic_editor_id: UUID | None = None
     idempotency_key: str | None = Field(default=None, max_length=64)
 
 

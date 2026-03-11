@@ -82,4 +82,18 @@ describe('EditorApi precheck endpoints', () => {
       expect.anything()
     )
   })
+
+  it('listAcademicEditors passes manuscript id and search query', async () => {
+    ;(globalThis.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: [] }),
+    })
+
+    await EditorApi.listAcademicEditors('manuscript-7', 'zhang')
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/v1/editor/academic-editors?manuscript_id=manuscript-7&search=zhang',
+      expect.anything()
+    )
+  })
 })

@@ -1,7 +1,10 @@
 import pytest
 from uuid import uuid4
-from fastapi.testclient import TestClient
+
+from app.core.auth_utils import get_current_user
+from app.core.roles import get_current_profile
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus
+from main import app
 
 # Mock data for integration tests
 MOCK_ME_ID = str(uuid4())
@@ -14,10 +17,6 @@ def mock_db_session(mocker):
     """Mock database session for integration tests"""
     mock_session = mocker.MagicMock()
     return mock_session
-
-from app.core.auth_utils import get_current_user
-from app.core.roles import get_current_profile
-from main import app
 
 @pytest.fixture(autouse=True)
 def bypass_auth(mocker):
@@ -117,6 +116,54 @@ async def test_ae_check_flow(client, mocker):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Technical check submitted"
+
+
+async def test_submit_technical_check_passes_academic_editor_id_to_service(client, mocker):
+    mocker.patch("app.core.auth_utils.get_current_user", return_value={"id": MOCK_AE_ID, "roles": ["assistant_editor"]})
+    submit_mock = mocker.patch(
+        "app.services.editor_service.EditorService.submit_technical_check",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+        },
+    )
+
+    academic_editor_id = str(uuid4())
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/submit-check",
+        json={
+            "decision": "academic",
+            "comment": "send to academic committee",
+            "academic_editor_id": academic_editor_id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert submit_mock.call_args.kwargs["academic_editor_id"] == academic_editor_id
+
+
+async def test_list_academic_editors_filters_by_manuscript_and_search(client, mocker):
+    list_mock = mocker.patch(
+        "app.services.editor_service.EditorService.list_academic_editor_candidates",
+        return_value=[
+            {
+                "id": str(uuid4()),
+                "email": "academic@example.com",
+                "full_name": "Academic Editor",
+                "roles": ["academic_editor"],
+            }
+        ],
+    )
+
+    response = await client.get(
+        f"/api/v1/editor/academic-editors?manuscript_id={MOCK_MANUSCRIPT_ID}&search=academic"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert str(list_mock.call_args.kwargs["manuscript_id"]) == MOCK_MANUSCRIPT_ID
+    assert list_mock.call_args.kwargs["search"] == "academic"
 
 
 async def test_revert_technical_check_flow(client, mocker):

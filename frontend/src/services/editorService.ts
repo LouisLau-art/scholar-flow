@@ -117,15 +117,24 @@ export const editorService = {
     return res
   },
 
-  submitTechnicalCheck: async (id: string, payload?: { decision?: TechnicalDecision; comment?: string }) => {
+  submitTechnicalCheck: async (id: string, payload?: { decision?: TechnicalDecision; comment?: string; academicEditorId?: string }) => {
     const res = await EditorApi.submitTechnicalCheck(id, {
       decision: payload?.decision || 'pass',
       comment: payload?.comment,
+      academic_editor_id: payload?.academicEditorId,
     })
     if (!res?.message) {
       throw new Error(res?.detail || res?.message || 'Failed to submit technical check')
     }
     return res
+  },
+
+  getAcademicEditorOptions: async (manuscriptId: string, search?: string) => {
+    const res = await EditorApi.listAcademicEditors(manuscriptId, search)
+    if (!res?.success) {
+      throw new Error(res?.detail || res?.message || 'Failed to load academic editors')
+    }
+    return res.data || []
   },
 
   revertTechnicalCheck: async (id: string, payload: { reason: string; source?: string }) => {

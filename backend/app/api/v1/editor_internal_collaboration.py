@@ -23,6 +23,7 @@ INTERNAL_COLLAB_ALLOWED_ROLES = [
     "admin",
     "managing_editor",
     "assistant_editor",
+    "academic_editor",
     "production_editor",
     "editor_in_chief",
 ]
@@ -32,7 +33,7 @@ def _load_manuscript_access_row(manuscript_id: str) -> dict:
     try:
         resp = (
             supabase_admin.table("manuscripts")
-            .select("id,assistant_editor_id,editor_id,owner_id")
+            .select("id,assistant_editor_id,academic_editor_id,editor_id,owner_id")
             .eq("id", str(manuscript_id))
             .single()
             .execute()
@@ -106,6 +107,11 @@ def _ensure_internal_collab_access(*, manuscript_id: str, user_id: str, roles: l
     if "assistant_editor" in role_set:
         assistant_editor_id = str(manuscript.get("assistant_editor_id") or "").strip()
         if assistant_editor_id and assistant_editor_id == uid:
+            return
+
+    if "academic_editor" in role_set:
+        academic_editor_id = str(manuscript.get("academic_editor_id") or "").strip()
+        if academic_editor_id and academic_editor_id == uid:
             return
 
     # PE 仅允许访问自己被分配到 production cycle 的稿件。

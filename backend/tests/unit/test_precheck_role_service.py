@@ -199,6 +199,74 @@ def test_submit_technical_check_pass_routes_to_under_review():
     assert kwargs["payload"]["action"] == "precheck_technical_to_under_review"
 
 
+def test_submit_technical_check_academic_requires_academic_editor_id():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": str(ae_id),
+            "journal_id": str(uuid4()),
+        }
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.submit_technical_check(manuscript_id, ae_id, decision="academic", comment="send to academic")
+
+    assert ei.value.status_code == 422
+    assert "academic_editor_id" in str(ei.value.detail)
+
+
+def test_submit_technical_check_academic_routes_with_binding():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    academic_editor_id = uuid4()
+    journal_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": str(ae_id),
+            "journal_id": str(journal_id),
+            "academic_editor_id": None,
+        }
+    )
+    svc._validate_academic_editor_assignment = Mock(return_value={"id": str(academic_editor_id)})  # type: ignore[attr-defined]
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "manuscripts",
+                "data": [
+                    {
+                        "id": str(manuscript_id),
+                        "status": ManuscriptStatus.PRE_CHECK.value,
+                        "pre_check_status": PreCheckStatus.ACADEMIC.value,
+                        "assistant_editor_id": str(ae_id),
+                        "academic_editor_id": str(academic_editor_id),
+                        "academic_submitted_at": "2026-03-10T00:00:00Z",
+                    }
+                ],
+            }
+        ]
+    )
+
+    out = svc.submit_technical_check(
+        manuscript_id,
+        ae_id,
+        decision="academic",
+        comment="send to academic",
+        academic_editor_id=academic_editor_id,
+    )
+
+    assert out["pre_check_status"] == PreCheckStatus.ACADEMIC.value
+    assert out["academic_editor_id"] == str(academic_editor_id)
+
+
 def test_revert_technical_check_routes_back_to_precheck_technical():
     svc = _new_service()
     manuscript_id = uuid4()

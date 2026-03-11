@@ -1188,6 +1188,12 @@ export function PrecheckRoleQueueCard({
                 </span>
               </div>
               <div>
+                <span className="font-medium text-foreground">Academic Submitted:</span>{' '}
+                <span className="text-foreground">
+                  {roleQueue?.academic_submitted_at ? formatDateTimeLocal(roleQueue.academic_submitted_at) : '—'}
+                </span>
+              </div>
+              <div>
                 <span className="font-medium text-foreground">Academic Completed:</span>{' '}
                 <span className="text-foreground">
                   {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
@@ -1206,6 +1212,12 @@ export function PrecheckRoleQueueCard({
               Technical completed:{' '}
               <span className="font-medium text-foreground">
                 {roleQueue?.technical_completed_at ? formatDateTimeLocal(roleQueue.technical_completed_at) : '—'}
+              </span>
+            </div>
+            <div className="text-foreground">
+              Academic submitted:{' '}
+              <span className="font-medium text-foreground">
+                {roleQueue?.academic_submitted_at ? formatDateTimeLocal(roleQueue.academic_submitted_at) : '—'}
               </span>
             </div>
             <div className="text-foreground">

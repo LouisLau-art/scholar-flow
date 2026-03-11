@@ -83,6 +83,7 @@ export type SubmitIntakeRevisionPayload = {
 export type SubmitTechnicalCheckPayload = {
   decision: TechnicalDecision
   comment?: string
+  academic_editor_id?: string
   idempotency_key?: string
 }
 

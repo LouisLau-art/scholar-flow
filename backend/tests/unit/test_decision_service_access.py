@@ -31,6 +31,16 @@ def test_ensure_editor_access_allows_assigned_assistant_editor() -> None:
     )
 
 
+
+
+def test_ensure_editor_access_allows_bound_academic_editor() -> None:
+    svc = _svc()
+    svc._ensure_editor_access(
+        manuscript={"academic_editor_id": "academic-1"},
+        user_id="academic-1",
+        roles={"academic_editor"},
+    )
+
 def test_ensure_editor_access_rejects_unassigned_user() -> None:
     svc = _svc()
     with pytest.raises(HTTPException) as exc:

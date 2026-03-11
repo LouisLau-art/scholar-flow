@@ -13,6 +13,7 @@ ALLOWED_USER_ROLES = {
     "owner",
     "managing_editor",
     "assistant_editor",
+    "academic_editor",
     "production_editor",
     "editor_in_chief",
     "admin",
@@ -106,7 +107,7 @@ class CreateUserRequest(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=100)
     role: str = Field(
         ...,
-        pattern="^(reviewer|owner|managing_editor|assistant_editor|production_editor|editor_in_chief|admin)$",
+        pattern="^(reviewer|owner|managing_editor|assistant_editor|academic_editor|production_editor|editor_in_chief|admin)$",
     )
 
     @field_validator("email", mode="before")
@@ -122,7 +123,7 @@ class UpdateRoleRequest(BaseModel):
     new_roles: Optional[List[str]] = Field(default=None)
     scope_journal_ids: Optional[List[UUID]] = Field(
         default=None,
-        description="当角色包含 managing_editor/editor_in_chief 时可一次性提交绑定期刊列表",
+        description="当角色包含 managing_editor/academic_editor/editor_in_chief 时可一次性提交绑定期刊列表",
     )
     reason: str = Field(..., min_length=10, description="Reason for role change is mandatory for audit trail")
 

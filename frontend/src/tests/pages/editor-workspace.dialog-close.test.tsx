@@ -7,6 +7,7 @@ import { editorService } from '@/services/editorService'
 vi.mock('@/services/editorService', () => ({
   editorService: {
     getAEWorkspace: vi.fn(),
+    getAcademicEditorOptions: vi.fn(),
     submitTechnicalCheck: vi.fn(),
   },
 }))
@@ -79,5 +80,36 @@ describe('AEWorkspacePanel submit check dialog close guard', () => {
       expect(screen.queryByText(/稿件：—/)).not.toBeInTheDocument()
       expect(screen.queryByText(/Untitled Manuscript/)).not.toBeInTheDocument()
     })
+  })
+
+  it('requires academic editor selection before routing to academic pre-check', async () => {
+    ;(editorService.getAEWorkspace as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'ms-technical-3',
+        title: 'AI Governance and Public Policy',
+        status: 'pre_check',
+        pre_check_status: 'technical',
+        updated_at: '2026-03-05T00:00:00Z',
+      },
+    ])
+    ;(editorService.getAcademicEditorOptions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'academic-1',
+        full_name: 'Prof. Zhang',
+        email: 'zhang@example.com',
+      },
+    ])
+
+    render(<AEWorkspacePanel />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Submit Check' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Next Step' }))
+    fireEvent.click(await screen.findByText('送 Academic 预审（可选）'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('送 Academic 预审必须指定学术编辑。')).toBeInTheDocument()
+    })
+    expect(editorService.submitTechnicalCheck).not.toHaveBeenCalled()
   })
 })

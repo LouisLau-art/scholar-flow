@@ -21,6 +21,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         *,
         decision: str,
         comment: str | None = None,
+        academic_editor_id: UUID | str | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -63,9 +64,18 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             raise HTTPException(status_code=403, detail="Only assigned assistant editor can submit technical check")
 
         if normalized_decision == "academic":
+            academic_editor_id_str = str(academic_editor_id or "").strip()
+            if not academic_editor_id_str:
+                raise HTTPException(status_code=422, detail="academic_editor_id is required for academic routing")
+            self._validate_academic_editor_assignment(
+                academic_editor_id=academic_editor_id_str,
+                manuscript_journal_id=str(ms.get("journal_id") or "").strip() or None,
+            )
             now = self._now()
             data = {
                 "pre_check_status": PreCheckStatus.ACADEMIC.value,
+                "academic_editor_id": academic_editor_id_str,
+                "academic_submitted_at": now,
                 "updated_at": now,
             }
             q = (
@@ -83,10 +93,12 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
                 latest_status = normalize_status(str(latest.get("status") or ""))
                 latest_pre = self._normalize_precheck_status(latest.get("pre_check_status"))
                 latest_ae = str(latest.get("assistant_editor_id") or "")
+                latest_academic_editor_id = str(latest.get("academic_editor_id") or "")
                 if (
                     latest_status == ManuscriptStatus.PRE_CHECK.value
                     and latest_pre == PreCheckStatus.ACADEMIC.value
                     and latest_ae == ae_id_str
+                    and latest_academic_editor_id == academic_editor_id_str
                 ):
                     return self._map_precheck_row(latest)
                 raise HTTPException(status_code=409, detail="Technical check conflict: manuscript state changed")
@@ -104,6 +116,8 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
                     "pre_check_to": PreCheckStatus.ACADEMIC.value,
                     "assistant_editor_before": owner_ae or None,
                     "assistant_editor_after": owner_ae or None,
+                    "academic_editor_before": str(ms.get("academic_editor_id") or "") or None,
+                    "academic_editor_after": academic_editor_id_str,
                     "decision": "academic",
                     "idempotency_key": idempotency_key,
                 },
@@ -313,12 +327,22 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         rows = getattr(resp, "data", None) or []
         out = self._enrich_precheck_rows(rows)
 
+        pure_academic_editor = (
+            "academic_editor" in normalized_roles
+            and not bool({"admin", "managing_editor", "editor_in_chief"} & normalized_roles)
+        )
+        if pure_academic_editor:
+            viewer_id_str = str(viewer_user_id or "").strip()
+            out = [
+                row for row in out if str(row.get("academic_editor_id") or "").strip() == viewer_id_str
+            ]
+
         if "admin" not in normalized_roles:
             scoped_journal_ids = get_user_scope_journal_ids(
                 user_id=str(viewer_user_id),
                 roles=normalized_roles,
             )
-            has_global_scope_role = bool({"managing_editor", "editor_in_chief"} & normalized_roles)
+            has_global_scope_role = bool({"managing_editor", "academic_editor", "editor_in_chief"} & normalized_roles)
             if scoped_journal_ids:
                 out = [
                     row
@@ -350,7 +374,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         }
         q = (
             self.client.table("manuscripts")
-            .select("id,title,status,updated_at,journal_id,journals(title,slug),assistant_editor_id,owner_id")
+            .select("id,title,status,updated_at,journal_id,journals(title,slug),assistant_editor_id,academic_editor_id,owner_id")
             .in_(
                 "status",
                 [
@@ -365,12 +389,22 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         resp = q.execute()
         rows = getattr(resp, "data", None) or []
 
+        pure_academic_editor = (
+            "academic_editor" in normalized_roles
+            and not bool({"admin", "managing_editor", "editor_in_chief"} & normalized_roles)
+        )
+        if pure_academic_editor:
+            viewer_id_str = str(viewer_user_id or "").strip()
+            rows = [
+                row for row in rows if str(row.get("academic_editor_id") or "").strip() == viewer_id_str
+            ]
+
         if "admin" not in normalized_roles:
             scoped_journal_ids = get_user_scope_journal_ids(
                 user_id=str(viewer_user_id),
                 roles=normalized_roles,
             )
-            has_global_scope_role = bool({"managing_editor", "editor_in_chief"} & normalized_roles)
+            has_global_scope_role = bool({"managing_editor", "academic_editor", "editor_in_chief"} & normalized_roles)
             if scoped_journal_ids:
                 rows = [
                     row
@@ -456,15 +490,66 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             changed_by=actor,
             comment=(comment or "").strip() or None,
             allow_skip=False,
-            extra_updates={"pre_check_status": None},
+            extra_updates={
+                "pre_check_status": None,
+                "academic_completed_at": self._now(),
+            },
             payload={
                 "action": payload_action,
                 "pre_check_from": PreCheckStatus.ACADEMIC.value,
                 "pre_check_to": None,
                 "assistant_editor_before": str(ms.get("assistant_editor_id") or "") or None,
                 "assistant_editor_after": str(ms.get("assistant_editor_id") or "") or None,
+                "academic_editor_before": str(ms.get("academic_editor_id") or "") or None,
+                "academic_editor_after": str(ms.get("academic_editor_id") or "") or None,
                 "decision": d,
                 "idempotency_key": idempotency_key,
             },
         )
         return updated
+
+    def _validate_academic_editor_assignment(
+        self,
+        *,
+        academic_editor_id: str,
+        manuscript_journal_id: str | None,
+    ) -> dict[str, Any]:
+        academic_editor_id_str = str(academic_editor_id or "").strip()
+        if not academic_editor_id_str:
+            raise HTTPException(status_code=422, detail="academic_editor_id is required")
+
+        try:
+            resp = (
+                self.client.table("user_profiles")
+                .select("id,full_name,email,roles")
+                .eq("id", academic_editor_id_str)
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=422, detail="academic_editor_id profile not found") from e
+
+        profile = getattr(resp, "data", None) or {}
+        if not profile:
+            raise HTTPException(status_code=422, detail="academic_editor_id profile not found")
+
+        role_set = set(normalize_roles(profile.get("roles") or []))
+        if not role_set.intersection({"academic_editor", "editor_in_chief", "admin"}):
+            raise HTTPException(
+                status_code=422,
+                detail="academic_editor_id must have academic_editor or editor_in_chief role",
+            )
+
+        journal_id = str(manuscript_journal_id or "").strip()
+        if journal_id and "admin" not in role_set:
+            scoped_journal_ids = get_user_scope_journal_ids(
+                user_id=academic_editor_id_str,
+                roles=role_set,
+            )
+            if scoped_journal_ids and journal_id not in scoped_journal_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail="academic_editor_id is not scoped to this journal",
+                )
+
+        return profile

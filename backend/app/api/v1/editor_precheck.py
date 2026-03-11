@@ -281,6 +281,7 @@ async def submit_technical_check(
             current_user["id"],
             decision=request.decision,
             comment=request.comment,
+            academic_editor_id=str(request.academic_editor_id) if request.academic_editor_id else None,
             idempotency_key=request.idempotency_key,
         )
         return {"message": "Technical check submitted", "data": updated}
@@ -329,7 +330,7 @@ async def get_academic_queue(
     page: int = 1,
     page_size: int = 20,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["academic_editor", "editor_in_chief", "admin"])),
 ):
     """
     List manuscripts in Academic Check Queue (EIC).
@@ -354,7 +355,7 @@ async def get_final_decision_queue(
     page: int = 1,
     page_size: int = 20,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["academic_editor", "editor_in_chief", "admin"])),
 ):
     """
     EIC Final Decision Queue:
@@ -380,7 +381,7 @@ async def submit_academic_check(
     id: UUID,
     request: AcademicCheckRequest,
     current_user: dict = Depends(get_current_user),
-    profile: dict = Depends(require_any_role(["editor_in_chief", "admin"])),
+    profile: dict = Depends(require_any_role(["academic_editor", "editor_in_chief", "admin"])),
 ):
     """
     Submit academic check. Routes to Review or Decision Phase.

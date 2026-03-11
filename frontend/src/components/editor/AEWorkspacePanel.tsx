@@ -30,9 +30,17 @@ interface Manuscript {
   created_at?: string | null
   updated_at?: string | null
   pre_check_status?: string | null
+  academic_editor_id?: string | null
   workspace_bucket?: 'technical' | 'academic_pending' | 'under_review' | 'revision_followup' | 'decision' | 'other'
   owner?: { id?: string; full_name?: string | null; email?: string | null } | null
   journal?: { title?: string | null; slug?: string | null } | null
+}
+
+type AcademicEditorOption = {
+  id: string
+  full_name?: string | null
+  email?: string | null
+  roles?: string[] | null
 }
 
 type WorkspaceBucket = 'technical' | 'academic_pending' | 'under_review' | 'revision_followup' | 'decision' | 'other'
@@ -81,6 +89,10 @@ function toMillis(value?: string | null): number {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime()
 }
 
+function toText(value: unknown): string {
+  return typeof value === 'string' ? value : String(value ?? '')
+}
+
 function deriveBucket(m: Manuscript): WorkspaceBucket {
   const explicit = m.workspace_bucket
   if (explicit && SECTION_ORDER.includes(explicit)) return explicit
@@ -104,6 +116,9 @@ export function AEWorkspacePanel() {
   const [dialogMode, setDialogMode] = useState<'submit' | 'revert' | null>(null)
   const [activeMs, setActiveMs] = useState<Manuscript | null>(null)
   const [technicalDecision, setTechnicalDecision] = useState<TechnicalDecision>('pass')
+  const [academicEditorId, setAcademicEditorId] = useState('')
+  const [academicEditorOptions, setAcademicEditorOptions] = useState<AcademicEditorOption[]>([])
+  const [academicEditorsLoading, setAcademicEditorsLoading] = useState(false)
   const [comment, setComment] = useState('')
   const [revertReason, setRevertReason] = useState('')
   const [error, setError] = useState('')
@@ -168,6 +183,9 @@ export function AEWorkspacePanel() {
     // 防止关闭瞬间点击穿透到列表里的 Submit Check 按钮导致弹窗立刻重开。
     reopenGuardUntilRef.current = Date.now() + DIALOG_REOPEN_GUARD_MS
     setTechnicalDecision('pass')
+    setAcademicEditorId('')
+    setAcademicEditorOptions([])
+    setAcademicEditorsLoading(false)
     setComment('')
     setRevertReason('')
     setError('')
@@ -179,6 +197,9 @@ export function AEWorkspacePanel() {
     if (!manuscript?.id) return
     if (Date.now() < reopenGuardUntilRef.current) return
     setTechnicalDecision('pass')
+    setAcademicEditorId(toText(manuscript.academic_editor_id || ''))
+    setAcademicEditorOptions([])
+    setAcademicEditorsLoading(false)
     setActiveMs(manuscript)
     setComment('')
     setError('')
@@ -200,6 +221,47 @@ export function AEWorkspacePanel() {
     }
   }, [activeMs?.id, dialogMode])
 
+  useEffect(() => {
+    if (dialogMode !== 'submit' || technicalDecision !== 'academic' || !activeMs?.id) {
+      setAcademicEditorsLoading(false)
+      if (technicalDecision !== 'academic') {
+        setAcademicEditorId('')
+        setAcademicEditorOptions([])
+      }
+      return
+    }
+
+    let cancelled = false
+    setAcademicEditorsLoading(true)
+    void editorService
+      .getAcademicEditorOptions(activeMs.id)
+      .then((rows) => {
+        if (cancelled) return
+        setAcademicEditorOptions(rows)
+        const boundAcademicEditorId = toText(activeMs.academic_editor_id || '').trim()
+        setAcademicEditorId((prev) => {
+          if (prev && rows.some((row: AcademicEditorOption) => row.id === prev)) return prev
+          if (boundAcademicEditorId && rows.some((row: AcademicEditorOption) => row.id === boundAcademicEditorId)) {
+            return boundAcademicEditorId
+          }
+          return ''
+        })
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setAcademicEditorOptions([])
+        setError(e instanceof Error ? e.message : '加载学术编辑列表失败')
+      })
+      .finally(() => {
+        if (cancelled) return
+        setAcademicEditorsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeMs?.academic_editor_id, activeMs?.id, dialogMode, technicalDecision])
+
   const handleSubmitCheck = useCallback(async () => {
     if (!activeMs?.id) return
     setError('')
@@ -207,11 +269,16 @@ export function AEWorkspacePanel() {
       setError('技术退回必须填写说明，方便作者修回。')
       return
     }
+    if (technicalDecision === 'academic' && !academicEditorId) {
+      setError('送 Academic 预审必须指定学术编辑。')
+      return
+    }
     setSubmitting(true)
     try {
       await editorService.submitTechnicalCheck(activeMs.id, {
         decision: technicalDecision,
         comment: comment.trim() || undefined,
+        academicEditorId: technicalDecision === 'academic' ? academicEditorId : undefined,
       })
       resetDialog()
       await fetchWorkspace({ silent: true, forceRefresh: true })
@@ -220,7 +287,7 @@ export function AEWorkspacePanel() {
     } finally {
       setSubmitting(false)
     }
-  }, [activeMs?.id, comment, fetchWorkspace, resetDialog, technicalDecision])
+  }, [academicEditorId, activeMs?.id, comment, fetchWorkspace, resetDialog, technicalDecision])
 
   const handleRevertCheck = useCallback(async () => {
     if (!activeMs?.id) return
@@ -420,7 +487,7 @@ export function AEWorkspacePanel() {
             <div>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next Step</div>
               <Select value={technicalDecision} onValueChange={(v) => setTechnicalDecision(v as TechnicalDecision)}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Next Step">
                   <SelectValue placeholder="选择技术检查后的流转" />
                 </SelectTrigger>
                 <SelectContent>
@@ -430,6 +497,37 @@ export function AEWorkspacePanel() {
                 </SelectContent>
               </Select>
             </div>
+
+            {technicalDecision === 'academic' ? (
+              <div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Academic Editor（必选）
+                </div>
+                <Select value={academicEditorId} onValueChange={setAcademicEditorId}>
+                  <SelectTrigger aria-label="Academic Editor（必选）">
+                    <SelectValue
+                      placeholder={
+                        academicEditorsLoading ? 'Loading academic editors...' : 'Select academic editor'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicEditorOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.full_name || option.email || option.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {academicEditorsLoading
+                    ? '正在加载可选的学术编辑...'
+                    : academicEditorOptions.length
+                      ? '默认沿用已绑定的学术编辑；如需改派，可在此调整。'
+                      : '当前期刊未配置可用的学术编辑，请先在 Journal Scope 中绑定。'}
+                </div>
+              </div>
+            ) : null}
 
             <div>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comment (optional)</div>

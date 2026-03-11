@@ -89,7 +89,9 @@ async def get_editor_manuscript_cards_context_impl(
         print(f"[CardsContext] precheck timeline failed (ignored): {e}")
 
     aid = str(ms.get("assistant_editor_id") or "").strip()
+    academic_id = str(ms.get("academic_editor_id") or "").strip()
     assistant_profile: dict[str, Any] = {}
+    academic_profile: dict[str, Any] = {}
     if aid:
         try:
             p = (
@@ -102,11 +104,24 @@ async def get_editor_manuscript_cards_context_impl(
             assistant_profile = getattr(p, "data", None) or {}
         except Exception:
             assistant_profile = {}
+    if academic_id:
+        try:
+            p = (
+                runtime.supabase_admin.table("user_profiles")
+                .select("id,full_name,email")
+                .eq("id", academic_id)
+                .single()
+                .execute()
+            )
+            data = getattr(p, "data", None) or {}
+            academic_profile = data[0] if isinstance(data, list) and data else data
+        except Exception:
+            academic_profile = {}
 
     role_map = {
         "intake": "managing_editor",
         "technical": "assistant_editor",
-        "academic": "editor_in_chief",
+        "academic": "academic_editor",
     }
     pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
     current_status = normalize_status(str(ms.get("status") or "")) or str(ms.get("status") or "").strip().lower()
@@ -120,8 +135,15 @@ async def get_editor_manuscript_cards_context_impl(
             "full_name": assistant_profile.get("full_name"),
             "email": assistant_profile.get("email"),
         }
+    elif in_precheck and pre_stage == "academic" and academic_id:
+        current_assignee = {
+            "id": academic_id,
+            "full_name": academic_profile.get("full_name"),
+            "email": academic_profile.get("email"),
+        }
+        current_assignee_label = "Assigned Academic Editor"
     elif in_precheck and pre_stage == "academic":
-        current_assignee_label = "Journal EIC Queue"
+        current_assignee_label = "Academic Editor Queue"
     elif in_precheck and pre_stage == "intake":
         current_assignee_label = "Managing Editor Queue"
     elif not in_precheck:
@@ -130,6 +152,7 @@ async def get_editor_manuscript_cards_context_impl(
     assigned_at = None
     technical_completed_at = None
     academic_completed_at = None
+    academic_submitted_at = str(ms.get("academic_submitted_at") or "").strip() or None
     for row in tl_rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         action = str(payload.get("action") or "")
@@ -149,6 +172,7 @@ async def get_editor_manuscript_cards_context_impl(
         "current_assignee_label": current_assignee_label,
         "assigned_at": assigned_at,
         "technical_completed_at": technical_completed_at,
+        "academic_submitted_at": academic_submitted_at,
         "academic_completed_at": academic_completed_at,
     }
 

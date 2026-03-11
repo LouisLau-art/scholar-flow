@@ -12,11 +12,13 @@ from app.lib.api_client import supabase_admin
 _ALLOWED_SCOPE_ROLES = {
     "managing_editor",
     "assistant_editor",
+    "academic_editor",
     "editor_in_chief",
 }
 
 _STRICT_SCOPE_ALWAYS_ROLES = {
     "managing_editor",
+    "academic_editor",
     "editor_in_chief",
 }
 

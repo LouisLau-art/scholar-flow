@@ -130,7 +130,21 @@ test.describe('Pre-check workflow (mocked)', () => {
         })
       }
 
-      if (pathname.startsWith('/api/v1/editor/academic') && req.method() === 'GET') {
+      if (pathname === '/api/v1/editor/academic-editors' && req.method() === 'GET') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: [
+            {
+              id: 'academic-editor-1',
+              full_name: 'Prof. Zhang',
+              email: 'zhang@example.com',
+              roles: ['academic_editor'],
+            },
+          ],
+        })
+      }
+
+      if (pathname === '/api/v1/editor/academic' && req.method() === 'GET') {
         const data =
           stage === 'academic'
             ? [
@@ -170,10 +184,11 @@ test.describe('Pre-check workflow (mocked)', () => {
     await page.getByRole('button', { name: '搜索' }).click()
     await expect(page.getByRole('button', { name: '通过并分配 AE' })).toBeVisible()
     await page.getByRole('button', { name: '通过并分配 AE' }).click()
-    await expect(page.getByRole('heading', { name: 'Assign Assistant Editor' })).toBeVisible()
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: 'Alice Editor' }).click()
-    await page.getByRole('button', { name: 'Assign', exact: true }).click()
+    const assignDialog = page.getByRole('dialog')
+    await expect(assignDialog.getByRole('heading', { name: '通过并分配 AE' })).toBeVisible()
+    await assignDialog.getByRole('combobox').first().click()
+    await assignDialog.getByRole('button', { name: 'Alice Editor' }).click()
+    await assignDialog.getByRole('button', { name: '分配并进入外审' }).click()
 
     // 2) AE Workspace -> submit academic (optional pre-check path)
     await page.goto('/editor/workspace')
@@ -183,11 +198,13 @@ test.describe('Pre-check workflow (mocked)', () => {
     await page.getByRole('button', { name: 'Submit Check' }).click()
     await page.getByRole('dialog').getByRole('combobox').click()
     await page.getByRole('option', { name: '送 Academic 预审（可选）' }).click()
+    await page.getByRole('dialog').getByRole('combobox', { name: 'Academic Editor（必选）' }).click()
+    await page.getByText('Prof. Zhang', { exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click()
 
     // 3) EIC Academic -> send to review
     await page.goto('/editor/academic')
-    await expect(page.getByRole('heading', { name: 'Editor-in-Chief Workspace' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Academic Editor Workspace' })).toBeVisible()
     await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
     await page.getByRole('button', { name: 'Make Decision' }).click()
     await page.getByLabel('Send to External Review').check()

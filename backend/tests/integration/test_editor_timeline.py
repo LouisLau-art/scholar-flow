@@ -255,6 +255,86 @@ async def test_editor_detail_returns_cancel_audit_for_cancelled_assignment(
     assert invites[0]["cancelled_by_name"] == "Cancelling Editor"
 
 
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_editor_detail_and_cards_context_use_bound_academic_editor_for_role_queue(
+    client,
+    auth_token,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setattr(editor_detail_api, "_get_signed_url", lambda *_args, **_kwargs: "https://example.com/signed")
+
+    fake_db = _FakeSupabase(
+        {
+            "manuscripts": [
+                {
+                    "id": "ms-academic-role-queue",
+                    "title": "Academic Bound Manuscript",
+                    "status": "pre_check",
+                    "pre_check_status": "academic",
+                    "owner_id": "owner-1",
+                    "editor_id": "editor-1",
+                    "assistant_editor_id": "ae-1",
+                    "academic_editor_id": "academic-1",
+                    "academic_submitted_at": "2026-03-11T09:30:00Z",
+                    "academic_completed_at": None,
+                    "file_path": "manuscripts/ms-academic-role-queue/v1.pdf",
+                    "created_at": "2026-03-11T09:00:00Z",
+                    "updated_at": "2026-03-11T09:35:00Z",
+                    "journals": {"title": "Journal"},
+                }
+            ],
+            "invoices": [],
+            "manuscript_files": [],
+            "review_assignments": [],
+            "review_reports": [],
+            "email_logs": [],
+            "status_transition_logs": [
+                {
+                    "id": "tl-1",
+                    "created_at": "2026-03-11T09:30:00Z",
+                    "comment": "sent to academic",
+                    "payload": {
+                        "action": "precheck_technical_pass",
+                        "academic_editor_after": "academic-1",
+                    },
+                }
+            ],
+            "user_profiles": [
+                {"id": "owner-1", "full_name": "Owner User", "email": "owner@example.com"},
+                {"id": "editor-1", "full_name": "Editor User", "email": "editor@example.com"},
+                {"id": "ae-1", "full_name": "Assistant Editor", "email": "ae@example.com"},
+                {"id": "academic-1", "full_name": "Academic Editor", "email": "academic@example.com"},
+            ],
+        }
+    )
+    monkeypatch.setattr(editor_detail_api, "supabase_admin", fake_db)
+
+    detail_res = await client.get(
+        "/api/v1/editor/manuscripts/ms-academic-role-queue",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert detail_res.status_code == 200, detail_res.text
+    detail_role_queue = (detail_res.json().get("data") or {}).get("role_queue") or {}
+    assert detail_role_queue.get("current_role") == "academic_editor"
+    assert (detail_role_queue.get("current_assignee") or {}).get("id") == "academic-1"
+    assert detail_role_queue.get("current_assignee_label") in {None, "Assigned Academic Editor"}
+    assert detail_role_queue.get("academic_submitted_at") == "2026-03-11T09:30:00Z"
+
+    cards_res = await client.get(
+        "/api/v1/editor/manuscripts/ms-academic-role-queue/cards-context",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert cards_res.status_code == 200, cards_res.text
+    cards_role_queue = ((cards_res.json().get("data") or {}).get("role_queue") or {})
+    assert cards_role_queue.get("current_role") == "academic_editor"
+    assert (cards_role_queue.get("current_assignee") or {}).get("id") == "academic-1"
+    assert cards_role_queue.get("academic_submitted_at") == "2026-03-11T09:30:00Z"
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_editor_detail_skip_cards_lightweight_skips_heavy_blocks(client, auth_token, monkeypatch: pytest.MonkeyPatch):

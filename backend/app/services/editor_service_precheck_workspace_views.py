@@ -4,12 +4,115 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.role_matrix import normalize_roles
 from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
 
 logger = logging.getLogger("scholarflow.editor_precheck_workspace")
 
 
 class EditorServicePrecheckWorkspaceViewMixin:
+    def list_academic_editor_candidates(
+        self,
+        *,
+        manuscript_id: UUID | str,
+        viewer_user_id: str,
+        viewer_roles: list[str] | None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
+        manuscript_id_str = str(manuscript_id)
+        ensure_manuscript_scope_access(
+            manuscript_id=manuscript_id_str,
+            user_id=str(viewer_user_id or ""),
+            roles=viewer_roles or [],
+            allow_admin_bypass=True,
+        )
+        manuscript = self._get_manuscript(manuscript_id_str)
+        journal_id = str(manuscript.get("journal_id") or "").strip()
+        bound_academic_editor_id = str(manuscript.get("academic_editor_id") or "").strip()
+        allowed_roles = {"academic_editor", "editor_in_chief"}
+
+        candidate_ids: set[str] = set()
+        if journal_id:
+            try:
+                scope_resp = (
+                    self.client.table("journal_role_scopes")
+                    .select("user_id,role")
+                    .eq("journal_id", journal_id)
+                    .eq("is_active", True)
+                    .in_("role", sorted(allowed_roles))
+                    .execute()
+                )
+                for row in (getattr(scope_resp, "data", None) or []):
+                    user_id = str(row.get("user_id") or "").strip()
+                    if user_id:
+                        candidate_ids.add(user_id)
+            except Exception as e:
+                logger.warning("[AcademicEditors] load journal role scopes failed, fallback to role query: %s", e)
+
+        if candidate_ids:
+            profile_resp = (
+                self.client.table("user_profiles")
+                .select("id,email,full_name,roles")
+                .in_("id", sorted(candidate_ids))
+                .execute()
+            )
+        else:
+            profile_resp = (
+                self.client.table("user_profiles")
+                .select("id,email,full_name,roles")
+                .or_("roles.cs.{academic_editor},roles.cs.{editor_in_chief}")
+                .execute()
+            )
+
+        candidates: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for row in (getattr(profile_resp, "data", None) or []):
+            row_id = str(row.get("id") or "").strip()
+            if not row_id:
+                continue
+            role_set = normalize_roles(row.get("roles") or [])
+            if not role_set.intersection(allowed_roles):
+                continue
+            seen_ids.add(row_id)
+            candidates.append(row)
+
+        if bound_academic_editor_id and bound_academic_editor_id not in seen_ids:
+            try:
+                bound_resp = (
+                    self.client.table("user_profiles")
+                    .select("id,email,full_name,roles")
+                    .eq("id", bound_academic_editor_id)
+                    .single()
+                    .execute()
+                )
+                bound_row = getattr(bound_resp, "data", None) or {}
+                bound_id = str(bound_row.get("id") or "").strip()
+                if bound_id:
+                    candidates.append(bound_row)
+                    seen_ids.add(bound_id)
+            except Exception as e:
+                logger.warning("[AcademicEditors] load bound academic editor failed (ignored): %s", e)
+
+        keyword = str(search or "").strip().lower()
+        if keyword:
+            candidates = [
+                row
+                for row in candidates
+                if keyword in str(row.get("email") or "").lower()
+                or keyword in str(row.get("full_name") or "").lower()
+            ]
+
+        candidates.sort(
+            key=lambda row: (
+                0 if str(row.get("id") or "").strip() == bound_academic_editor_id else 1,
+                0 if "editor_in_chief" in normalize_roles(row.get("roles") or []) else 1,
+                0 if str(row.get("full_name") or "").strip() else 1,
+                str(row.get("full_name") or row.get("email") or "").lower(),
+            )
+        )
+        return candidates
+
     def _derive_ae_workspace_bucket(self, *, status: str | None, pre_check_status: str | None) -> str:
         if status == ManuscriptStatus.PRE_CHECK.value and pre_check_status == PreCheckStatus.TECHNICAL.value:
             return "technical"

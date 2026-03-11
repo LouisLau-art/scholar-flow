@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
 import logging
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
@@ -31,13 +30,7 @@ from app.api.v1.editor_precheck import router as editor_precheck_router
 from app.api.v1.editor_finance import router as editor_finance_router
 from app.api.v1.editor_reviewer_library import router as editor_reviewer_library_router
 from app.api.v1.editor_common import (
-    AcademicCheckRequest,
-    AssignAERequest,
-    ConfirmInvoicePaidPayload,
-    IntakeRevisionRequest,
     InvoiceInfoUpdatePayload,
-    QuickPrecheckPayload,
-    TechnicalCheckRequest,
     auth_user_exists as _auth_user_exists,
     ensure_bucket_exists as _ensure_bucket_exists,
     get_signed_url as _get_signed_url,
@@ -56,9 +49,9 @@ from app.api.v1.editor_heavy_handlers import (
 
 router = APIRouter(prefix="/editor", tags=["Editor Command Center"])
 logger = logging.getLogger("scholarflow.editor")
-INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief", "owner"]
-EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "production_editor", "editor_in_chief"]
-EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "editor_in_chief"]
+INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "production_editor", "editor_in_chief", "owner"]
+EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "production_editor", "editor_in_chief"]
+EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "editor_in_chief"]
 
 
 async def get_editor_pipeline_test():
@@ -551,6 +544,34 @@ async def list_assistant_editors(
     except Exception as e:
         logger.error("[Precheck] 获取 assistant editors 失败: %s", e)
         raise HTTPException(status_code=500, detail="Failed to load assistant editors")
+
+
+@router.get("/academic-editors")
+async def list_academic_editors(
+    manuscript_id: UUID,
+    search: str = Query("", description="按姓名/邮箱模糊检索（可选）"),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["assistant_editor", "managing_editor", "admin"])),
+):
+    """
+    提供 AE/ME 送 Academic 预审时的候选学术编辑列表。
+    候选范围：
+    - 当前稿件所属期刊已绑定的 academic_editor / editor_in_chief
+    - 若稿件已绑定 academic_editor，则优先返回并置顶
+    """
+    try:
+        data = EditorService().list_academic_editor_candidates(
+            manuscript_id=manuscript_id,
+            viewer_user_id=str(current_user.get("id") or ""),
+            viewer_roles=profile.get("roles") or [],
+            search=search,
+        )
+        return {"success": True, "data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[Precheck] 获取 academic editors 失败: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to load academic editors")
 
 
 @router.get("/journals")

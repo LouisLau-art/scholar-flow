@@ -18,6 +18,13 @@ interface Manuscript {
   title: string
   status?: string
   pre_check_status?: string
+  academic_editor_id?: string | null
+  academic_submitted_at?: string | null
+  current_assignee?: {
+    id?: string | null
+    full_name?: string | null
+    email?: string | null
+  } | null
   journal?: { title?: string | null } | null
   updated_at?: string | null
   latest_first_decision_draft?: {
@@ -92,8 +99,8 @@ export default function EICAcademicQueuePage() {
               <GraduationCap className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Editor-in-Chief Workspace</h1>
-              <p className="mt-1 text-muted-foreground font-medium">Editor-in-Chief workspace for optional academic pre-check and final decision handoff.</p>
+              <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Academic Editor Workspace</h1>
+              <p className="mt-1 text-muted-foreground font-medium">Academic editor workspace for optional academic pre-check and final decision handoff.</p>
             </div>
           </div>
 
@@ -112,14 +119,16 @@ export default function EICAcademicQueuePage() {
           ) : null}
           <div className="border-b border-border bg-muted/40 px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Academic Review Queue (Optional)</h2>
-            <p className="mt-1 text-xs text-muted-foreground">仅展示 AE 主动送到 academic 的稿件；可继续送外审或转入决策阶段。</p>
+            <p className="mt-1 text-xs text-muted-foreground">仅展示已绑定到当前学术编辑的 academic 稿件；可继续送外审或转入决策阶段。</p>
           </div>
           <table className="w-full table-fixed">
             <thead className="bg-muted/40">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</th>
                 <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Journal</th>
+                <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Academic Editor</th>
                 <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
                 <th className="w-32 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
               </tr>
@@ -127,11 +136,11 @@ export default function EICAcademicQueuePage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
                 </tr>
               ) : academicManuscripts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {scopeHint ? 'No manuscript in your assigned journal scope.' : 'No manuscripts awaiting academic check.'}
                   </td>
                 </tr>
@@ -140,7 +149,13 @@ export default function EICAcademicQueuePage() {
                   <tr key={m.id} className="border-t border-border/60 hover:bg-muted/60">
                     <td className="px-4 py-3 text-sm text-foreground">{m.title}</td>
                     <td className="px-4 py-3 text-sm text-foreground">{m.journal?.title || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">
+                      {m.current_assignee?.full_name || m.current_assignee?.email || m.academic_editor_id || '—'}
+                    </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{m.pre_check_status}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {m.academic_submitted_at ? new Date(m.academic_submitted_at).toLocaleString() : '—'}
+                    </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
                     <td className="px-4 py-3">
                       <button

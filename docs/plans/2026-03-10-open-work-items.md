@@ -60,11 +60,22 @@
 
 当前状态：
 
-- 目前只有 academic queue / EIC 范式，没有 per-manuscript academic assignee 模型
+- 第一阶段已完成：
+  - 新增正式角色 `academic_editor`
+  - `journal_role_scopes` 已支持 `academic_editor`
+  - `manuscripts` 已落地：
+    - `academic_editor_id`
+    - `academic_submitted_at`
+    - `academic_completed_at`
+  - AE 在 `送 Academic 预审` 时必须指定具体学术编辑
+  - academic queue / detail / decision access 已开始基于真实 assignee 工作
 
 待做：
 
-- 设计角色模型、稿件绑定字段、默认继承规则、改派动作
+- 第二阶段：
+  - 把后续 first decision / academic 相关动作默认沿用同一学术编辑
+  - 增加显式改派动作
+  - User Management / journal scope 管理页补齐 `academic_editor`
 
 ### 4. Reviewer 邀请邮件预览弹窗
 

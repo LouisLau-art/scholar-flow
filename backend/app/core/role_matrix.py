@@ -46,7 +46,15 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "review:view_assignments",
         "review:unassign",
     },
+    "academic_editor": {
+        "academic:view_queue",
+        "academic:process",
+        "manuscript:view_detail",
+        "decision:record_first",
+    },
     "editor_in_chief": {
+        "academic:view_queue",
+        "academic:process",
         "process:view",
         "manuscript:view_detail",
         "decision:record_first",

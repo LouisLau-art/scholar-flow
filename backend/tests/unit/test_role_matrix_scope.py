@@ -30,3 +30,10 @@ def test_list_allowed_actions_unions_roles() -> None:
 def test_assistant_editor_can_record_first_but_not_submit_final() -> None:
     assert can_perform_action(action="decision:record_first", roles=["assistant_editor"]) is True
     assert can_perform_action(action="decision:submit_final", roles=["assistant_editor"]) is False
+
+
+def test_academic_editor_can_view_queue_and_record_first_but_not_submit_final() -> None:
+    assert can_perform_action(action="academic:view_queue", roles=["academic_editor"]) is True
+    assert can_perform_action(action="academic:process", roles=["academic_editor"]) is True
+    assert can_perform_action(action="decision:record_first", roles=["academic_editor"]) is True
+    assert can_perform_action(action="decision:submit_final", roles=["academic_editor"]) is False

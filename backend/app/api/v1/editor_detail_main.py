@@ -323,6 +323,8 @@ async def get_editor_manuscript_detail_impl(
         profile_ids.add(str(ms["editor_id"]))
     if ms.get("assistant_editor_id"):
         profile_ids.add(str(ms["assistant_editor_id"]))
+    if ms.get("academic_editor_id"):
+        profile_ids.add(str(ms["academic_editor_id"]))
     for row in rr_rows:
         rid = str(row.get("reviewer_id") or "").strip()
         if rid:
@@ -574,7 +576,7 @@ async def get_editor_manuscript_detail_impl(
     role_map = {
         "intake": "managing_editor",
         "technical": "assistant_editor",
-        "academic": "editor_in_chief",
+        "academic": "academic_editor",
     }
     pre_stage = str(ms.get("pre_check_status") or "intake").strip().lower() or "intake"
     current_status = normalize_status(str(ms.get("status") or "")) or str(ms.get("status") or "").strip().lower()
@@ -586,8 +588,17 @@ async def get_editor_manuscript_detail_impl(
         aid2 = str(ms.get("assistant_editor_id"))
         aprof = profiles_map.get(aid2) or {}
         current_assignee = {"id": aid2, "full_name": aprof.get("full_name"), "email": aprof.get("email")}
+    elif in_precheck and pre_stage == "academic" and ms.get("academic_editor_id"):
+        academic_editor_id = str(ms.get("academic_editor_id"))
+        aprof = profiles_map.get(academic_editor_id) or {}
+        current_assignee = {
+            "id": academic_editor_id,
+            "full_name": aprof.get("full_name"),
+            "email": aprof.get("email"),
+        }
+        current_assignee_label = "Assigned Academic Editor"
     elif in_precheck and pre_stage == "academic":
-        current_assignee_label = "Journal EIC Queue"
+        current_assignee_label = "Academic Editor Queue"
     elif in_precheck and pre_stage == "intake":
         current_assignee_label = "Managing Editor Queue"
     elif not in_precheck:
@@ -597,6 +608,7 @@ async def get_editor_manuscript_detail_impl(
     assigned_at = None
     technical_completed_at = None
     academic_completed_at = None
+    academic_submitted_at = str(ms.get("academic_submitted_at") or "").strip() or None
     if not skip_cards:
         for row in tl_rows:
             payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
@@ -617,6 +629,7 @@ async def get_editor_manuscript_detail_impl(
         "current_assignee_label": current_assignee_label,
         "assigned_at": assigned_at,
         "technical_completed_at": technical_completed_at,
+        "academic_submitted_at": academic_submitted_at,
         "academic_completed_at": academic_completed_at,
     }
 

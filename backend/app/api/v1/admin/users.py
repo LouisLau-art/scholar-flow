@@ -34,7 +34,7 @@ def get_user_management_service():
 class JournalScopeUpsertRequest(BaseModel):
     user_id: UUID
     journal_id: UUID
-    role: Literal["managing_editor", "editor_in_chief"]
+    role: Literal["managing_editor", "academic_editor", "editor_in_chief"]
     is_active: bool = True
 
 
@@ -215,7 +215,7 @@ class EmailTemplateResponse(BaseModel):
 _JOURNAL_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _EMAIL_TEMPLATE_KEY_RE = re.compile(r"^[a-z0-9_]{2,64}$")
 _EMAIL_TEMPLATE_SCENE_RE = re.compile(r"^[a-z0-9_]{2,64}$")
-_SCOPE_REQUIRED_ROLES = {"managing_editor", "editor_in_chief"}
+_SCOPE_REQUIRED_ROLES = {"managing_editor", "academic_editor", "editor_in_chief"}
 _SCOPE_TABLE = "journal_role_scopes"
 _EMAIL_TEMPLATE_TABLE = "email_templates"
 

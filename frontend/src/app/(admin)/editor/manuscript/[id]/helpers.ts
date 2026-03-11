@@ -39,6 +39,7 @@ export type ManuscriptDetail = {
     current_assignee_label?: string | null
     assigned_at?: string | null
     technical_completed_at?: string | null
+    academic_submitted_at?: string | null
     academic_completed_at?: string | null
   } | null
   precheck_timeline?: Array<{
