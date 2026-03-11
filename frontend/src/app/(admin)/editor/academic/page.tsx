@@ -100,7 +100,7 @@ export default function EICAcademicQueuePage() {
             </div>
             <div>
               <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Academic Editor Workspace</h1>
-              <p className="mt-1 text-muted-foreground font-medium">Academic editor workspace for optional academic pre-check and final decision handoff.</p>
+              <p className="mt-1 text-muted-foreground font-medium">Review manuscripts routed for academic pre-check before they enter external review or the decision workspace.</p>
             </div>
           </div>
 
@@ -119,7 +119,7 @@ export default function EICAcademicQueuePage() {
           ) : null}
           <div className="border-b border-border bg-muted/40 px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Academic Review Queue (Optional)</h2>
-            <p className="mt-1 text-xs text-muted-foreground">仅展示已绑定到当前学术编辑的 academic 稿件；可继续送外审或转入决策阶段。</p>
+            <p className="mt-1 text-xs text-muted-foreground">仅展示已绑定到当前学术编辑的 academic 稿件；可先打开稿件详情查看材料，再决定送外审或转入决策工作台。</p>
           </div>
           <table className="w-full table-fixed">
             <thead className="bg-muted/40">
@@ -130,7 +130,7 @@ export default function EICAcademicQueuePage() {
                 <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
-                <th className="w-32 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -158,12 +158,20 @@ export default function EICAcademicQueuePage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{m.updated_at ? new Date(m.updated_at).toLocaleString() : '—'}</td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => openDecisionModal(m.id)}
-                        className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
-                      >
-                        Make Decision
-                      </button>
+                      <div className="flex flex-col items-start gap-2">
+                        <Link
+                          href={`/editor/manuscript/${encodeURIComponent(m.id)}`}
+                          className="inline-flex items-center rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                        >
+                          Open Details
+                        </Link>
+                        <button
+                          onClick={() => openDecisionModal(m.id)}
+                          className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                        >
+                          Submit Academic Decision
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -72,8 +72,10 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Academic Pre-check Decision</DialogTitle>
-          <DialogDescription>Choose the next route for this manuscript.</DialogDescription>
+          <DialogTitle>Academic Pre-check Routing</DialogTitle>
+          <DialogDescription>
+            Choose the next route for this manuscript. Sending it to the decision workspace does not finalize the manuscript; it hands the case to the academic/editorial decision stage.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -81,13 +83,13 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
             <div className="flex items-start gap-2">
               <RadioGroupItem id="academic-check-review" value="review" />
               <Label htmlFor="academic-check-review" className="cursor-pointer text-sm font-medium">
-                Send to External Review
+                Route to External Review
               </Label>
             </div>
             <div className="flex items-start gap-2">
               <RadioGroupItem id="academic-check-decision" value="decision_phase" />
               <Label htmlFor="academic-check-decision" className="cursor-pointer text-sm font-medium">
-                Proceed to Decision Phase (Reject/Revision)
+                Send to Decision Workspace
               </Label>
             </div>
           </RadioGroup>
@@ -100,7 +102,7 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
               onChange={(e) => setComment(e.target.value)}
               maxLength={2000}
               disabled={isSubmitting}
-              placeholder="Add context for review/decision route..."
+              placeholder="Add context for the academic recommendation or routing decision..."
               className="min-h-[96px]"
             />
             {error ? <div className="text-xs text-destructive">{error}</div> : null}
