@@ -20,4 +20,17 @@ describe('workflow helpers', () => {
     expect(nextAction.description).toContain('First / Final Decision')
     expect(nextAction.blockers).toContain('尚未发出审稿邀请')
   })
+
+  it('keeps review-stage copy neutral for detail viewers without action permissions', () => {
+    const nextAction = getNextActionCard({ status: 'under_review', reviewer_invites: [] } as any, {
+      canManageReviewers: false,
+      canRecordFirstDecision: false,
+      canSubmitFinalDecision: false,
+    } as any)
+
+    expect(nextAction.phase).toBe('External Review')
+    expect(nextAction.title).not.toContain('Exit Review Stage')
+    expect(nextAction.description).not.toContain('Exit Review Stage')
+    expect(nextAction.blockers).toContain('当前账号无外审收口或决策权限')
+  })
 })

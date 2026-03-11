@@ -362,6 +362,18 @@ export function getNextActionCard(
 
   if (status === 'under_review' || status === 'resubmitted') {
     if ((manuscript.reviewer_invites || []).length === 0) blockers.push('尚未发出审稿邀请')
+    const canExitReviewStage =
+      capability.canManageReviewers || capability.canRecordFirstDecision || capability.canSubmitFinalDecision
+    if (!canExitReviewStage) {
+      blockers.push('当前账号无外审收口或决策权限')
+      return {
+        phase: 'External Review',
+        title: '等待具备权限的编辑收口当前外审并推进下一阶段',
+        description:
+          '当前阶段仍处于外审流程中。具备权限的编辑可继续邀请 reviewer，或在合适时机将稿件推进到修回或决策阶段。',
+        blockers,
+      }
+    }
     return {
       phase: 'External Review',
       title: '使用 Exit Review Stage 收口当前外审并决定下一步',
