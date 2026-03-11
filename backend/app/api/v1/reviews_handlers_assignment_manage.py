@@ -165,19 +165,11 @@ async def unassign_reviewer_impl(
         except Exception:
             pass
 
-        remaining_res = (
-            supabase_admin_client.table("review_assignments")
-            .select("id")
-            .eq("manuscript_id", manuscript_id)
-            .execute()
-        )
-        if len(remaining_res.data or []) == 0:
-            (
-                supabase_admin_client.table("manuscripts")
-                .update({"status": "pre_check"})
-                .eq("id", manuscript_id)
-                .execute()
-            )
+        # 中文注释:
+        # - 删除 selected reviewer 只是撤销“拟邀请名单”，不应回退稿件主状态；
+        # - 外审阶段的 manuscript.status 必须由显式 workflow action 推进/回退，
+        #   不能因为 reviewer list 为空就静默打回 pre_check，否则会出现
+        #   “Timeline 仍显示 under_review，但详情顶部显示 Pre-check”的状态分裂。
 
         return {"success": True, "message": "Reviewer unassigned"}
     except HTTPException:

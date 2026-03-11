@@ -1138,6 +1138,69 @@ async def test_unassign_reviewer_rejects_non_selected_assignment(
 
 
 @pytest.mark.asyncio
+async def test_unassign_last_selected_reviewer_keeps_manuscript_under_review(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc13")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa13")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb113")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["assistant_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "round_number": 2,
+                    "status": "selected",
+                },
+                [],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "under_review",
+                }
+            ],
+        }
+    )
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+    ):
+        resp = await client.delete(
+            f"/api/v1/reviews/assign/{assignment_id}",
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    assert supabase_admin._delete_calls.get("review_assignments") == 1
+    assert supabase_admin._update_calls.get("manuscripts") in (None, [])
+
+
+@pytest.mark.asyncio
 async def test_send_assignment_email_uses_fresh_idempotency_key_for_reinvited_assignment(
     client: AsyncClient,
     auth_token: str,
