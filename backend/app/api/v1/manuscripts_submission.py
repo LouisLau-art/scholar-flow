@@ -219,7 +219,11 @@ async def upload_manuscript(
 
         try:
             metadata = await asyncio.wait_for(
-                _m().parse_manuscript_metadata(text or "", layout_lines=layout_lines or []),
+                _m().extract_manuscript_metadata(
+                    text or "",
+                    parser_mode=parser_mode,
+                    layout_lines=layout_lines or [],
+                ),
                 timeout=meta_timeout_sec,
             )
         except asyncio.TimeoutError:

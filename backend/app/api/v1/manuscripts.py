@@ -12,6 +12,7 @@ import logging
 from app.core.pdf_processor import extract_text_and_layout_from_pdf
 from app.core.docx_processor import extract_text_from_docx
 from app.core.ai_engine import parse_manuscript_metadata
+from app.core.gemini_metadata import extract_manuscript_metadata, extract_metadata_with_gemini
 from app.core.plagiarism_worker import plagiarism_check_worker
 from app.core.storage_filename import sanitize_storage_filename
 from app.services.editorial_service import process_quality_check
@@ -52,6 +53,8 @@ _MONKEYPATCH_COMPAT_EXPORTS = (
     extract_text_and_layout_from_pdf,
     extract_text_from_docx,
     parse_manuscript_metadata,
+    extract_manuscript_metadata,
+    extract_metadata_with_gemini,
     plagiarism_check_worker,
     process_quality_check,
 )
