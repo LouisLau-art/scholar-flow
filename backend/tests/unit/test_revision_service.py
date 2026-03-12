@@ -305,6 +305,98 @@ def test_submit_revision_routes_revision_before_review_back_to_precheck_technica
     assert manuscript_update["ae_sla_started_at"]
 
 
+def test_submit_revision_prefers_persisted_waiting_author_stage_over_missing_route_hint(supabase_admin, monkeypatch):
+    svc = revision_service_module.RevisionService()
+    monkeypatch.setattr(
+        svc,
+        "get_manuscript",
+        lambda *_args, **_kwargs: {
+            "id": "m1",
+            "status": "revision_before_review",
+            "pre_check_status": "technical",
+            "assistant_editor_id": "ae-1",
+            "author_id": "a1",
+            "version": 1,
+            "title": "t",
+            "abstract": "a",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_pending_revision",
+        lambda *_args, **_kwargs: {"id": "r1", "decision_type": "minor"},
+    )
+
+    manuscript_versions = supabase_admin.table("manuscript_versions")
+    revisions = supabase_admin.table("revisions")
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscript_versions.execute.return_value = _Resp(data=[{"id": "v2"}])
+    revisions.execute.return_value = _Resp(data=[{"id": "r1"}])
+    manuscripts.execute.return_value = _Resp(data=[{"id": "m1"}])
+
+    out = svc.submit_revision(
+        "m1",
+        "a1",
+        "m1/v2.pdf",
+        "resp",
+    )
+
+    assert out["success"] is True
+    assert out["data"]["manuscript_status"] == "pre_check"
+    assert out["data"]["pre_check_status"] == "technical"
+
+    manuscript_update = manuscripts.update.call_args[0][0]
+    assert manuscript_update["status"] == "pre_check"
+    assert manuscript_update["pre_check_status"] == "technical"
+    assert manuscript_update["assistant_editor_id"] == "ae-1"
+
+
+def test_submit_revision_falls_back_to_intake_when_waiting_author_has_no_assigned_ae(supabase_admin, monkeypatch):
+    svc = revision_service_module.RevisionService()
+    monkeypatch.setattr(
+        svc,
+        "get_manuscript",
+        lambda *_args, **_kwargs: {
+            "id": "m1",
+            "status": "revision_before_review",
+            "pre_check_status": "technical",
+            "assistant_editor_id": None,
+            "author_id": "a1",
+            "version": 1,
+            "title": "t",
+            "abstract": "a",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_pending_revision",
+        lambda *_args, **_kwargs: {"id": "r1", "decision_type": "minor"},
+    )
+
+    manuscript_versions = supabase_admin.table("manuscript_versions")
+    revisions = supabase_admin.table("revisions")
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscript_versions.execute.return_value = _Resp(data=[{"id": "v2"}])
+    revisions.execute.return_value = _Resp(data=[{"id": "r1"}])
+    manuscripts.execute.return_value = _Resp(data=[{"id": "m1"}])
+
+    out = svc.submit_revision(
+        "m1",
+        "a1",
+        "m1/v2.pdf",
+        "resp",
+    )
+
+    assert out["success"] is True
+    assert out["data"]["manuscript_status"] == "pre_check"
+    assert out["data"]["pre_check_status"] == "intake"
+
+    manuscript_update = manuscripts.update.call_args[0][0]
+    assert manuscript_update["status"] == "pre_check"
+    assert manuscript_update["pre_check_status"] == "intake"
+    assert manuscript_update["assistant_editor_id"] is None
+
+
 def test_submit_revision_major_resubmission_does_not_auto_create_rereview_assignments(supabase_admin, monkeypatch):
     svc = revision_service_module.RevisionService()
     monkeypatch.setattr(

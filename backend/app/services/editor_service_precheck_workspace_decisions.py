@@ -165,7 +165,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             payload={
                 "action": "precheck_technical_revision",
                 "pre_check_from": PreCheckStatus.TECHNICAL.value,
-                "pre_check_to": None,
+                "pre_check_to": PreCheckStatus.TECHNICAL.value,
                 "assistant_editor_before": owner_ae or None,
                 "assistant_editor_after": owner_ae or None,
                 "decision": "revision",

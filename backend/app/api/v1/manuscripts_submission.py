@@ -389,6 +389,10 @@ async def submit_revision(
         derived_stage = str(pending.get("__derived_precheck_stage") or "").strip().lower()
         if derived_stage in {"intake", "technical"}:
             precheck_resubmit_stage = derived_stage
+    if precheck_resubmit_stage is None and str(manuscript.get("status") or "").strip().lower() == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
+        persisted_stage = str(manuscript.get("pre_check_status") or "").strip().lower()
+        if persisted_stage in {"intake", "technical"}:
+            precheck_resubmit_stage = persisted_stage
 
     next_version = (manuscript.get("version", 1)) + 1
     pdf_file_path = service.generate_versioned_file_path(

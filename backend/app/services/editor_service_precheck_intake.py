@@ -432,7 +432,7 @@ class EditorServicePrecheckIntakeMixin:
             payload={
                 "action": "precheck_intake_revision",
                 "pre_check_from": PreCheckStatus.INTAKE.value,
-                "pre_check_to": None,
+                "pre_check_to": PreCheckStatus.INTAKE.value,
                 "decision": "revision",
                 "idempotency_key": idempotency_key,
             },

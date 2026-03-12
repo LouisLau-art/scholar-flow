@@ -435,12 +435,21 @@ class RevisionService:
             return {"success": False, "error": f"Failed to update revision: {e}"}
 
         # 8. 更新稿件
+        effective_precheck_resubmit_stage = precheck_resubmit_stage
+        if effective_precheck_resubmit_stage not in {"intake", "technical"} and current_status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
+            persisted_precheck_stage = str(manuscript.get("pre_check_status") or "").strip().lower()
+            if persisted_precheck_stage in {"intake", "technical"}:
+                effective_precheck_resubmit_stage = persisted_precheck_stage
+
+        if effective_precheck_resubmit_stage == "technical" and not str(manuscript.get("assistant_editor_id") or "").strip():
+            effective_precheck_resubmit_stage = "intake"
+
         is_precheck_revision_flow = (
             current_status in {
                 ManuscriptStatus.MINOR_REVISION.value,
                 ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
             }
-            and (precheck_resubmit_stage in {"intake", "technical"})
+            and (effective_precheck_resubmit_stage in {"intake", "technical"})
         )
         manuscript_update: dict = {
             "status": "resubmitted",
@@ -453,12 +462,12 @@ class RevisionService:
             # 中文注释:
             # - ME/AE 技术退回后的作者修回应回到预审队列继续处理，而不是进入外审修回分支(resubmitted)。
             manuscript_update["status"] = ManuscriptStatus.PRE_CHECK.value
-            manuscript_update["pre_check_status"] = precheck_resubmit_stage
-            if precheck_resubmit_stage == "intake":
+            manuscript_update["pre_check_status"] = effective_precheck_resubmit_stage
+            if effective_precheck_resubmit_stage == "intake":
                 # Intake 由 ME 重新看稿，清理 AE 绑定，避免误入 Technical 队列。
                 manuscript_update["assistant_editor_id"] = None
                 manuscript_update["ae_sla_started_at"] = None
-            elif precheck_resubmit_stage == "technical":
+            elif effective_precheck_resubmit_stage == "technical":
                 # Technical 退回后作者修回，应显式保留原 AE，确保重新进入 AE workspace。
                 manuscript_update["assistant_editor_id"] = manuscript.get("assistant_editor_id")
                 manuscript_update["ae_sla_started_at"] = now
