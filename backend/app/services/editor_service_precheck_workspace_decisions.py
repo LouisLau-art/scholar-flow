@@ -159,6 +159,8 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
             allow_skip=False,
             extra_updates={
                 "ae_sla_started_at": str(ms.get("ae_sla_started_at") or "").strip() or self._now(),
+                "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_id": owner_ae or None,
             },
             payload={
                 "action": "precheck_technical_revision",

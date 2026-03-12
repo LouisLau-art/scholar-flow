@@ -424,6 +424,11 @@ class EditorServicePrecheckIntakeMixin:
             changed_by=actor,
             comment=comment_clean,
             allow_skip=False,
+            extra_updates={
+                "pre_check_status": PreCheckStatus.INTAKE.value,
+                "assistant_editor_id": None,
+                "ae_sla_started_at": None,
+            },
             payload={
                 "action": "precheck_intake_revision",
                 "pre_check_from": PreCheckStatus.INTAKE.value,

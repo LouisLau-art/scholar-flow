@@ -364,6 +364,8 @@ def test_submit_technical_check_revision_routes_to_revision_before_review():
     kwargs = editorial_mock.update_status.call_args.kwargs
     assert kwargs["to_status"] == "revision_before_review"
     assert kwargs["extra_updates"]["ae_sla_started_at"]
+    assert kwargs["extra_updates"]["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+    assert kwargs["extra_updates"]["assistant_editor_id"] == str(ae_id)
     assert kwargs["payload"]["action"] == "precheck_technical_revision"
 
 
@@ -813,6 +815,11 @@ def test_request_intake_revision_success():
     assert out["status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
     kwargs = editorial_mock.update_status.call_args.kwargs
     assert kwargs["to_status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert kwargs["extra_updates"] == {
+        "pre_check_status": PreCheckStatus.INTAKE.value,
+        "assistant_editor_id": None,
+        "ae_sla_started_at": None,
+    }
     assert kwargs["payload"]["action"] == "precheck_intake_revision"
 
 
