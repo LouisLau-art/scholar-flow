@@ -53,6 +53,36 @@ def test_email_recipient_resolver_adds_journal_mailbox_to_cc_and_reply_to():
     assert target["journal_public_editorial_email"] == "office@example.org"
 
 
+def test_email_recipient_resolver_uses_preloaded_journal_mailbox_without_refetch():
+    resolver = EmailRecipientResolver()
+    supabase = MagicMock()
+
+    target = resolver.resolve_author_email_targets(
+        manuscript={
+            "journal_id": "journal-1",
+            "journal_public_editorial_email": "office@example.org",
+            "submission_email": "login@example.org",
+            "author_contacts": [
+                {
+                    "name": "Corr Author",
+                    "email": "corr@example.org",
+                    "is_corresponding": True,
+                },
+                {
+                    "name": "Co Author",
+                    "email": "co@example.org",
+                    "is_corresponding": False,
+                },
+            ],
+        },
+        supabase_client=supabase,
+    )
+
+    assert target["cc_recipients"] == ["co@example.org", "office@example.org"]
+    assert target["reply_to_recipients"] == ["office@example.org"]
+    supabase.table.assert_not_called()
+
+
 def test_notification_orchestrator_delegates_author_resolution_to_recipient_resolver():
     resolver = MagicMock()
     resolver.resolve_author_email_targets.return_value = {

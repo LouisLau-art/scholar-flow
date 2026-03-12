@@ -119,9 +119,11 @@ class EmailRecipientResolver:
             except Exception:
                 pass
 
-        journal_public_editorial_email = None
+        journal_public_editorial_email = normalize_email(
+            manuscript_data.get("journal_public_editorial_email")
+        )
         journal_id = str(manuscript_data.get("journal_id") or "").strip()
-        if supabase_client and journal_id:
+        if not journal_public_editorial_email and supabase_client and journal_id:
             try:
                 journal = (
                     supabase_client.table("journals")

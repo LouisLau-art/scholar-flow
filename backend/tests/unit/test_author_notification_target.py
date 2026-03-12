@@ -251,14 +251,11 @@ async def test_submit_final_decision_impl_uses_resolved_author_target_for_decisi
         )
 
     assert result["success"] is True
-    assert len(background_tasks.tasks) == 3
+    assert len(background_tasks.tasks) == 2
     invoice_pdf_task = background_tasks.tasks[0]
     decision_task = background_tasks.tasks[1]
-    invoice_email_task = background_tasks.tasks[2]
     assert decision_task.kwargs["to_email"] == "submission@example.org"
     assert decision_task.kwargs["context"]["recipient_name"] == "Corr Author"
-    assert invoice_email_task.kwargs["to_email"] == "submission@example.org"
-    assert invoice_email_task.kwargs["context"]["recipient_name"] == "Corr Author"
     assert invoice_pdf_task.func.__name__ == "generate_and_store_invoice_pdf_safe"
 
 

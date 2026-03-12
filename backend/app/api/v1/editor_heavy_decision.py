@@ -242,24 +242,6 @@ async def submit_final_decision_impl(
                     },
                 )
 
-                # 2. Invoice Email (Feature 025)
-                if decision == "accept" and apc_amount and apc_amount > 0:
-                    frontend_base_url = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
-                    invoice_link = f"{frontend_base_url}/dashboard"
-
-                    background_tasks.add_task(
-                        email_service.send_email_background,
-                        to_email=author_email,
-                        subject="Invoice Generated",
-                        template_name="invoice.html",
-                        context={
-                            "recipient_name": recipient_name,
-                            "manuscript_title": manuscript_title,
-                            "amount": f"{apc_amount:,.2f}",
-                            "link": invoice_link,
-                        },
-                    )
-
         # GAP-P1-05 / US3: legacy final decision 审计对齐（before/after/reason/source）
         try:
             now_log = datetime.now(timezone.utc).isoformat()

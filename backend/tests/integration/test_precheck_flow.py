@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from uuid import uuid4
 
 from app.core.auth_utils import get_current_user
@@ -70,6 +71,30 @@ async def test_me_intake_flow(client, mocker):
     response = await client.post(f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/assign-ae", json={"ae_id": MOCK_AE_ID})
     assert response.status_code == 200
     assert response.json()["message"] == "AE assigned successfully"
+
+
+async def test_me_assign_ae_waiting_author_flow(client, mocker):
+    mocker.patch(
+        "app.services.editor_service.EditorService.assign_ae",
+        return_value={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": MOCK_AE_ID,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/assign-ae",
+        json={"ae_id": MOCK_AE_ID},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["message"] == "AE assigned successfully"
+    assert body["data"]["status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert body["data"]["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+
 
 async def test_ae_check_flow(client, mocker):
     """
@@ -214,6 +239,72 @@ async def test_revert_technical_check_flow(client, mocker):
     assert body["message"] == "Technical check reverted"
     assert body["data"]["status"] == ManuscriptStatus.PRE_CHECK.value
     assert body["data"]["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+
+
+async def test_author_submit_revision_uses_persisted_precheck_stage_when_pending_has_no_hint(client, mocker):
+    author_id = str(uuid4())
+    assistant_editor_id = str(uuid4())
+    app.dependency_overrides[get_current_user] = lambda: {"id": author_id, "email": "author@example.com"}
+
+    revision_service = mocker.Mock()
+    revision_service.get_manuscript.return_value = {
+        "id": MOCK_MANUSCRIPT_ID,
+        "title": "Waiting Author Manuscript",
+        "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+        "pre_check_status": PreCheckStatus.TECHNICAL.value,
+        "assistant_editor_id": assistant_editor_id,
+        "author_id": author_id,
+        "version": 1,
+    }
+    revision_service.ensure_pending_revision_for_submit.return_value = {
+        "id": "rev-1",
+        "decision_type": "minor",
+    }
+    revision_service.generate_versioned_file_path.side_effect = [
+        f"{MOCK_MANUSCRIPT_ID}/v2_revision.pdf",
+        f"{MOCK_MANUSCRIPT_ID}/v2_revision.docx",
+    ]
+    revision_service.submit_revision.return_value = {
+        "success": True,
+        "data": {
+            "manuscript_status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+        },
+    }
+    mocker.patch("app.api.v1.manuscripts_submission.RevisionService", return_value=revision_service)
+
+    storage_bucket = mocker.Mock()
+    storage_bucket.upload.return_value = None
+    supabase_admin = mocker.Mock()
+    supabase_admin.storage.from_.return_value = storage_bucket
+    supabase_admin.table.return_value.insert.return_value.execute.return_value = SimpleNamespace(data=[{"id": "file-1"}])
+    mocker.patch(
+        "app.api.v1.manuscripts_submission._m",
+        return_value=SimpleNamespace(
+            supabase_admin=supabase_admin,
+            _is_missing_table_error=lambda *_args, **_kwargs: False,
+        ),
+    )
+
+    notification_service = mocker.Mock()
+    mocker.patch("app.api.v1.manuscripts_submission.NotificationService", return_value=notification_service)
+
+    response = await client.post(
+        f"/api/v1/manuscripts/{MOCK_MANUSCRIPT_ID}/revisions",
+        data={"response_letter": "已按意见完成技术修改。"},
+        files={
+            "pdf_file": ("revised.pdf", b"%PDF-1.4 mocked", "application/pdf"),
+            "word_file": (
+                "revised.docx",
+                b"PK\x03\x04 mocked docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert revision_service.submit_revision.call_args.kwargs["precheck_resubmit_stage"] == PreCheckStatus.TECHNICAL.value
+    notification_service.create_notification.assert_called()
 
 
 async def test_me_workspace_flow(client, mocker):
