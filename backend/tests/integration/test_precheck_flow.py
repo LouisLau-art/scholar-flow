@@ -277,7 +277,7 @@ async def test_author_submit_revision_uses_persisted_precheck_stage_when_pending
     storage_bucket.upload.return_value = None
     supabase_admin = mocker.Mock()
     supabase_admin.storage.from_.return_value = storage_bucket
-    supabase_admin.table.return_value.insert.return_value.execute.return_value = SimpleNamespace(data=[{"id": "file-1"}])
+    supabase_admin.table.return_value.upsert.return_value.execute.return_value = SimpleNamespace(data=[{"id": "file-1"}])
     mocker.patch(
         "app.api.v1.manuscripts_submission._m",
         return_value=SimpleNamespace(
