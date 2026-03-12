@@ -32,7 +32,14 @@ export type ManuscriptDetail = {
   academic_editor_id?: string | null
   assistant_editor_id?: string | null
   invoice_metadata?: { authors?: string; affiliation?: string; apc_amount?: number; funding_info?: string } | null
-  invoice?: { status?: string | null; amount?: number | string | null } | null
+  invoice?: {
+    id?: string | null
+    invoice_number?: string | null
+    status?: string | null
+    amount?: number | string | null
+    pdf_path?: string | null
+    pdf_generated_at?: string | null
+  } | null
   signed_files?: any
   files?: ManuscriptFile[] | null
   journals?: { title?: string } | null

@@ -198,6 +198,7 @@ export default function EditorManuscriptDetailPage() {
     fundingInfo: '',
   })
   const [invoiceSaving, setInvoiceSaving] = useState(false)
+  const [invoiceSending, setInvoiceSending] = useState(false)
   const cardsSectionRef = useRef<HTMLDivElement | null>(null)
   const [cardsActivated, setCardsActivated] = useState(false)
   const [cardsLoading, setCardsLoading] = useState(false)
@@ -817,6 +818,72 @@ export default function EditorManuscriptDetailPage() {
     setInvoiceOpen(true)
   }, [capability.canUpdateInvoiceInfo])
 
+  const saveInvoiceInfo = useCallback(
+    async (options?: { closeOnSuccess?: boolean }) => {
+      if (!capability.canUpdateInvoiceInfo) {
+        toast.error('You do not have permission to update invoice info.')
+        return false
+      }
+      try {
+        setInvoiceSaving(true)
+        const apc = invoiceForm.apcAmount.trim() ? Number(invoiceForm.apcAmount) : undefined
+        const res = await EditorApi.updateInvoiceInfo(id, {
+          authors: invoiceForm.authors || undefined,
+          affiliation: invoiceForm.affiliation || undefined,
+          apc_amount: Number.isFinite(apc as number) ? (apc as number) : undefined,
+          funding_info: invoiceForm.fundingInfo || undefined,
+        })
+        if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
+        if (options?.closeOnSuccess ?? true) {
+          setInvoiceOpen(false)
+        }
+        await refreshDetail({ force: true })
+        return true
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Save failed')
+        return false
+      } finally {
+        setInvoiceSaving(false)
+      }
+    },
+    [capability.canUpdateInvoiceInfo, id, invoiceForm, refreshDetail]
+  )
+
+  const handleSaveAndSendInvoiceEmail = useCallback(async () => {
+    const invoiceId = String(ms?.invoice?.id || '').trim()
+    const invoiceNumber = String(ms?.invoice?.invoice_number || '').trim()
+    if (!invoiceId) {
+      toast.error('Invoice is not ready yet.')
+      return
+    }
+    const saved = await saveInvoiceInfo({ closeOnSuccess: false })
+    if (!saved) return
+    try {
+      setInvoiceSending(true)
+      const res = await EditorApi.sendInvoiceEmail(invoiceId)
+      if (!res?.success) {
+        throw new Error(normalizeApiErrorMessage(res, 'Failed to send invoice email'))
+      }
+      const deliveryStatus = String(res?.data?.delivery_status || '').trim().toLowerCase()
+      if (deliveryStatus === 'sent') {
+        toast.success(
+          invoiceNumber ? `Invoice email ${invoiceNumber} sent.` : 'Invoice email sent.'
+        )
+      } else if (deliveryStatus === 'failed') {
+        toast.error(res?.data?.delivery_error || 'Invoice email failed to send.')
+        return
+      } else {
+        toast.message('Invoice email accepted. Delivery pending.')
+      }
+      setInvoiceOpen(false)
+      await refreshDetail({ force: true })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send invoice email')
+    } finally {
+      setInvoiceSending(false)
+    }
+  }, [ms?.invoice?.id, ms?.invoice?.invoice_number, refreshDetail, saveInvoiceInfo])
+
   const handleOpenDecisionWorkspace = useCallback(() => {
     router.push(`/editor/decision/${encodeURIComponent(id)}`)
   }, [id, router])
@@ -1362,30 +1429,14 @@ export default function EditorManuscriptDetailPage() {
         form={invoiceForm}
         onChange={(patch) => setInvoiceForm((prev) => ({ ...prev, ...patch }))}
         saving={invoiceSaving}
+        sendingEmail={invoiceSending}
+        canSendEmail={Boolean(ms?.invoice?.id)}
+        invoiceNumber={ms?.invoice?.invoice_number}
         onSave={async () => {
-          if (!capability.canUpdateInvoiceInfo) {
-            toast.error('You do not have permission to update invoice info.')
-            return
-          }
-          try {
-            setInvoiceSaving(true)
-            const apc = invoiceForm.apcAmount.trim() ? Number(invoiceForm.apcAmount) : undefined
-            const res = await EditorApi.updateInvoiceInfo(id, {
-              authors: invoiceForm.authors || undefined,
-              affiliation: invoiceForm.affiliation || undefined,
-              apc_amount: Number.isFinite(apc as number) ? (apc as number) : undefined,
-              funding_info: invoiceForm.fundingInfo || undefined,
-            })
-            if (!res?.success) throw new Error(res?.detail || res?.message || 'Save failed')
-            toast.success('Invoice info updated')
-            setInvoiceOpen(false)
-            await refreshDetail({ force: true })
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : 'Save failed')
-          } finally {
-            setInvoiceSaving(false)
-          }
+          const saved = await saveInvoiceInfo()
+          if (saved) toast.success('Invoice info updated')
         }}
+        onSaveAndSend={handleSaveAndSendInvoiceEmail}
       />
 
       <ReviewerEmailPreviewDialog

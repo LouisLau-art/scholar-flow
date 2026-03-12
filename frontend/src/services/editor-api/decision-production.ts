@@ -207,6 +207,15 @@ export function createDecisionProductionApi(deps: DecisionProductionApiDeps) {
       return json
     },
 
+    async sendInvoiceEmail(invoiceId: string) {
+      const res = await authedFetch(`/api/v1/invoices/${encodeURIComponent(invoiceId)}/email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to send invoice email' }))
+    },
+
     async bindOwner(manuscriptId: string, ownerId: string) {
       const res = await authedFetch(`/api/v1/editor/manuscripts/${manuscriptId}/bind-owner`, {
         method: 'POST',
