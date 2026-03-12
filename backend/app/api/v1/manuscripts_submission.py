@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.api.v1.editor_common import resolve_author_notification_target
 from app.core.auth_utils import get_current_user
 from app.core.email_normalization import normalize_email
 from app.core.mail import EmailService
@@ -712,7 +713,19 @@ async def create_manuscript(
             )
 
             try:
-                author_email = submission_email or str(current_user.get("email") or "").strip().lower()
+                author_target = resolve_author_notification_target(
+                    manuscript={
+                        "author_id": current_user_id,
+                        "submission_email": submission_email,
+                        "author_contacts": author_contacts,
+                    },
+                    author_profile={
+                        "email": current_user.get("email"),
+                        "full_name": current_user.get("full_name"),
+                    },
+                )
+                author_email = str(author_target.get("recipient_email") or "").strip().lower()
+                recipient_name = str(author_target.get("recipient_name") or "").strip()
                 if author_email:
                     email_service = EmailService()
                     background_tasks.add_task(
@@ -722,7 +735,7 @@ async def create_manuscript(
                         template_name="submission_ack.html",
                         context={
                             "subject": "Submission Received",
-                            "recipient_name": str(corresponding_author.get("name") or "").strip()
+                            "recipient_name": recipient_name
                             or author_email.split("@")[0].replace(".", " ").title(),
                             "manuscript_title": manuscript.title,
                             "manuscript_id": str(manuscript_id),

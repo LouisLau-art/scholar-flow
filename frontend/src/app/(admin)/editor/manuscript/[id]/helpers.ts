@@ -86,6 +86,7 @@ export type ManuscriptDetail = {
     email_events?: Array<{
       assignment_id?: string | null
       manuscript_id?: string | null
+      recipient?: string | null
       status?: string | null
       event_type?: string | null
       template_name?: string | null
@@ -208,6 +209,7 @@ export function formatReviewerDeclineReason(raw: unknown): string | null {
 export function formatReviewerEmailEventLabel(event: {
   status?: string | null
   event_type?: string | null
+  recipient?: string | null
   actor?: {
     full_name?: string | null
     email?: string | null
@@ -237,7 +239,8 @@ export function formatReviewerEmailEventLabel(event: {
               : 'updated'
   const actorLabel =
     String(event?.actor?.full_name || '').trim() || String(event?.actor?.email || '').trim()
-  return `${eventLabel} ${statusLabel}${actorLabel ? ` by ${actorLabel}` : ''}`.trim()
+  const recipientLabel = String(event?.recipient || '').trim()
+  return `${eventLabel} ${statusLabel}${actorLabel ? ` by ${actorLabel}` : ''}${recipientLabel ? ` to ${recipientLabel}` : ''}`.trim()
 }
 
 function humanizeReviewerState(raw: unknown): string {

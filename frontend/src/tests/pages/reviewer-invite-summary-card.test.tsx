@@ -57,6 +57,7 @@ describe('Reviewer summary cards', () => {
             invited_via: 'template_invitation',
             email_events: [
               {
+                recipient: 'reviewer@example.com',
                 status: 'sent',
                 event_type: 'invitation',
                 created_at: '2026-03-05T00:00:00Z',
@@ -91,7 +92,7 @@ describe('Reviewer summary cards', () => {
     expect(screen.getByText(/Delivery: sent/i)).toBeInTheDocument()
     expect(screen.getByText(/Selected by Selector User via Editor shortlist/i)).toBeInTheDocument()
     expect(screen.getByText(/Invited by Inviter User via Invitation template/i)).toBeInTheDocument()
-    expect(screen.getByText(/Invitation sent by Inviter User/i)).toBeInTheDocument()
+    expect(screen.getByText(/Invitation sent by Inviter User to reviewer@example.com/i)).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('reviewer-history-ra-1'))
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
   })

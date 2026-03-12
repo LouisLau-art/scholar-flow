@@ -62,6 +62,7 @@ export type ReviewerHistoryItem = {
 export type ReviewerEmailEvent = {
   assignment_id?: string | null
   manuscript_id?: string | null
+  recipient?: string | null
   status?: string | null
   event_type?: string | null
   template_name?: string | null

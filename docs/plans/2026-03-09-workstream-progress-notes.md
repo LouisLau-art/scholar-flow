@@ -699,3 +699,24 @@
   - `cd frontend && bun run test:run src/components/admin/CreateUserDialog.test.tsx src/components/admin/UserTable.test.tsx src/components/admin/UserRoleDialog.test.tsx src/components/admin/UserFilters.test.tsx`
   - `cd frontend && bun run lint`
   - `cd frontend && bunx tsc --noEmit`
+
+## 2026-03-12 收尾：作者通知链 + Reviewer 邮件 recipient 审计
+
+- 投稿确认邮件现在统一走 `resolve_author_notification_target(...)`：
+  - 优先 `submission_email`
+  - 其次通讯作者邮箱
+  - 最后作者 profile 邮箱
+- `POST /api/v1/manuscripts` 的 submission acknowledgment 不再直接回退到当前登录账号邮箱。
+
+- reviewer 邮件事件现在在后端详情/历史接口中透出 `recipient`：
+  - `editor_detail_main`
+  - `reviews reviewer-history`
+- 前端稿件详情页和 reviewer history modal 已同步显示：
+  - `Invitation sent by X to reviewer@example.com`
+
+- 本轮验证：
+  - `cd backend && pytest -q -o addopts= tests/test_manuscripts.py`
+  - `cd backend && uvx ruff check app/api/v1/manuscripts_submission.py app/api/v1/reviews.py app/api/v1/editor_detail_main.py tests/test_manuscripts.py --select=E9,F63,F7,F82`
+  - `cd frontend && bun run test:run src/tests/pages/reviewer-invite-summary-card.test.tsx`
+  - `cd frontend && bunx tsc --noEmit`
+  - `cd frontend && bun run lint`

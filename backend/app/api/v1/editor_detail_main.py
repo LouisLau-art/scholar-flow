@@ -18,6 +18,7 @@ def _serialize_assignment_email_event(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "assignment_id": row.get("assignment_id"),
         "manuscript_id": row.get("manuscript_id"),
+        "recipient": row.get("recipient"),
         "status": str(row.get("status") or "").strip().lower() or None,
         "event_type": str(row.get("event_type") or "").strip().lower() or None,
         "template_name": row.get("template_name"),
@@ -59,7 +60,7 @@ def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, lis
             rows = (
                 runtime.supabase_admin.table("email_logs")
                 .select(
-                    "assignment_id, manuscript_id, actor_user_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                    "assignment_id, manuscript_id, recipient, actor_user_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
                 )
                 .in_("assignment_id", normalized_ids)
                 .order("created_at", desc=True)
@@ -71,7 +72,7 @@ def _load_assignment_email_events(*, assignment_ids: list[str]) -> dict[str, lis
             rows = (
                 runtime.supabase_admin.table("email_logs")
                 .select(
-                    "assignment_id, manuscript_id, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
+                    "assignment_id, manuscript_id, recipient, template_name, status, event_type, error_message, provider_id, idempotency_key, created_at"
                 )
                 .in_("assignment_id", normalized_ids)
                 .order("created_at", desc=True)

@@ -150,6 +150,56 @@ async def test_create_manuscript_success(client: AsyncClient):
         assert insert_payload["author_contacts"][0]["is_corresponding"] is True
 
 
+@pytest.mark.asyncio
+async def test_create_manuscript_submission_ack_uses_resolved_author_target(client: AsyncClient):
+    """投稿确认邮件应统一使用解析后的作者通知目标，而不是回退到登录账号邮箱。"""
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Targeted Submission",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "delegate@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": required_author_contacts(),
+        "author_id": "00000000-0000-0000-0000-000000000000",
+        "status": "pre_check",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00",
+    }
+    mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock), \
+         patch(
+             "app.api.v1.manuscripts_submission.resolve_author_notification_target",
+             return_value={"recipient_email": "corr@example.org", "recipient_name": "Alice Author"},
+         ) as resolve_target_mock, \
+         patch("app.api.v1.manuscripts_submission.BackgroundTasks.add_task", autospec=True) as add_task_mock:
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Targeted Submission",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                    "submission_email": "delegate@example.org",
+                "author_contacts": required_author_contacts(),
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 200
+    resolve_target_mock.assert_called_once()
+    assert add_task_mock.call_count == 1
+    _, send_callable = add_task_mock.call_args.args[:2]
+    assert callable(send_callable)
+    assert add_task_mock.call_args.kwargs["to_email"] == "corr@example.org"
+    assert add_task_mock.call_args.kwargs["context"]["recipient_name"] == "Alice Author"
+
+
 def test_ensure_author_role_membership_appends_author_role():
     from app.api.v1 import manuscripts_submission
 

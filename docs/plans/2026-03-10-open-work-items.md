@@ -13,7 +13,7 @@
 - 投稿时必须支持：
   - 投稿联系邮箱
   - 多作者列表
-  - 唯一通讯作者
+  - 一个或多个通讯作者
   - 每位作者至少包含：姓名、邮箱、机构
 - 作者不要求在 ScholarFlow 中预先存在账号
 
@@ -22,9 +22,14 @@
 - 前端投稿表单已支持 `submission_email + author_contacts[]`
 - 作者顺序已支持前端调整（`Move Up / Move Down`）
 - 后端模型、写库逻辑、远端 Supabase migration 已完成
+- 通讯作者现在已放宽为“至少一个，可多个”
+- 每位作者已支持：
+  - `affiliation`
+  - `city`
+  - `country_or_region`
 - 稿件详情页已开始展示：
   - Authors
-  - Corresponding Author
+  - Corresponding Author(s)
   - Submission Email
   - Special Issue
 - 作者侧关键邮件入口已完成统一：
@@ -34,6 +39,7 @@
   - 发票邮件
   - 发表通知
   现在全部优先使用 `submission_email / corresponding author email`
+- 投稿确认邮件（Submission Received）也已统一走相同收件人解析逻辑
 
 剩余收尾：
 
