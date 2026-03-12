@@ -152,7 +152,7 @@ def test_resolve_author_notification_target_falls_back_to_profile_email_when_sub
 
 
 @pytest.mark.asyncio
-async def test_submit_intake_revision_uses_resolved_author_notification_target(monkeypatch):
+async def test_submit_intake_revision_keeps_author_notification_in_app_only(monkeypatch):
     manuscript_id = uuid4()
     updated = {
         "id": str(manuscript_id),
@@ -168,7 +168,7 @@ async def test_submit_intake_revision_uses_resolved_author_notification_target(m
     with patch("app.api.v1.editor_precheck.NotificationService.create_notification", return_value=None), patch(
         "app.api.v1.editor_precheck.resolve_author_notification_target",
         return_value=_normalize_target("submission@example.org", "Corr Author"),
-    ):
+    ) as resolve_target_mock:
         result = await submit_intake_revision(
             id=manuscript_id,
             request=IntakeRevisionRequest(comment="Please update formatting."),
@@ -178,14 +178,12 @@ async def test_submit_intake_revision_uses_resolved_author_notification_target(m
         )
 
     assert result["message"] == "Intake revision submitted"
-    assert len(background_tasks.tasks) == 1
-    task = background_tasks.tasks[0]
-    assert task.kwargs["to_email"] == "submission@example.org"
-    assert task.kwargs["context"]["recipient_name"] == "Corr Author"
+    resolve_target_mock.assert_not_called()
+    assert len(background_tasks.tasks) == 0
 
 
 @pytest.mark.asyncio
-async def test_request_revision_impl_uses_resolved_author_notification_target(monkeypatch):
+async def test_request_revision_impl_keeps_author_notification_in_app_only(monkeypatch):
     manuscript = {
         "id": str(uuid4()),
         "author_id": str(uuid4()),
@@ -200,7 +198,7 @@ async def test_request_revision_impl_uses_resolved_author_notification_target(mo
     with patch("app.api.v1.editor_heavy_revision.NotificationService.create_notification", return_value=None), patch(
         "app.api.v1.editor_heavy_revision.resolve_author_notification_target",
         return_value=_normalize_target("submission@example.org", "Corr Author"),
-    ):
+    ) as resolve_target_mock:
         result = await request_revision_impl(
             request=request,
             profile={"roles": ["managing_editor"]},
@@ -209,10 +207,8 @@ async def test_request_revision_impl_uses_resolved_author_notification_target(mo
         )
 
     assert str(result["data"]["revision"]["id"])
-    assert len(background_tasks.tasks) == 1
-    task = background_tasks.tasks[0]
-    assert task.kwargs["to_email"] == "submission@example.org"
-    assert task.kwargs["context"]["recipient_name"] == "Corr Author"
+    resolve_target_mock.assert_not_called()
+    assert len(background_tasks.tasks) == 0
 
 
 @pytest.mark.asyncio

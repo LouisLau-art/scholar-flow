@@ -69,34 +69,9 @@ async def request_revision_impl(
                 content=f"Editor has requested a {request.decision_type} revision for '{title}'.",
             )
 
-            # Feature 025: Send Email
-            if background_tasks:
-                try:
-                    target = resolve_author_notification_target(
-                        manuscript=manuscript,
-                        manuscript_id=str(request.manuscript_id),
-                        supabase_client=supabase_admin_client,
-                    )
-                    author_email = target.get("recipient_email")
-                    recipient_name = target.get("recipient_name") or "Author"
-
-                    if author_email:
-                        from app.core.mail import email_service
-
-                        background_tasks.add_task(
-                            email_service.send_email_background,
-                            to_email=author_email,
-                            subject="Revision Requested",
-                            template_name="status_update.html",
-                            context={
-                                "recipient_name": recipient_name,
-                                "manuscript_title": title,
-                                "decision_label": f"{request.decision_type.capitalize()} Revision Requested",
-                                "comment": request.comment or "Please check the portal for details.",
-                            },
-                        )
-                except Exception as e:
-                    print(f"[Email] Failed to send revision email: {e}")
+            # 中文注释:
+            # 正式修回请求按业务口径改为半自动/手动邮件，不在创建 revision request 时自动发信；
+            # 当前这里只保留站内通知，后续由 preview/send API 承接邮件发送。
 
     except Exception as e:
         print(f"[Notifications] Failed to send revision notification: {e}")

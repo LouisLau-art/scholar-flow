@@ -147,32 +147,9 @@ async def submit_intake_revision(
                     content=f"Managing Editor requested technical revision for '{manuscript_title}'. Feedback: {comment_clean}",
                 )
 
-                if background_tasks:
-                    try:
-                        target = resolve_author_notification_target(
-                            manuscript=updated,
-                            manuscript_id=str(id),
-                            supabase_client=supabase_admin,
-                        )
-                        author_email = target.get("recipient_email")
-                        recipient_name = target.get("recipient_name") or "Author"
-                        if author_email:
-                            from app.core.mail import email_service
-
-                            background_tasks.add_task(
-                                email_service.send_email_background,
-                                to_email=author_email,
-                                subject="Technical Revision Requested",
-                                template_name="status_update.html",
-                                context={
-                                    "recipient_name": recipient_name,
-                                    "manuscript_title": manuscript_title,
-                                    "decision_label": "Technical Revision Requested",
-                                    "comment": comment_clean or "Please check the portal for details.",
-                                },
-                            )
-                    except Exception as e:
-                        print(f"[Email] Failed to send intake-revision email: {e}")
+                # 中文注释:
+                # 技术退修需要编辑明确补充问题说明，按业务口径改为仅保留站内通知；
+                # 后续由人工邮件 compose/发送链路处理，不在这里自动发信。
         except Exception as e:
             print(f"[Notifications] Failed to send intake-revision notification: {e}")
 
