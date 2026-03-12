@@ -629,3 +629,198 @@ async def test_revision_request_email_mark_external_sent_logs_external_delivery(
     assert log_kwargs["cc_recipients"] == ["co@example.org", "office@example.org"]
     assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
     assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
+
+
+@pytest.mark.asyncio
+async def test_proofreading_email_preview_returns_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeee11")
+    cycle_id = "cycle-proof-1"
+
+    supabase_admin = _Client(
+        {
+            "production_cycles": [
+                {
+                    "id": cycle_id,
+                    "manuscript_id": str(manuscript_id),
+                    "status": "awaiting_author",
+                    "proofreader_author_id": "author-1",
+                }
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Proofreading Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+
+    with (
+        patch("app.api.v1.editor_production.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_production.ensure_manuscript_scope_access", return_value=None),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading-email/preview",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"editor_message": "Please review the updated proof carefully."},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["resolved_recipients"]["to"] == ["corr@example.org"]
+    assert data["resolved_recipients"]["cc"] == ["co@example.org", "office@example.org"]
+    assert data["reply_to"] == ["office@example.org"]
+    assert data["delivery_mode"] == "manual"
+    assert data["can_send"] is True
+    assert "Please review the updated proof carefully." in data["html"]
+
+
+@pytest.mark.asyncio
+async def test_proofreading_email_send_uses_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeee12")
+    cycle_id = "cycle-proof-2"
+
+    supabase_admin = _Client(
+        {
+            "production_cycles": [
+                {
+                    "id": cycle_id,
+                    "manuscript_id": str(manuscript_id),
+                    "status": "awaiting_author",
+                    "proofreader_author_id": "author-1",
+                }
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Proofreading Send Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Proofreading Required",
+            "provider_id": "re_pf_123",
+            "error_message": None,
+        }
+    )
+
+    with (
+        patch("app.api.v1.editor_production.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_production.ensure_manuscript_scope_access", return_value=None),
+        patch("app.api.v1.editor_production.email_service.send_rendered_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading-email/send",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"editor_message": "Please confirm the latest proof or submit remaining corrections."},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["delivery_status"] == "sent"
+    send_kwargs = send_mock.call_args.kwargs
+    assert send_kwargs["to_emails"] == ["corr@example.org"]
+    assert send_kwargs["cc_emails"] == ["co@example.org", "office@example.org"]
+    assert send_kwargs["reply_to_emails"] == ["office@example.org"]
+    assert send_kwargs["template_key"] == "proofreading_request"
+    assert send_kwargs["audit_context"]["communication_status"] == "system_sent"
+
+
+@pytest.mark.asyncio
+async def test_proofreading_email_mark_external_sent_logs_external_delivery(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeee13")
+    cycle_id = "cycle-proof-3"
+
+    supabase_admin = _Client(
+        {
+            "production_cycles": [
+                {
+                    "id": cycle_id,
+                    "manuscript_id": str(manuscript_id),
+                    "status": "awaiting_author",
+                    "proofreader_author_id": "author-1",
+                }
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Proofreading External Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+    log_mock = MagicMock()
+
+    with (
+        patch("app.api.v1.editor_production.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_production.ensure_manuscript_scope_access", return_value=None),
+        patch("app.api.v1.editor_production.email_service.log_attempt", log_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading-email/mark-external-sent",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "editor_message": "Please check the remaining highlighted corrections.",
+                "channel": "gmail_web",
+            },
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["communication_status"] == "external_sent"
+    assert data["recipient"] == "corr@example.org"
+    log_kwargs = log_mock.call_args.kwargs
+    assert log_kwargs["provider"] == "gmail_web"
+    assert log_kwargs["to_recipients"] == ["corr@example.org"]
+    assert log_kwargs["cc_recipients"] == ["co@example.org", "office@example.org"]
+    assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
+    assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
