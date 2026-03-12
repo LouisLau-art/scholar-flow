@@ -19,6 +19,7 @@ import {
   hasJournalSelection,
   isHttpUrl,
   isSupportedCoverLetterDocument,
+  isSupportedSourceArchive,
   isSupportedWordDocument,
   isValidEmail,
   normalizeAuthorContactsForPayload,
@@ -42,6 +43,10 @@ export function useSubmissionForm() {
   const [wordFilePath, setWordFilePath] = useState<string | null>(null)
   const [isUploadingWordFile, setIsUploadingWordFile] = useState(false)
   const [wordFileUploadError, setWordFileUploadError] = useState<string | null>(null)
+  const [sourceArchiveFile, setSourceArchiveFile] = useState<File | null>(null)
+  const [sourceArchivePath, setSourceArchivePath] = useState<string | null>(null)
+  const [isUploadingSourceArchive, setIsUploadingSourceArchive] = useState(false)
+  const [sourceArchiveUploadError, setSourceArchiveUploadError] = useState<string | null>(null)
   const [hasDocxAutoMetadata, setHasDocxAutoMetadata] = useState(false)
   const [coverLetterFile, setCoverLetterFile] = useState<File | null>(null)
   const [coverLetterPath, setCoverLetterPath] = useState<string | null>(null)
@@ -68,6 +73,8 @@ export function useSubmissionForm() {
   const authorContactsValid = hasValidAuthorContacts(metadata.authorContacts)
   const fileValid = !!uploadedPath
   const wordFileValid = !!wordFilePath
+  const sourceArchiveValid = !!sourceArchivePath
+  const manuscriptSourceValid = wordFileValid !== sourceArchiveValid
   const coverLetterValid = !!coverLetterPath
   const datasetValue = datasetUrl.trim()
   const sourceCodeValue = sourceCodeUrl.trim()
@@ -204,6 +211,19 @@ export function useSubmissionForm() {
     return ''
   }
 
+  const clearWordRoute = () => {
+    setWordFile(null)
+    setWordFilePath(null)
+    setWordFileUploadError(null)
+    setHasDocxAutoMetadata(false)
+  }
+
+  const clearSourceArchiveRoute = () => {
+    setSourceArchiveFile(null)
+    setSourceArchivePath(null)
+    setSourceArchiveUploadError(null)
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
@@ -310,9 +330,7 @@ export function useSubmissionForm() {
   const handleWordFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) {
-      setWordFile(null)
-      setWordFilePath(null)
-      setWordFileUploadError(null)
+      clearWordRoute()
       return
     }
 
@@ -330,6 +348,7 @@ export function useSubmissionForm() {
       return
     }
 
+    clearSourceArchiveRoute()
     setWordFile(selectedFile)
     setWordFilePath(null)
     setWordFileUploadError(null)
@@ -386,6 +405,60 @@ export function useSubmissionForm() {
       toast.error(message, { id: toastId })
     } finally {
       setIsUploadingWordFile(false)
+    }
+  }
+
+  const handleSourceArchiveUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (!selectedFile) {
+      clearSourceArchiveRoute()
+      return
+    }
+
+    if (!isSupportedSourceArchive(selectedFile)) {
+      clearSourceArchiveRoute()
+      event.currentTarget.value = ''
+      toast.error('LaTeX source archive only supports .zip files.')
+      return
+    }
+
+    if (!user) {
+      toast.error('Please log in to upload the LaTeX source ZIP.')
+      return
+    }
+
+    clearWordRoute()
+    setSourceArchiveFile(selectedFile)
+    setSourceArchivePath(null)
+    setSourceArchiveUploadError(null)
+    setIsUploadingSourceArchive(true)
+    const toastId = toast.loading('Uploading LaTeX source ZIP…')
+
+    try {
+      const safeName = sanitizeFilename(selectedFile.name || 'latex-source.zip')
+      const uploadPath = `${user.id}/source-archives/${crypto.randomUUID()}_${safeName.replace(/\.zip$/i, '')}.zip`
+      const { error: uploadErrorResult } = await withTimeout(
+        supabase.storage
+          .from('manuscripts')
+          .upload(uploadPath, selectedFile, {
+            contentType: selectedFile.type || 'application/zip',
+            upsert: false,
+          }),
+        SUPPLEMENTAL_UPLOAD_TIMEOUT_MS,
+        'LaTeX source ZIP upload',
+      )
+      if (uploadErrorResult) {
+        throw new Error(`Upload failed: ${uploadErrorResult.message}`)
+      }
+
+      setSourceArchivePath(uploadPath)
+      toast.success('LaTeX source ZIP uploaded. It will be stored for editorial use only.', { id: toastId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'LaTeX source ZIP upload failed.'
+      setSourceArchiveUploadError(message.replace('Upload failed: ', ''))
+      toast.error(message, { id: toastId })
+    } finally {
+      setIsUploadingSourceArchive(false)
     }
   }
 
@@ -465,12 +538,20 @@ export function useSubmissionForm() {
       toast.error('File upload is incomplete. Please try again.')
       return
     }
-    if (!wordFile) {
-      toast.error('Please upload the Word version of the manuscript before submitting.')
+    if (wordFile && !wordFilePath) {
+      toast.error('Word manuscript upload is incomplete. Please try again.')
       return
     }
-    if (!wordFilePath) {
-      toast.error('Word manuscript upload is incomplete. Please try again.')
+    if (sourceArchiveFile && !sourceArchivePath) {
+      toast.error('LaTeX source ZIP upload is incomplete. Please try again.')
+      return
+    }
+    if (!wordFilePath && !sourceArchivePath) {
+      toast.error('Please upload either a Word manuscript or a LaTeX source ZIP before submitting.')
+      return
+    }
+    if (wordFilePath && sourceArchivePath) {
+      toast.error('Please keep only one manuscript source: Word manuscript or LaTeX source ZIP.')
       return
     }
     if (!coverLetterFile) {
@@ -559,6 +640,9 @@ export function useSubmissionForm() {
           manuscript_word_path: wordFilePath,
           manuscript_word_filename: wordFile?.name || null,
           manuscript_word_content_type: wordFile?.type || null,
+          source_archive_path: sourceArchivePath,
+          source_archive_filename: sourceArchiveFile?.name || null,
+          source_archive_content_type: sourceArchiveFile?.type || null,
           cover_letter_path: coverLetterPath,
           cover_letter_filename: coverLetterFile?.name || null,
           cover_letter_content_type: coverLetterFile?.type || null,
@@ -591,6 +675,10 @@ export function useSubmissionForm() {
     wordFilePath,
     wordFileUploadError,
     isUploadingWordFile,
+    sourceArchiveFileName: sourceArchiveFile?.name || null,
+    sourceArchivePath,
+    sourceArchiveUploadError,
+    isUploadingSourceArchive,
     coverLetterFileName: coverLetterFile?.name || null,
     coverLetterPath,
     coverLetterUploadError,
@@ -621,7 +709,7 @@ export function useSubmissionForm() {
     showEthicsConsentError,
     submitDisabled:
       !fileValid ||
-      !wordFileValid ||
+      !manuscriptSourceValid ||
       !coverLetterValid ||
       !titleValid ||
       !abstractValid ||
@@ -635,13 +723,14 @@ export function useSubmissionForm() {
       isLoadingJournals ||
       isUploading ||
       isUploadingWordFile ||
+      isUploadingSourceArchive ||
       isUploadingCoverLetter ||
       isSubmitting ||
       !user,
     showValidationHint:
       !!user &&
       (!fileValid ||
-        !wordFileValid ||
+        !manuscriptSourceValid ||
         !coverLetterValid ||
         !titleValid ||
         !abstractValid ||
@@ -654,6 +743,7 @@ export function useSubmissionForm() {
         !ethicsConsent),
     handleFileUpload,
     handleWordFileUpload,
+    handleSourceArchiveUpload,
     handleCoverLetterUpload,
     handleFinalize,
     onJournalChange: (value: string) => {

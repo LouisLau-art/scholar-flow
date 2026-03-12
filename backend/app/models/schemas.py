@@ -117,7 +117,41 @@ class ManuscriptBase(BaseModel):
 
 class ManuscriptCreate(ManuscriptBase):
     """创建稿件时使用的模型"""
+
     author_id: UUID
+    source_archive_path: Optional[str] = Field(None, max_length=1000, description="LaTeX 源文件 ZIP 在 Storage 中的路径")
+    source_archive_filename: Optional[str] = Field(None, max_length=255, description="LaTeX 源文件 ZIP 原始文件名")
+    source_archive_content_type: Optional[str] = Field(None, max_length=255, description="LaTeX 源文件 ZIP MIME 类型")
+
+    @field_validator(
+        "source_archive_path",
+        "source_archive_filename",
+        "source_archive_content_type",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_source_archive_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
+
+    @model_validator(mode="after")
+    def validate_submission_file_requirements(self):
+        if not self.file_path:
+            raise ValueError("file_path is required")
+        if not self.cover_letter_path:
+            raise ValueError("cover_letter_path is required")
+
+        has_word_manuscript = bool(self.manuscript_word_path)
+        has_source_archive = bool(self.source_archive_path)
+        if has_word_manuscript == has_source_archive:
+            if has_word_manuscript:
+                raise ValueError("Exactly one of manuscript_word_path or source_archive_path may be provided")
+            raise ValueError("Either Word manuscript or LaTeX source ZIP is required")
+        return self
 
 class Manuscript(ManuscriptBase):
     """数据库中的完整稿件模型"""

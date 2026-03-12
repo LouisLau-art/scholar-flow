@@ -15,7 +15,7 @@ export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
   return (
     <div className="rounded-lg border border-border/80 bg-card p-5">
       <label htmlFor="submission-word-file" className="mb-2 block text-sm font-semibold text-foreground">
-        Upload Manuscript (Word) (Required)
+        Word Manuscript (.doc/.docx) (Optional)
       </label>
       <Input
         id="submission-word-file"
@@ -29,6 +29,9 @@ export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
       <div className="mt-2 text-xs text-foreground/75">Accepted formats: `.doc`, `.docx`.</div>
       <div className="mt-1 text-xs text-foreground/65">
         Word metadata is parsed first and becomes the primary source for title and abstract autofill.
+      </div>
+      <div className="mt-1 text-xs text-foreground/65">
+        Uploading a Word manuscript will replace any previously uploaded LaTeX source ZIP.
       </div>
       {props.isUploadingWordFile ? (
         <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">

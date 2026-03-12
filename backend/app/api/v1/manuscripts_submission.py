@@ -601,18 +601,28 @@ async def create_manuscript(
             raise HTTPException(status_code=422, detail="Manuscript PDF only supports .pdf")
 
         manuscript_word_path = str(manuscript.manuscript_word_path or "").strip()
-        if not manuscript_word_path:
-            raise HTTPException(status_code=422, detail="manuscript_word_path is required")
-        if ".." in manuscript_word_path or manuscript_word_path.startswith("/"):
-            raise HTTPException(status_code=422, detail="Invalid manuscript_word_path")
-        if current_user_id and not manuscript_word_path.startswith(f"{current_user_id}/"):
-            raise HTTPException(status_code=422, detail="manuscript_word_path must belong to current user")
-        lowered_word_path = manuscript_word_path.lower()
-        if not (lowered_word_path.endswith(".doc") or lowered_word_path.endswith(".docx")):
-            raise HTTPException(status_code=422, detail="Manuscript Word file only supports .doc/.docx")
-
         manuscript_word_filename = str(manuscript.manuscript_word_filename or "").strip() or None
         manuscript_word_content_type = str(manuscript.manuscript_word_content_type or "").strip() or None
+        if manuscript_word_path:
+            if ".." in manuscript_word_path or manuscript_word_path.startswith("/"):
+                raise HTTPException(status_code=422, detail="Invalid manuscript_word_path")
+            if current_user_id and not manuscript_word_path.startswith(f"{current_user_id}/"):
+                raise HTTPException(status_code=422, detail="manuscript_word_path must belong to current user")
+            lowered_word_path = manuscript_word_path.lower()
+            if not (lowered_word_path.endswith(".doc") or lowered_word_path.endswith(".docx")):
+                raise HTTPException(status_code=422, detail="Manuscript Word file only supports .doc/.docx")
+
+        source_archive_path = str(manuscript.source_archive_path or "").strip()
+        source_archive_filename = str(manuscript.source_archive_filename or "").strip() or None
+        source_archive_content_type = str(manuscript.source_archive_content_type or "").strip() or None
+        if source_archive_path:
+            if ".." in source_archive_path or source_archive_path.startswith("/"):
+                raise HTTPException(status_code=422, detail="Invalid source_archive_path")
+            if current_user_id and not source_archive_path.startswith(f"{current_user_id}/"):
+                raise HTTPException(status_code=422, detail="source_archive_path must belong to current user")
+            if not source_archive_path.lower().endswith(".zip"):
+                raise HTTPException(status_code=422, detail="LaTeX source archive only supports .zip")
+
         submission_email = str(manuscript.submission_email or "").strip().lower()
         author_contacts = [item.model_dump(mode="json") for item in manuscript.author_contacts]
         author_names = [str(item.get("name") or "").strip() for item in author_contacts if str(item.get("name") or "").strip()]
@@ -623,18 +633,17 @@ async def create_manuscript(
         cover_letter_content_type = str(manuscript.cover_letter_content_type or "").strip() or None
         validated_journal_id = _m()._validate_submission_journal_id(manuscript.journal_id)
 
-        if cover_letter_path:
-            if ".." in cover_letter_path or cover_letter_path.startswith("/"):
-                raise HTTPException(status_code=422, detail="Invalid cover_letter_path")
-            if current_user_id and not cover_letter_path.startswith(f"{current_user_id}/"):
-                raise HTTPException(status_code=422, detail="cover_letter_path must belong to current user")
-            lowered_cover_path = cover_letter_path.lower()
-            if not (
-                lowered_cover_path.endswith(".pdf")
-                or lowered_cover_path.endswith(".doc")
-                or lowered_cover_path.endswith(".docx")
-            ):
-                raise HTTPException(status_code=422, detail="Cover letter only supports .pdf/.doc/.docx")
+        if ".." in cover_letter_path or cover_letter_path.startswith("/"):
+            raise HTTPException(status_code=422, detail="Invalid cover_letter_path")
+        if current_user_id and not cover_letter_path.startswith(f"{current_user_id}/"):
+            raise HTTPException(status_code=422, detail="cover_letter_path must belong to current user")
+        lowered_cover_path = cover_letter_path.lower()
+        if not (
+            lowered_cover_path.endswith(".pdf")
+            or lowered_cover_path.endswith(".doc")
+            or lowered_cover_path.endswith(".docx")
+        ):
+            raise HTTPException(status_code=422, detail="Cover letter only supports .pdf/.doc/.docx")
 
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -665,29 +674,42 @@ async def create_manuscript(
 
             _ensure_author_role_membership(current_user_id, current_user.get("email"))
 
-            supplemental_files = [
-                {
-                    "manuscript_id": str(manuscript_id),
-                    "file_type": "manuscript",
-                    "bucket": "manuscripts",
-                    "path": manuscript_word_path,
-                    "original_filename": manuscript_word_filename,
-                    "content_type": manuscript_word_content_type,
-                    "uploaded_by": current_user_id or None,
-                },
-            ]
-            if cover_letter_path:
+            supplemental_files = []
+            if manuscript_word_path:
                 supplemental_files.append(
                     {
                         "manuscript_id": str(manuscript_id),
-                        "file_type": "cover_letter",
+                        "file_type": "manuscript",
                         "bucket": "manuscripts",
-                        "path": cover_letter_path,
-                        "original_filename": cover_letter_filename,
-                        "content_type": cover_letter_content_type,
+                        "path": manuscript_word_path,
+                        "original_filename": manuscript_word_filename,
+                        "content_type": manuscript_word_content_type,
                         "uploaded_by": current_user_id or None,
                     }
                 )
+            if source_archive_path:
+                supplemental_files.append(
+                    {
+                        "manuscript_id": str(manuscript_id),
+                        "file_type": "source_archive",
+                        "bucket": "manuscripts",
+                        "path": source_archive_path,
+                        "original_filename": source_archive_filename,
+                        "content_type": source_archive_content_type,
+                        "uploaded_by": current_user_id or None,
+                    }
+                )
+            supplemental_files.append(
+                {
+                    "manuscript_id": str(manuscript_id),
+                    "file_type": "cover_letter",
+                    "bucket": "manuscripts",
+                    "path": cover_letter_path,
+                    "original_filename": cover_letter_filename,
+                    "content_type": cover_letter_content_type,
+                    "uploaded_by": current_user_id or None,
+                }
+            )
 
             try:
                 for file_item in supplemental_files:

@@ -216,14 +216,18 @@ describe('SubmissionForm Component', () => {
     render(<SubmissionForm />)
 
     const coverLetterHeading = screen.getByText('Cover Letter (Required)')
-    const wordHeading = screen.getByText('Upload Manuscript (Word) (Required)')
+    const wordHeading = screen.getByText('Word Manuscript (.doc/.docx) (Optional)')
+    const sourceArchiveHeading = screen.getByText('LaTeX Source ZIP (.zip) (Optional)')
     const pdfHeading = screen.getByText('Upload Manuscript (PDF) (Required)')
 
     expect(
       coverLetterHeading.compareDocumentPosition(wordHeading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(
-      wordHeading.compareDocumentPosition(pdfHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+      wordHeading.compareDocumentPosition(sourceArchiveHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      sourceArchiveHeading.compareDocumentPosition(pdfHeading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
 
@@ -661,6 +665,191 @@ describe('SubmissionForm Component', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
+    })
+  })
+
+  it('allows latex zip route and skips ZIP metadata parsing', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-file'), {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-source-archive-file'), {
+      target: { files: [new File(['zip'], 'paper-source.zip', { type: 'application/zip' })] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/LaTeX source ZIP uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-cover-letter-file'), {
+      target: {
+        files: [
+          new File(['cover'], 'cover-letter.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    fillRequiredAuthorFields()
+    acceptRequiredDeclarations()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-finalize')).not.toBeDisabled()
+    })
+
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        (call) => call[0] === '/api/v1/manuscripts'
+      ) as [unknown, RequestInit?] | undefined
+      expect(createCall).toBeTruthy()
+      const requestInit = createCall?.[1] as RequestInit | undefined
+      const body = JSON.parse(String(requestInit?.body || ''))
+      expect(body.manuscript_word_path).toBeNull()
+      expect(body.source_archive_path).toContain('u1/source-archives/')
+      expect(body.source_archive_filename).toBe('paper-source.zip')
+      expect(body.source_archive_content_type).toBe('application/zip')
+    })
+
+    expect(fetchMock.mock.calls.filter((call) => call[0] === '/api/v1/manuscripts/upload')).toHaveLength(1)
+  })
+
+  it('keeps only one manuscript source when ZIP replaces a Word upload', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-file'), {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-source-archive-file'), {
+      target: { files: [new File(['zip'], 'paper-source.zip', { type: 'application/zip' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/LaTeX source ZIP uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-cover-letter-file'), {
+      target: {
+        files: [
+          new File(['cover'], 'cover-letter.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    fillRequiredAuthorFields()
+    acceptRequiredDeclarations()
+    fireEvent.click(screen.getByTestId('submission-finalize'))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        (call) => call[0] === '/api/v1/manuscripts'
+      ) as [unknown, RequestInit?] | undefined
+      expect(createCall).toBeTruthy()
+      const requestInit = createCall?.[1] as RequestInit | undefined
+      const body = JSON.parse(String(requestInit?.body || ''))
+      expect(body.manuscript_word_path).toBeNull()
+      expect(body.source_archive_path).toContain('u1/source-archives/')
     })
   })
 

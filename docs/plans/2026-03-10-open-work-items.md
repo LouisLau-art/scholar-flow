@@ -20,6 +20,10 @@
 当前状态：
 
 - 前端投稿表单已支持 `submission_email + author_contacts[]`
+- 投稿文件入口已切到：
+  - `PDF + Cover Letter + (Word xor ZIP)`
+  - `LaTeX` 当前只支持 `.zip`
+  - ZIP 仅进入 Storage / manuscript_files，不参与 AI 解析
 - 作者顺序已支持前端调整（`Move Up / Move Down`）
 - 后端模型、写库逻辑、远端 Supabase migration 已完成
 - 通讯作者现在已放宽为“至少一个，可多个”

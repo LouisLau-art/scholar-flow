@@ -560,7 +560,9 @@ export function buildFileHubProps(files?: ManuscriptFile[] | null): {
 } {
   const rawFiles = files || []
   return {
-    manuscriptFiles: filterFilesByType(rawFiles, 'manuscript').map((f) => mapFile(f, 'pdf')),
+    manuscriptFiles: rawFiles
+      .filter((file) => file.file_type === 'manuscript' || file.file_type === 'source_archive')
+      .map((f) => mapFile(f, f.file_type === 'source_archive' ? 'other' : 'pdf')),
     coverFiles: filterFilesByType(rawFiles, 'cover_letter').map((f) => mapFile(f, 'doc')),
     reviewFiles: filterFilesByType(rawFiles, 'review_attachment').map((f) => mapFile(f, 'rpt')),
   }

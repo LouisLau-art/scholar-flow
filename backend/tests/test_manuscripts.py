@@ -47,6 +47,9 @@ def required_submission_files(user_id: str):
         "manuscript_word_path": f"{user_id}/word-manuscripts/paper.docx",
         "manuscript_word_filename": "paper.docx",
         "manuscript_word_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "cover_letter_path": f"{user_id}/cover-letters/cover-letter.pdf",
+        "cover_letter_filename": "cover-letter.pdf",
+        "cover_letter_content_type": "application/pdf",
     }
 
 
@@ -69,6 +72,18 @@ def required_author_contacts():
             "is_corresponding": False,
         },
     ]
+
+
+def required_zip_submission_files(user_id: str):
+    return {
+        "file_path": f"{user_id}/paper.pdf",
+        "source_archive_path": f"{user_id}/source-archives/paper-source.zip",
+        "source_archive_filename": "paper-source.zip",
+        "source_archive_content_type": "application/zip",
+        "cover_letter_path": f"{user_id}/cover-letters/cover-letter.pdf",
+        "cover_letter_filename": "cover-letter.pdf",
+        "cover_letter_content_type": "application/pdf",
+    }
 
 @pytest.mark.asyncio
 async def test_get_manuscripts_empty(client: AsyncClient, auth_token: str):
@@ -628,8 +643,8 @@ async def test_create_manuscript_rejects_cover_letter_outside_user_scope(client:
 
 
 @pytest.mark.asyncio
-async def test_create_manuscript_rejects_missing_word_manuscript(client: AsyncClient):
-    """验证 Word 主稿缺失时返回 422"""
+async def test_create_manuscript_rejects_missing_word_and_source_archive(client: AsyncClient):
+    """验证 Word/ZIP 都缺失时返回 422"""
     token_user_id = "11111111-1111-1111-1111-111111111111"
     mock = get_full_mock([])
     mock_token = generate_test_token(user_id=token_user_id)
@@ -645,12 +660,118 @@ async def test_create_manuscript_rejects_missing_word_manuscript(client: AsyncCl
                 "author_contacts": required_author_contacts(),
                 "author_id": token_user_id,
                 "file_path": f"{token_user_id}/paper.pdf",
+                "cover_letter_path": f"{token_user_id}/cover-letters/cover-letter.pdf",
+                "cover_letter_filename": "cover-letter.pdf",
+                "cover_letter_content_type": "application/pdf",
             },
             headers={"Authorization": f"Bearer {mock_token}"}
         )
 
     assert response.status_code == 422
-    assert "manuscript_word_path" in str(response.json().get("detail", ""))
+    assert "word manuscript or latex source zip" in str(response.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_rejects_missing_cover_letter(client: AsyncClient):
+    """验证 cover letter 缺失时返回 422"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    mock = get_full_mock([])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Auth Bound Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
+                "author_id": token_user_id,
+                "file_path": f"{token_user_id}/paper.pdf",
+                "manuscript_word_path": f"{token_user_id}/word-manuscripts/paper.docx",
+                "manuscript_word_filename": "paper.docx",
+                "manuscript_word_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
+    assert "cover_letter_path" in str(response.json().get("detail", ""))
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_accepts_zip_source_archive(client: AsyncClient):
+    """验证作者可用 ZIP 替代 Word 主稿提交"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "ZIP Source Manuscript",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "corresponding@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": required_author_contacts(),
+        "author_id": token_user_id,
+        "status": "pre_check",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00",
+    }
+    mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "ZIP Source Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
+                "author_id": token_user_id,
+                **required_zip_submission_files(token_user_id),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 200
+    upsert_payloads = [call.args[0] for call in admin_mock.upsert.call_args_list]
+    assert any(item["file_type"] == "source_archive" for item in upsert_payloads)
+    source_archive_payload = next(item for item in upsert_payloads if item["file_type"] == "source_archive")
+    assert source_archive_payload["path"].endswith("paper-source.zip")
+    assert source_archive_payload["uploaded_by"] == token_user_id
+
+
+@pytest.mark.asyncio
+async def test_create_manuscript_rejects_word_and_source_archive_together(client: AsyncClient):
+    """验证 Word 和 ZIP 不能同时提交"""
+    token_user_id = "11111111-1111-1111-1111-111111111111"
+    mock = get_full_mock([])
+    mock_token = generate_test_token(user_id=token_user_id)
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Conflicting Source Files Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
+                "author_id": token_user_id,
+                **required_submission_files(token_user_id),
+                "source_archive_path": f"{token_user_id}/source-archives/paper-source.zip",
+                "source_archive_filename": "paper-source.zip",
+                "source_archive_content_type": "application/zip",
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
+    assert "exactly one" in str(response.json().get("detail", "")).lower()
 
 @pytest.mark.asyncio
 async def test_get_manuscripts_list(client: AsyncClient, auth_token: str):

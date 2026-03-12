@@ -8,6 +8,7 @@ import {
   SubmissionFileUploadCard,
   SubmissionFinalizePanel,
   SubmissionMetadataForm,
+  SubmissionSourceArchiveUploadCard,
   SubmissionWordUploadCard,
   useSubmissionForm,
 } from '@/components/submission'
@@ -83,6 +84,14 @@ export default function SubmissionForm() {
         wordFileName={form.wordFileName}
         wordFileUploadError={form.wordFileUploadError}
         onWordFileChange={form.handleWordFileUpload}
+      />
+
+      <SubmissionSourceArchiveUploadCard
+        isUploadingSourceArchive={form.isUploadingSourceArchive}
+        sourceArchivePath={form.sourceArchivePath}
+        sourceArchiveFileName={form.sourceArchiveFileName}
+        sourceArchiveUploadError={form.sourceArchiveUploadError}
+        onSourceArchiveChange={form.handleSourceArchiveUpload}
       />
 
       <SubmissionFileUploadCard

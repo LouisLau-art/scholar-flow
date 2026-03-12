@@ -32,17 +32,26 @@
 
 ### 2.1 文件要求
 
-作者首次投稿时，当前系统要求上传：
+作者首次投稿时，当前系统现在要求上传：
 
 1. Cover Letter
-2. Manuscript Word
+2. Word Manuscript 或 LaTeX Source ZIP（二选一）
 3. Manuscript PDF
 
 当前页面顺序也是：
 
 1. Cover Letter
 2. Word
-3. PDF
+3. LaTeX ZIP
+4. PDF
+
+当前约束：
+
+- `PDF manuscript` 必传
+- `Cover letter` 必传
+- `Word manuscript` 与 `LaTeX source ZIP` 互斥二选一
+- 当前只支持 `.zip`
+- ZIP 仅存储给编辑部使用，不参与 AI / 大模型元数据解析
 
 ### 2.2 元数据自动解析
 
@@ -55,6 +64,7 @@
 
 - Word 稿成功解析出标题/摘要/作者信息后，Word 成为主元数据来源
 - PDF 仍为必传文件，但不再与 Word 竞争元数据主来源
+- 若作者走 LaTeX ZIP 路线，则 ZIP 不参与解析，只保留 PDF 解析或作者手填
 
 ### 2.3 作者信息
 

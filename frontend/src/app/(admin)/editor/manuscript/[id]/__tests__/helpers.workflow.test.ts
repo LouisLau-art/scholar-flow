@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { allowedNext, getNextActionCard } from '@/app/(admin)/editor/manuscript/[id]/helpers'
+import { allowedNext, buildFileHubProps, getNextActionCard } from '@/app/(admin)/editor/manuscript/[id]/helpers'
 
 describe('workflow helpers', () => {
   it('routes pre-check technical return to revision_before_review', () => {
@@ -52,5 +52,23 @@ describe('workflow helpers', () => {
     expect(nextAction.phase).toBe('Author Revision')
     expect(nextAction.title).toContain('外审前技术修回')
     expect(nextAction.description).toContain('pre-check')
+  })
+
+  it('groups source archive files into manuscript versions', () => {
+    const props = buildFileHubProps([
+      {
+        id: 'file-1',
+        file_type: 'source_archive',
+        path: 'user-1/source-archives/paper-source.zip',
+        original_filename: 'paper-source.zip',
+        content_type: 'application/zip',
+      },
+    ] as any)
+
+    expect(props.manuscriptFiles).toHaveLength(1)
+    expect(props.manuscriptFiles[0]?.label).toBe('paper-source.zip')
+    expect(props.manuscriptFiles[0]?.badge).toBe('ZIP')
+    expect(props.coverFiles).toHaveLength(0)
+    expect(props.reviewFiles).toHaveLength(0)
   })
 })
