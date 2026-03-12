@@ -140,6 +140,36 @@ class AssignmentEmailActionPayload(BaseModel):
         return normalized or None
 
 
+class AssignmentExternalEmailPayload(AssignmentEmailActionPayload):
+    channel: str | None = "other"
+    subject: str | None = None
+    cc_emails: list[EmailStr] = []
+    bcc_emails: list[EmailStr] = []
+    reply_to_emails: list[EmailStr] = []
+
+    @field_validator("cc_emails", "bcc_emails", "reply_to_emails", mode="before")
+    @classmethod
+    def _normalize_email_list(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            value = [value]
+        normalized: list[str] = []
+        for item in value:
+            email = normalize_email(item)
+            if email and email not in normalized:
+                normalized.append(email)
+        return normalized
+
+    @field_validator("channel", "subject", mode="before")
+    @classmethod
+    def _normalize_plain_string(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+
 def _is_missing_assignment_audit_column_error(error: Exception | str) -> bool:
     text = str(error or "").lower()
     return (
@@ -360,6 +390,60 @@ def _build_assignment_preview_email_audit_context(
         "event_type": "preview",
         "idempotency_key": idempotency_key,
     }
+
+
+def _apply_assignment_email_side_effects(
+    *,
+    effective_assignment_id: str,
+    assignment: dict[str, Any],
+    effective_assignment: dict[str, Any],
+    manuscript: dict[str, Any],
+    manuscript_id: str,
+    event_type: str,
+    send_is_preview: bool,
+    delivery_status: str,
+    current_user_id: str,
+    now_iso: str,
+    assignment_is_declined: bool,
+    invited_via: str,
+) -> None:
+    patch: dict[str, Any] = {}
+    assignment_status = str(assignment.get("status") or "").strip().lower()
+    if not send_is_preview and event_type == "invitation" and delivery_status == EmailStatus.SENT.value:
+        if not assignment_is_declined:
+            patch["invited_at"] = now_iso
+            if assignment_status in {"selected", "pending", "invited", "opened"}:
+                patch["status"] = "invited"
+            if current_user_id and not str(assignment.get("invited_by") or "").strip():
+                patch["invited_by"] = current_user_id
+            patch["invited_via"] = invited_via
+        else:
+            patch["invited_at"] = now_iso
+            patch["status"] = "invited"
+            if current_user_id:
+                patch["invited_by"] = current_user_id
+            patch["invited_via"] = invited_via
+    elif not send_is_preview and event_type == "reminder" and delivery_status == EmailStatus.SENT.value:
+        patch["last_reminded_at"] = now_iso
+
+    if patch:
+        try:
+            supabase_admin.table("review_assignments").update(patch).eq("id", effective_assignment_id).execute()
+        except Exception as exc:
+            if not _is_missing_assignment_audit_column_error(exc):
+                raise
+            fallback_patch = {key: value for key, value in patch.items() if key not in {"invited_by", "invited_via"}}
+            if fallback_patch:
+                supabase_admin.table("review_assignments").update(fallback_patch).eq("id", effective_assignment_id).execute()
+
+    manuscript_status = str(manuscript.get("status") or "").strip().lower()
+    if (
+        not send_is_preview
+        and event_type == "invitation"
+        and delivery_status == EmailStatus.SENT.value
+        and manuscript_status in {"pre_check", "resubmitted"}
+    ):
+        supabase_admin.table("manuscripts").update({"status": "under_review"}).eq("id", manuscript_id).execute()
 
 
 def _resolve_assignment_email_frontend_base_url() -> str:
@@ -1369,43 +1453,20 @@ async def send_assignment_email(
     delivery_subject = str(delivery.get("subject") or subject_preview or "(no subject)").strip() or "(no subject)"
 
     try:
-        patch: dict[str, Any] = {}
-        if not send_is_preview and event_type == "invitation" and delivery_status == EmailStatus.SENT.value:
-            if not assignment_is_declined:
-                patch["invited_at"] = now_iso
-                if assignment_status in {"selected", "pending", "invited", "opened"}:
-                    patch["status"] = "invited"
-                if current_user_id and not str(assignment.get("invited_by") or "").strip():
-                    patch["invited_by"] = current_user_id
-                if not str(assignment.get("invited_via") or "").strip():
-                    patch["invited_via"] = "template_invitation"
-            else:
-                patch["invited_at"] = now_iso
-                patch["status"] = "invited"
-                if current_user_id:
-                    patch["invited_by"] = current_user_id
-                patch["invited_via"] = "template_invitation"
-        elif not send_is_preview and event_type == "reminder" and delivery_status == EmailStatus.SENT.value:
-            patch["last_reminded_at"] = now_iso
-        if patch:
-            try:
-                supabase_admin.table("review_assignments").update(patch).eq("id", effective_assignment_id).execute()
-            except Exception as exc:
-                if not _is_missing_assignment_audit_column_error(exc):
-                    raise
-                fallback_patch = {key: value for key, value in patch.items() if key not in {"invited_by", "invited_via"}}
-                if fallback_patch:
-                    supabase_admin.table("review_assignments").update(fallback_patch).eq("id", effective_assignment_id).execute()
-
-        manuscript_status = str(manuscript.get("status") or "").strip().lower()
-        if (
-            not send_is_preview
-            and
-            event_type == "invitation"
-            and delivery_status == EmailStatus.SENT.value
-            and manuscript_status in {"pre_check", "resubmitted"}
-        ):
-            supabase_admin.table("manuscripts").update({"status": "under_review"}).eq("id", manuscript_id).execute()
+        _apply_assignment_email_side_effects(
+            effective_assignment_id=effective_assignment_id,
+            assignment=assignment,
+            effective_assignment=effective_assignment,
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            event_type=event_type,
+            send_is_preview=send_is_preview,
+            delivery_status=delivery_status,
+            current_user_id=current_user_id,
+            now_iso=now_iso,
+            assignment_is_declined=assignment_is_declined,
+            invited_via="template_invitation",
+        )
     except Exception:
         # 回填失败不影响主流程（真实发送结果已返回给前端）。
         pass
@@ -1426,6 +1487,116 @@ async def send_assignment_email(
             "delivery_status": delivery_status,
             "delivery_error": delivery_error,
             "delivery_subject": delivery_subject,
+            "processed_at": now_iso,
+        },
+    }
+
+
+@router.post("/reviews/assignments/{assignment_id}/mark-external-sent")
+async def mark_assignment_email_external_sent(
+    assignment_id: UUID,
+    payload: AssignmentExternalEmailPayload | None = Body(default=None),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "assistant_editor", "admin"])),
+):
+    """
+    记录 reviewer 邮件已通过外部邮箱发送。
+
+    中文注释:
+    - 不走平台内投递，但保留业务审计。
+    - 若发送目标就是 reviewer 本人，则仍推进 assignment/manuscript 状态。
+    """
+    body = payload or AssignmentExternalEmailPayload()
+    prepared = _prepare_assignment_email_resources(
+        assignment_id=assignment_id,
+        payload=body,
+        current_user=current_user,
+        profile=profile,
+    )
+
+    assignment = prepared["assignment"]
+    manuscript = prepared["manuscript"]
+    template_key = prepared["template_key"]
+    event_type = prepared["event_type"]
+    reviewer_email = prepared["reviewer_email"]
+    recipient_email = prepared["recipient_email"]
+    recipient_overridden = prepared["recipient_overridden"]
+    manuscript_id = prepared["manuscript_id"]
+    assignment_is_declined = prepared["assignment_is_declined"]
+    current_user_id = str(current_user.get("id") or "").strip()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    effective_assignment = assignment
+    if assignment_is_declined and event_type == "invitation" and not recipient_overridden:
+        effective_assignment = _insert_reinvite_assignment_attempt(
+            assignment=assignment,
+            current_user_id=current_user_id,
+        )
+    effective_assignment_id = str(effective_assignment.get("id") or assignment_id).strip()
+    if not effective_assignment_id:
+        raise HTTPException(status_code=500, detail="Failed to resolve assignment id for reviewer email")
+
+    send_is_preview = recipient_overridden
+    subject_value = str(body.subject or body.subject_override or "").strip() or "External reviewer email"
+    channel_value = str(body.channel or "other").strip() or "other"
+    idempotency_key = str(body.idempotency_key or "").strip() or (
+        f"reviewer-external-email/{effective_assignment_id}/{event_type}/{now_dt.strftime('%Y%m%d%H%M%S%f')}"
+    )
+    audit_context = _build_assignment_email_audit_context(
+        assignment_id=effective_assignment_id,
+        manuscript_id=manuscript_id,
+        event_type=event_type,
+        idempotency_key=idempotency_key,
+        actor_user_id=current_user_id,
+    )
+    audit_context["delivery_mode"] = "manual"
+    audit_context["communication_status"] = "external_sent"
+
+    email_service.log_attempt(
+        recipient=recipient_email,
+        subject=subject_value,
+        template_name=template_key,
+        status=EmailStatus.SENT,
+        provider=channel_value,
+        to_recipients=[recipient_email],
+        cc_recipients=list(body.cc_emails or []),
+        bcc_recipients=list(body.bcc_emails or []),
+        reply_to_recipients=list(body.reply_to_emails or []),
+        audit_context=audit_context,
+    )
+
+    try:
+        _apply_assignment_email_side_effects(
+            effective_assignment_id=effective_assignment_id,
+            assignment=assignment,
+            effective_assignment=effective_assignment,
+            manuscript=manuscript,
+            manuscript_id=manuscript_id,
+            event_type=event_type,
+            send_is_preview=send_is_preview,
+            delivery_status=EmailStatus.SENT.value,
+            current_user_id=current_user_id,
+            now_iso=now_iso,
+            assignment_is_declined=assignment_is_declined,
+            invited_via="external_email",
+        )
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "data": {
+            "assignment_id": effective_assignment_id,
+            "event_type": event_type,
+            "recipient": recipient_email,
+            "reviewer_email": reviewer_email,
+            "recipient_overridden": send_is_preview,
+            "preview_send": send_is_preview,
+            "idempotency_key": idempotency_key,
+            "communication_status": "external_sent",
+            "delivery_status": EmailStatus.SENT.value,
+            "provider": channel_value,
             "processed_at": now_iso,
         },
     }

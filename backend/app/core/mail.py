@@ -933,7 +933,13 @@ class EmailService:
         status: EmailStatus,
         *,
         provider_id: Optional[str] = None,
+        provider: Optional[str] = None,
         error_message: Optional[str] = None,
+        to_recipients: Sequence[str] | None = None,
+        cc_recipients: Sequence[str] | None = None,
+        bcc_recipients: Sequence[str] | None = None,
+        reply_to_recipients: Sequence[str] | None = None,
+        attachment_manifest: Sequence[Mapping[str, Any]] | None = None,
         audit_context: Mapping[str, Any] | None = None,
     ) -> None:
         self._log_attempt(
@@ -942,7 +948,13 @@ class EmailService:
             template_name,
             status,
             provider_id=provider_id,
+            provider=provider,
             error_message=error_message,
+            to_recipients=to_recipients,
+            cc_recipients=cc_recipients,
+            bcc_recipients=bcc_recipients,
+            reply_to_recipients=reply_to_recipients,
+            attachment_manifest=attachment_manifest,
             audit_context=audit_context,
         )
 

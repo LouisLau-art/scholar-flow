@@ -737,6 +737,102 @@ async def test_send_assignment_email_with_recipient_override_does_not_advance_as
 
 
 @pytest.mark.asyncio
+async def test_mark_assignment_email_external_sent_advances_assignment_and_logs_external_delivery(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://scholar-flow-q1yw.vercel.app")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccac")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaacf")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbad")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": None,
+                    "last_reminded_at": None,
+                    "invited_by": None,
+                    "invited_via": None,
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "External Email Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    log_mock = MagicMock()
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.log_attempt", log_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/mark-external-sent",
+            json={
+                "template_key": "reviewer_invitation_standard",
+                "recipient_email": "reviewer@example.com",
+                "channel": "gmail_web",
+                "subject": "Invitation sent manually",
+            },
+            headers=headers,
+        )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["communication_status"] == "external_sent"
+    assert payload["data"]["recipient"] == "reviewer@example.com"
+    assert payload["data"]["preview_send"] is False
+    log_kwargs = log_mock.call_args.kwargs
+    assert log_kwargs["provider"] == "gmail_web"
+    assert log_kwargs["to_recipients"] == ["reviewer@example.com"]
+    assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
+    assignment_patch = supabase_admin._update_calls["review_assignments"][0]
+    manuscript_patch = supabase_admin._update_calls["manuscripts"][0]
+    assert assignment_patch["status"] == "invited"
+    assert assignment_patch["invited_via"] == "external_email"
+    assert manuscript_patch["status"] == "under_review"
+
+
+@pytest.mark.asyncio
 async def test_preview_assignment_email_accepts_compose_overrides(
     client: AsyncClient,
     auth_token: str,
