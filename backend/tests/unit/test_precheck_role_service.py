@@ -321,6 +321,70 @@ def test_assign_ae_raises_409_when_state_changed_concurrently():
     assert ei.value.status_code == 409
 
 
+def test_get_intake_queue_excludes_waiting_author_placeholders():
+    svc = _new_service()
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "manuscripts",
+                "data": [
+                    {
+                        "id": "active-1",
+                        "title": "Active Intake Manuscript",
+                        "status": ManuscriptStatus.PRE_CHECK.value,
+                        "pre_check_status": PreCheckStatus.INTAKE.value,
+                        "assistant_editor_id": None,
+                        "owner_id": None,
+                        "author_id": None,
+                        "created_at": "2026-03-12T08:00:00Z",
+                        "updated_at": "2026-03-12T09:00:00Z",
+                    }
+                ],
+            },
+            {
+                "table": "manuscripts",
+                "data": [
+                    {
+                        "id": "wait-1",
+                        "title": "Waiting Author Manuscript",
+                        "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                        "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                        "assistant_editor_id": "ae-1",
+                        "owner_id": None,
+                        "author_id": None,
+                        "created_at": "2026-03-11T08:00:00Z",
+                        "updated_at": "2026-03-12T10:00:00Z",
+                    }
+                ],
+            },
+            {
+                "table": "user_profiles",
+                "data": [],
+            },
+        ]
+    )
+    svc._load_latest_precheck_intake_revision_logs = Mock(  # type: ignore[attr-defined]
+        return_value={
+            "wait-1": {
+                "created_at": "2026-03-12T10:00:00Z",
+                "comment": "Need technical fixes before review",
+            }
+        }
+    )
+    svc._apply_process_visibility_scope = Mock(side_effect=lambda *, rows, **_kwargs: rows)  # type: ignore[attr-defined]
+
+    out = svc.get_intake_queue(
+        viewer_user_id="admin-user",
+        viewer_roles=["admin"],
+        page=1,
+        page_size=20,
+    )
+
+    assert [row["id"] for row in out] == ["active-1"]
+    assert out[0]["intake_actionable"] is True
+    assert out[0]["waiting_resubmit"] is False
+
+
 def test_submit_technical_check_revision_requires_comment():
     svc = _new_service()
     with pytest.raises(HTTPException) as ei:

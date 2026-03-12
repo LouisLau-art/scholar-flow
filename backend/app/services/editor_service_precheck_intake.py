@@ -22,8 +22,8 @@ class EditorServicePrecheckIntakeMixin:
     ) -> list[dict[str, Any]]:
         """
         ME Intake Queue:
-        - Active: status=pre_check & pre_check_status=intake
-        - Passive placeholder: status=revision_before_review（兼容旧 minor_revision）且来源于 precheck_intake_revision（等待作者 resubmit）
+        - Active only: status=pre_check & pre_check_status=intake
+        - 等待作者修回的稿件不再作为灰态占位混入 intake，改由 ME workspace 跟进。
         """
         selects = [
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id,journals(title,slug)",
@@ -61,39 +61,6 @@ class EditorServicePrecheckIntakeMixin:
             if "schema cache" in lowered or "could not find" in lowered:
                 raise active_last_error
 
-        waiting_rows_candidates: list[dict[str, Any]] = []
-        waiting_last_error: Exception | None = None
-        for select_clause in selects:
-            try:
-                query = (
-                    self.client.table("manuscripts")
-                    .select(select_clause)
-                    .in_(
-                        "status",
-                        [
-                            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
-                            ManuscriptStatus.MINOR_REVISION.value,
-                        ],
-                    )
-                    .order("updated_at", desc=True)
-                    .order("created_at", desc=True)
-                    .range(0, fetch_end)
-                )
-                resp = query.execute()
-                waiting_rows_candidates = getattr(resp, "data", None) or []
-                break
-            except Exception as e:
-                waiting_last_error = e
-                lowered = str(e).lower()
-                if "journals" in lowered or "schema cache" in lowered or "pgrst" in lowered:
-                    continue
-                raise
-        if not waiting_rows_candidates and waiting_last_error:
-            lowered = str(waiting_last_error).lower()
-            if "schema cache" in lowered or "could not find" in lowered:
-                # 中文注释: “灰态占位”不可用时降级为仅返回 active intake，不阻断主流程。
-                waiting_rows_candidates = []
-
         # Intake 列表不需要加载完整 pre-check 时间线，避免每次刷新多打一条审计日志聚合查询。
         active_out = [self._map_precheck_row(r) for r in active_rows]
         for row in active_out:
@@ -102,29 +69,7 @@ class EditorServicePrecheckIntakeMixin:
             row["waiting_resubmit_at"] = None
             row["waiting_resubmit_reason"] = None
 
-        waiting_ids = [
-            str(row.get("id") or "").strip()
-            for row in waiting_rows_candidates
-            if str(row.get("id") or "").strip()
-        ]
-        waiting_reason_map = self._load_latest_precheck_intake_revision_logs(waiting_ids)
-        waiting_out: list[dict[str, Any]] = []
-        for row in waiting_rows_candidates:
-            mid = str(row.get("id") or "").strip()
-            reason_meta = waiting_reason_map.get(mid)
-            if not mid or not reason_meta:
-                continue
-            out_row = dict(row)
-            out_row["pre_check_status"] = "awaiting_resubmit"
-            out_row["current_role"] = "author"
-            out_row["current_assignee"] = None
-            out_row["intake_actionable"] = False
-            out_row["waiting_resubmit"] = True
-            out_row["waiting_resubmit_at"] = reason_meta.get("created_at")
-            out_row["waiting_resubmit_reason"] = reason_meta.get("comment")
-            waiting_out.append(out_row)
-
-        out = [*active_out, *waiting_out]
+        out = [*active_out]
 
         # 补齐 owner/author 展示字段（full_name/email/affiliation），用于 Intake 决策信息补全。
         profile_ids = sorted(
@@ -216,7 +161,6 @@ class EditorServicePrecheckIntakeMixin:
                 or keyword in str(((row.get("owner") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("author") or {}).get("full_name") or "")).lower()
                 or keyword in str(((row.get("journal") or {}).get("title") or "")).lower()
-                or keyword in str(row.get("waiting_resubmit_reason") or "").lower()
             ]
 
         if overdue_only:
