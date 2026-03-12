@@ -9,11 +9,16 @@ from app.services.editor_service import EditorService
 class _QueryStub:
     def __init__(self, data):
         self._data = data
+        self._in_filters: list[tuple[str, set[str]]] = []
 
     def select(self, *_args, **_kwargs):
         return self
 
     def in_(self, *_args, **_kwargs):
+        if len(_args) >= 2:
+            key = str(_args[0])
+            values = {str(v) for v in (_args[1] or [])}
+            self._in_filters.append((key, values))
         return self
 
     def eq(self, *_args, **_kwargs):
@@ -26,7 +31,10 @@ class _QueryStub:
         return self
 
     def execute(self, *_args, **_kwargs):
-        return SimpleNamespace(data=self._data)
+        rows = [dict(item) for item in self._data]
+        for key, values in self._in_filters:
+            rows = [row for row in rows if str(row.get(key)) in values]
+        return SimpleNamespace(data=rows)
 
 
 class _ClientStub:
@@ -132,3 +140,53 @@ def test_ae_workspace_enriches_only_precheck_rows():
 
     assert captured_ids == ["pre-1"]
     assert {row["id"] for row in out} == {"pre-1", "review-1"}
+
+
+def test_managing_workspace_includes_waiting_author_precheck_rows():
+    svc = EditorService()
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "manuscripts",
+                "data": [
+                    *_workspace_rows(),
+                    {
+                        "id": "wait-1",
+                        "title": "Waiting Author Manuscript",
+                        "status": "revision_before_review",
+                        "pre_check_status": "technical",
+                        "assistant_editor_id": "ae-2",
+                        "owner_id": "owner-1",
+                        "journal_id": "journal-1",
+                        "created_at": "2026-02-22T00:00:00Z",
+                        "updated_at": "2026-02-24T03:00:00Z",
+                    },
+                ],
+            },
+            {
+                "table": "user_profiles",
+                "data": [
+                    {
+                        "id": "ae-2",
+                        "full_name": "AE Waiting",
+                        "email": "ae-waiting@example.com",
+                    }
+                ],
+            },
+        ]
+    )
+    svc._enrich_precheck_rows = Mock(side_effect=lambda rows, **_kwargs: rows)  # type: ignore[attr-defined]
+
+    out = svc.get_managing_workspace(
+        viewer_user_id="admin-user",
+        viewer_roles=["admin"],
+        page=1,
+        page_size=20,
+    )
+
+    waiting = next((row for row in out if row["id"] == "wait-1"), None)
+    assert waiting is not None
+    assert waiting["status"] == "revision_before_review"
+    assert waiting["pre_check_status"] == "technical"
+    assert waiting["workspace_bucket"] == "awaiting_author"
+    assert waiting["assistant_editor"]["id"] == "ae-2"

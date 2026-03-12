@@ -146,6 +146,8 @@ class EditorServicePrecheckWorkspaceViewMixin:
             if pre_check_status == PreCheckStatus.ACADEMIC.value:
                 return "academic_pending"
             return "precheck_other"
+        if status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
+            return "awaiting_author"
         if status == ManuscriptStatus.UNDER_REVIEW.value:
             return "under_review"
         if status in {
@@ -181,6 +183,7 @@ class EditorServicePrecheckWorkspaceViewMixin:
         """
         status_scope = [
             ManuscriptStatus.PRE_CHECK.value,
+            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
             ManuscriptStatus.UNDER_REVIEW.value,
             ManuscriptStatus.MINOR_REVISION.value,
             ManuscriptStatus.MAJOR_REVISION.value,
