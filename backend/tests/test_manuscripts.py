@@ -1,10 +1,12 @@
 import asyncio
+import os
+from pathlib import Path
+import re
+import uuid
+from unittest.mock import MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch, MagicMock
-import uuid
-import os
-import re
 from jose import jwt
 
 # === 稿件业务核心测试 (真实行为模拟版) ===
@@ -84,6 +86,19 @@ def required_zip_submission_files(user_id: str):
         "cover_letter_filename": "cover-letter.pdf",
         "cover_letter_content_type": "application/pdf",
     }
+
+
+def test_manuscript_files_migration_allows_source_archive_file_type():
+    """验证云端 migration 已显式放行 ZIP 源文件 taxonomy。"""
+    migrations_dir = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
+    matching_migrations = []
+
+    for migration_path in sorted(migrations_dir.glob("*.sql")):
+        sql = migration_path.read_text(encoding="utf-8")
+        if "manuscript_files_file_type_check" in sql and "source_archive" in sql:
+            matching_migrations.append(migration_path.name)
+
+    assert matching_migrations, "缺少允许 source_archive 的 manuscript_files 约束迁移"
 
 @pytest.mark.asyncio
 async def test_get_manuscripts_empty(client: AsyncClient, auth_token: str):
