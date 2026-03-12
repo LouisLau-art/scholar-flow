@@ -143,6 +143,8 @@ function buildCacheKey(q: string): string {
   return `q=${encodeURIComponent(String(q || '').trim().toLowerCase())}`
 }
 
+import { authService } from '@/services/auth'
+
 interface ManagingWorkspacePanelProps {
   initialBucket?: string
 }
@@ -154,6 +156,9 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
   const [searchInput, setSearchInput] = useState('')
   const [query, setQuery] = useState('')
   const [activeBucket, setActiveBucket] = useState<string>(initialBucket || 'all')
+  
+  const [authReady, setAuthReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
@@ -178,6 +183,8 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
 
   const fetchWorkspace = useCallback(
     async (options?: { preferCache?: boolean; silent?: boolean; forceRefresh?: boolean; queryOverride?: string }) => {
+      if (!authReady) return
+      
       const effectiveQuery = String(options?.queryOverride ?? query).trim()
       const cacheKey = buildCacheKey(effectiveQuery)
       const cacheItem = workspaceRowsCache.get(cacheKey)
@@ -192,6 +199,7 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
       const blockUi = !options?.silent && !hasRows
       if (blockUi) setLoading(true)
       else setIsRefreshing(true)
+      setError(null)
 
       const currentRequestId = ++requestIdRef.current
       abortRef.current?.abort()
@@ -211,6 +219,7 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
       } catch (err) {
         if (controller.signal.aborted || currentRequestId !== requestIdRef.current) return
         console.error(err)
+        setError(err instanceof Error ? err.message : '加载失败')
       } finally {
         if (currentRequestId === requestIdRef.current) {
           setLoading(false)
@@ -218,7 +227,7 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
         }
       }
     },
-    [query]
+    [query, authReady]
   )
 
   const handleSubmitReturn = async (id: string, comment: string) => {
@@ -227,8 +236,22 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
   }
 
   useEffect(() => {
-    void fetchWorkspace({ preferCache: true })
-  }, [fetchWorkspace])
+    let mounted = true
+    authService.getSession().then(() => {
+      if (mounted) setAuthReady(true)
+    }).catch(() => {
+      if (mounted) setAuthReady(true)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (authReady) {
+      void fetchWorkspace({ preferCache: true })
+    }
+  }, [fetchWorkspace, authReady])
 
   useEffect(() => {
     return () => {
@@ -339,15 +362,35 @@ export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanel
         </div>
       </form>
 
-      {isRefreshing && !loading ? (
+      {isRefreshing && !loading && !error ? (
         <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Syncing latest workspace data…
         </div>
       ) : null}
 
-      {loading ? (
+      {error && manuscripts.length > 0 ? (
+        <div className="flex items-center justify-end gap-2 text-xs text-red-600">
+          数据同步失败，请重试
+        </div>
+      ) : null}
+
+      {!authReady ? (
+        <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">正在验证登录态...</div>
+      ) : loading ? (
         <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">Loading…</div>
+      ) : error && manuscripts.length === 0 ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center shadow-sm">
+          <h3 className="text-sm font-medium text-red-800">加载失败</h3>
+          <p className="mt-1 text-sm text-red-600">{error}</p>
+          <Button
+            variant="outline"
+            className="mt-4 border-red-200 text-red-700 hover:bg-red-100 hover:text-red-800"
+            onClick={() => void fetchWorkspace({ forceRefresh: true })}
+          >
+            重试
+          </Button>
+        </div>
       ) : visibleSections.length === 0 ? (
         <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
           No manuscripts in current scope.
