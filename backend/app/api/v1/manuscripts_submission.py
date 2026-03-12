@@ -14,6 +14,7 @@ from app.api.v1.editor_common import resolve_author_notification_target
 from app.core.auth_utils import get_current_user
 from app.core.email_normalization import normalize_email
 from app.core.mail import EmailService
+from app.models.manuscript import ManuscriptStatus
 from app.models.revision import RevisionSubmitResponse
 from app.models.schemas import ManuscriptCreate
 from app.services.notification_service import NotificationService
