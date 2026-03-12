@@ -41,8 +41,10 @@
 当前页面顺序也是：
 
 1. Cover Letter
-2. Word
-3. LaTeX ZIP
+2. Manuscript Source 选择器
+3. 根据选择显示：
+   - Word manuscript
+   - 或 LaTeX ZIP
 4. PDF
 
 当前约束：
@@ -50,6 +52,9 @@
 - `PDF manuscript` 必传
 - `Cover letter` 必传
 - `Word manuscript` 与 `LaTeX source ZIP` 互斥二选一
+- UI 先要求作者选择 `Manuscript Source`
+- 未选择 source type 前，不显示 Word/ZIP 上传卡片
+- 若已上传一种 source，再切换到另一种时，会先弹确认并清空当前 source 文件
 - 当前只支持 `.zip`
 - ZIP 仅存储给编辑部使用，不参与 AI / 大模型元数据解析
 

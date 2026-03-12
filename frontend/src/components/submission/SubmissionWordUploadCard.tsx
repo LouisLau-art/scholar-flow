@@ -2,22 +2,35 @@ import { Loader2 } from 'lucide-react'
 
 import { InlineNotice } from '@/components/ui/inline-notice'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 type SubmissionWordUploadCardProps = {
   isUploadingWordFile: boolean
   wordFilePath: string | null
   wordFileName: string | null
   wordFileUploadError: string | null
+  inputResetKey: number
   onWordFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onClearWordFile?: () => void
 }
 
 export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
+  const canClear = Boolean(props.wordFilePath || props.wordFileName)
+
   return (
     <div className="rounded-lg border border-border/80 bg-card p-5">
-      <label htmlFor="submission-word-file" className="mb-2 block text-sm font-semibold text-foreground">
-        Word Manuscript (.doc/.docx) (Optional)
-      </label>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor="submission-word-file" className="block text-sm font-semibold text-foreground">
+          Word Manuscript (.doc/.docx)
+        </label>
+        {canClear && props.onClearWordFile ? (
+          <Button type="button" variant="ghost" size="sm" onClick={props.onClearWordFile}>
+            Remove Word Manuscript
+          </Button>
+        ) : null}
+      </div>
       <Input
+        key={props.inputResetKey}
         id="submission-word-file"
         type="file"
         accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -29,9 +42,6 @@ export function SubmissionWordUploadCard(props: SubmissionWordUploadCardProps) {
       <div className="mt-2 text-xs text-foreground/75">Accepted formats: `.doc`, `.docx`.</div>
       <div className="mt-1 text-xs text-foreground/65">
         Word metadata is parsed first and becomes the primary source for title and abstract autofill.
-      </div>
-      <div className="mt-1 text-xs text-foreground/65">
-        Uploading a Word manuscript will replace any previously uploaded LaTeX source ZIP.
       </div>
       {props.isUploadingWordFile ? (
         <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">

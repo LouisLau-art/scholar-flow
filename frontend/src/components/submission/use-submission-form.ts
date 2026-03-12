@@ -65,6 +65,11 @@ export function useSubmissionForm() {
   const [sourceCodeUrl, setSourceCodeUrl] = useState('')
   const [policyConsent, setPolicyConsent] = useState(false)
   const [ethicsConsent, setEthicsConsent] = useState(false)
+  const [wordInputResetKey, setWordInputResetKey] = useState(0)
+  const [sourceArchiveInputResetKey, setSourceArchiveInputResetKey] = useState(0)
+  const [selectedSourceType, setSelectedSourceType] = useState<'word' | 'zip' | null>(null)
+  const [pendingSourceType, setPendingSourceType] = useState<'word' | 'zip' | null>(null)
+  const [isSourceTypeSwitchDialogOpen, setIsSourceTypeSwitchDialogOpen] = useState(false)
 
   const titleValid = metadata.title.trim().length >= 5
   const abstractValid = metadata.abstract.trim().length >= 30
@@ -74,7 +79,14 @@ export function useSubmissionForm() {
   const fileValid = !!uploadedPath
   const wordFileValid = !!wordFilePath
   const sourceArchiveValid = !!sourceArchivePath
-  const manuscriptSourceValid = wordFileValid !== sourceArchiveValid
+  const hasExclusiveSourceUpload = wordFileValid !== sourceArchiveValid
+  const selectedSourceUploadValid =
+    selectedSourceType === 'word'
+      ? wordFileValid
+      : selectedSourceType === 'zip'
+        ? sourceArchiveValid
+        : false
+  const manuscriptSourceValid = hasExclusiveSourceUpload && selectedSourceUploadValid
   const coverLetterValid = !!coverLetterPath
   const datasetValue = datasetUrl.trim()
   const sourceCodeValue = sourceCodeUrl.trim()
@@ -211,17 +223,60 @@ export function useSubmissionForm() {
     return ''
   }
 
-  const clearWordRoute = () => {
+  const clearWordRoute = (options?: { resetInput?: boolean }) => {
     setWordFile(null)
     setWordFilePath(null)
     setWordFileUploadError(null)
     setHasDocxAutoMetadata(false)
+    if (options?.resetInput) {
+      setWordInputResetKey((value) => value + 1)
+    }
   }
 
-  const clearSourceArchiveRoute = () => {
+  const clearSourceArchiveRoute = (options?: { resetInput?: boolean }) => {
     setSourceArchiveFile(null)
     setSourceArchivePath(null)
     setSourceArchiveUploadError(null)
+    if (options?.resetInput) {
+      setSourceArchiveInputResetKey((value) => value + 1)
+    }
+  }
+
+  const requestSourceTypeChange = (nextType: 'word' | 'zip') => {
+    if (selectedSourceType === nextType) {
+      return
+    }
+
+    const hasCurrentSourceFile =
+      (selectedSourceType === 'word' && (wordFile !== null || wordFilePath !== null)) ||
+      (selectedSourceType === 'zip' && (sourceArchiveFile !== null || sourceArchivePath !== null))
+
+    if (hasCurrentSourceFile) {
+      setPendingSourceType(nextType)
+      setIsSourceTypeSwitchDialogOpen(true)
+      return
+    }
+
+    setPendingSourceType(null)
+    setIsSourceTypeSwitchDialogOpen(false)
+    setSelectedSourceType(nextType)
+  }
+
+  const cancelSourceTypeChange = () => {
+    setPendingSourceType(null)
+    setIsSourceTypeSwitchDialogOpen(false)
+  }
+
+  const confirmSourceTypeChange = () => {
+    if (selectedSourceType === 'word') {
+      clearWordRoute({ resetInput: true })
+    } else if (selectedSourceType === 'zip') {
+      clearSourceArchiveRoute({ resetInput: true })
+    }
+
+    setSelectedSourceType(pendingSourceType)
+    setPendingSourceType(null)
+    setIsSourceTypeSwitchDialogOpen(false)
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,7 +385,13 @@ export function useSubmissionForm() {
   const handleWordFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) {
-      clearWordRoute()
+      clearWordRoute({ resetInput: true })
+      return
+    }
+
+    if (selectedSourceType !== 'word') {
+      event.currentTarget.value = ''
+      toast.error('Choose Word manuscript as the source type before uploading the file.')
       return
     }
 
@@ -348,7 +409,6 @@ export function useSubmissionForm() {
       return
     }
 
-    clearSourceArchiveRoute()
     setWordFile(selectedFile)
     setWordFilePath(null)
     setWordFileUploadError(null)
@@ -411,12 +471,18 @@ export function useSubmissionForm() {
   const handleSourceArchiveUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) {
-      clearSourceArchiveRoute()
+      clearSourceArchiveRoute({ resetInput: true })
+      return
+    }
+
+    if (selectedSourceType !== 'zip') {
+      event.currentTarget.value = ''
+      toast.error('Choose LaTeX source ZIP as the source type before uploading the file.')
       return
     }
 
     if (!isSupportedSourceArchive(selectedFile)) {
-      clearSourceArchiveRoute()
+      clearSourceArchiveRoute({ resetInput: true })
       event.currentTarget.value = ''
       toast.error('LaTeX source archive only supports .zip files.')
       return
@@ -427,7 +493,6 @@ export function useSubmissionForm() {
       return
     }
 
-    clearWordRoute()
     setSourceArchiveFile(selectedFile)
     setSourceArchivePath(null)
     setSourceArchiveUploadError(null)
@@ -538,16 +603,24 @@ export function useSubmissionForm() {
       toast.error('File upload is incomplete. Please try again.')
       return
     }
-    if (wordFile && !wordFilePath) {
+    if (!selectedSourceType) {
+      toast.error('Please choose one manuscript source before submitting.')
+      return
+    }
+    if (selectedSourceType === 'word' && wordFile && !wordFilePath) {
       toast.error('Word manuscript upload is incomplete. Please try again.')
       return
     }
-    if (sourceArchiveFile && !sourceArchivePath) {
+    if (selectedSourceType === 'zip' && sourceArchiveFile && !sourceArchivePath) {
       toast.error('LaTeX source ZIP upload is incomplete. Please try again.')
       return
     }
-    if (!wordFilePath && !sourceArchivePath) {
-      toast.error('Please upload either a Word manuscript or a LaTeX source ZIP before submitting.')
+    if (selectedSourceType === 'word' && !wordFilePath) {
+      toast.error('Please upload the Word manuscript before submitting.')
+      return
+    }
+    if (selectedSourceType === 'zip' && !sourceArchivePath) {
+      toast.error('Please upload the LaTeX source ZIP before submitting.')
       return
     }
     if (wordFilePath && sourceArchivePath) {
@@ -746,6 +819,16 @@ export function useSubmissionForm() {
     handleSourceArchiveUpload,
     handleCoverLetterUpload,
     handleFinalize,
+    selectedSourceType,
+    requestSourceTypeChange,
+    pendingSourceType,
+    isSourceTypeSwitchDialogOpen,
+    confirmSourceTypeChange,
+    cancelSourceTypeChange,
+    clearWordRoute: () => clearWordRoute({ resetInput: true }),
+    clearSourceArchiveRoute: () => clearSourceArchiveRoute({ resetInput: true }),
+    wordInputResetKey,
+    sourceArchiveInputResetKey,
     onJournalChange: (value: string) => {
       setJournalId(value)
       markTouched('journal')

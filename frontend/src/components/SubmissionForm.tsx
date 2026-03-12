@@ -9,6 +9,8 @@ import {
   SubmissionFinalizePanel,
   SubmissionMetadataForm,
   SubmissionSourceArchiveUploadCard,
+  SubmissionSourceTypeSelector,
+  SubmissionSourceTypeSwitchDialog,
   SubmissionWordUploadCard,
   useSubmissionForm,
 } from '@/components/submission'
@@ -78,21 +80,34 @@ export default function SubmissionForm() {
         onCoverLetterChange={form.handleCoverLetterUpload}
       />
 
-      <SubmissionWordUploadCard
-        isUploadingWordFile={form.isUploadingWordFile}
-        wordFilePath={form.wordFilePath}
-        wordFileName={form.wordFileName}
-        wordFileUploadError={form.wordFileUploadError}
-        onWordFileChange={form.handleWordFileUpload}
+      <SubmissionSourceTypeSelector
+        selectedSourceType={form.selectedSourceType}
+        onSourceTypeChange={form.requestSourceTypeChange}
       />
 
-      <SubmissionSourceArchiveUploadCard
-        isUploadingSourceArchive={form.isUploadingSourceArchive}
-        sourceArchivePath={form.sourceArchivePath}
-        sourceArchiveFileName={form.sourceArchiveFileName}
-        sourceArchiveUploadError={form.sourceArchiveUploadError}
-        onSourceArchiveChange={form.handleSourceArchiveUpload}
-      />
+      {form.selectedSourceType === 'word' ? (
+        <SubmissionWordUploadCard
+          isUploadingWordFile={form.isUploadingWordFile}
+          wordFilePath={form.wordFilePath}
+          wordFileName={form.wordFileName}
+          wordFileUploadError={form.wordFileUploadError}
+          inputResetKey={form.wordInputResetKey}
+          onWordFileChange={form.handleWordFileUpload}
+          onClearWordFile={form.clearWordRoute}
+        />
+      ) : null}
+
+      {form.selectedSourceType === 'zip' ? (
+        <SubmissionSourceArchiveUploadCard
+          isUploadingSourceArchive={form.isUploadingSourceArchive}
+          sourceArchivePath={form.sourceArchivePath}
+          sourceArchiveFileName={form.sourceArchiveFileName}
+          sourceArchiveUploadError={form.sourceArchiveUploadError}
+          inputResetKey={form.sourceArchiveInputResetKey}
+          onSourceArchiveChange={form.handleSourceArchiveUpload}
+          onClearSourceArchive={form.clearSourceArchiveRoute}
+        />
+      ) : null}
 
       <SubmissionFileUploadCard
         fileName={form.fileName}
@@ -108,6 +123,13 @@ export default function SubmissionForm() {
         submitDisabled={form.submitDisabled}
         showValidationHint={form.showValidationHint}
         onFinalize={form.handleFinalize}
+      />
+
+      <SubmissionSourceTypeSwitchDialog
+        open={form.isSourceTypeSwitchDialogOpen}
+        pendingSourceType={form.pendingSourceType}
+        onConfirm={form.confirmSourceTypeChange}
+        onCancel={form.cancelSourceTypeChange}
       />
     </div>
   )

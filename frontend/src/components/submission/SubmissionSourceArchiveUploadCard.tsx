@@ -2,22 +2,35 @@ import { Loader2 } from 'lucide-react'
 
 import { InlineNotice } from '@/components/ui/inline-notice'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 type SubmissionSourceArchiveUploadCardProps = {
   isUploadingSourceArchive: boolean
   sourceArchivePath: string | null
   sourceArchiveFileName: string | null
   sourceArchiveUploadError: string | null
+  inputResetKey: number
   onSourceArchiveChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onClearSourceArchive?: () => void
 }
 
 export function SubmissionSourceArchiveUploadCard(props: SubmissionSourceArchiveUploadCardProps) {
+  const canClear = Boolean(props.sourceArchivePath || props.sourceArchiveFileName)
+
   return (
     <div className="rounded-lg border border-border/80 bg-card p-5">
-      <label htmlFor="submission-source-archive-file" className="mb-2 block text-sm font-semibold text-foreground">
-        LaTeX Source ZIP (.zip) (Optional)
-      </label>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor="submission-source-archive-file" className="block text-sm font-semibold text-foreground">
+          LaTeX Source ZIP (.zip)
+        </label>
+        {canClear && props.onClearSourceArchive ? (
+          <Button type="button" variant="ghost" size="sm" onClick={props.onClearSourceArchive}>
+            Remove LaTeX ZIP
+          </Button>
+        ) : null}
+      </div>
       <Input
+        key={props.inputResetKey}
         id="submission-source-archive-file"
         type="file"
         accept=".zip,application/zip,application/x-zip-compressed"
@@ -29,9 +42,6 @@ export function SubmissionSourceArchiveUploadCard(props: SubmissionSourceArchive
       <div className="mt-2 text-xs text-foreground/75">Accepted format: `.zip`.</div>
       <div className="mt-1 text-xs text-foreground/65">
         Use this for LaTeX submissions. ZIP is stored for editorial use only and is not used for metadata parsing.
-      </div>
-      <div className="mt-1 text-xs text-foreground/65">
-        Uploading a ZIP source archive will replace any previously uploaded Word manuscript.
       </div>
       {props.isUploadingSourceArchive ? (
         <div className="mt-2 inline-flex items-center gap-2 text-xs text-primary">

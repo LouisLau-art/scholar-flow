@@ -108,6 +108,14 @@ function fillRequiredAuthorFields() {
   })
 }
 
+function selectWordSourceType() {
+  fireEvent.click(screen.getByTestId('submission-source-type-word'))
+}
+
+function selectZipSourceType() {
+  fireEvent.click(screen.getByTestId('submission-source-type-zip'))
+}
+
 describe('SubmissionForm Component', () => {
   /**
    * 验证投稿表单核心交互
@@ -212,23 +220,22 @@ describe('SubmissionForm Component', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders cover letter before word and pdf upload sections', () => {
+  it('renders cover letter before source selector and keeps source uploads hidden initially', () => {
     render(<SubmissionForm />)
 
     const coverLetterHeading = screen.getByText('Cover Letter (Required)')
-    const wordHeading = screen.getByText('Word Manuscript (.doc/.docx) (Optional)')
-    const sourceArchiveHeading = screen.getByText('LaTeX Source ZIP (.zip) (Optional)')
+    const sourceSelectorHeading = screen.getByText('Manuscript Source (Choose One)')
     const pdfHeading = screen.getByText('Upload Manuscript (PDF) (Required)')
 
     expect(
-      coverLetterHeading.compareDocumentPosition(wordHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+      coverLetterHeading.compareDocumentPosition(sourceSelectorHeading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(
-      wordHeading.compareDocumentPosition(sourceArchiveHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+      sourceSelectorHeading.compareDocumentPosition(pdfHeading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
-    expect(
-      sourceArchiveHeading.compareDocumentPosition(pdfHeading) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
+
+    expect(screen.queryByText('Word Manuscript (.doc/.docx) (Optional)')).not.toBeInTheDocument()
+    expect(screen.queryByText('LaTeX Source ZIP (.zip) (Optional)')).not.toBeInTheDocument()
   })
 
   it('handles file upload success and populates metadata', async () => {
@@ -312,6 +319,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByTestId('submission-user')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     fireEvent.change(wordInput, {
       target: {
@@ -420,6 +428,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByTestId('submission-user')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     fireEvent.change(wordInput, {
       target: {
@@ -436,7 +445,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('bob.li@example.edu')).toBeInTheDocument()
     })
 
-    fireEvent.change(wordInput, {
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
       target: {
         files: [
           new File(['word'], 'paper-v2.docx', {
@@ -521,6 +530,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByTestId('submission-user')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     fireEvent.change(wordInput, {
       target: {
@@ -594,7 +604,7 @@ describe('SubmissionForm Component', () => {
     })
   })
 
-  it('keeps finalize disabled until Word manuscript and cover letter are uploaded', async () => {
+  it('keeps finalize disabled until source type, manuscript source, and cover letter are provided', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
       access_token: 'token',
@@ -636,6 +646,9 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    expect(screen.getByTestId('submission-finalize')).toBeDisabled()
+
+    selectWordSourceType()
     expect(screen.getByTestId('submission-finalize')).toBeDisabled()
 
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
@@ -713,6 +726,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectZipSourceType()
     fireEvent.change(screen.getByTestId('submission-source-archive-file'), {
       target: { files: [new File(['zip'], 'paper-source.zip', { type: 'application/zip' })] },
     })
@@ -760,7 +774,7 @@ describe('SubmissionForm Component', () => {
     expect(fetchMock.mock.calls.filter((call) => call[0] === '/api/v1/manuscripts/upload')).toHaveLength(1)
   })
 
-  it('keeps only one manuscript source when ZIP replaces a Word upload', async () => {
+  it('prompts before switching from Word to ZIP manuscript source', async () => {
     ;(authService.getSession as any).mockResolvedValue({
       user: { id: 'u1', email: 'user@example.com' },
       access_token: 'token',
@@ -804,6 +818,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     fireEvent.change(screen.getByTestId('submission-word-file'), {
       target: {
         files: [
@@ -817,39 +832,99 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
     })
 
-    fireEvent.change(screen.getByTestId('submission-source-archive-file'), {
-      target: { files: [new File(['zip'], 'paper-source.zip', { type: 'application/zip' })] },
-    })
+    selectZipSourceType()
+
     await waitFor(() => {
-      expect(screen.getByText(/LaTeX source ZIP uploaded:/i)).toBeInTheDocument()
+      expect(screen.getByText('Switch manuscript source type?')).toBeInTheDocument()
     })
 
-    fireEvent.change(screen.getByTestId('submission-cover-letter-file'), {
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Switch manuscript source type?')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('submission-source-archive-file')).not.toBeInTheDocument()
+  })
+
+  it('allows switching to ZIP after confirming source change', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Parsed Title',
+                abstract: 'A'.repeat(40),
+                authors: [],
+              },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-file'), {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    selectWordSourceType()
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
       target: {
         files: [
-          new File(['cover'], 'cover-letter.docx', {
+          new File(['word'], 'paper.docx', {
             type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           }),
         ],
       },
     })
     await waitFor(() => {
-      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
     })
 
-    fillRequiredAuthorFields()
-    acceptRequiredDeclarations()
-    fireEvent.click(screen.getByTestId('submission-finalize'))
+    selectZipSourceType()
 
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(
-        (call) => call[0] === '/api/v1/manuscripts'
-      ) as [unknown, RequestInit?] | undefined
-      expect(createCall).toBeTruthy()
-      const requestInit = createCall?.[1] as RequestInit | undefined
-      const body = JSON.parse(String(requestInit?.body || ''))
-      expect(body.manuscript_word_path).toBeNull()
-      expect(body.source_archive_path).toContain('u1/source-archives/')
+      expect(screen.getByText('Switch manuscript source type?')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /switch and remove current file/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Word manuscript uploaded:/i)).not.toBeInTheDocument()
+      expect(screen.getByTestId('submission-source-archive-file')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-source-archive-file'), {
+      target: { files: [new File(['zip'], 'paper-source.zip', { type: 'application/zip' })] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/LaTeX source ZIP uploaded:/i)).toBeInTheDocument()
     })
   })
 
@@ -902,6 +977,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     const wordFile = new File(['docx'], 'paper.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -989,6 +1065,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     const wordFile = new File(['word'], 'paper.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -1093,6 +1170,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     fireEvent.change(wordInput, {
       target: {
@@ -1245,6 +1323,7 @@ describe('SubmissionForm Component', () => {
       expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
     })
 
+    selectWordSourceType()
     const wordInput = screen.getByTestId('submission-word-file') as HTMLInputElement
     const wordFile = new File(['docx'], 'paper.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

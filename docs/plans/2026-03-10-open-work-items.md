@@ -24,6 +24,10 @@
   - `PDF + Cover Letter + (Word xor ZIP)`
   - `LaTeX` 当前只支持 `.zip`
   - ZIP 仅进入 Storage / manuscript_files，不参与 AI 解析
+  - 投稿页交互也已收成：
+    - 先选 `Manuscript Source`
+    - 再只显示单一 `Word` 或 `ZIP` 上传入口
+    - 切换 source type 时要求确认并清空当前 source 文件
 - 作者顺序已支持前端调整（`Move Up / Move Down`）
 - 后端模型、写库逻辑、远端 Supabase migration 已完成
 - 通讯作者现在已放宽为“至少一个，可多个”
