@@ -678,6 +678,9 @@ class EmailService:
         self,
         *,
         to_email: str,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
         template_key: str,
         subject_template: str,
         body_html_template: str,
@@ -697,6 +700,9 @@ class EmailService:
         """
         self.send_inline_email(
             to_email=to_email,
+            cc_emails=cc_emails,
+            bcc_emails=bcc_emails,
+            reply_to_emails=reply_to_emails,
             template_key=template_key,
             subject_template=subject_template,
             body_html_template=body_html_template,
@@ -712,6 +718,9 @@ class EmailService:
         self,
         *,
         to_email: str,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
         template_key: str,
         subject_template: str,
         body_html_template: str,
@@ -767,6 +776,9 @@ class EmailService:
 
         return self.send_rendered_email(
             to_email=to_email,
+            cc_emails=cc_emails,
+            bcc_emails=bcc_emails,
+            reply_to_emails=reply_to_emails,
             template_key=template_key,
             subject=subject,
             html_body=html,

@@ -5,6 +5,7 @@ from typing import Any
 
 from postgrest.exceptions import APIError
 
+from app.core.email_normalization import normalize_email
 from app.core.mail import email_service
 from app.lib.api_client import supabase_admin
 from app.models.email_log import EmailStatus
@@ -95,23 +96,32 @@ def _load_cancellation_template() -> dict[str, Any]:
     return dict(_DEFAULT_REVIEWER_CANCELLATION_TEMPLATE)
 
 
-def _resolve_journal_title(manuscript: dict[str, Any]) -> str:
+def _resolve_journal_contact_context(manuscript: dict[str, Any]) -> dict[str, str | None]:
     journal_id = str(manuscript.get("journal_id") or "").strip()
     if not journal_id:
-        return "ScholarFlow Journal"
+        return {
+            "journal_title": "ScholarFlow Journal",
+            "journal_public_editorial_email": None,
+        }
     try:
         row = (
             supabase_admin.table("journals")
-            .select("title")
+            .select("title, public_editorial_email")
             .eq("id", journal_id)
             .single()
             .execute()
         )
         payload = getattr(row, "data", None) or {}
         title = str(payload.get("title") or "").strip()
-        return title or "ScholarFlow Journal"
+        return {
+            "journal_title": title or "ScholarFlow Journal",
+            "journal_public_editorial_email": normalize_email(payload.get("public_editorial_email")),
+        }
     except Exception:
-        return "ScholarFlow Journal"
+        return {
+            "journal_title": "ScholarFlow Journal",
+            "journal_public_editorial_email": None,
+        }
 
 
 def send_reviewer_assignment_cancellation_email(
@@ -152,7 +162,11 @@ def send_reviewer_assignment_cancellation_email(
 
     template_row = _load_cancellation_template()
     template_key = _normalize_template_key(str(template_row.get("template_key") or _CANCELLATION_TEMPLATE_KEY))
-    journal_title = _resolve_journal_title(manuscript)
+    journal_context = _resolve_journal_contact_context(manuscript)
+    journal_title = str(journal_context.get("journal_title") or "ScholarFlow Journal").strip() or "ScholarFlow Journal"
+    journal_public_editorial_email = normalize_email(journal_context.get("journal_public_editorial_email"))
+    cc_emails = [journal_public_editorial_email] if journal_public_editorial_email and journal_public_editorial_email != reviewer_email else []
+    reply_to_emails = [journal_public_editorial_email] if journal_public_editorial_email else []
     manuscript_id = str(manuscript.get("id") or assignment.get("manuscript_id") or "").strip()
     manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
     assignment_id = str(assignment.get("id") or "").strip()
@@ -164,6 +178,8 @@ def send_reviewer_assignment_cancellation_email(
         "actor_user_id": str(cancelled_by or "").strip() or None,
         "scene": _REVIEW_ASSIGNMENT_SCENE,
         "event_type": _CANCELLATION_EVENT_TYPE,
+        "delivery_mode": "auto",
+        "communication_status": "system_sent",
         "idempotency_key": idempotency_key,
     }
     headers = {
@@ -191,6 +207,8 @@ def send_reviewer_assignment_cancellation_email(
     }
     delivery = email_service.send_inline_email(
         to_email=reviewer_email,
+        cc_emails=cc_emails,
+        reply_to_emails=reply_to_emails,
         template_key=template_key,
         subject_template=str(template_row.get("subject_template") or "").strip() or _DEFAULT_REVIEWER_CANCELLATION_TEMPLATE["subject_template"],
         body_html_template=str(template_row.get("body_html_template") or "").strip() or _DEFAULT_REVIEWER_CANCELLATION_TEMPLATE["body_html_template"],
