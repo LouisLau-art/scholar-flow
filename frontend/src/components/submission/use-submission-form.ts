@@ -14,6 +14,7 @@ import {
   buildAuthorContactsFromNames,
   createAuthorContact,
   extractTraceId,
+  getDuplicateAuthorEmail,
   hasAtLeastOneCorrespondingAuthor,
   hasValidAuthorContacts,
   hasJournalSelection,
@@ -75,6 +76,7 @@ export function useSubmissionForm() {
   const abstractValid = metadata.abstract.trim().length >= 30
   const submissionEmailValue = metadata.submissionEmail.trim()
   const submissionEmailValid = isValidEmail(submissionEmailValue)
+  const duplicateAuthorEmail = getDuplicateAuthorEmail(metadata.authorContacts)
   const authorContactsValid = hasValidAuthorContacts(metadata.authorContacts)
   const fileValid = !!uploadedPath
   const wordFileValid = !!wordFilePath
@@ -648,7 +650,9 @@ export function useSubmissionForm() {
       return
     }
     if (!authorContactsValid) {
-      if (!hasAtLeastOneCorrespondingAuthor(metadata.authorContacts)) {
+      if (duplicateAuthorEmail) {
+        toast.error('Each author email must be unique.')
+      } else if (!hasAtLeastOneCorrespondingAuthor(metadata.authorContacts)) {
         toast.error('Please select at least one corresponding author.')
       } else {
         toast.error('Please complete every author with name, email, affiliation, city, and country or region.')

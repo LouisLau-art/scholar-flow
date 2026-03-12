@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pydantic.config import ConfigDict
 
+from app.core.email_normalization import normalize_email
+
 # === 核心业务实体模型 (Pydantic v2) ===
 
 class ManuscriptAuthorContact(BaseModel):
@@ -110,6 +112,14 @@ class ManuscriptBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_author_contacts(self):
+        # 中文注释: 作者姓名允许重名，但邮箱必须作为唯一标识，避免同一邮箱被重复登记成多个作者。
+        seen_emails: set[str] = set()
+        for item in self.author_contacts:
+            normalized_email = normalize_email(str(item.email))
+            if normalized_email in seen_emails:
+                raise ValueError("author contact emails must be unique")
+            seen_emails.add(normalized_email)
+
         corresponding_count = sum(1 for item in self.author_contacts if item.is_corresponding)
         if corresponding_count < 1:
             raise ValueError("at least one corresponding author is required")

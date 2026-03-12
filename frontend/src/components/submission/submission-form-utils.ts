@@ -63,6 +63,10 @@ export const INITIAL_TOUCHED: TouchedState = {
 
 const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function normalizeAuthorEmail(value: string): string {
+  return value.trim().toLowerCase()
+}
+
 export function createAuthorContact(overrides: Partial<Omit<SubmissionAuthorContact, 'id'>> = {}): SubmissionAuthorContact {
   return {
     id: `author-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -96,8 +100,26 @@ export function hasAtLeastOneCorrespondingAuthor(authorContacts: SubmissionAutho
   return authorContacts.some((author) => author.isCorresponding)
 }
 
+export function getDuplicateAuthorEmail(authorContacts: SubmissionAuthorContact[]): string | null {
+  const seenEmails = new Set<string>()
+  for (const author of authorContacts) {
+    const normalizedEmail = normalizeAuthorEmail(author.email)
+    if (!normalizedEmail) continue
+    if (seenEmails.has(normalizedEmail)) {
+      return normalizedEmail
+    }
+    seenEmails.add(normalizedEmail)
+  }
+  return null
+}
+
 export function hasValidAuthorContacts(authorContacts: SubmissionAuthorContact[]): boolean {
-  return authorContacts.length > 0 && hasAtLeastOneCorrespondingAuthor(authorContacts) && authorContacts.every(isAuthorContactComplete)
+  return (
+    authorContacts.length > 0 &&
+    hasAtLeastOneCorrespondingAuthor(authorContacts) &&
+    authorContacts.every(isAuthorContactComplete) &&
+    getDuplicateAuthorEmail(authorContacts) === null
+  )
 }
 
 export function buildAuthorContactsFromNames(names: string[]): SubmissionAuthorContact[] {
@@ -155,7 +177,7 @@ export function buildAuthorContactsFromStructuredContacts(
 export function normalizeAuthorContactsForPayload(authorContacts: SubmissionAuthorContact[]) {
   return authorContacts.map((author) => ({
     name: author.name.trim(),
-    email: author.email.trim(),
+    email: normalizeAuthorEmail(author.email),
     affiliation: author.affiliation.trim(),
     city: author.city.trim(),
     country_or_region: author.countryOrRegion.trim(),

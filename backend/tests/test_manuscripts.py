@@ -572,6 +572,47 @@ async def test_create_manuscript_allows_multiple_corresponding_authors(client: A
 
 
 @pytest.mark.asyncio
+async def test_create_manuscript_rejects_duplicate_author_emails(client: AsyncClient):
+    mock = get_full_mock([])
+    mock_token = generate_test_token()
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Structured Author Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "submissions@example.org",
+                "author_contacts": [
+                    {
+                        "name": "Alice Author",
+                        "email": "alice.author@example.org",
+                        "affiliation": "Example University",
+                        "city": "Wuhan",
+                        "country_or_region": "China",
+                        "is_corresponding": True,
+                    },
+                    {
+                        "name": "Alice Author",
+                        "email": "ALICE.AUTHOR@example.org",
+                        "affiliation": "Example Institute",
+                        "city": "Beijing",
+                        "country_or_region": "China",
+                        "is_corresponding": False,
+                    },
+                ],
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"}
+        )
+
+    assert response.status_code == 422
+    assert "unique" in response.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_create_manuscript_requires_city_and_country_for_each_author(client: AsyncClient):
     mock = get_full_mock([])
     mock_token = generate_test_token()

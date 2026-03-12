@@ -234,7 +234,7 @@ export function SubmissionAuthorContactsField(props: SubmissionAuthorContactsFie
 
       {props.showAuthorContactsError ? (
         <InlineNotice tone="danger" size="sm" data-testid="submission-author-contacts-error">
-          Every author must include name, email, affiliation, city, and country or region. Select at least one corresponding author.
+          Every author must include name, email, affiliation, city, and country or region. Each author email must be unique. Select at least one corresponding author.
         </InlineNotice>
       ) : null}
     </div>

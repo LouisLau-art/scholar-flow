@@ -210,6 +210,104 @@ describe('SubmissionForm Component', () => {
     expect(screen.getByTestId('submission-author-corresponding-1')).toBeChecked()
   })
 
+  it('keeps finalize disabled when two authors share the same email', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: { title: 'Parsed Title', abstract: 'A'.repeat(40), authors: [] },
+            }),
+        } as any
+      }
+      if (url === '/api/v1/manuscripts') {
+        return { ok: true, json: async () => ({ success: true }) } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-file'), {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    selectWordSourceType()
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-cover-letter-file'), {
+      target: {
+        files: [
+          new File(['cover'], 'cover-letter.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Cover letter uploaded:/i)).toBeInTheDocument()
+    })
+
+    fillRequiredAuthorFields()
+
+    fireEvent.click(screen.getByTestId('submission-add-author'))
+    fireEvent.change(screen.getByTestId('submission-author-name-1'), {
+      target: { value: 'Alice Zhang' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-email-1'), {
+      target: { value: 'ALICE.ZHANG@example.com' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-affiliation-1'), {
+      target: { value: 'Wuhan University' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-city-1'), {
+      target: { value: 'Wuhan' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-country-1'), {
+      target: { value: 'China' },
+    })
+    fireEvent.blur(screen.getByTestId('submission-author-email-1'))
+
+    acceptRequiredDeclarations()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-finalize')).toBeDisabled()
+    })
+
+    expect(screen.getByTestId('submission-author-contacts-error')).toHaveTextContent('Each author email must be unique.')
+    expect(fetchMock.mock.calls.find((call) => call[0] === '/api/v1/manuscripts')).toBeFalsy()
+  })
+
   it('explains that submission email can differ from listed author emails', () => {
     render(<SubmissionForm />)
 
