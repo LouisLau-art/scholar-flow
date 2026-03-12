@@ -9,12 +9,22 @@ from app.services.production_workspace_service_workflow_common import (
     ACTIVE_CYCLE_STATUSES,
     POST_ACCEPTANCE_ALLOWED,
     is_table_missing_error,
+    is_missing_column_error,
 )
 
 
 def _find_display_cycle(cycles: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    active = next((row for row in cycles if str(row.get("status") or "") in ACTIVE_CYCLE_STATUSES), None)
-    latest_approved = next((row for row in cycles if str(row.get("status") or "") == "approved_for_publish"), None)
+    from app.services.production_workspace_service import _derive_cycle_stage
+    active = None
+    latest_approved = None
+    for row in cycles:
+        stage = _derive_cycle_stage(status=row.get("status"), stage=row.get("stage"))
+        if stage and stage not in {"cancelled", "ready_to_publish"}:
+            if active is None:
+                active = row
+        if stage == "ready_to_publish":
+            if latest_approved is None:
+                latest_approved = row
     return active, (active or latest_approved)
 
 
@@ -37,6 +47,9 @@ class ProductionWorkspaceWorkflowCycleContextQueueMixin:
             cycle=display_cycle,
             purpose="read",
         )
+
+        from app.services.production_workspace_service import _derive_cycle_stage
+        active_stage = _derive_cycle_stage(status=active.get("status"), stage=active.get("stage")) if active else None
 
         manuscript_status = normalize_status(str(manuscript.get("status") or "")) or ""
         active_layout_id = str((active or {}).get("layout_editor_id") or "").strip() if active else ""
@@ -66,10 +79,12 @@ class ProductionWorkspaceWorkflowCycleContextQueueMixin:
                 "can_manage_editors": is_manager,
                 "can_upload_galley": bool(
                     can_manage_production
-                    and active
-                    and str(active.get("status") or "") in {"draft", "in_layout_revision", "author_corrections_submitted"}
+                    and active_stage in {"received", "typesetting", "language_editing", "pdf_preparation", "ae_final_review"}
                 ),
-                "can_approve": bool(can_manage_production and active and str(active.get("status") or "") == "author_confirmed"),
+                "can_approve": bool(
+                    can_manage_production 
+                    and active_stage == "ae_final_review"
+                ),
             },
         }
 
@@ -81,47 +96,98 @@ class ProductionWorkspaceWorkflowCycleContextQueueMixin:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         roles = self._roles(profile_roles)
-        if not roles.intersection({"admin", "production_editor"}):
+        if not roles.intersection({"admin", "managing_editor", "editor_in_chief", "production_editor", "assistant_editor"}):
             raise HTTPException(status_code=403, detail="Forbidden")
 
         safe_limit = max(1, min(int(limit or 50), 200))
-        active_statuses = sorted(ACTIVE_CYCLE_STATUSES)
         uid = str(user_id)
         cycles: list[dict[str, Any]] = []
+        
+        from app.services.production_workspace_service import _derive_cycle_stage, _derive_current_assignee_id
+        
         try:
+            sop_select = (
+                "id,manuscript_id,cycle_no,status,stage,current_assignee_id,"
+                "coordinator_ae_id,typesetter_id,language_editor_id,pdf_editor_id,"
+                "layout_editor_id,collaborator_editor_ids,proof_due_at,updated_at,created_at"
+            )
             primary = (
                 self.client.table("production_cycles")
-                .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at,created_at")
-                .eq("layout_editor_id", uid)
-                .in_("status", active_statuses)
+                .select(sop_select)
+                .or_(
+                    f"current_assignee_id.eq.{uid},"
+                    f"coordinator_ae_id.eq.{uid},"
+                    f"typesetter_id.eq.{uid},"
+                    f"language_editor_id.eq.{uid},"
+                    f"pdf_editor_id.eq.{uid},"
+                    f"layout_editor_id.eq.{uid}"
+                )
                 .order("updated_at", desc=True)
-                .limit(safe_limit)
+                .limit(safe_limit * 2)
                 .execute()
             )
             cycles.extend(getattr(primary, "data", None) or [])
-        except Exception as exc:
-            if is_table_missing_error(exc, "production_cycles"):
-                raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
-            raise HTTPException(status_code=500, detail=f"Failed to list production queue: {exc}") from exc
-
-        try:
+            
             collab = (
                 self.client.table("production_cycles")
-                .select("id,manuscript_id,cycle_no,status,proof_due_at,updated_at,created_at")
+                .select(sop_select)
                 .contains("collaborator_editor_ids", [uid])
-                .in_("status", active_statuses)
                 .order("updated_at", desc=True)
-                .limit(safe_limit)
+                .limit(safe_limit * 2)
                 .execute()
             )
             cycles.extend(getattr(collab, "data", None) or [])
-        except Exception:
-            pass
+        except Exception as e:
+            if any(is_missing_column_error(e, col) for col in ["stage", "current_assignee_id", "coordinator_ae_id"]):
+                active_statuses = sorted(ACTIVE_CYCLE_STATUSES)
+                try:
+                    primary = (
+                        self.client.table("production_cycles")
+                        .select("id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proof_due_at,updated_at,created_at")
+                        .eq("layout_editor_id", uid)
+                        .in_("status", active_statuses)
+                        .order("updated_at", desc=True)
+                        .limit(safe_limit)
+                        .execute()
+                    )
+                    cycles.extend(getattr(primary, "data", None) or [])
+                    
+                    collab = (
+                        self.client.table("production_cycles")
+                        .select("id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proof_due_at,updated_at,created_at")
+                        .contains("collaborator_editor_ids", [uid])
+                        .in_("status", active_statuses)
+                        .order("updated_at", desc=True)
+                        .limit(safe_limit)
+                        .execute()
+                    )
+                    cycles.extend(getattr(collab, "data", None) or [])
+                except Exception as exc:
+                    if is_table_missing_error(exc, "production_cycles"):
+                        raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
+                    raise HTTPException(status_code=500, detail=f"Failed to list production queue: {exc}") from exc
+            else:
+                if is_table_missing_error(e, "production_cycles"):
+                    raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from e
+                raise HTTPException(status_code=500, detail=f"Failed to list production queue: {e}") from e
 
         unique_cycles: dict[str, dict[str, Any]] = {}
         for row in cycles:
             cycle_id = str(row.get("id") or "").strip()
-            if cycle_id:
+            if not cycle_id:
+                continue
+                
+            stage = _derive_cycle_stage(status=row.get("status"), stage=row.get("stage"))
+            if stage in {"cancelled", "ready_to_publish"}:
+                continue
+                
+            current_assignee_id = _derive_current_assignee_id(row)
+            collaborators = self._normalize_uuid_list(row.get("collaborator_editor_ids"))
+            
+            if (current_assignee_id == uid or 
+                uid in collaborators or 
+                row.get("layout_editor_id") == uid or
+                row.get("coordinator_ae_id") == uid):
                 unique_cycles[cycle_id] = row
 
         selected_cycles = list(unique_cycles.values())
@@ -180,6 +246,7 @@ class ProductionWorkspaceWorkflowCycleContextQueueMixin:
                         "id": cycle.get("id"),
                         "cycle_no": cycle.get("cycle_no"),
                         "status": cycle.get("status"),
+                        "stage": _derive_cycle_stage(status=cycle.get("status"), stage=cycle.get("stage")),
                         "proof_due_at": cycle.get("proof_due_at"),
                         "updated_at": cycle.get("updated_at") or cycle.get("created_at"),
                     },

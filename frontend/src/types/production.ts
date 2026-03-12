@@ -7,7 +7,40 @@ export type ProductionCycleStatus =
   | 'approved_for_publish'
   | 'cancelled'
 
+export type ProductionCycleStage =
+  | 'received'
+  | 'typesetting'
+  | 'language_editing'
+  | 'ae_internal_proof'
+  | 'author_proofreading'
+  | 'ae_final_review'
+  | 'pdf_preparation'
+  | 'ready_to_publish'
+  | 'published'
+  | 'cancelled'
+
+export type ProductionArtifactKind =
+  | 'source_manuscript_snapshot'
+  | 'typeset_output'
+  | 'language_output'
+  | 'ae_internal_proof'
+  | 'author_annotated_proof'
+  | 'final_confirmation_pdf'
+  | 'publication_pdf'
+
 export type ProofreadingDecision = 'confirm_clean' | 'submit_corrections'
+
+export type ProductionArtifact = {
+  id: string
+  artifact_kind: ProductionArtifactKind
+  storage_bucket?: string | null
+  storage_path?: string | null
+  file_name?: string | null
+  mime_type?: string | null
+  uploaded_by?: string | null
+  created_at?: string | null
+  metadata?: Record<string, unknown> | null
+}
 
 export type ProductionCorrectionItem = {
   id?: string
@@ -35,9 +68,15 @@ export type ProductionCycle = {
   manuscript_id: string
   cycle_no: number
   status: ProductionCycleStatus
+  stage?: ProductionCycleStage | null
   layout_editor_id: string
   collaborator_editor_ids?: string[]
   proofreader_author_id: string
+  coordinator_ae_id?: string | null
+  typesetter_id?: string | null
+  language_editor_id?: string | null
+  pdf_editor_id?: string | null
+  current_assignee_id?: string | null
   galley_bucket?: string | null
   galley_path?: string | null
   galley_signed_url?: string | null
@@ -48,6 +87,7 @@ export type ProductionCycle = {
   created_at?: string | null
   updated_at?: string | null
   latest_response?: ProductionProofreadingResponse | null
+  artifacts?: ProductionArtifact[]
 }
 
 export type ProductionWorkspaceContext = {

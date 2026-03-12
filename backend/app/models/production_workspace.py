@@ -17,7 +17,40 @@ ProductionCycleStatus = Literal[
     "cancelled",
 ]
 
+ProductionCycleStage = Literal[
+    "received",
+    "typesetting",
+    "language_editing",
+    "ae_internal_proof",
+    "author_proofreading",
+    "ae_final_review",
+    "pdf_preparation",
+    "ready_to_publish",
+    "published",
+    "cancelled",
+]
+
+ProductionArtifactKind = Literal[
+    "source_manuscript_snapshot",
+    "typeset_output",
+    "language_output",
+    "ae_internal_proof",
+    "author_annotated_proof",
+    "final_confirmation_pdf",
+    "publication_pdf",
+]
+
 ProofreadingDecision = Literal["confirm_clean", "submit_corrections"]
+
+_LEGACY_STATUS_STAGE_MAP: dict[ProductionCycleStatus, ProductionCycleStage] = {
+    "draft": "received",
+    "awaiting_author": "author_proofreading",
+    "author_confirmed": "ae_final_review",
+    "author_corrections_submitted": "ae_final_review",
+    "in_layout_revision": "typesetting",
+    "approved_for_publish": "ready_to_publish",
+    "cancelled": "cancelled",
+}
 
 
 class CreateProductionCycleRequest(BaseModel):
@@ -53,14 +86,32 @@ class SubmitProofreadingRequest(BaseModel):
         return self
 
 
+class ProductionArtifactPayload(BaseModel):
+    id: str
+    artifact_kind: ProductionArtifactKind
+    storage_bucket: str | None = None
+    storage_path: str | None = None
+    file_name: str | None = None
+    mime_type: str | None = None
+    uploaded_by: str | None = None
+    created_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
+
+
 class ProductionCyclePayload(BaseModel):
     id: str
     manuscript_id: str
     cycle_no: int
     status: ProductionCycleStatus
+    stage: ProductionCycleStage | None = None
     layout_editor_id: str
     collaborator_editor_ids: list[str] = Field(default_factory=list)
     proofreader_author_id: str
+    coordinator_ae_id: str | None = None
+    typesetter_id: str | None = None
+    language_editor_id: str | None = None
+    pdf_editor_id: str | None = None
+    current_assignee_id: str | None = None
     galley_bucket: str | None = None
     galley_path: str | None = None
     galley_signed_url: str | None = None
@@ -71,6 +122,13 @@ class ProductionCyclePayload(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     latest_response: dict[str, Any] | None = None
+    artifacts: list[ProductionArtifactPayload] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _default_stage_from_legacy_status(self) -> "ProductionCyclePayload":
+        if self.stage is None:
+            self.stage = _LEGACY_STATUS_STAGE_MAP.get(self.status, "received")
+        return self
 
 
 class ProductionWorkspaceResponse(BaseModel):

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.models.production_workspace import SubmitProofreadingRequest
 from app.services.production_workspace_service_workflow_common import (
     AUTHOR_CONTEXT_VISIBLE_STATUSES,
+    is_missing_column_error,
     is_table_missing_error,
     utc_now,
 )
@@ -226,14 +227,30 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                 raise HTTPException(status_code=500, detail=f"Failed to save correction items: {e}") from e
 
         try:
+            next_assignee_id = (
+                str(cycle.get("coordinator_ae_id") or "").strip()
+                or str(cycle.get("layout_editor_id") or "").strip()
+                or str(cycle.get("current_assignee_id") or "").strip()
+                or None
+            )
             self.client.table("production_cycles").update(
                 {
                     "status": new_status,
+                    "stage": "ae_final_review",
+                    "current_assignee_id": next_assignee_id,
                     "updated_at": submitted_at,
                 }
             ).eq("id", cycle_id).eq("manuscript_id", manuscript_id).execute()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to update cycle status: {e}") from e
+            if any(is_missing_column_error(e, column) for column in ("stage", "current_assignee_id")):
+                self.client.table("production_cycles").update(
+                    {
+                        "status": new_status,
+                        "updated_at": submitted_at,
+                    }
+                ).eq("id", cycle_id).eq("manuscript_id", manuscript_id).execute()
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to update cycle status: {e}") from e
 
         self._insert_log(
             manuscript_id=manuscript_id,

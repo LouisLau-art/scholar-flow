@@ -20,25 +20,42 @@ def _is_table_missing_error(error: Exception, table_name: str) -> bool:
     text = str(error).lower()
     return table_name.lower() in text and "does not exist" in text
 
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    text = str(error).lower()
+    return column_name.lower() in text and ("column" in text or "schema cache" in text)
+
 
 class ProductionWorkspacePublishGateMixin:
     def assert_publish_gate_ready(self, *, manuscript_id: str) -> dict[str, Any] | None:
         """
         发布前核准门禁：
-        - 严格模式（PRODUCTION_CYCLE_STRICT=1）下，必须存在 approved_for_publish 轮次。
+        - 严格模式（PRODUCTION_CYCLE_STRICT=1）下，必须存在 ready_to_publish 轮次。
         - 非严格模式下，若没有任何生产轮次则降级放行（兼容历史数据）。
         """
         strict = _is_truthy_env("PRODUCTION_CYCLE_STRICT", "0")
 
         try:
-            resp = (
-                self.client.table("production_cycles")
-                .select("id,manuscript_id,cycle_no,status,galley_path,approved_at")
-                .eq("manuscript_id", manuscript_id)
-                .order("cycle_no", desc=True)
-                .limit(1)
-                .execute()
-            )
+            try:
+                resp = (
+                    self.client.table("production_cycles")
+                    .select("id,manuscript_id,cycle_no,status,stage,galley_path,approved_at")
+                    .eq("manuscript_id", manuscript_id)
+                    .order("cycle_no", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+            except Exception as e:
+                if _is_missing_column_error(e, "stage"):
+                    resp = (
+                        self.client.table("production_cycles")
+                        .select("id,manuscript_id,cycle_no,status,galley_path,approved_at")
+                        .eq("manuscript_id", manuscript_id)
+                        .order("cycle_no", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                else:
+                    raise
             rows = getattr(resp, "data", None) or []
         except Exception as e:
             if _is_table_missing_error(e, "production_cycles"):
@@ -51,7 +68,11 @@ class ProductionWorkspacePublishGateMixin:
             return None
 
         latest = rows[0]
-        if str(latest.get("status") or "") != "approved_for_publish":
+        
+        from app.services.production_workspace_service import _derive_cycle_stage
+        stage = _derive_cycle_stage(status=latest.get("status"), stage=latest.get("stage"))
+        
+        if stage != "ready_to_publish":
             raise HTTPException(status_code=403, detail="Latest production cycle is not approved for publish")
         if not str(latest.get("galley_path") or "").strip():
             raise HTTPException(status_code=403, detail="Approved production cycle is missing galley proof")

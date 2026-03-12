@@ -109,9 +109,12 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             "manuscript_id": manuscript_id,
             "cycle_no": self._next_cycle_no(manuscript_id),
             "status": "draft",
+            "stage": "received",
             "layout_editor_id": layout_editor_id,
             "collaborator_editor_ids": collab_ids,
             "proofreader_author_id": str(request.proofreader_author_id),
+            "typesetter_id": layout_editor_id,
+            "current_assignee_id": layout_editor_id,
             "proof_due_at": request.proof_due_at.isoformat(),
             "created_at": now,
             "updated_at": now,
@@ -125,11 +128,25 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
         except HTTPException:
             raise
         except Exception as exc:
-            if is_table_missing_error(exc, "production_cycles"):
-                raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
-            if "idx_production_cycles_active_unique" in str(exc):
-                raise HTTPException(status_code=409, detail="An active production cycle already exists") from exc
-            raise HTTPException(status_code=500, detail=f"Failed to create production cycle: {exc}") from exc
+            if any(
+                is_missing_column_error(exc, column)
+                for column in ("stage", "typesetter_id", "current_assignee_id")
+            ):
+                legacy_payload = dict(payload)
+                legacy_payload.pop("stage", None)
+                legacy_payload.pop("typesetter_id", None)
+                legacy_payload.pop("current_assignee_id", None)
+                resp = self.client.table("production_cycles").insert(legacy_payload).execute()
+                rows = getattr(resp, "data", None) or []
+                if not rows:
+                    raise HTTPException(status_code=500, detail="Failed to create production cycle")
+                row = rows[0]
+            else:
+                if is_table_missing_error(exc, "production_cycles"):
+                    raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
+                if "idx_production_cycles_active_unique" in str(exc):
+                    raise HTTPException(status_code=409, detail="An active production cycle already exists") from exc
+                raise HTTPException(status_code=500, detail=f"Failed to create production cycle: {exc}") from exc
 
         self._insert_log(
             manuscript_id=manuscript_id,
@@ -139,6 +156,7 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             comment="production cycle created",
             payload={
                 "event_type": "production_cycle_created",
+                "to_stage": "received",
                 "cycle_id": row.get("id"),
                 "proof_due_at": row.get("proof_due_at"),
             },
@@ -286,12 +304,29 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to upload galley: {exc}") from exc
+            
+        try:
+            self.client.table("production_cycle_artifacts").insert({
+                "cycle_id": cycle_id,
+                "manuscript_id": manuscript_id,
+                "artifact_kind": "ae_internal_proof",
+                "storage_bucket": "production-proofs",
+                "storage_path": object_path,
+                "file_name": filename,
+                "mime_type": content_type or "application/pdf",
+                "uploaded_by": user_id,
+                "metadata": {"version_note": note}
+            }).execute()
+        except Exception:
+            pass
 
         patch: dict[str, Any] = {
             "status": "awaiting_author",
+            "stage": "author_proofreading",
             "galley_bucket": "production-proofs",
             "galley_path": object_path,
             "version_note": note,
+            "current_assignee_id": str(cycle.get("proofreader_author_id") or "").strip() or None,
             "updated_at": utc_now_iso(),
         }
         if due is not None:
@@ -312,7 +347,29 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
         except HTTPException:
             raise
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to update cycle: {exc}") from exc
+            if any(
+                is_missing_column_error(exc, column)
+                for column in ("stage", "current_assignee_id")
+            ):
+                legacy_patch = dict(patch)
+                legacy_patch.pop("stage", None)
+                legacy_patch.pop("current_assignee_id", None)
+                resp = (
+                    self.client.table("production_cycles")
+                    .update(legacy_patch)
+                    .eq("id", cycle_id)
+                    .eq("manuscript_id", manuscript_id)
+                    .execute()
+                )
+                rows = getattr(resp, "data", None) or []
+                if not rows:
+                    raise HTTPException(status_code=500, detail="Failed to update cycle after galley upload")
+                row = rows[0]
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to update cycle: {exc}") from exc
+
+        from app.services.production_workspace_service import _derive_cycle_stage
+        old_stage = _derive_cycle_stage(status=old_status, stage=cycle.get("stage"))
 
         self._insert_log(
             manuscript_id=manuscript_id,
@@ -322,6 +379,8 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             comment="galley uploaded",
             payload={
                 "event_type": "galley_uploaded",
+                "from_stage": old_stage,
+                "to_stage": "author_proofreading",
                 "cycle_id": cycle_id,
                 "galley_path": object_path,
                 "version_note": note,
@@ -362,6 +421,7 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
                         to_emails=target.get("to_recipients") or [author_email],
                         cc_emails=target.get("cc_recipients") or [],
                         reply_to_emails=target.get("reply_to_recipients") or [],
+                        idempotency_key=f"proofreading-request/{cycle_id}/initial",
                         template_key="proofreading_request",
                         subject="Proofreading Required",
                         html_body=rendered_html,

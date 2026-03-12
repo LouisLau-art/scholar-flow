@@ -67,6 +67,8 @@ class ProductionWorkspaceWorkflowCycleMixin(
         user_id: str,
         profile_roles: list[str] | None,
     ) -> dict[str, Any]:
+        from app.services.production_workspace_service import _derive_cycle_stage
+
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
@@ -77,10 +79,12 @@ class ProductionWorkspaceWorkflowCycleMixin(
             cycle=cycle,
             purpose="write",
         )
-        if str(cycle.get("status") or "") != "author_confirmed":
+        
+        stage = _derive_cycle_stage(status=cycle.get("status"), stage=cycle.get("stage"))
+        if stage != "ae_final_review":
             raise HTTPException(
                 status_code=422,
-                detail="Cycle can be approved only after author_confirmed",
+                detail="Cycle can be approved only after ae_final_review",
             )
 
         galley_path = str(cycle.get("galley_path") or "").strip()
@@ -89,20 +93,38 @@ class ProductionWorkspaceWorkflowCycleMixin(
 
         now = utc_now_iso()
         try:
-            resp = (
-                self.client.table("production_cycles")
-                .update(
-                    {
-                        "status": "approved_for_publish",
-                        "approved_by": user_id,
-                        "approved_at": now,
-                        "updated_at": now,
-                    }
+            update_payload = {
+                "status": "approved_for_publish",
+                "approved_by": user_id,
+                "approved_at": now,
+                "updated_at": now,
+            }
+            # Try to write SOP stage if supported
+            try:
+                resp = (
+                    self.client.table("production_cycles")
+                    .update(
+                        {
+                            **update_payload,
+                            "stage": "ready_to_publish",
+                        }
+                    )
+                    .eq("id", cycle_id)
+                    .eq("manuscript_id", manuscript_id)
+                    .execute()
                 )
-                .eq("id", cycle_id)
-                .eq("manuscript_id", manuscript_id)
-                .execute()
-            )
+            except Exception as e:
+                if is_missing_column_error(e, "stage"):
+                    resp = (
+                        self.client.table("production_cycles")
+                        .update(update_payload)
+                        .eq("id", cycle_id)
+                        .eq("manuscript_id", manuscript_id)
+                        .execute()
+                    )
+                else:
+                    raise
+            
             rows = getattr(resp, "data", None) or []
             if not rows:
                 raise HTTPException(status_code=500, detail="Failed to approve cycle")
@@ -146,6 +168,7 @@ class ProductionWorkspaceWorkflowCycleMixin(
         return {
             "cycle_id": cycle_id,
             "status": "approved_for_publish",
+            "stage": "ready_to_publish",
             "approved_at": row.get("approved_at") or now,
             "approved_by": str(row.get("approved_by") or user_id),
         }

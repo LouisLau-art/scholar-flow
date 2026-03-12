@@ -6,7 +6,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.models.production_workspace import CreateProductionCycleRequest, SubmitProofreadingRequest
+from app.models.production_workspace import (
+    CreateProductionCycleRequest,
+    ProductionCyclePayload,
+    SubmitProofreadingRequest,
+)
 from app.services.production_workspace_service import ProductionWorkspaceService
 
 
@@ -291,6 +295,7 @@ def test_upload_galley_sends_initial_proofreading_email(monkeypatch: pytest.Monk
     assert email_send_mock.call_args["cc_emails"] == ["co@example.org", "office@example.org"]
     assert email_send_mock.call_args["reply_to_emails"] == ["office@example.org"]
     assert email_send_mock.call_args["template_key"] == "proofreading_request"
+    assert email_send_mock.call_args["idempotency_key"] == "proofreading-request/cycle-1/initial"
     assert email_send_mock.call_args["audit_context"]["delivery_mode"] == "auto"
 
 
@@ -379,6 +384,35 @@ def test_assistant_editor_cannot_read_production_workspace_after_accept() -> Non
     assert exc.value.status_code == 403
 
 
+def test_assistant_editor_can_read_when_assigned_as_production_coordinator() -> None:
+    svc = _svc()
+
+    svc._ensure_editor_access(
+        manuscript={"id": "ms-1", "assistant_editor_id": "ae-1"},
+        user_id="ae-1",
+        roles={"assistant_editor"},
+        cycle={"id": "cycle-1", "coordinator_ae_id": "ae-1", "stage": "ae_final_review"},
+        purpose="read",
+    )
+
+
+def test_production_editor_can_write_when_current_assignee_matches_sop_contract() -> None:
+    svc = _svc()
+
+    svc._ensure_editor_access(
+        manuscript={"id": "ms-1"},
+        user_id="pe-1",
+        roles={"production_editor"},
+        cycle={
+            "id": "cycle-1",
+            "stage": "typesetting",
+            "typesetter_id": "pe-1",
+            "current_assignee_id": "pe-1",
+        },
+        purpose="write",
+    )
+
+
 def test_production_editor_can_read_workspace_after_cycle_approved_for_publish(monkeypatch: pytest.MonkeyPatch) -> None:
     svc = _svc()
 
@@ -434,3 +468,50 @@ def test_production_editor_can_read_workspace_after_cycle_approved_for_publish(m
     assert ctx["active_cycle"]["status"] == "approved_for_publish"
     assert ctx["permissions"]["can_upload_galley"] is False
     assert ctx["permissions"]["can_approve"] is False
+
+
+def test_production_cycle_payload_exposes_sop_contract_fields() -> None:
+    cycle = ProductionCyclePayload(
+        id="cycle-1",
+        manuscript_id="ms-1",
+        cycle_no=1,
+        status="draft",
+        stage="typesetting",
+        layout_editor_id="layout-1",
+        proofreader_author_id="author-1",
+        coordinator_ae_id="ae-1",
+        typesetter_id="typesetter-1",
+        language_editor_id="lang-1",
+        pdf_editor_id="pdf-1",
+        current_assignee_id="typesetter-1",
+        artifacts=[
+            {
+                "id": "artifact-1",
+                "artifact_kind": "typeset_output",
+                "storage_path": "production_cycles/ms-1/cycle-1/typeset.pdf",
+            }
+        ],
+    )
+
+    dumped = cycle.model_dump()
+
+    assert dumped["stage"] == "typesetting"
+    assert dumped["coordinator_ae_id"] == "ae-1"
+    assert dumped["typesetter_id"] == "typesetter-1"
+    assert dumped["language_editor_id"] == "lang-1"
+    assert dumped["pdf_editor_id"] == "pdf-1"
+    assert dumped["current_assignee_id"] == "typesetter-1"
+    assert dumped["artifacts"][0]["artifact_kind"] == "typeset_output"
+
+
+def test_production_cycle_payload_defaults_stage_from_legacy_status() -> None:
+    cycle = ProductionCyclePayload(
+        id="cycle-2",
+        manuscript_id="ms-1",
+        cycle_no=2,
+        status="awaiting_author",
+        layout_editor_id="layout-1",
+        proofreader_author_id="author-1",
+    )
+
+    assert cycle.stage == "author_proofreading"

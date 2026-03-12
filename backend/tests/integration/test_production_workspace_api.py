@@ -11,6 +11,8 @@ from .test_utils import insert_manuscript, make_user
 
 def _cleanup(db, manuscript_id: str, *, user_ids: list[str]) -> None:
     tables = [
+        ("production_cycle_events", "manuscript_id", manuscript_id),
+        ("production_cycle_artifacts", "manuscript_id", manuscript_id),
         ("production_proofreading_responses", "manuscript_id", manuscript_id),
         ("production_cycles", "manuscript_id", manuscript_id),
         ("status_transition_logs", "manuscript_id", manuscript_id),
@@ -36,15 +38,23 @@ def _cleanup(db, manuscript_id: str, *, user_ids: list[str]) -> None:
 
 def _require_schema(db) -> None:
     checks = [
-        ("production_cycles", "id,manuscript_id,cycle_no,status,galley_path"),
-        ("production_proofreading_responses", "id,cycle_id,decision,submitted_at"),
+        (
+            "production_cycles",
+            "id,manuscript_id,cycle_no,status,stage,coordinator_ae_id,typesetter_id,language_editor_id,pdf_editor_id,current_assignee_id,galley_path",
+        ),
+        (
+            "production_proofreading_responses",
+            "id,cycle_id,decision,submitted_at,attachment_bucket,attachment_path,attachment_file_name",
+        ),
+        ("production_cycle_artifacts", "id,cycle_id,manuscript_id,artifact_kind,storage_path"),
+        ("production_cycle_events", "id,cycle_id,manuscript_id,event_type,created_at"),
         ("production_correction_items", "id,response_id,suggested_text"),
     ]
     for table, cols in checks:
         try:
             db.table(table).select(cols).limit(1).execute()
         except APIError as e:
-            pytest.skip(f"数据库缺少 Feature 042 schema（{table}/{cols}）：{getattr(e, 'message', str(e))}")
+            pytest.skip(f"数据库缺少 Production SOP schema（{table}/{cols}）：{getattr(e, 'message', str(e))}")
 
 
 def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
@@ -98,6 +108,18 @@ async def test_editor_can_create_cycle_and_upload_galley(
         create_data = create_res.json()["data"]["cycle"]
         assert create_data["status"] == "draft"
         cycle_id = create_data["id"]
+        created_cycle = (
+            supabase_admin_client.table("production_cycles")
+            .select("status,stage,typesetter_id,current_assignee_id")
+            .eq("id", cycle_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert created_cycle["status"] == "draft"
+        assert created_cycle["stage"] == "received"
+        assert created_cycle["typesetter_id"] == editor.id
+        assert created_cycle["current_assignee_id"] == editor.id
 
         upload_res = await client.post(
             f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/galley",
@@ -112,6 +134,18 @@ async def test_editor_can_create_cycle_and_upload_galley(
         uploaded = upload_res.json()["data"]["cycle"]
         assert uploaded["status"] == "awaiting_author"
         assert uploaded["galley_path"]
+        uploaded_cycle = (
+            supabase_admin_client.table("production_cycles")
+            .select("status,stage,typesetter_id,current_assignee_id")
+            .eq("id", cycle_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert uploaded_cycle["status"] == "awaiting_author"
+        assert uploaded_cycle["stage"] == "author_proofreading"
+        assert uploaded_cycle["typesetter_id"] == editor.id
+        assert uploaded_cycle["current_assignee_id"] == author.id
 
         ctx_res = await client.get(
             f"/api/v1/editor/manuscripts/{manuscript_id}/production-workspace",
@@ -177,5 +211,116 @@ async def test_create_cycle_blocks_when_active_cycle_exists(
             },
         )
         assert second.status_code == 409, second.text
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_production_schema_supports_sop_artifacts_events_and_feedback_attachment_fields(
+    supabase_admin_client,
+    set_admin_emails,
+):
+    editor = make_user(email="prod_schema_editor@example.com")
+    author = make_user(email="prod_schema_author@example.com")
+    set_admin_emails([editor.email])
+    _require_schema(supabase_admin_client)
+
+    manuscript_id = str(uuid4())
+    cycle_id = str(uuid4())
+    artifact_id = str(uuid4())
+
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="approved",
+        title="Production Schema Contract Manuscript",
+    )
+    _ensure_profile(supabase_admin_client, user_id=editor.id, email=editor.email, roles=["admin", "editor", "production_editor"])
+    _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
+
+    try:
+        supabase_admin_client.table("production_cycles").insert(
+            {
+                "id": cycle_id,
+                "manuscript_id": manuscript_id,
+                "cycle_no": 1,
+                "status": "draft",
+                "stage": "received",
+                "layout_editor_id": editor.id,
+                "proofreader_author_id": author.id,
+                "coordinator_ae_id": editor.id,
+                "typesetter_id": editor.id,
+                "current_assignee_id": editor.id,
+            }
+        ).execute()
+
+        artifact_rows = (
+            supabase_admin_client.table("production_cycle_artifacts")
+            .insert(
+                {
+                    "id": artifact_id,
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "artifact_kind": "typeset_output",
+                    "storage_bucket": "production-proofs",
+                    "storage_path": f"production_cycles/{manuscript_id}/cycle-1/typeset.pdf",
+                    "file_name": "typeset.pdf",
+                    "mime_type": "application/pdf",
+                    "uploaded_by": editor.id,
+                    "metadata": {"source": "integration-test"},
+                }
+            )
+            .execute()
+            .data
+            or []
+        )
+        assert len(artifact_rows) == 1
+        assert artifact_rows[0]["artifact_kind"] == "typeset_output"
+
+        event_rows = (
+            supabase_admin_client.table("production_cycle_events")
+            .insert(
+                {
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "event_type": "typeset_uploaded",
+                    "from_stage": "received",
+                    "to_stage": "typesetting",
+                    "actor_user_id": editor.id,
+                    "target_user_id": editor.id,
+                    "artifact_id": artifact_id,
+                    "payload": {"source": "integration-test"},
+                }
+            )
+            .execute()
+            .data
+            or []
+        )
+        assert len(event_rows) == 1
+        assert event_rows[0]["event_type"] == "typeset_uploaded"
+
+        response_rows = (
+            supabase_admin_client.table("production_proofreading_responses")
+            .insert(
+                {
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "author_id": author.id,
+                    "decision": "submit_corrections",
+                    "summary": "Annotated proof attached",
+                    "attachment_bucket": "production-proof-attachments",
+                    "attachment_path": f"production_feedback/{manuscript_id}/annotated-proof.pdf",
+                    "attachment_file_name": "annotated-proof.pdf",
+                }
+            )
+            .execute()
+            .data
+            or []
+        )
+        assert len(response_rows) == 1
+        assert response_rows[0]["attachment_bucket"] == "production-proof-attachments"
+        assert response_rows[0]["attachment_file_name"] == "annotated-proof.pdf"
     finally:
         _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])

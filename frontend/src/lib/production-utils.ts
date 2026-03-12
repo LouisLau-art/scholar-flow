@@ -1,7 +1,35 @@
-import type { ProductionCorrectionItem, ProductionCycle, ProofreadingDecision } from '@/types/production'
+import type {
+  ProductionCorrectionItem,
+  ProductionCycle,
+  ProductionCycleStage,
+  ProductionCycleStatus,
+  ProofreadingDecision,
+} from '@/types/production'
+
+const ACTIVE_PRODUCTION_STAGES: ReadonlySet<ProductionCycleStage> = new Set([
+  'received',
+  'typesetting',
+  'language_editing',
+  'ae_internal_proof',
+  'author_proofreading',
+  'ae_final_review',
+  'pdf_preparation',
+  'ready_to_publish',
+])
+
+const ACTIVE_LEGACY_STATUSES: ReadonlySet<ProductionCycleStatus> = new Set([
+  'draft',
+  'awaiting_author',
+  'author_corrections_submitted',
+  'in_layout_revision',
+])
 
 export function hasActiveProductionCycle(cycles: ProductionCycle[]): boolean {
-  return cycles.some((cycle) => ['draft', 'awaiting_author', 'author_corrections_submitted', 'in_layout_revision'].includes(cycle.status))
+  return cycles.some((cycle) => {
+    const stage = String(cycle.stage || '').trim()
+    if (stage) return ACTIVE_PRODUCTION_STAGES.has(stage)
+    return ACTIVE_LEGACY_STATUSES.has(cycle.status)
+  })
 }
 
 export function canApproveProductionCycle(status: string | null | undefined): boolean {

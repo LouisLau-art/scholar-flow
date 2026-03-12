@@ -43,6 +43,27 @@ AUTHOR_CONTEXT_VISIBLE_STATUSES = {
     "author_confirmed",
 }
 
+_LEGACY_STATUS_STAGE_MAP = {
+    "draft": "received",
+    "awaiting_author": "author_proofreading",
+    "author_confirmed": "ae_final_review",
+    "author_corrections_submitted": "ae_final_review",
+    "in_layout_revision": "typesetting",
+    "approved_for_publish": "ready_to_publish",
+    "cancelled": "cancelled",
+}
+
+_PRODUCTION_CYCLE_SELECT_LEGACY = (
+    "id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
+    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
+)
+
+_PRODUCTION_CYCLE_SELECT_SOP = (
+    "id,manuscript_id,cycle_no,status,stage,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
+    "coordinator_ae_id,typesetter_id,language_editor_id,pdf_editor_id,current_assignee_id,"
+    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
+)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -90,6 +111,39 @@ def _is_missing_column_error(error: Exception, column_name: str) -> bool:
 
 def _safe_filename(filename: str) -> str:
     return sanitize_storage_filename(filename, default_name="proof")
+
+
+def _derive_cycle_stage(*, status: Any, stage: Any) -> str | None:
+    explicit = str(stage or "").strip()
+    if explicit:
+        return explicit
+    legacy = str(status or "").strip()
+    return _LEGACY_STATUS_STAGE_MAP.get(legacy)
+
+
+def _derive_current_assignee_id(row: dict[str, Any]) -> str | None:
+    explicit = str(row.get("current_assignee_id") or "").strip()
+    if explicit:
+        return explicit
+
+    stage = _derive_cycle_stage(status=row.get("status"), stage=row.get("stage"))
+    proofreader_author_id = str(row.get("proofreader_author_id") or "").strip()
+    coordinator_ae_id = str(row.get("coordinator_ae_id") or "").strip()
+    typesetter_id = str(row.get("typesetter_id") or row.get("layout_editor_id") or "").strip()
+    language_editor_id = str(row.get("language_editor_id") or "").strip()
+    pdf_editor_id = str(row.get("pdf_editor_id") or "").strip()
+
+    if stage == "author_proofreading":
+        return proofreader_author_id or None
+    if stage == "language_editing":
+        return language_editor_id or typesetter_id or None
+    if stage == "pdf_preparation":
+        return pdf_editor_id or coordinator_ae_id or typesetter_id or None
+    if stage in {"ae_internal_proof", "ae_final_review", "ready_to_publish"}:
+        return coordinator_ae_id or typesetter_id or None
+    if stage in {"received", "typesetting"}:
+        return typesetter_id or None
+    return coordinator_ae_id or typesetter_id or None
 
 
 class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWorkspacePublishGateMixin):
@@ -238,13 +292,35 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
         # - 访问控制应按“任一角色满足即可放行”，避免因为缺少 journal scope 把已被分配的 AE 挡掉。
         # - 但“写操作”必须严格按角色语义执行，避免 ME/EIC 缺 scope 时被 AE 分配兜底放行造成越权。
 
-        # 1) Production Editor: 仅允许访问“分配给自己”的 production cycle（layout_editor_id）。
-        #    说明：write/read 都允许，但必须基于 cycle 的真实分配关系。
-        if "production_editor" in roles and cycle is not None:
+        # 1) Production Editor / Coordinator AE:
+        #    - 新 SOP 字段优先：current_assignee_id / coordinator_ae_id / 分工字段；
+        #    - 旧字段回退：layout_editor_id / collaborator_editor_ids。
+        if cycle is not None:
             layout_editor_id = str(cycle.get("layout_editor_id") or "").strip()
+            current_assignee_id = str(cycle.get("current_assignee_id") or "").strip()
+            coordinator_ae_id = str(cycle.get("coordinator_ae_id") or "").strip()
             collaborators = set(self._normalize_uuid_list(cycle.get("collaborator_editor_ids")))
-            if (layout_editor_id and layout_editor_id == uid) or (uid and uid in collaborators):
+            production_assignments = {
+                str(cycle.get("typesetter_id") or "").strip(),
+                str(cycle.get("language_editor_id") or "").strip(),
+                str(cycle.get("pdf_editor_id") or "").strip(),
+                layout_editor_id,
+                current_assignee_id,
+                *collaborators,
+            }
+            production_assignments.discard("")
+
+            if "assistant_editor" in roles and coordinator_ae_id and coordinator_ae_id == uid:
                 return
+
+            if "production_editor" in roles:
+                if purpose == "read" and uid in production_assignments:
+                    return
+                if purpose == "write":
+                    if current_assignee_id and current_assignee_id == uid:
+                        return
+                    if not current_assignee_id and ((layout_editor_id and layout_editor_id == uid) or uid in collaborators):
+                        return
 
         # 2) 写操作：ME/EIC 必须通过 journal scope；其余角色一律不允许写入 production。
         if purpose == "write":
@@ -272,7 +348,7 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                 pass
 
         # 4) Assistant Editor:
-        #    录用后生产阶段不再由 AE 持续跟进，避免“accepted 后 AE 仍可进入 production”。
+        #    未被分配为 coordinator 的 AE 仍不能进入 production。
         if "assistant_editor" in roles:
             raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -300,16 +376,32 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
         try:
             resp = (
                 self.client.table("production_cycles")
-                .select(
-                    "id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
-                    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
-                )
+                .select(_PRODUCTION_CYCLE_SELECT_SOP)
                 .eq("manuscript_id", manuscript_id)
                 .order("cycle_no", desc=True)
                 .execute()
             )
             return getattr(resp, "data", None) or []
         except Exception as e:
+            if any(
+                _is_missing_column_error(e, column)
+                for column in (
+                    "stage",
+                    "coordinator_ae_id",
+                    "typesetter_id",
+                    "language_editor_id",
+                    "pdf_editor_id",
+                    "current_assignee_id",
+                )
+            ):
+                resp = (
+                    self.client.table("production_cycles")
+                    .select(_PRODUCTION_CYCLE_SELECT_LEGACY)
+                    .eq("manuscript_id", manuscript_id)
+                    .order("cycle_no", desc=True)
+                    .execute()
+                )
+                return getattr(resp, "data", None) or []
             if _is_table_missing_error(e, "production_cycles"):
                 raise HTTPException(
                     status_code=500,
@@ -321,10 +413,7 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
         try:
             resp = (
                 self.client.table("production_cycles")
-                .select(
-                    "id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proofreader_author_id,"
-                    "galley_bucket,galley_path,version_note,proof_due_at,approved_by,approved_at,created_at,updated_at"
-                )
+                .select(_PRODUCTION_CYCLE_SELECT_SOP)
                 .eq("manuscript_id", manuscript_id)
                 .eq("id", cycle_id)
                 .single()
@@ -332,16 +421,62 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             )
             row = getattr(resp, "data", None) or None
         except Exception as e:
+            if any(
+                _is_missing_column_error(e, column)
+                for column in (
+                    "stage",
+                    "coordinator_ae_id",
+                    "typesetter_id",
+                    "language_editor_id",
+                    "pdf_editor_id",
+                    "current_assignee_id",
+                )
+            ):
+                try:
+                    resp = (
+                        self.client.table("production_cycles")
+                        .select(_PRODUCTION_CYCLE_SELECT_LEGACY)
+                        .eq("manuscript_id", manuscript_id)
+                        .eq("id", cycle_id)
+                        .single()
+                        .execute()
+                    )
+                    row = getattr(resp, "data", None) or None
+                except Exception as legacy_exc:
+                    raise HTTPException(status_code=404, detail="Production cycle not found") from legacy_exc
+            else:
+                row = None
             if _is_table_missing_error(e, "production_cycles"):
                 raise HTTPException(
                     status_code=500,
                     detail="DB not migrated: production_cycles table missing",
                 ) from e
-            raise HTTPException(status_code=404, detail="Production cycle not found") from e
+            if row is None:
+                raise HTTPException(status_code=404, detail="Production cycle not found") from e
 
         if not row:
             raise HTTPException(status_code=404, detail="Production cycle not found")
         return row
+
+    def _get_cycle_artifacts(self, cycle_id: str) -> list[dict[str, Any]]:
+        try:
+            resp = (
+                self.client.table("production_cycle_artifacts")
+                .select("id,artifact_kind,storage_bucket,storage_path,file_name,mime_type,uploaded_by,created_at,metadata")
+                .eq("cycle_id", cycle_id)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            return getattr(resp, "data", None) or []
+        except Exception as e:
+            if _is_table_missing_error(e, "production_cycle_artifacts"):
+                return []
+            if any(
+                _is_missing_column_error(e, column)
+                for column in ("artifact_kind", "storage_bucket", "storage_path", "metadata")
+            ):
+                return []
+            raise
 
     def _get_latest_response(self, cycle_id: str) -> dict[str, Any] | None:
         try:
@@ -411,9 +546,15 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             "manuscript_id": row.get("manuscript_id"),
             "cycle_no": row.get("cycle_no"),
             "status": row.get("status"),
+            "stage": _derive_cycle_stage(status=row.get("status"), stage=row.get("stage")),
             "layout_editor_id": row.get("layout_editor_id"),
             "collaborator_editor_ids": self._normalize_uuid_list(row.get("collaborator_editor_ids")),
             "proofreader_author_id": row.get("proofreader_author_id"),
+            "coordinator_ae_id": row.get("coordinator_ae_id"),
+            "typesetter_id": row.get("typesetter_id") or row.get("layout_editor_id"),
+            "language_editor_id": row.get("language_editor_id"),
+            "pdf_editor_id": row.get("pdf_editor_id"),
+            "current_assignee_id": _derive_current_assignee_id(row),
             "galley_bucket": bucket or None,
             "galley_path": path or None,
             "galley_signed_url": self._signed_url(bucket, path) if include_signed_url and bucket and path else None,
@@ -424,6 +565,7 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
             "latest_response": self._get_latest_response(str(row.get("id") or "")),
+            "artifacts": self._get_cycle_artifacts(str(row.get("id") or "")),
         }
 
     def _next_cycle_no(self, manuscript_id: str) -> int:
@@ -486,7 +628,7 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
         for row in rows:
             try:
                 self.client.table("status_transition_logs").insert(row).execute()
-                return
+                break
             except Exception as e:
                 # 缺 payload 列时，尝试去掉 payload 再写一次
                 if "payload" in row and _is_missing_column_error(e, "payload"):
@@ -494,10 +636,39 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                     fallback.pop("payload", None)
                     try:
                         self.client.table("status_transition_logs").insert(fallback).execute()
-                        return
+                        break
                     except Exception:
                         pass
                 continue
+
+        # SOP Enhancement: Write to production_cycle_events if cycle_id is present
+        cycle_id = payload.get("cycle_id")
+        if cycle_id:
+            try:
+                event_type = payload.get("event_type") or "transition"
+                event_payload = {
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "event_type": event_type,
+                    "from_stage": payload.get("from_stage"),
+                    "to_stage": payload.get("to_stage"),
+                    "actor_user_id": changed_by if changed_by else None,
+                    "comment": comment,
+                    "payload": payload,
+                }
+                
+                # Check if changed_by is valid UUID
+                if changed_by:
+                    import uuid
+                    try:
+                        uuid.UUID(str(changed_by))
+                    except ValueError:
+                        event_payload["actor_user_id"] = None
+                        
+                self.client.table("production_cycle_events").insert(event_payload).execute()
+            except Exception:
+                pass
+                
         return
 
     def _notify(self, *, user_id: str | None, manuscript_id: str, title: str, content: str, action_url: str) -> None:

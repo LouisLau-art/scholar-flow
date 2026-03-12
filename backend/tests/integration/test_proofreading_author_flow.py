@@ -11,6 +11,8 @@ from .test_utils import insert_manuscript, make_user
 
 def _cleanup(db, manuscript_id: str, *, user_ids: list[str]) -> None:
     for table, column in (
+        ("production_cycle_events", "manuscript_id"),
+        ("production_cycle_artifacts", "manuscript_id"),
         ("production_proofreading_responses", "manuscript_id"),
         ("production_cycles", "manuscript_id"),
         ("status_transition_logs", "manuscript_id"),
@@ -32,15 +34,23 @@ def _cleanup(db, manuscript_id: str, *, user_ids: list[str]) -> None:
 
 def _require_schema(db) -> None:
     checks = [
-        ("production_cycles", "id,manuscript_id,status,proof_due_at"),
-        ("production_proofreading_responses", "id,cycle_id,decision,submitted_at"),
+        (
+            "production_cycles",
+            "id,manuscript_id,status,stage,coordinator_ae_id,typesetter_id,language_editor_id,pdf_editor_id,current_assignee_id,proof_due_at",
+        ),
+        (
+            "production_proofreading_responses",
+            "id,cycle_id,decision,submitted_at,attachment_bucket,attachment_path,attachment_file_name",
+        ),
+        ("production_cycle_artifacts", "id,cycle_id,manuscript_id,artifact_kind,storage_path"),
+        ("production_cycle_events", "id,cycle_id,manuscript_id,event_type,created_at"),
         ("production_correction_items", "id,response_id,suggested_text"),
     ]
     for table, cols in checks:
         try:
             db.table(table).select(cols).limit(1).execute()
         except APIError as e:
-            pytest.skip(f"数据库缺少 Feature 042 schema（{table}/{cols}）：{getattr(e, 'message', str(e))}")
+            pytest.skip(f"数据库缺少 Production SOP schema（{table}/{cols}）：{getattr(e, 'message', str(e))}")
 
 
 def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
@@ -128,13 +138,15 @@ async def test_author_submit_confirm_clean_updates_cycle(
 
         cycle = (
             supabase_admin_client.table("production_cycles")
-            .select("status")
+            .select("status,stage,current_assignee_id")
             .eq("id", cycle_id)
             .single()
             .execute()
             .data
         )
         assert cycle["status"] == "author_confirmed"
+        assert cycle["stage"] == "ae_final_review"
+        assert cycle["current_assignee_id"] == editor.id
     finally:
         _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])
 
@@ -210,17 +222,19 @@ async def test_author_submit_corrections_persists_items(
 
         cycle = (
             supabase_admin_client.table("production_cycles")
-            .select("status")
+            .select("status,stage,current_assignee_id")
             .eq("id", cycle_id)
             .single()
             .execute()
             .data
         )
         assert cycle["status"] == "author_corrections_submitted"
+        assert cycle["stage"] == "ae_final_review"
+        assert cycle["current_assignee_id"] == editor.id
 
         responses = (
             supabase_admin_client.table("production_proofreading_responses")
-            .select("id")
+            .select("id,attachment_bucket,attachment_path,attachment_file_name")
             .eq("cycle_id", cycle_id)
             .execute()
             .data
@@ -228,6 +242,9 @@ async def test_author_submit_corrections_persists_items(
         )
         assert len(responses) == 1
         response_id = responses[0]["id"]
+        assert responses[0]["attachment_bucket"] is None
+        assert responses[0]["attachment_path"] is None
+        assert responses[0]["attachment_file_name"] is None
 
         items = (
             supabase_admin_client.table("production_correction_items")
