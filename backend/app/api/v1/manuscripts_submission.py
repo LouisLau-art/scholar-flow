@@ -785,17 +785,31 @@ async def create_manuscript(
                 recipient_name = str(author_target.get("recipient_name") or "").strip()
                 if author_email:
                     email_service = EmailService()
+                    template_context = {
+                        "subject": "Submission Received",
+                        "recipient_name": recipient_name
+                        or author_email.split("@")[0].replace(".", " ").title(),
+                        "manuscript_title": manuscript.title,
+                        "manuscript_id": str(manuscript_id),
+                    }
+                    rendered_html = email_service.render_template("submission_ack.html", template_context)
+                    rendered_text = email_service.derive_plain_text_from_html(rendered_html)
                     background_tasks.add_task(
-                        email_service.send_template_email,
-                        to_email=author_email,
+                        email_service.send_rendered_email,
+                        to_emails=author_target.get("to_recipients") or [author_email],
+                        cc_emails=author_target.get("cc_recipients") or [],
+                        reply_to_emails=author_target.get("reply_to_recipients") or [],
+                        template_key="submission_ack",
                         subject="Submission Received",
-                        template_name="submission_ack.html",
-                        context={
-                            "subject": "Submission Received",
-                            "recipient_name": recipient_name
-                            or author_email.split("@")[0].replace(".", " ").title(),
-                            "manuscript_title": manuscript.title,
+                        html_body=rendered_html,
+                        text_body=rendered_text,
+                        audit_context={
                             "manuscript_id": str(manuscript_id),
+                            "actor_user_id": current_user_id or None,
+                            "scene": "submission",
+                            "event_type": "submission_ack",
+                            "delivery_mode": "auto",
+                            "communication_status": "system_sent",
                         },
                     )
             except Exception as e:

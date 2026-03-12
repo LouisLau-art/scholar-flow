@@ -259,7 +259,13 @@ async def test_create_manuscript_submission_ack_uses_resolved_author_target(clie
          patch("app.api.v1.manuscripts.supabase_admin", admin_mock), \
          patch(
              "app.api.v1.manuscripts_submission.resolve_author_notification_target",
-             return_value={"recipient_email": "corr@example.org", "recipient_name": "Alice Author"},
+             return_value={
+                 "recipient_email": "corr@example.org",
+                 "recipient_name": "Alice Author",
+                 "to_recipients": ["corr@example.org"],
+                 "cc_recipients": ["bob.author@example.org", "office@example.org"],
+                 "reply_to_recipients": ["office@example.org"],
+             },
          ) as resolve_target_mock, \
          patch("app.api.v1.manuscripts_submission.BackgroundTasks.add_task", autospec=True) as add_task_mock:
         response = await client.post(
@@ -280,8 +286,12 @@ async def test_create_manuscript_submission_ack_uses_resolved_author_target(clie
     assert add_task_mock.call_count == 1
     _, send_callable = add_task_mock.call_args.args[:2]
     assert callable(send_callable)
-    assert add_task_mock.call_args.kwargs["to_email"] == "corr@example.org"
-    assert add_task_mock.call_args.kwargs["context"]["recipient_name"] == "Alice Author"
+    assert add_task_mock.call_args.kwargs["to_emails"] == ["corr@example.org"]
+    assert add_task_mock.call_args.kwargs["cc_emails"] == ["bob.author@example.org", "office@example.org"]
+    assert add_task_mock.call_args.kwargs["reply_to_emails"] == ["office@example.org"]
+    assert add_task_mock.call_args.kwargs["template_key"] == "submission_ack"
+    assert "Alice Author" in add_task_mock.call_args.kwargs["html_body"]
+    assert "Targeted Submission" in add_task_mock.call_args.kwargs["html_body"]
 
 
 def test_ensure_author_role_membership_appends_author_role():

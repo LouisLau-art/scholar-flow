@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .meta { margin: 16px 0; padding: 12px 16px; background: #f6f8fb; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Submission Received</h2>
+        <p>Dear {{ recipient_name }},</p>
+        <p>We have received your manuscript submission and it has entered our editorial workflow.</p>
+
+        <div class="meta">
+            <p><strong>Manuscript Title:</strong> {{ manuscript_title }}</p>
+            <p><strong>Submission ID:</strong> {{ manuscript_id }}</p>
+        </div>
+
+        <p>You will receive further updates by email as the submission moves through review.</p>
+        <p>If you need to contact the journal, please reply to this email.</p>
+    </div>
+</body>
+</html>
