@@ -89,15 +89,29 @@ async def publish_manuscript_dev_impl(
                     if author_email:
                         from app.core.mail import email_service
 
+                        publish_context = {
+                            "recipient_name": author_name,
+                            "manuscript_title": title,
+                            "doi": published.get("doi"),
+                        }
+                        rendered_html = email_service.render_template("published.html", publish_context)
+                        rendered_text = email_service.derive_plain_text_from_html(rendered_html)
                         background_tasks.add_task(
-                            email_service.send_email_background,
-                            to_email=author_email,
+                            email_service.send_rendered_email,
+                            to_emails=target.get("to_recipients") or [author_email],
+                            cc_emails=target.get("cc_recipients") or [],
+                            reply_to_emails=target.get("reply_to_recipients") or [],
+                            template_key="published",
                             subject="Your article has been published",
-                            template_name="published.html",
-                            context={
-                                "recipient_name": author_name,
-                                "manuscript_title": title,
-                                "doi": published.get("doi"),
+                            html_body=rendered_html,
+                            text_body=rendered_text,
+                            audit_context={
+                                "manuscript_id": manuscript_id,
+                                "actor_user_id": str(current_user.get("id") or "").strip() or None,
+                                "scene": "publish",
+                                "event_type": "article_published",
+                                "delivery_mode": "auto",
+                                "communication_status": "system_sent",
                             },
                         )
         except Exception as e:

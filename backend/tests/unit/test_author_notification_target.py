@@ -289,5 +289,8 @@ async def test_publish_manuscript_dev_impl_uses_resolved_author_notification_tar
     assert result["success"] is True
     assert len(background_tasks.tasks) == 1
     task = background_tasks.tasks[0]
-    assert task.kwargs["to_email"] == "submission@example.org"
-    assert task.kwargs["context"]["recipient_name"] == "Corr Author"
+    assert task.kwargs["to_emails"] == ["submission@example.org"]
+    assert task.kwargs["cc_emails"] == ["coauthor@example.org", "office@example.org"]
+    assert task.kwargs["reply_to_emails"] == ["office@example.org"]
+    assert task.kwargs["template_key"] == "published"
+    assert "Corr Author" in task.kwargs["html_body"]
