@@ -250,6 +250,49 @@ def test_assign_ae_allows_waiting_author_reassignment_from_technical():
     assert log_kwargs["payload"]["assistant_editor_after"] == str(new_ae_id)
 
 
+def test_assign_ae_rejects_start_external_review_while_waiting_author():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    operator = uuid4()
+
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+            "assistant_editor_id": None,
+            "owner_id": None,
+        }
+    )
+    client = Mock()
+    for method in ("table", "update", "eq", "or_", "execute"):
+        getattr(client, method).return_value = client
+    client.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": str(manuscript_id),
+                "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_id": str(ae_id),
+            }
+        ]
+    )
+    svc.client = client
+    svc.editorial = Mock()
+
+    with pytest.raises(HTTPException) as ei:
+        svc.assign_ae(
+            manuscript_id,
+            ae_id,
+            operator,
+            start_external_review=True,
+        )
+
+    assert ei.value.status_code == 409
+    assert "waiting author" in str(ei.value.detail).lower()
+
+
 def test_assign_ae_raises_409_when_state_changed_concurrently():
     svc = _new_service()
     manuscript_id = uuid4()

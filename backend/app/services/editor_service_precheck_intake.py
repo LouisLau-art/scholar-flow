@@ -274,6 +274,8 @@ class EditorServicePrecheckIntakeMixin:
             )
         if pre not in {PreCheckStatus.INTAKE.value, PreCheckStatus.TECHNICAL.value}:
             raise HTTPException(status_code=409, detail=f"Invalid pre-check stage for assignment: {pre}")
+        if status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value and start_external_review:
+            raise HTTPException(status_code=409, detail="Cannot start external review while waiting author resubmission")
         if pre == PreCheckStatus.TECHNICAL.value and ae_before == ae_id_str:
             # 幂等：同一 AE 重复分派
             out = dict(ms)
