@@ -30,6 +30,49 @@ class _NoopClient:
         return SimpleNamespace(data=[])
 
 
+class _UploadTable:
+    def __init__(self, row: dict):
+        self._row = row
+        self._payload: dict | None = None
+
+    def update(self, payload: dict):
+        self._payload = payload
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        data = dict(self._row)
+        data.update(self._payload or {})
+        return SimpleNamespace(data=[data])
+
+
+class _UploadBucket:
+    def __init__(self):
+        self.uploads: list[dict] = []
+
+    def upload(self, path: str, content: bytes, options: dict):
+        self.uploads.append({"path": path, "content": content, "options": options})
+
+
+class _UploadStorage:
+    def __init__(self):
+        self.bucket = _UploadBucket()
+
+    def from_(self, _name: str):
+        return self.bucket
+
+
+class _UploadClient:
+    def __init__(self, row: dict):
+        self._row = row
+        self.storage = _UploadStorage()
+
+    def table(self, _name: str):
+        return _UploadTable(self._row)
+
+
 def _svc() -> ProductionWorkspaceService:
     svc = ProductionWorkspaceService()
     svc.client = _NoopClient()  # type: ignore[assignment]
@@ -178,6 +221,128 @@ def test_approve_cycle_requires_author_confirmed(monkeypatch: pytest.MonkeyPatch
             profile_roles=["managing_editor"],
         )
     assert exc.value.status_code == 422
+
+
+def test_upload_galley_sends_initial_proofreading_email(monkeypatch: pytest.MonkeyPatch):
+    cycle_row = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "cycle_no": 1,
+        "status": "draft",
+        "proofreader_author_id": "author-1",
+        "layout_editor_id": "editor-1",
+    }
+    svc = _svc()
+    svc.client = _UploadClient(cycle_row)  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "english_editing",
+            "title": "Demo Manuscript",
+            "author_id": "author-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle_row))
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_notify", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_format_cycle", lambda row, include_signed_url: row)
+
+    monkeypatch.setattr(
+        "app.services.production_workspace_service_workflow_cycle_writes.resolve_author_notification_target",
+        lambda **_kwargs: {
+            "recipient_email": "corr@example.org",
+            "recipient_name": "Corr Author",
+            "to_recipients": ["corr@example.org"],
+            "cc_recipients": ["co@example.org", "office@example.org"],
+            "reply_to_recipients": ["office@example.org"],
+        },
+    )
+    email_send_mock = SimpleNamespace(call_args=None)
+
+    def _send_rendered_email(**kwargs):
+        email_send_mock.call_args = kwargs
+        return {"ok": True, "status": "sent", "provider_id": "proof_1", "error_message": None}
+
+    monkeypatch.setattr(
+        "app.services.production_workspace_service_workflow_cycle_writes.email_service.send_rendered_email",
+        _send_rendered_email,
+    )
+
+    row = svc.upload_galley(
+        manuscript_id="ms-1",
+        cycle_id="cycle-1",
+        user_id="editor-1",
+        profile_roles=["production_editor"],
+        filename="proof.pdf",
+        content=b"%PDF-1.4 proof",
+        version_note="v1",
+        proof_due_at=datetime.now(timezone.utc) + timedelta(days=2),
+        content_type="application/pdf",
+    )
+
+    assert row["status"] == "awaiting_author"
+    assert email_send_mock.call_args is not None
+    assert email_send_mock.call_args["to_emails"] == ["corr@example.org"]
+    assert email_send_mock.call_args["cc_emails"] == ["co@example.org", "office@example.org"]
+    assert email_send_mock.call_args["reply_to_emails"] == ["office@example.org"]
+    assert email_send_mock.call_args["template_key"] == "proofreading_request"
+    assert email_send_mock.call_args["audit_context"]["delivery_mode"] == "auto"
+
+
+def test_upload_galley_does_not_auto_send_proofreading_email_on_resubmission(monkeypatch: pytest.MonkeyPatch):
+    cycle_row = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "cycle_no": 1,
+        "status": "author_corrections_submitted",
+        "proofreader_author_id": "author-1",
+        "layout_editor_id": "editor-1",
+    }
+    svc = _svc()
+    svc.client = _UploadClient(cycle_row)  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "proofreading",
+            "title": "Demo Manuscript",
+            "author_id": "author-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle_row))
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_notify", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_format_cycle", lambda row, include_signed_url: row)
+
+    send_calls: list[dict] = []
+    monkeypatch.setattr(
+        "app.services.production_workspace_service_workflow_cycle_writes.email_service.send_rendered_email",
+        lambda **kwargs: send_calls.append(kwargs) or {"ok": True, "status": "sent"},
+    )
+
+    row = svc.upload_galley(
+        manuscript_id="ms-1",
+        cycle_id="cycle-1",
+        user_id="editor-1",
+        profile_roles=["production_editor"],
+        filename="proof.pdf",
+        content=b"%PDF-1.4 proof",
+        version_note="v2",
+        proof_due_at=datetime.now(timezone.utc) + timedelta(days=2),
+        content_type="application/pdf",
+    )
+
+    assert row["status"] == "awaiting_author"
+    assert send_calls == []
 
 
 def test_assert_publish_gate_ready_strict_requires_approved_cycle(monkeypatch: pytest.MonkeyPatch):

@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from app.api.v1.editor_common import resolve_author_notification_target
+from app.core.mail import email_service
 from app.models.manuscript import normalize_status
 from app.models.production_workspace import (
     CreateProductionCycleRequest,
@@ -333,4 +335,46 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             content=f"New galley proof is ready for manuscript '{manuscript.get('title') or manuscript_id}'.",
             action_url=f"/proofreading/{manuscript_id}",
         )
+        if old_status == "draft":
+            try:
+                target = resolve_author_notification_target(
+                    manuscript={
+                        "id": manuscript.get("id"),
+                        "title": manuscript.get("title"),
+                        "author_id": manuscript.get("author_id"),
+                    },
+                    manuscript_id=manuscript_id,
+                    supabase_client=self.client,
+                )
+                author_email = target.get("recipient_email")
+                recipient_name = target.get("recipient_name") or "Author"
+                if author_email:
+                    rendered_html = email_service.render_template(
+                        "status_update.html",
+                        {
+                            "recipient_name": recipient_name,
+                            "manuscript_title": manuscript.get("title") or manuscript_id,
+                            "decision_label": "Proofreading Required",
+                            "comment": "A new galley proof is ready. Please review it and submit your confirmation or corrections.",
+                        },
+                    )
+                    email_service.send_rendered_email(
+                        to_emails=target.get("to_recipients") or [author_email],
+                        cc_emails=target.get("cc_recipients") or [],
+                        reply_to_emails=target.get("reply_to_recipients") or [],
+                        template_key="proofreading_request",
+                        subject="Proofreading Required",
+                        html_body=rendered_html,
+                        text_body=email_service.derive_plain_text_from_html(rendered_html),
+                        audit_context={
+                            "manuscript_id": manuscript_id,
+                            "actor_user_id": str(user_id or "").strip() or None,
+                            "scene": "proofreading",
+                            "event_type": "proofreading_request",
+                            "delivery_mode": "auto",
+                            "communication_status": "system_sent",
+                        },
+                    )
+            except Exception as exc:
+                print(f"[ProofEmail] failed to send proofreading request email (ignored): {exc}")
         return self._format_cycle(row, include_signed_url=True)
