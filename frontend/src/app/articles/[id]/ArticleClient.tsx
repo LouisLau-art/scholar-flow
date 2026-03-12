@@ -25,7 +25,7 @@ const PRIVATE_PROGRESS_STEPS: Array<{ key: string; label: string }> = [
 
 function normalizeWorkflowStatus(rawStatus: unknown): string {
   const status = String(rawStatus || '').toLowerCase()
-  if (['minor_revision', 'major_revision', 'revision_required', 'revision_requested', 'returned_for_revision'].includes(status)) {
+  if (['revision_before_review', 'minor_revision', 'major_revision', 'revision_required', 'revision_requested', 'returned_for_revision'].includes(status)) {
     return 'revision_requested'
   }
   if (status === 'decision_done') return 'decision'

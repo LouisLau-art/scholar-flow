@@ -26,7 +26,7 @@ async def get_author_stats(current_user: dict = Depends(get_current_user)):
         revision_requested = sum(
             1
             for r in rows
-            if (r.get("status") in {"major_revision", "minor_revision", "revision_requested"})
+            if (r.get("status") in {"revision_before_review", "major_revision", "minor_revision", "revision_requested"})
         )
         rejected = sum(1 for r in rows if r.get("status") == "rejected")
 

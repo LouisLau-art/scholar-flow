@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
 from app.services.decision_service import DecisionService
+from app.services.decision_service_transitions import build_author_decision_email_payload
 
 
 def _svc() -> DecisionService:
@@ -40,6 +41,18 @@ def test_ensure_editor_access_allows_bound_academic_editor() -> None:
         user_id="academic-1",
         roles={"academic_editor"},
     )
+
+
+def test_ensure_editor_access_rejects_unassigned_editor_in_chief() -> None:
+    svc = _svc()
+    with pytest.raises(HTTPException) as exc:
+        svc._ensure_editor_access(
+            manuscript={"editor_id": "editor-1", "assistant_editor_id": "ae-1", "academic_editor_id": "academic-1"},
+            user_id="chief-2",
+            roles={"editor_in_chief"},
+        )
+    assert exc.value.status_code == 403
+
 
 def test_ensure_editor_access_rejects_unassigned_user() -> None:
     svc = _svc()
@@ -172,13 +185,14 @@ def test_get_decision_context_returns_role_based_permission_flags(
         "_get_latest_review_stage_exit_request",
         lambda _id: {
             "target_stage": "first",
-            "requested_outcome": "major_revision",
-            "note": "AE recommends major revision",
+            "requested_outcome": "reject_resubmit",
+            "note": "AE recommends reject and resubmit",
             "recipient_emails": ["chief@example.com", "board@example.com"],
             "changed_at": "2026-03-10T00:00:00+00:00",
             "changed_by": "ae-1",
         },
     )
+    monkeypatch.setattr(svc, "_get_latest_decision_recommendation", lambda _id: None)
     monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
     monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
 
@@ -192,7 +206,7 @@ def test_get_decision_context_returns_role_based_permission_flags(
     assert permissions.get("can_record_first") is True
     assert permissions.get("can_submit_final") is False
     assert permissions.get("can_submit") is True
-    assert context.get("review_stage_exit_request", {}).get("requested_outcome") == "major_revision"
+    assert context.get("review_stage_exit_request", {}).get("requested_outcome") == "reject_resubmit"
     assert context.get("review_stage_exit_request", {}).get("recipient_emails") == [
         "chief@example.com",
         "board@example.com",
@@ -222,9 +236,10 @@ def test_get_decision_context_allows_academic_editor_to_submit_final(
         },
     )
     monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
-    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1"}])
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
     monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
     monkeypatch.setattr(svc, "_get_latest_review_stage_exit_request", lambda _id: None)
+    monkeypatch.setattr(svc, "_get_latest_decision_recommendation", lambda _id: None)
     monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
     monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
 
@@ -238,6 +253,7 @@ def test_get_decision_context_allows_academic_editor_to_submit_final(
     assert permissions.get("can_record_first") is True
     assert permissions.get("can_submit_final") is True
     assert permissions.get("can_submit") is True
+    assert permissions.get("submission_mode") == "recommendation"
 
 
 def test_review_stage_exit_request_requires_requested_outcome_for_first_target() -> None:
@@ -253,7 +269,7 @@ def test_review_stage_exit_request_requires_recipients_for_first_target() -> Non
     with pytest.raises(ValueError, match="recipient_emails is required"):
         ReviewStageExitRequest(
             target_stage="first",
-            requested_outcome="major_revision",
+            requested_outcome="accept_after_minor_revision",
             note="Send to academic editor",
             accepted_pending_resolutions=[],
         )
@@ -263,7 +279,7 @@ def test_review_stage_exit_request_rejects_requested_outcome_for_non_first_targe
     with pytest.raises(ValueError, match="requested_outcome is only allowed"):
         ReviewStageExitRequest(
             target_stage="major_revision",
-            requested_outcome="reject",
+            requested_outcome="reject_resubmit",
             note="AE direct major revision",
             accepted_pending_resolutions=[],
         )
@@ -272,13 +288,24 @@ def test_review_stage_exit_request_rejects_requested_outcome_for_non_first_targe
 def test_review_stage_exit_request_normalizes_first_decision_recipient_emails() -> None:
     request = ReviewStageExitRequest(
         target_stage="first",
-        requested_outcome="major_revision",
+        requested_outcome="reject_resubmit",
         recipient_emails=" Chief@example.com ; board@example.com\nchief@example.com ",
         note="Send to academic decision",
         accepted_pending_resolutions=[],
     )
 
     assert request.recipient_emails == ["chief@example.com", "board@example.com"]
+
+
+def test_review_stage_exit_request_rejects_legacy_add_reviewer_outcome() -> None:
+    with pytest.raises(ValueError):
+        ReviewStageExitRequest(
+            target_stage="first",
+            requested_outcome="add_reviewer",
+            recipient_emails=["chief@example.com"],
+            note="Legacy add reviewer should no longer be accepted",
+            accepted_pending_resolutions=[],
+        )
 
 
 def test_review_stage_exit_request_rejects_recipient_emails_for_non_first_target() -> None:
@@ -378,8 +405,8 @@ def test_submit_decision_allows_revision_without_submitted_author_revision(
 
     out = svc.submit_decision(
         manuscript_id="ms-1",
-        user_id="eic-1",
-        profile_roles=["editor_in_chief"],
+        user_id="me-1",
+        profile_roles=["managing_editor"],
         request=DecisionSubmitRequest(
             content="Need major revision",
             decision="major_revision",
@@ -414,8 +441,8 @@ def test_submit_decision_blocks_accept_without_submitted_author_revision(
     with pytest.raises(HTTPException) as exc:
         svc.submit_decision(
             manuscript_id="ms-1",
-            user_id="eic-1",
-            profile_roles=["editor_in_chief"],
+            user_id="me-1",
+            profile_roles=["managing_editor"],
             request=DecisionSubmitRequest(
                 content="Accept",
                 decision="accept",
@@ -527,8 +554,8 @@ def test_submit_decision_first_stage_add_reviewer_returns_to_under_review_withou
 
     out = svc.submit_decision(
         manuscript_id="ms-1",
-        user_id="eic-1",
-        profile_roles=["editor_in_chief"],
+        user_id="me-1",
+        profile_roles=["managing_editor"],
         request=DecisionSubmitRequest(
             content="",
             decision="add_reviewer",
@@ -598,8 +625,8 @@ def test_submit_decision_first_stage_reuses_current_draft_instead_of_latest_fina
 
     out = svc.submit_decision(
         manuscript_id="ms-1",
-        user_id="eic-1",
-        profile_roles=["editor_in_chief"],
+        user_id="me-1",
+        profile_roles=["managing_editor"],
         request=DecisionSubmitRequest(
             content="Need major revision",
             decision="major_revision",
@@ -674,8 +701,8 @@ def test_submit_decision_final_stage_creates_new_letter_and_discards_stale_draft
 
     out = svc.submit_decision(
         manuscript_id="ms-1",
-        user_id="eic-1",
-        profile_roles=["editor_in_chief"],
+        user_id="me-1",
+        profile_roles=["managing_editor"],
         request=DecisionSubmitRequest(
             content="Accept",
             decision="accept",
@@ -716,8 +743,8 @@ def test_submit_decision_blocks_add_reviewer_in_final_stage(
     with pytest.raises(HTTPException) as exc:
         svc.submit_decision(
             manuscript_id="ms-1",
-            user_id="eic-1",
-            profile_roles=["editor_in_chief"],
+            user_id="me-1",
+            profile_roles=["managing_editor"],
             request=DecisionSubmitRequest(
                 content="Need more reviewers",
                 decision="add_reviewer",
@@ -796,8 +823,8 @@ def test_submit_decision_blocks_final_revision_before_decision_queue(
     with pytest.raises(HTTPException) as exc:
         svc.submit_decision(
             manuscript_id="ms-1",
-            user_id="eic-1",
-            profile_roles=["editor_in_chief"],
+            user_id="me-1",
+            profile_roles=["managing_editor"],
             request=DecisionSubmitRequest(
                 content="Need revision",
                 decision="major_revision",
@@ -841,8 +868,8 @@ def test_submit_decision_allows_accept_in_decision_done_without_author_revision(
 
     out = svc.submit_decision(
         manuscript_id="ms-1",
-        user_id="eic-1",
-        profile_roles=["editor_in_chief"],
+        user_id="me-1",
+        profile_roles=["managing_editor"],
         request=DecisionSubmitRequest(
             content="Accept",
             decision="accept",
@@ -852,6 +879,279 @@ def test_submit_decision_allows_accept_in_decision_done_without_author_revision(
         ),
     )
     assert out["manuscript_status"] == "approved"
+
+
+def test_submit_decision_maps_reject_resubmit_to_reject_workflow_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    save_calls: list[dict[str, object]] = []
+    transition_calls: list[dict[str, object]] = []
+    notify_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision_done",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_save_letter",
+        lambda **kwargs: save_calls.append(kwargs)
+        or {
+            "id": "dl-1",
+            "status": "final",
+            "decision": kwargs["decision"],
+            "updated_at": "2026-03-12T00:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "_transition_for_final_decision",
+        lambda **kwargs: transition_calls.append(kwargs) or "rejected",
+    )
+    monkeypatch.setattr(
+        svc,
+        "_notify_author",
+        lambda **kwargs: notify_calls.append(kwargs),
+    )
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="me-1",
+        profile_roles=["managing_editor"],
+        request=DecisionSubmitRequest(
+            content="The idea is promising, but the manuscript needs to be rewritten and resubmitted.",
+            decision="reject_resubmit",
+            is_final=True,
+            decision_stage="final",
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["manuscript_status"] == "rejected"
+    assert save_calls[0]["decision"] == "reject"
+    assert transition_calls[0]["decision"] == "reject"
+    assert transition_calls[0]["transition_payload"]["decision"] == "reject_resubmit"
+    assert transition_calls[0]["transition_payload"]["workflow_decision"] == "reject"
+    assert notify_calls[0]["decision"] == "reject_resubmit"
+
+
+def test_build_author_decision_email_payload_maps_reject_resubmit_template_key() -> None:
+    payload = build_author_decision_email_payload(
+        decision="reject_resubmit",
+        manuscript_title="Promising Manuscript",
+        recipient_name="Dr. Author",
+    )
+
+    assert payload["template_key"] == "decision_reject_resubmit"
+    assert payload["context"]["decision_label"] == "Reject and Encourage Resubmitting after Revision"
+    assert "encourage" in str(payload["body_text_template"]).lower()
+
+
+def test_notify_author_sends_email_for_reject_resubmit(monkeypatch: pytest.MonkeyPatch) -> None:
+    svc = _svc()
+    email_calls: list[dict[str, object]] = []
+    notification_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "app.services.decision_service_transitions.resolve_author_notification_target",
+        lambda **_kwargs: {
+            "recipient_email": "submission@example.org",
+            "recipient_name": "Dr. Author",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.decision_service_transitions.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
+    monkeypatch.setattr(
+        svc.notification,
+        "create_notification",
+        lambda **kwargs: notification_calls.append(kwargs),
+    )
+
+    svc._notify_author(
+        manuscript={
+            "id": "ms-1",
+            "title": "Promising Manuscript",
+            "author_id": "author-1",
+        },
+        manuscript_id="ms-1",
+        decision="reject_resubmit",
+    )
+
+    assert email_calls[0]["to_email"] == "submission@example.org"
+    assert email_calls[0]["template_key"] == "decision_reject_resubmit"
+    assert email_calls[0]["context"]["decision_label"] == "Reject and Encourage Resubmitting after Revision"
+    assert notification_calls[0]["user_id"] == "author-1"
+
+
+def test_notify_author_prefers_latest_recommendation_template_when_bucket_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    email_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "app.services.decision_service_transitions.resolve_author_notification_target",
+        lambda **_kwargs: {
+            "recipient_email": "submission@example.org",
+            "recipient_name": "Dr. Author",
+        },
+    )
+    monkeypatch.setattr(
+        svc,
+        "_get_latest_decision_recommendation",
+        lambda _manuscript_id: {"decision": "reject_resubmit"},
+    )
+    monkeypatch.setattr(
+        "app.services.decision_service_transitions.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
+    monkeypatch.setattr(svc.notification, "create_notification", lambda **_kwargs: None)
+
+    svc._notify_author(
+        manuscript={
+            "id": "ms-1",
+            "title": "Promising Manuscript",
+            "author_id": "author-1",
+        },
+        manuscript_id="ms-1",
+        decision="reject",
+    )
+
+    assert email_calls[0]["template_key"] == "decision_reject_resubmit"
+    assert email_calls[0]["context"]["decision_label"] == "Reject and Encourage Resubmitting after Revision"
+
+
+def test_submit_decision_first_stage_academic_recommendation_keeps_status_and_skips_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    audit_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision",
+            "version": 1,
+            "author_id": "author-1",
+            "academic_editor_id": "academic-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [])
+    monkeypatch.setattr(
+        svc,
+        "_transition_for_first_decision",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("recommendation submit should not transition")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_notify_author",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("recommendation submit should not notify author")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_safe_insert_audit_log",
+        lambda **kwargs: audit_calls.append(kwargs),
+    )
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="academic-1",
+        profile_roles=["academic_editor"],
+        request=DecisionSubmitRequest(
+            content="Optional recommendation note",
+            decision="accept",
+            is_final=True,
+            decision_stage="first",
+            attachment_paths=["att-1|decision/recommendation-note.docx"],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["decision_letter_id"] is None
+    assert out["status"] is None
+    assert out["manuscript_status"] == "decision"
+    assert len(audit_calls) == 1
+    assert audit_calls[0]["from_status"] == "decision"
+    assert audit_calls[0]["to_status"] == "decision"
+    payload = audit_calls[0]["payload"]
+    assert isinstance(payload, dict)
+    assert payload["action"] == "decision_recommendation_submitted"
+    assert payload["decision"] == "accept"
+    assert payload["decision_stage"] == "first"
+
+
+def test_submit_decision_final_stage_academic_recommendation_audits_without_notify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    audit_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "decision_done",
+            "version": 2,
+            "author_id": "author-1",
+            "academic_editor_id": "academic-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1", "status": "submitted"}])
+    monkeypatch.setattr(
+        svc,
+        "_transition_for_final_decision",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("recommendation submit should not transition")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_notify_author",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("recommendation submit should not notify author")),
+    )
+    monkeypatch.setattr(
+        svc,
+        "_safe_insert_audit_log",
+        lambda **kwargs: audit_calls.append(kwargs),
+    )
+
+    out = svc.submit_decision(
+        manuscript_id="ms-1",
+        user_id="academic-1",
+        profile_roles=["academic_editor"],
+        request=DecisionSubmitRequest(
+            content="The idea is promising, but the manuscript needs to be rewritten and resubmitted.",
+            decision="reject_resubmit",
+            is_final=True,
+            decision_stage="final",
+            attachment_paths=[],
+            last_updated_at=None,
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision_done"
+    assert len(audit_calls) == 1
+    payload = audit_calls[0]["payload"]
+    assert isinstance(payload, dict)
+    assert payload["action"] == "decision_recommendation_submitted"
+    assert payload["decision"] == "reject_resubmit"
+    assert payload["workflow_decision"] == "reject"
+    assert payload["decision_stage"] == "final"
 
 
 def test_exit_review_stage_cancels_auto_and_explicit_pending_reviewers(
@@ -990,7 +1290,7 @@ def test_exit_review_stage_allows_zero_submitted_reports(
         profile_roles=["assistant_editor"],
         request=ReviewStageExitRequest(
             target_stage="first",
-            requested_outcome="minor_revision",
+            requested_outcome="accept_after_minor_revision",
             recipient_emails=["chief@example.com"],
             note="Proceed without waiting for reviewer reports",
             accepted_pending_resolutions=[],
@@ -1216,9 +1516,9 @@ def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
         profile_roles=["assistant_editor"],
         request=ReviewStageExitRequest(
             target_stage="first",
-            requested_outcome="reject",
+            requested_outcome="reject_resubmit",
             recipient_emails=["chief@example.com", "board@example.com"],
-            note="AE recommends reject but escalates for first decision",
+            note="AE recommends reject and resubmit but escalates for first decision",
             accepted_pending_resolutions=[],
         ),
     )
@@ -1228,7 +1528,7 @@ def test_exit_review_stage_persists_requested_outcome_in_transition_payload(
     payload = transitions[0]["payload"]
     assert isinstance(payload, dict)
     assert payload["target_stage"] == "first"
-    assert payload["requested_outcome"] == "reject"
+    assert payload["requested_outcome"] == "reject_resubmit"
     assert payload["recipient_emails"] == ["chief@example.com", "board@example.com"]
 
 

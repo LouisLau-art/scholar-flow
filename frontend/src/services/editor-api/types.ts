@@ -35,7 +35,15 @@ export type EditorRbacContextResponse = {
 
 export type DecisionSubmissionPayload = {
   content: string
-  decision: 'accept' | 'reject' | 'major_revision' | 'minor_revision' | 'add_reviewer'
+  decision:
+    | 'accept'
+    | 'reject'
+    | 'major_revision'
+    | 'minor_revision'
+    | 'add_reviewer'
+    | 'accept_after_minor_revision'
+    | 'reject_resubmit'
+    | 'reject_decline'
   is_final: boolean
   decision_stage?: 'first' | 'final'
   attachment_paths: string[]
@@ -50,7 +58,12 @@ export type ReviewStageExitPendingResolutionPayload = {
 
 export type ReviewStageExitPayload = {
   target_stage: 'first' | 'final' | 'major_revision' | 'minor_revision'
-  requested_outcome?: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
+  requested_outcome?:
+    | 'accept'
+    | 'accept_after_minor_revision'
+    | 'major_revision'
+    | 'reject_resubmit'
+    | 'reject_decline'
   recipient_emails?: string[]
   note?: string
   accepted_pending_resolutions?: ReviewStageExitPendingResolutionPayload[]

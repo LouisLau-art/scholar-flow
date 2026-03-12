@@ -382,7 +382,7 @@ async def submit_academic_check(
     profile: dict = Depends(require_any_role(["academic_editor", "editor_in_chief", "admin"])),
 ):
     """
-    Submit academic check. Routes to Review or Decision Phase.
+    Submit academic recommendation. Editorial office executes the actual next transition later.
     """
     try:
         ensure_manuscript_scope_access(
@@ -418,7 +418,7 @@ async def quick_precheck(
 
     decision 映射：
     - approve  -> under_review
-    - revision -> minor_revision
+    - revision -> revision_before_review
     """
     decision = payload.decision
     comment = (payload.comment or "").strip() or None
@@ -439,7 +439,7 @@ async def quick_precheck(
     if current_status != "pre_check":
         raise HTTPException(status_code=400, detail=f"Quick pre-check only allowed for pre_check. Current: {current_status}")
 
-    to_status = "under_review" if decision == "approve" else "minor_revision"
+    to_status = "under_review" if decision == "approve" else "revision_before_review"
     updated = svc.update_status(
         manuscript_id=id,
         to_status=to_status,

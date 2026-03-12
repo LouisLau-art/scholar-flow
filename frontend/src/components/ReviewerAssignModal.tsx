@@ -432,7 +432,7 @@ export default function ReviewerAssignModal({
               <div>
                 <h2 className="text-xl font-bold text-foreground">Build Reviewer List</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Save a draft reviewer selection here. Send the actual invitation email from manuscript detail.
+                  Build the reviewer list for the current round manually here. The system will not auto-carry reviewers into the next round; send the actual invitation email from manuscript detail.
                 </p>
               </div>
             </div>
@@ -497,7 +497,7 @@ export default function ReviewerAssignModal({
             </div>
 
             <div className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Selection policy hint: cooldown {policyMeta.cooldown_days || 30} days (same journal) is warning-only here, conflict-of-interest remains hard block, overdue risk is warning-only.
+              Selection policy hint: cooldown {policyMeta.cooldown_days || 30} days (same journal) is warning-only here, conflict-of-interest remains hard block, overdue risk is warning-only. Current-round reviewer selection is always explicit.
             </div>
 
             <ReviewerCandidateList

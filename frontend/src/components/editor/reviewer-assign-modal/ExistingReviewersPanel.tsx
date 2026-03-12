@@ -36,7 +36,7 @@ export function ExistingReviewersPanel(props: ExistingReviewersPanelProps) {
 
   return (
     <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
-      <h3 className="font-semibold text-foreground mb-3">Current Reviewers ({existingReviewers.length})</h3>
+      <h3 className="font-semibold text-foreground mb-3">Current Round Reviewers ({existingReviewers.length})</h3>
       <div className="space-y-2">
         {existingReviewers.map((r) => {
           const badge = resolveAssignmentBadge(r.status)

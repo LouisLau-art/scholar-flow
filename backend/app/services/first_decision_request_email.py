@@ -15,10 +15,11 @@ _DECISION_SCENE = "decision_workflow"
 _FIRST_DECISION_EVENT_TYPE = "first_decision_request"
 _FIRST_DECISION_TEMPLATE_KEY = "first_decision_request_standard"
 _OUTCOME_LABELS = {
+    "accept": "Accept",
+    "accept_after_minor_revision": "Accept After Minor Revision",
     "major_revision": "Major Revision",
-    "minor_revision": "Minor Revision",
-    "reject": "Reject",
-    "add_reviewer": "Add Reviewer",
+    "reject_resubmit": "Reject and Encourage Resubmitting after Revision",
+    "reject_decline": "Reject and Decline Resubmitting",
 }
 
 _DEFAULT_FIRST_DECISION_TEMPLATE: dict[str, Any] = {

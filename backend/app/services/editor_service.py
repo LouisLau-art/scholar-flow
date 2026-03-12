@@ -445,17 +445,17 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
             }
         return out
 
-    def _load_precheck_timeline_index(self, manuscript_ids: list[str]) -> dict[str, dict[str, str]]:
+    def _load_precheck_timeline_index(self, manuscript_ids: list[str]) -> dict[str, dict[str, Any]]:
         """
-        从审计日志汇总 assigned_at / technical_completed_at / academic_completed_at。
+        从审计日志汇总 assigned_at / technical_completed_at / academic_completed_at / recommendation。
         """
         if not manuscript_ids:
             return {}
-        index: dict[str, dict[str, str]] = {}
+        index: dict[str, dict[str, Any]] = {}
         try:
             resp = (
                 self.client.table("status_transition_logs")
-                .select("manuscript_id,created_at,payload")
+                .select("manuscript_id,created_at,comment,payload")
                 .in_("manuscript_id", manuscript_ids)
                 .order("created_at", desc=False)
                 .execute()
@@ -479,8 +479,21 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
                 bucket["assigned_at"] = created_at
             if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
                 bucket["technical_completed_at"] = created_at
-            if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
+            if action in {
+                "precheck_academic_recommendation_submitted",
+                "precheck_academic_to_review",
+                "precheck_academic_to_decision",
+            }:
                 bucket["academic_completed_at"] = created_at
+                decision = str(payload.get("decision") or "").strip().lower()
+                if not decision:
+                    if action == "precheck_academic_to_review":
+                        decision = "review"
+                    elif action == "precheck_academic_to_decision":
+                        decision = "decision_phase"
+                bucket["academic_recommendation"] = decision or None
+                comment = str(row.get("comment") or "").strip()
+                bucket["academic_recommendation_comment"] = comment or None
         return index
 
     def _enrich_precheck_rows(
@@ -522,8 +535,22 @@ class EditorService(EditorServicePrecheckMixin, EditorServiceFinanceMixin):
             stamp = timeline_index.get(manuscript_id, {}) if include_timeline else {}
             row["assigned_at"] = stamp.get("assigned_at") if include_timeline else None
             row["technical_completed_at"] = stamp.get("technical_completed_at") if include_timeline else None
-            row["academic_completed_at"] = stamp.get("academic_completed_at") if include_timeline else None
+            row["academic_completed_at"] = (
+                stamp.get("academic_completed_at")
+                if include_timeline and stamp.get("academic_completed_at")
+                else row.get("academic_completed_at")
+            )
             row["academic_submitted_at"] = row.get("academic_submitted_at")
+            row["academic_recommendation"] = (
+                stamp.get("academic_recommendation")
+                if include_timeline
+                else row.get("academic_recommendation")
+            )
+            row["academic_recommendation_comment"] = (
+                stamp.get("academic_recommendation_comment")
+                if include_timeline
+                else row.get("academic_recommendation_comment")
+            )
             precheck_status = str(row.get("pre_check_status") or "").strip().lower()
             assignee_id = (
                 str(row.get("academic_editor_id") or "").strip()

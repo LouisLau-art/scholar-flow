@@ -636,6 +636,8 @@ async def create_manuscript(
             ):
                 raise HTTPException(status_code=422, detail="Cover letter only supports .pdf/.doc/.docx")
 
+        now_iso = datetime.now(timezone.utc).isoformat()
+
         data = {
             "id": str(manuscript_id),
             "title": manuscript.title,
@@ -651,8 +653,9 @@ async def create_manuscript(
             "author_id": current_user_id,
             "status": "pre_check",
             "owner_id": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "initial_submitted_at": now_iso,
         }
 
         response = _m().supabase.table("manuscripts").insert(data).execute()

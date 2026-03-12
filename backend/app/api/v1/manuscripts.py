@@ -188,7 +188,15 @@ def _get_signed_url_for_manuscripts_bucket(file_path: str, *, expires_in: int = 
 
 def _normalize_private_progress_status(raw_status: Any) -> str:
     status = str(raw_status or "").strip().lower()
-    if status in {"minor_revision", "major_revision", "revision_required", "revision_requested", "returned_for_revision", "return_for_revision"}:
+    if status in {
+        "revision_before_review",
+        "minor_revision",
+        "major_revision",
+        "revision_required",
+        "revision_requested",
+        "returned_for_revision",
+        "return_for_revision",
+    }:
         return "revision_requested"
     if status == "decision_done":
         return "decision"

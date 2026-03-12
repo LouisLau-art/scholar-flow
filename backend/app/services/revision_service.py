@@ -7,11 +7,10 @@ Revision Service: 处理稿件修订工作流的核心业务逻辑
 3. 文件安全: 从不覆盖原始文件，始终创建新版本。
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional, Literal
 from app.lib.api_client import supabase_admin
 from app.core.storage_filename import sanitize_storage_filename
-from app.services.notification_service import NotificationService
 from app.models.manuscript import ManuscriptStatus, normalize_status
 
 
@@ -148,6 +147,7 @@ class RevisionService:
         if current_status not in {
             ManuscriptStatus.MAJOR_REVISION.value,
             ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
             "revision_requested",
         }:
             return None
@@ -180,7 +180,11 @@ class RevisionService:
         pending = self.get_pending_revision(manuscript_id)
         if (
             pending
-            and current_status == ManuscriptStatus.MINOR_REVISION.value
+            and current_status
+            in {
+                ManuscriptStatus.MINOR_REVISION.value,
+                ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            }
             and precheck_stage in {"intake", "technical"}
         ):
             # 中文注释:
@@ -355,7 +359,7 @@ class RevisionService:
         Author 提交修订稿 (User Story 2)
 
         中文注释:
-        1. 验证稿件状态必须是 major_revision / minor_revision（兼容旧 revision_requested）
+        1. 验证稿件状态必须是 major_revision / minor_revision / revision_before_review（兼容旧 revision_requested）
         2. 验证作者身份
         3. 创建新版本记录
         4. 更新 revision 记录（填充 response_letter, submitted_at）
@@ -370,7 +374,12 @@ class RevisionService:
 
         # 2. 验证状态
         current_status = normalize_status(str(manuscript.get("status") or "")) or str(manuscript.get("status") or "")
-        if current_status not in {ManuscriptStatus.MAJOR_REVISION.value, ManuscriptStatus.MINOR_REVISION.value, "revision_requested"}:
+        if current_status not in {
+            ManuscriptStatus.MAJOR_REVISION.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            "revision_requested",
+        }:
             return {
                 "success": False,
                 "error": f"Cannot submit revision: manuscript status is '{manuscript.get('status')}', expected major/minor revision",
@@ -427,7 +436,10 @@ class RevisionService:
 
         # 8. 更新稿件
         is_precheck_revision_flow = (
-            current_status == ManuscriptStatus.MINOR_REVISION.value
+            current_status in {
+                ManuscriptStatus.MINOR_REVISION.value,
+                ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            }
             and (precheck_resubmit_stage in {"intake", "technical"})
         )
         manuscript_update: dict = {
@@ -435,6 +447,7 @@ class RevisionService:
             "version": new_version,
             "file_path": new_file_path,
             "updated_at": now,
+            "latest_author_resubmitted_at": now,
         }
         if is_precheck_revision_flow:
             # 中文注释:
@@ -444,93 +457,21 @@ class RevisionService:
             if precheck_resubmit_stage == "intake":
                 # Intake 由 ME 重新看稿，清理 AE 绑定，避免误入 Technical 队列。
                 manuscript_update["assistant_editor_id"] = None
+                manuscript_update["ae_sla_started_at"] = None
+            elif precheck_resubmit_stage == "technical":
+                # Technical 退回后作者修回，应显式保留原 AE，确保重新进入 AE workspace。
+                manuscript_update["assistant_editor_id"] = manuscript.get("assistant_editor_id")
+                manuscript_update["ae_sla_started_at"] = now
         if new_title:
             manuscript_update["title"] = new_title
         if new_abstract:
             manuscript_update["abstract"] = new_abstract
 
-        # 9. 若上一轮为大修：自动发起二审（复用上一轮已完成的 reviewer 列表）
+        # 9. 多轮外审由编辑部显式决定，不在作者修回时自动续轮 reviewer。
         # 中文注释:
-        # - MVP 规则：major revision 的修回默认进入 under_review，并自动生成新一轮 review_assignments（round=new_version）。
-        # - minor revision 的修回保持 resubmitted，由 Editor 直接做终审即可。
-        created_re_review = False
-        try:
-            decision_type = str(pending_revision.get("decision_type") or "").strip().lower()
-        except Exception:
-            decision_type = ""
-
-        if decision_type == "major":
-            try:
-                prev = (
-                    self.read_client.table("review_assignments")
-                    .select("reviewer_id, status, round_number")
-                    .eq("manuscript_id", manuscript_id)
-                    .eq("round_number", current_version)
-                    .execute()
-                )
-                prev_rows = self._extract_data(prev) or []
-            except Exception as e:
-                print(f"[RevisionService] load previous review_assignments failed: {e}")
-                prev_rows = []
-
-            prev_reviewer_ids = sorted(
-                {
-                    str(r.get("reviewer_id"))
-                    for r in prev_rows
-                    if r.get("reviewer_id")
-                    and str(r.get("status") or "").lower() == "completed"
-                }
-            )
-
-            if prev_reviewer_ids:
-                due_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-                for rid in prev_reviewer_ids:
-                    try:
-                        existing = (
-                            self.client.table("review_assignments")
-                            .select("id")
-                            .eq("manuscript_id", manuscript_id)
-                            .eq("reviewer_id", rid)
-                            .eq("round_number", new_version)
-                            .limit(1)
-                            .execute()
-                        )
-                        if self._extract_data(existing):
-                            continue
-                    except Exception:
-                        # 保守：查不到就尝试插入（由后端幂等/后续 UI 去重兜底）
-                        pass
-
-                    try:
-                        self.client.table("review_assignments").insert(
-                            {
-                                "manuscript_id": manuscript_id,
-                                "reviewer_id": rid,
-                                "status": "pending",
-                                "due_at": due_at,
-                                "round_number": new_version,
-                            }
-                        ).execute()
-                        created_re_review = True
-                    except Exception as e:
-                        print(f"[RevisionService] create re-review assignment failed: {e}")
-                        continue
-
-                    # 站内通知：提醒 reviewer 有新一轮复审
-                    try:
-                        title = str(manuscript.get("title") or "Manuscript")
-                        NotificationService().create_notification(
-                            user_id=str(rid),
-                            manuscript_id=str(manuscript_id),
-                            type="review_invite",
-                            title="Re-review Invitation",
-                            content=f"You have been invited to re-review '{title}'.",
-                        )
-                    except Exception as e:
-                        print(f"[RevisionService] create reviewer notification failed (ignored): {e}")
-
-                if created_re_review:
-                    manuscript_update["status"] = "under_review"
+        # - 业务新口径要求：作者提交 major/minor revision 后，系统只把稿件推进到 resubmitted；
+        # - 后续是否进入下一轮 under_review、发给哪些 reviewer，必须由编辑部手动决定；
+        # - 这里显式去掉“复用上一轮已完成 reviewer 自动建新 round assignments”的旧逻辑。
 
         try:
             self.client.table("manuscripts").update(manuscript_update).eq(

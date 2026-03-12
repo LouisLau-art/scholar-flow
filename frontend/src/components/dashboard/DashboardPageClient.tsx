@@ -422,7 +422,7 @@ function DashboardPageContent({
                                 </div>
                               </div>
                               <div className="flex items-center gap-3">
-                                {['major_revision', 'minor_revision', 'revision_requested'].includes(item.status) && (
+                                {['revision_before_review', 'major_revision', 'minor_revision', 'revision_requested'].includes(item.status) && (
                                   <Link
                                     href={`/submit-revision/${item.id}`}
                                     className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"

@@ -11,7 +11,12 @@ from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.mail import email_service
 from app.core.role_matrix import can_perform_action
 from app.lib.api_client import supabase_admin
-from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
+from app.models.decision import (
+    DecisionSubmitRequest,
+    ReviewStageExitRequest,
+    get_workflow_decision_bucket,
+    is_academic_recommendation_value,
+)
 from app.models.manuscript import ManuscriptStatus, normalize_status
 from app.services.first_decision_request_email import send_first_decision_request_email
 from app.services.reviewer_assignment_cancellation_email import (
@@ -76,6 +81,19 @@ class DecisionService(
             return True
         return False
 
+    def _get_submission_mode(self, roles: set[str]) -> str:
+        """
+        中文注释：
+        - 内部编辑（ME/AE/Admin）进入 decision workspace 时属于执行模式；
+        - academic_editor / editor_in_chief 单独进入时属于 recommendation-only；
+        - 若用户同时具备内部+学术角色，内部执行语义优先。
+        """
+        if roles.intersection({"admin", "managing_editor", "assistant_editor"}):
+            return "execute"
+        if roles.intersection({"academic_editor", "editor_in_chief"}):
+            return "recommendation"
+        return "execute"
+
     def _get_manuscript(self, manuscript_id: str) -> dict[str, Any]:
         select_candidates = [
             # 首选：完整字段（含 version + assistant_editor_id）
@@ -122,8 +140,10 @@ class DecisionService(
     def _ensure_editor_access(
         self, *, manuscript: dict[str, Any], user_id: str, roles: set[str]
     ) -> None:
-        # admin / editor_in_chief 可跨稿件访问（期刊 scope 会在上层统一约束）。
-        if roles.intersection({"admin", "editor_in_chief"}):
+        # 中文注释：
+        # - admin 保留跨稿件兜底权限；
+        # - academic_editor / editor_in_chief 在决策链路上都必须绑定到当前稿件。
+        if "admin" in roles:
             return
         assigned_editor_id = str(manuscript.get("editor_id") or "")
         if assigned_editor_id and assigned_editor_id == str(user_id):
@@ -268,6 +288,54 @@ class DecisionService(
                 if isinstance(payload.get("recipient_emails"), list)
                 else [],
                 "note": str(row.get("comment") or ""),
+                "changed_at": row.get("created_at"),
+                "changed_by": row.get("changed_by"),
+            }
+        return None
+
+    def _get_latest_decision_recommendation(self, manuscript_id: str) -> dict[str, Any] | None:
+        """
+        读取最近一次学术 recommendation 提交，供编辑部执行时参考。
+        """
+        try:
+            rows = (
+                self.client.table("status_transition_logs")
+                .select("payload,comment,created_at,changed_by")
+                .eq("manuscript_id", manuscript_id)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            return None
+
+        for row in rows:
+            payload = row.get("payload") if isinstance(row, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            if str(payload.get("action") or "").strip().lower() != "decision_recommendation_submitted":
+                continue
+            attachment_payload = payload.get("attachment_paths")
+            raw_attachment_paths = attachment_payload if isinstance(attachment_payload, list) else []
+            attachments: list[dict[str, Any]] = []
+            for raw_ref in raw_attachment_paths:
+                attachment_id, path = _decode_attachment_ref(str(raw_ref))
+                attachments.append(
+                    {
+                        "id": attachment_id,
+                        "path": path,
+                        "name": path.split("/")[-1] if path else attachment_id,
+                        "signed_url": self._signed_url("decision-attachments", path) if path else None,
+                    }
+                )
+            return {
+                "decision": payload.get("decision"),
+                "workflow_decision": payload.get("workflow_decision"),
+                "decision_stage": payload.get("decision_stage"),
+                "content": str(payload.get("content") or row.get("comment") or ""),
+                "attachments": attachments,
                 "changed_at": row.get("created_at"),
                 "changed_by": row.get("changed_by"),
             }
@@ -838,6 +906,7 @@ class DecisionService(
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
+        submission_mode = self._get_submission_mode(roles)
         self._ensure_internal_decision_access(
             manuscript=manuscript,
             manuscript_id=manuscript_id,
@@ -868,13 +937,16 @@ class DecisionService(
                 "Decision submission is only allowed in decision/decision_done stage"
             )
 
-        draft = self._get_latest_letter(
-            manuscript_id=manuscript_id,
-            editor_id=user_id,
-            status="draft",
-            manuscript_version=int(manuscript.get("version") or 1),
-        )
+        draft = None
+        if submission_mode == "execute":
+            draft = self._get_latest_letter(
+                manuscript_id=manuscript_id,
+                editor_id=user_id,
+                status="draft",
+                manuscript_version=int(manuscript.get("version") or 1),
+            )
         review_stage_exit_request = self._get_latest_review_stage_exit_request(manuscript_id)
+        latest_decision_recommendation = self._get_latest_decision_recommendation(manuscript_id)
         template_content = self._build_template(reports)
 
         draft_payload: dict[str, Any] | None = None
@@ -912,17 +984,19 @@ class DecisionService(
             "reports": reports,
             "draft": draft_payload,
             "review_stage_exit_request": review_stage_exit_request,
+            "latest_decision_recommendation": latest_decision_recommendation,
             "templates": [
                 {"id": "default", "name": "Default Decision Template", "content": template_content}
             ],
             "permissions": {
                 "can_record_first": can_record_first,
                 "can_submit_final": can_submit_final,
-                "can_submit": len(reports) > 0,
+                "can_submit": len(reports) > 0 or submission_mode == "recommendation",
                 "can_submit_final_now": can_submit_final and len(final_blocking_reasons) == 0,
                 "final_blocking_reasons": final_blocking_reasons,
                 "has_submitted_author_revision": has_submitted_author_revision,
                 "is_read_only": False,
+                "submission_mode": submission_mode,
             },
         }
 
@@ -936,6 +1010,7 @@ class DecisionService(
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         roles = self._roles(profile_roles)
+        submission_mode = self._get_submission_mode(roles)
         action = "decision:submit_final" if request.is_final else "decision:record_first"
         self._ensure_internal_decision_access(
             manuscript=manuscript,
@@ -945,22 +1020,41 @@ class DecisionService(
             action=action,
         )
 
-        decision = str(request.decision).strip().lower()
-        if decision not in {"accept", "reject", "major_revision", "minor_revision", "add_reviewer"}:
-            raise HTTPException(status_code=422, detail="Invalid decision")
-        if request.decision_stage == "final" and decision == "add_reviewer":
+        requested_decision = str(request.decision).strip().lower()
+        try:
+            workflow_decision = get_workflow_decision_bucket(requested_decision)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid decision") from exc
+
+        if request.decision_stage == "final" and workflow_decision == "add_reviewer":
             raise HTTPException(
                 status_code=422,
                 detail="Add reviewer is only allowed in first decision stage",
             )
-        if request.decision_stage == "first" and decision == "accept":
+        if (
+            submission_mode != "recommendation"
+            and request.decision_stage == "first"
+            and workflow_decision == "accept"
+        ):
             raise HTTPException(
                 status_code=422,
                 detail="First decision does not allow accept; route manuscript to final decision instead",
             )
 
         content = str(request.content or "").strip()
-        if request.is_final and decision != "add_reviewer" and not content:
+        if submission_mode == "recommendation":
+            if not request.is_final:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Recommendation submission does not support draft save",
+                )
+            if not is_academic_recommendation_value(requested_decision):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Recommendation submission requires one of the five academic recommendation values",
+                )
+
+        if submission_mode != "recommendation" and request.is_final and workflow_decision != "add_reviewer" and not content:
             raise HTTPException(status_code=422, detail="Decision letter content is required")
 
         reports = self._list_submitted_reports(manuscript_id)
@@ -971,7 +1065,7 @@ class DecisionService(
                     status_code=422,
                     detail="Exit review stage first; first decision is only available in decision stage",
                 )
-            if not request.is_final and decision == "add_reviewer":
+            if not request.is_final and workflow_decision == "add_reviewer":
                 raise HTTPException(
                     status_code=422,
                     detail="Add reviewer is a workflow action and cannot be saved as a draft",
@@ -990,13 +1084,40 @@ class DecisionService(
                     status_code=422,
                     detail="Exit review stage first; final decision submission is only available in decision/decision_done stage",
                 )
-            if decision == "accept" and current_status != ManuscriptStatus.DECISION_DONE.value:
+            if workflow_decision == "accept" and current_status != ManuscriptStatus.DECISION_DONE.value:
                 raise HTTPException(
                     status_code=422,
                     detail="Accept is only allowed in final decision queue (decision_done)",
                 )
         else:
             raise HTTPException(status_code=422, detail="Invalid decision stage")
+
+        if submission_mode == "recommendation":
+            now_iso = _utc_now_iso()
+            self._safe_insert_audit_log(
+                manuscript_id=manuscript_id,
+                from_status=current_status,
+                to_status=current_status,
+                changed_by=user_id,
+                comment=content or f"{request.decision_stage or 'decision'} recommendation submitted",
+                payload={
+                    "action": "decision_recommendation_submitted",
+                    "decision": requested_decision,
+                    "workflow_decision": workflow_decision,
+                    "decision_stage": request.decision_stage,
+                    "source": "decision_workspace",
+                    "reason": "editor_submit_decision_recommendation",
+                    "execution_required": True,
+                    "content": content,
+                    "attachment_paths": list(request.attachment_paths or []),
+                },
+            )
+            return {
+                "decision_letter_id": None,
+                "status": None,
+                "manuscript_status": current_status,
+                "updated_at": now_iso,
+            }
 
         draft = self._get_latest_letter(
             manuscript_id=manuscript_id,
@@ -1012,12 +1133,12 @@ class DecisionService(
                 manuscript_version=int(manuscript.get("version") or 1),
                 editor_id=user_id,
                 content=content,
-                decision=decision,
+                decision=workflow_decision,
                 status="draft",
                 attachment_paths=list(request.attachment_paths or []),
                 last_updated_at=request.last_updated_at,
             )
-        elif request.decision_stage == "first" and decision != "add_reviewer":
+        elif request.decision_stage == "first" and workflow_decision != "add_reviewer":
             # 中文注释:
             # - first decision 提交时只允许复用当前 draft；不再“更新最近任意 letter”，
             #   避免覆盖后续 final decision 或历史 committed letter。
@@ -1027,7 +1148,7 @@ class DecisionService(
                 manuscript_version=int(manuscript.get("version") or 1),
                 editor_id=user_id,
                 content=content,
-                decision=decision,
+                decision=workflow_decision,
                 status="final",
                 attachment_paths=list(request.attachment_paths or []),
                 last_updated_at=request.last_updated_at,
@@ -1041,7 +1162,7 @@ class DecisionService(
                 manuscript_version=int(manuscript.get("version") or 1),
                 editor_id=user_id,
                 content=content,
-                decision=decision,
+                decision=workflow_decision,
                 status="final",
                 attachment_paths=list(request.attachment_paths or []),
                 last_updated_at=request.last_updated_at,
@@ -1051,7 +1172,8 @@ class DecisionService(
         if request.is_final and request.decision_stage == "final":
             transition_payload = {
                 "action": "final_decision_workspace",
-                "decision": decision,
+                "decision": requested_decision,
+                "workflow_decision": workflow_decision,
                 "decision_stage": "final",
                 "source": "decision_workspace",
                 "reason": "editor_submit_final_decision",
@@ -1065,19 +1187,20 @@ class DecisionService(
             new_status = self._transition_for_final_decision(
                 manuscript_id=manuscript_id,
                 current_status=current_status,
-                decision=decision,
+                decision=workflow_decision,
                 changed_by=user_id,
                 transition_payload=transition_payload,
             )
             if draft and str(draft.get("id") or "").strip():
                 self._delete_letter_by_id(letter_id=str(draft.get("id") or ""))
             self._notify_author(
-                manuscript=manuscript, manuscript_id=manuscript_id, decision=decision
+                manuscript=manuscript, manuscript_id=manuscript_id, decision=requested_decision
             )
         elif request.is_final and request.decision_stage == "first":
             transition_payload = {
                 "action": "first_decision_workspace",
-                "decision": decision,
+                "decision": requested_decision,
+                "workflow_decision": workflow_decision,
                 "decision_stage": "first",
                 "source": "decision_workspace",
                 "reason": "editor_submit_first_decision",
@@ -1092,17 +1215,17 @@ class DecisionService(
             new_status = self._transition_for_first_decision(
                 manuscript_id=manuscript_id,
                 current_status=current_status,
-                decision=decision,
+                decision=workflow_decision,
                 changed_by=user_id,
                 transition_payload=transition_payload,
             )
-            if decision == "add_reviewer" and draft and str(draft.get("id") or "").strip():
+            if workflow_decision == "add_reviewer" and draft and str(draft.get("id") or "").strip():
                 self._delete_letter_by_id(letter_id=str(draft.get("id") or ""))
-            if decision != "add_reviewer":
+            if workflow_decision != "add_reviewer":
                 self._notify_author(
                     manuscript=manuscript,
                     manuscript_id=manuscript_id,
-                    decision=decision,
+                    decision=requested_decision,
                 )
         else:
             self._safe_insert_audit_log(
@@ -1116,7 +1239,8 @@ class DecisionService(
                     "decision_stage": "first",
                     "source": "decision_workspace",
                     "reason": "editor_save_first_decision",
-                    "decision": decision,
+                    "decision": requested_decision,
+                    "workflow_decision": workflow_decision,
                     "before": {"status": current_status},
                     "after": {"status": current_status},
                     "decision_letter": {

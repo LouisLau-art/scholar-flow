@@ -1,5 +1,6 @@
 export type ManuscriptStatus =
   | 'pre_check'
+  | 'revision_before_review'
   | 'under_review'
   | 'major_revision'
   | 'minor_revision'
@@ -18,6 +19,8 @@ export function getStatusLabel(status: ManuscriptStatus): string {
   switch (status) {
     case 'pre_check':
       return 'Pre-check'
+    case 'revision_before_review':
+      return 'Revision Before Review'
     case 'under_review':
       return 'Under Review'
     case 'major_revision':
@@ -51,6 +54,8 @@ export function getStatusBadgeClass(status: ManuscriptStatus): string {
   switch (status) {
     case 'pre_check':
       return 'bg-muted text-muted-foreground border-border'
+    case 'revision_before_review':
+      return 'bg-secondary text-secondary-foreground border-border'
     case 'under_review':
       return 'bg-blue-50 text-blue-700 border-blue-200'
     case 'decision':

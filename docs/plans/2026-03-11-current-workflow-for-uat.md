@@ -1,6 +1,6 @@
 # 当前系统已实现业务流程说明（给验收方）
 
-更新时间：2026-03-11
+更新时间：2026-03-12
 
 本文档只描述**当前系统已经落代码并可运行的真实流程**，不描述理想方案，也不描述尚未实现的规划项。  
 目的：
@@ -81,6 +81,32 @@
 - 不要求等于任一作者邮箱
 - 可用于学生/助理代投场景
 
+### 2.5 作者修回后的当前回流
+
+作者提交修回后，当前系统分两类处理：
+
+1. `pre-check` 技术退回修回
+
+- 若来源是 `intake`，回到 `pre_check / intake`
+- 若来源是 `technical`，回到 `pre_check / technical`
+
+2. 编辑部 `major_revision / minor_revision` 修回
+
+- 稿件进入 `status = resubmitted`
+- `version + 1`
+- 会记录：
+  - `latest_author_resubmitted_at`
+
+当前系统**不会**因为上一轮是 `major_revision` 就自动创建下一轮 reviewer assignment。
+
+也就是说：
+
+- 系统不再自动把上一轮 reviewer 复制到新 round
+- 是否再次进入 `under_review`
+- 以及下一轮发给哪些 reviewer
+
+都由编辑部后续手动决定
+
 ## 3. ME 入口阶段
 
 ### 3.1 稿件初始状态
@@ -105,6 +131,7 @@ Managing Editor 在 Intake Queue 中可执行：
 只是增加：
 
 - `assistant_editor_id`
+- `ae_sla_started_at`
 
 ## 4. AE 技术检查阶段
 
@@ -142,7 +169,18 @@ Assistant Editor 在技术检查阶段，当前系统支持三个出口：
 
 - 技术层面退回作者修改
 
-当前实现会将稿件推进到修回相关状态链，而不是继续停留在 technical pre-check。
+结果：
+
+- `status -> revision_before_review`
+- 当前不会继续停留在 `pre_check / technical`
+- 作者修回后：
+  - 若来源是 `technical`，则回到 `pre_check / technical`
+  - 若来源是 `intake`，则回到 `pre_check / intake`
+
+当前系统还会同步记录：
+
+- `latest_author_resubmitted_at`
+- `ae_sla_started_at`（仅在重新回到 AE technical 队列时重置）
 
 ## 5. Academic 预审阶段
 
@@ -183,30 +221,49 @@ AE 选择 `Academic` 后，稿件进入：
 
 含义：
 
-- 学术编辑认为该稿件不需要先外审，而应直接进入后续决策阶段
+- 学术编辑建议该稿件不需要先外审，而应由编辑部考虑直接进入后续决策阶段
 
 结果：
 
-- `status -> decision`
+- 当前只记录 `recommendation = decision_phase`
+- 稿件继续停留在 `pre_check / academic`
+- 后续由编辑部在详情页执行真实流转（如 `status -> decision`）
 
 ### 5.4 当前实现的重要说明
 
 当前系统里：
 
-- `academic pre-check -> decision`
+- `academic pre-check` recommendation-only
 - 与
 - `under_review -> decision`
 
-最终都会进入同一套 `Decision Workspace`。
+只有在编辑部执行实际流转后，才会进入同一套 `Decision Workspace`。
 
-因此，Academic 预审选择 `Send to Decision Workspace` 后，看到的仍然是：
+因此，Academic 预审阶段现在是“学术建议”与“编辑部执行”分层：
 
-- `minor revision`
-- `major revision`
-- `reject`
-- `add reviewer`
+- 学术编辑提交 recommendation
+- 编辑部决定是否推进到 `decision`
 
-这不是异常，而是当前实现的明确设计。
+一旦被推进到 `decision / decision_done`：
+
+- 学术编辑 / 主编看到的是 recommendation-only 的 5 个标准学术结论：
+  - `accept`
+  - `accept_after_minor_revision`
+  - `major_revision`
+  - `reject_resubmit`
+  - `reject_decline`
+- 他们提交后不会直接改变稿件状态，也不会直接通知作者
+- recommendation 会写入审计，供编辑部后续执行时参考
+- 内部编辑进入同一个 `Decision Workspace` 时，仍保留 execute 模式，负责真正的状态流转与作者通知
+- 当内部编辑执行 first/final decision 时，作者通知当前以 **email-first** 为主，站内通知仅作补充
+- 若内部执行结果仍是粗粒度 `reject / minor_revision`，系统会优先尝试匹配最近一条 workflow bucket 一致的学术 recommendation，用其更细的模板键发送作者邮件，例如：
+  - `reject -> reject_resubmit`
+  - `minor_revision -> accept_after_minor_revision`
+- 当前已补最小 route 级 smoke，锁定以下两条真实链路：
+  - `pre_check/academic` 中 academic recommendation 提交后，由编辑部执行推进到 `under_review`，会分别写入 recommendation 与 execution 审计
+  - `pre_check/academic` 中 academic recommendation 提交后，由编辑部执行推进到 `decision`，会分别写入 recommendation 与 execution 审计
+  - `review-stage-exit` 进入 `first decision` 时，会向指定收件人发出 first decision request email，且邮件里携带新的 academic recommendation label
+  - `final decision` 中内部执行粗粒度 `reject` 时，如最近 recommendation 为 `reject_resubmit`，作者邮件会优先使用 `decision_reject_resubmit`
 
 ## 6. Reviewer 外审阶段
 
@@ -296,10 +353,11 @@ Reviewer 当前主入口为邮件中的 magic link：
 
 其中 `requested_outcome` 当前允许：
 
+- `accept`
+- `accept_after_minor_revision`
 - `major_revision`
-- `minor_revision`
-- `reject`
-- `add_reviewer`
+- `reject_resubmit`
+- `reject_decline`
 
 这表示：
 
@@ -366,6 +424,24 @@ AE 必须对其逐个明确处理，例如：
 - `first decision` 不允许 `accept`
 - `accept` 只出现在 `final decision` 阶段
 
+### 9.4 作者通知
+
+当前 `Decision Workspace` 在编辑部执行 first/final decision 后：
+
+- 会给作者发送 decision email
+- 同时保留一条站内 decision notification 作为补充
+- email 使用明确的 `template_key`
+
+当前已落地的 decision email template key 包括：
+
+- `decision_accept`
+- `decision_accept_after_minor_revision`
+- `decision_major_revision`
+- `decision_minor_revision`
+- `decision_reject`
+- `decision_reject_resubmit`
+- `decision_reject_decline`
+
 ## 10. 当前已实现但仍建议验收方重点确认的点
 
 以下并非系统错误，但建议验收方重点确认是否符合最终业务口径：
@@ -374,12 +450,12 @@ AE 必须对其逐个明确处理，例如：
 
 当前实现中：
 
-- academic pre-check 送入 decision
+- academic pre-check 先记录 recommendation，再由编辑部决定是否送入 decision
 - 外审结束后送入 decision
 
 都会进入同一套 `Decision Workspace`
 
-这在运行上是成立的，但在产品语义上仍偏粗。
+这比旧实现更符合业务边界，但是否还需要单独的“待编辑部执行 academic recommendation”看板，仍建议验收时确认。
 
 ### 10.2 AE 可直接给 major/minor
 
@@ -395,7 +471,7 @@ AE 必须对其逐个明确处理，例如：
 当前系统方向已在向：
 
 - AE 不直接 reject
-- AE 可 `send_first_decision + reject recommendation`
+- AE 可 `send_first_decision + reject_resubmit / reject_decline recommendation`
 
 收口。
 

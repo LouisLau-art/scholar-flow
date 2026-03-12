@@ -247,6 +247,78 @@ def test_submit_technical_check_pass_routes_to_under_review():
     assert kwargs["payload"]["action"] == "precheck_technical_to_under_review"
 
 
+def test_submit_technical_check_revision_routes_to_revision_before_review():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": str(ae_id),
+        }
+    )
+    editorial_mock = Mock()
+    editorial_mock.update_status.return_value = {
+        "id": str(manuscript_id),
+        "status": "revision_before_review",
+        "pre_check_status": None,
+        "assistant_editor_id": str(ae_id),
+    }
+    svc.editorial = editorial_mock
+
+    out = svc.submit_technical_check(
+        manuscript_id,
+        ae_id,
+        decision="revision",
+        comment="formatting package is incomplete",
+    )
+
+    assert out["status"] == "revision_before_review"
+    kwargs = editorial_mock.update_status.call_args.kwargs
+    assert kwargs["to_status"] == "revision_before_review"
+    assert kwargs["extra_updates"]["ae_sla_started_at"]
+    assert kwargs["payload"]["action"] == "precheck_technical_revision"
+
+
+def test_assign_ae_sets_ae_sla_started_at_on_assignment():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    operator = uuid4()
+
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+            "assistant_editor_id": None,
+            "owner_id": None,
+        }
+    )
+
+    client = Mock()
+    for method in ("table", "update", "eq", "or_", "execute"):
+        getattr(client, method).return_value = client
+    client.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": str(manuscript_id),
+                "status": ManuscriptStatus.PRE_CHECK.value,
+                "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_id": str(ae_id),
+            }
+        ]
+    )
+    svc.client = client
+
+    svc.assign_ae(manuscript_id, ae_id, operator)
+
+    update_payload = client.update.call_args[0][0]
+    assert update_payload["ae_sla_started_at"]
+
+
 def test_submit_technical_check_academic_requires_academic_editor_id():
     svc = _new_service()
     manuscript_id = uuid4()
@@ -644,7 +716,7 @@ def test_request_intake_revision_success():
     editorial_mock = Mock()
     editorial_mock.update_status.return_value = {
         "id": str(manuscript_id),
-        "status": ManuscriptStatus.MINOR_REVISION.value,
+        "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
     }
     svc.editorial = editorial_mock
 
@@ -653,9 +725,9 @@ def test_request_intake_revision_success():
         current_user_id=current_user_id,
         comment="请补充图表清晰度与伦理声明",
     )
-    assert out["status"] == ManuscriptStatus.MINOR_REVISION.value
+    assert out["status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
     kwargs = editorial_mock.update_status.call_args.kwargs
-    assert kwargs["to_status"] == ManuscriptStatus.MINOR_REVISION.value
+    assert kwargs["to_status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
     assert kwargs["payload"]["action"] == "precheck_intake_revision"
 
 
@@ -702,7 +774,7 @@ def test_submit_academic_check_rejects_non_academic_stage():
     assert ei.value.status_code == 409
 
 
-def test_submit_academic_check_routes_to_under_review():
+def test_submit_academic_check_records_recommendation_without_transition():
     svc = _new_service()
     manuscript_id = uuid4()
     changed_by = uuid4()
@@ -712,26 +784,48 @@ def test_submit_academic_check_routes_to_under_review():
             "status": ManuscriptStatus.PRE_CHECK.value,
             "pre_check_status": PreCheckStatus.ACADEMIC.value,
             "assistant_editor_id": None,
-            "academic_editor_id": str(uuid4()),
+            "academic_editor_id": str(changed_by),
         }
     )
-    editorial_mock = Mock()
-    editorial_mock.update_status.return_value = {
-        "id": str(manuscript_id),
-        "status": ManuscriptStatus.UNDER_REVIEW.value,
-    }
-    svc.editorial = editorial_mock
+    client = Mock()
+    for method in ("table", "update", "eq", "execute"):
+        getattr(client, method).return_value = client
+    client.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": str(manuscript_id),
+                "status": ManuscriptStatus.PRE_CHECK.value,
+                "pre_check_status": PreCheckStatus.ACADEMIC.value,
+                "assistant_editor_id": None,
+                "academic_editor_id": str(changed_by),
+                "academic_completed_at": "2026-03-12T08:00:00Z",
+            }
+        ]
+    )
+    svc.client = client
+    svc.editorial = Mock()
 
     out = svc.submit_academic_check(
         manuscript_id,
         "review",
+        comment="looks ready for external review",
         changed_by=changed_by,
         actor_roles=["editor_in_chief"],
     )
-    assert out["status"] == ManuscriptStatus.UNDER_REVIEW.value
-    kwargs = editorial_mock.update_status.call_args.kwargs
-    assert kwargs["to_status"] == ManuscriptStatus.UNDER_REVIEW.value
-    assert kwargs["payload"]["action"] == "precheck_academic_to_review"
+    assert out["status"] == ManuscriptStatus.PRE_CHECK.value
+    assert out["pre_check_status"] == PreCheckStatus.ACADEMIC.value
+    svc.editorial.update_status.assert_not_called()
+
+    update_payload = client.update.call_args[0][0]
+    assert update_payload["academic_completed_at"]
+    assert update_payload["updated_at"]
+
+    log_kwargs = svc._safe_insert_transition_log.call_args.kwargs
+    assert log_kwargs["from_status"] == ManuscriptStatus.PRE_CHECK.value
+    assert log_kwargs["to_status"] == ManuscriptStatus.PRE_CHECK.value
+    assert log_kwargs["payload"]["action"] == "precheck_academic_recommendation_submitted"
+    assert log_kwargs["payload"]["decision"] == "review"
+    assert log_kwargs["payload"]["recommended_next_status"] == ManuscriptStatus.UNDER_REVIEW.value
 
 
 def test_submit_academic_check_rejects_unbound_academic_editor():
@@ -753,6 +847,30 @@ def test_submit_academic_check_rejects_unbound_academic_editor():
             "review",
             changed_by=caller,
             actor_roles=["academic_editor"],
+        )
+
+    assert ei.value.status_code == 403
+
+
+def test_submit_academic_check_rejects_unbound_editor_in_chief():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    caller = str(uuid4())
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+            "academic_editor_id": str(uuid4()),
+        }
+    )
+
+    with pytest.raises(HTTPException) as ei:
+        svc.submit_academic_check(
+            manuscript_id,
+            "review",
+            changed_by=caller,
+            actor_roles=["editor_in_chief"],
         )
 
     assert ei.value.status_code == 403

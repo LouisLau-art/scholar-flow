@@ -148,6 +148,7 @@ async def test_create_manuscript_success(client: AsyncClient):
         assert insert_payload["submission_email"] == "corresponding@example.org"
         assert insert_payload["authors"] == ["Alice Author", "Bob Author"]
         assert insert_payload["author_contacts"][0]["is_corresponding"] is True
+        assert insert_payload["initial_submitted_at"] == insert_payload["created_at"]
 
 
 @pytest.mark.asyncio

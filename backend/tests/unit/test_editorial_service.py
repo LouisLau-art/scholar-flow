@@ -56,6 +56,37 @@ def test_update_status_valid_transition_writes_log(supabase_admin):
     assert logs.insert.called is True
 
 
+def test_update_status_blocks_precheck_to_decision_outside_academic_stage(supabase_admin):
+    svc = editorial_service_module.EditorialService()
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.side_effect = [
+        _Resp(data={"id": "m1", "status": "pre_check", "pre_check_status": "technical"}),
+    ]
+
+    with pytest.raises(Exception) as exc_info:
+        svc.update_status(manuscript_id="m1", to_status="decision", changed_by="u1")
+
+    assert "academic stage" in str(exc_info.value)
+
+
+def test_update_status_allows_precheck_to_decision_from_academic_stage(supabase_admin):
+    svc = editorial_service_module.EditorialService()
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.side_effect = [
+        _Resp(data={"id": "m1", "status": "pre_check", "pre_check_status": "academic"}),
+        _Resp(data=[{"id": "m1", "status": "decision", "pre_check_status": None}]),
+    ]
+
+    logs = supabase_admin.table("status_transition_logs")
+    logs.execute.return_value = _Resp(data=[{"id": "l1"}])
+
+    out = svc.update_status(manuscript_id="m1", to_status="decision", changed_by="u1")
+    assert out["status"] == "decision"
+    assert logs.insert.called is True
+
+
 def test_update_status_blocks_skip_when_not_admin(supabase_admin):
     svc = editorial_service_module.EditorialService()
 

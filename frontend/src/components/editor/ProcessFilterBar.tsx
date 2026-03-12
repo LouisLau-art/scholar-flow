@@ -19,6 +19,7 @@ let staffCache: { data: StaffOption[]; cachedAt: number } | null = null
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'pre_check', label: 'Pre-check' },
+  { value: 'revision_before_review', label: 'Revision Before Review' },
   { value: 'under_review', label: 'Under Review' },
   { value: 'major_revision', label: 'Major Revision' },
   { value: 'minor_revision', label: 'Minor Revision' },

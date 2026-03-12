@@ -22,6 +22,7 @@ class ManuscriptStatus(str, Enum):
     """
 
     PRE_CHECK = "pre_check"
+    REVISION_BEFORE_REVIEW = "revision_before_review"
     UNDER_REVIEW = "under_review"
     MAJOR_REVISION = "major_revision"
     MINOR_REVISION = "minor_revision"
@@ -41,7 +42,8 @@ class ManuscriptStatus(str, Enum):
         章程要求：状态机规则必须显性可见。
 
         MVP 规则（editor 视角）：
-        - pre_check -> under_review / minor_revision
+        - pre_check -> under_review / revision_before_review
+        - revision_before_review -> pre_check
         - under_review -> decision / major_revision / minor_revision
         - major_revision/minor_revision -> resubmitted
         - resubmitted -> under_review / decision / major_revision / minor_revision
@@ -55,7 +57,9 @@ class ManuscriptStatus(str, Enum):
         c = (current or "").strip().lower()
         if c == cls.PRE_CHECK.value:
             # Feature 038: ME/AE can request revision (minor_revision), EIC can route to review or decision
-            return {cls.UNDER_REVIEW.value, cls.MINOR_REVISION.value, cls.DECISION.value}
+            return {cls.UNDER_REVIEW.value, cls.REVISION_BEFORE_REVIEW.value, cls.DECISION.value}
+        if c == cls.REVISION_BEFORE_REVIEW.value:
+            return {cls.PRE_CHECK.value}
         if c == cls.UNDER_REVIEW.value:
             # 章程 039/040: 外审发现严重问题必须先进入 decision 阶段再拒稿
             return {cls.DECISION.value, cls.MAJOR_REVISION.value, cls.MINOR_REVISION.value}

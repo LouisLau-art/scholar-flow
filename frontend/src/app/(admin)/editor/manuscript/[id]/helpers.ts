@@ -11,6 +11,7 @@ export type ManuscriptDetail = {
   title?: string | null
   abstract?: string | null
   status?: string | null
+  pre_check_status?: string | null
   created_at?: string | null
   updated_at?: string | null
   final_pdf_path?: string | null
@@ -43,6 +44,8 @@ export type ManuscriptDetail = {
     technical_completed_at?: string | null
     academic_submitted_at?: string | null
     academic_completed_at?: string | null
+    academic_recommendation?: string | null
+    academic_recommendation_comment?: string | null
   } | null
   precheck_timeline?: Array<{
     id: string
@@ -335,9 +338,18 @@ export function normalizeWorkflowStatus(raw: unknown): string {
   return legacyMap[s] || s
 }
 
-export function allowedNext(status: string): string[] {
+export function allowedNext(
+  status: string,
+  options?: { preCheckStatus?: string | null }
+): string[] {
   const s = normalizeWorkflowStatus(status)
-  if (s === 'pre_check') return ['under_review', 'minor_revision']
+  const preCheckStatus = String(options?.preCheckStatus || '').trim().toLowerCase()
+  if (s === 'pre_check') {
+    if (preCheckStatus === 'academic') {
+      return ['under_review', 'decision', 'revision_before_review']
+    }
+    return ['under_review', 'revision_before_review']
+  }
   if (s === 'under_review') return ['decision']
   if (s === 'resubmitted') return ['under_review', 'decision']
   if (s === 'decision') return ['decision_done']
@@ -350,15 +362,34 @@ export function getNextActionCard(
   capability: EditorCapability
 ): { phase: string; title: string; description: string; blockers: string[] } {
   const status = normalizeWorkflowStatus(manuscript.status)
+  const preCheckStatus = String(manuscript.pre_check_status || '').trim().toLowerCase()
   const blockers: string[] = []
   const amount = Number(manuscript.invoice?.amount ?? manuscript.invoice_metadata?.apc_amount ?? 0)
   const invoiceStatus = String(manuscript.invoice?.status || '').toLowerCase()
 
   if (status === 'pre_check') {
+    if (preCheckStatus === 'academic') {
+      return {
+        phase: 'Academic Pre-check',
+        title: '等待学术编辑 recommendation，随后由编辑部执行正式流转',
+        description:
+          '学术编辑在这个阶段只提交 recommendation，不会直接改稿件状态。编辑部后续可根据 recommendation 把稿件推进到 under_review 或 decision。',
+        blockers,
+      }
+    }
     return {
       phase: 'Pre-check',
       title: '先完成入口技术审查，再决定分配 AE 或退回作者',
       description: '当前阶段不应直接进入终审动作。请先确认材料完整性与格式规范。',
+      blockers,
+    }
+  }
+
+  if (status === 'revision_before_review') {
+    return {
+      phase: 'Author Revision',
+      title: '当前稿件处于外审前技术修回，等待作者重新提交',
+      description: '作者修回后，稿件会重新回到 pre-check 队列继续处理，不应按正常学术修回理解。',
       blockers,
     }
   }
@@ -381,7 +412,7 @@ export function getNextActionCard(
       phase: 'External Review',
       title: '使用 Exit Review Stage 收口当前外审并决定下一步',
       description:
-        'AE 可继续邀请 reviewer，也可通过 Exit Review Stage 直接给出 major/minor revision，或将稿件送入 First / Final Decision。',
+        'AE 可继续邀请 reviewer，也可通过 Exit Review Stage 直接给出 major/minor revision，或将稿件送入 decision 队列并附上 AE recommendation。',
       blockers,
     }
   }

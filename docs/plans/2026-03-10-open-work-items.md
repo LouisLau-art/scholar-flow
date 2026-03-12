@@ -167,8 +167,9 @@
 - 继续按最新业务口径扩展：
   - AE 可在 `under_review` 阶段直接给出 `major/minor`
   - AE 不可直接 `reject`，但可 `send_first_decision`
-  - `send_first_decision` 的接收邮箱默认主编/编委，但允许改成 AE 自己（已完成 payload 持久化与 Decision Workspace 展示，仍待真正发信动作）
+  - `send_first_decision` 的接收邮箱默认主编/编委，但允许改成 AE 自己（已完成 payload 持久化、Decision Workspace 展示与发信结果回传；后续主要补 smoke）
   - 作者在进入下一阶段后仍应能看到后续新到达的审稿意见（已由 author-context 集成测试锁定）
+  - decision author notification 已切到 email-first，并会优先复用最近一条 workflow bucket 一致的 academic recommendation 模板；对应 route 级 smoke 已补到 `backend/tests/integration/test_decision_workspace.py`，后续主要剩 admin 模板运营化与更高层 rollout 集成
 
 ## 四、UI / 交互稳定性问题
 
@@ -197,6 +198,11 @@
 待做：
 
 - 继续把 editor / reviewer / decision 的关键真实链路纳入 smoke
+  - 已补最小 route 级 smoke：
+    - `academic recommendation -> editorial execute(decision)` 审计链路
+    - `academic recommendation -> editorial execute(under_review)` 审计链路
+    - `review-stage-exit -> first decision request email` 链路
+    - `final decision -> author email-first template key` 链路
 - 减少脆弱的 network-level wait，更多转向页面级稳定断言
 
 ## 六、建议执行顺序
@@ -204,4 +210,6 @@
 1. 跑一轮 `academic editor -> first decision` 真实 UAT，确认默认 assignee 沿用
 2. 继续收口 `under_review -> send_first_decision / direct revision`
 3. 继续 reviewer history / reminder / 邮件可信度收尾
-4. 继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径
+4. 继续把 decision / academic / review-stage-exit 关键真实链路纳入 smoke
+   当前已补 `pre_check/academic -> {under_review, decision}`、`review-stage-exit -> first decision request email`、`final decision -> author email-first template key` 四条最小 route 级 smoke，下一步优先补更高层 rollout script / UI smoke
+5. 继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径

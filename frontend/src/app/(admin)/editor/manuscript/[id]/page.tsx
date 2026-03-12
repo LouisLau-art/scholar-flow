@@ -18,8 +18,10 @@ import { Loader2, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
 import { getStatusLabel } from '@/lib/statusStyles'
 import { formatDateTimeLocal } from '@/lib/date-display'
+import { getDecisionOptionLabel } from '@/lib/decision-labels'
 import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 import type { EditorRbacContext } from '@/types/rbac'
+import type { AcademicRecommendation } from '@/types/decision'
 import { deriveEditorCapability } from '@/lib/rbac'
 import {
   allowedNext,
@@ -86,7 +88,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 }
 
 type ReviewStageExitTarget = 'first' | 'final' | 'major_revision' | 'minor_revision'
-type ReviewStageExitRequestedOutcome = 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
+type ReviewStageExitRequestedOutcome = AcademicRecommendation
 
 function normalizeRecipientEmails(value: string): string[] {
   const normalized = String(value || '')
@@ -114,18 +116,7 @@ function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
 }
 
 function getReviewStageExitRequestedOutcomeLabel(outcome: ReviewStageExitRequestedOutcome): string {
-  switch (outcome) {
-    case 'major_revision':
-      return 'Major Revision'
-    case 'minor_revision':
-      return 'Minor Revision'
-    case 'reject':
-      return 'Reject'
-    case 'add_reviewer':
-      return 'Add Reviewer'
-    default:
-      return outcome
-  }
+  return getDecisionOptionLabel(outcome)
 }
 
 export default function EditorManuscriptDetailPage() {
@@ -676,7 +667,10 @@ export default function EditorManuscriptDetailPage() {
   const statusLower = normalizeWorkflowStatus(status)
   const isPrecheckActive = statusLower === 'pre_check'
   const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
-  const nextStatuses = useMemo(() => allowedNext(status), [status])
+  const nextStatuses = useMemo(
+    () => allowedNext(status, { preCheckStatus: ms?.pre_check_status }),
+    [ms?.pre_check_status, status]
+  )
   const canAssignReviewersStage = ['under_review', 'resubmitted'].includes(statusLower)
   const canExitReviewStage =
     ['under_review', 'resubmitted'].includes(statusLower) &&
@@ -752,11 +746,14 @@ export default function EditorManuscriptDetailPage() {
   const getTransitionActionLabel = useCallback(
     (nextStatus: string) => {
       const next = String(nextStatus || '').toLowerCase()
-      if (statusLower === 'pre_check' && next === 'minor_revision') {
+      if (statusLower === 'pre_check' && next === 'revision_before_review') {
         return 'Request Technical Return'
       }
       if (statusLower === 'pre_check' && next === 'under_review') {
         return 'Move to Under Review'
+      }
+      if (statusLower === 'pre_check' && next === 'decision') {
+        return 'Move to Decision Workspace'
       }
       return `Move to ${getStatusLabel(nextStatus)}`
     },
@@ -1419,7 +1416,7 @@ export default function EditorManuscriptDetailPage() {
                       Send to First Decision
                     </Label>
                     <div className="text-xs text-muted-foreground">
-                      进入 `decision` 队列，由学术编辑/主编处理 major revision / minor revision / reject / add reviewer。
+                      进入 `decision` 队列，由学术编辑/主编提交学术 recommendation，后续再由编辑部执行正式流转。
                     </div>
                   </div>
                 </label>
@@ -1441,7 +1438,7 @@ export default function EditorManuscriptDetailPage() {
               <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
                 <div className="text-sm font-medium text-foreground">AE recommendation for First Decision</div>
                 <div className="text-xs text-muted-foreground">
-                  AE 不直接做 reject；这里只是把推荐结论连同稿件一并提交给学术编辑/主编。
+                  这里只记录 AE 给学术编辑/主编的推荐结论。标准学术结论由学术编辑/主编在 decision workspace 中继续提交。
                 </div>
                 <RadioGroup
                   value={reviewStageExitRequestedOutcome}
@@ -1450,6 +1447,24 @@ export default function EditorManuscriptDetailPage() {
                   }
                   className="grid gap-2 pt-1"
                 >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-accept" value="accept" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-accept" className="cursor-pointer font-medium">
+                        Recommend Accept
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑直接接收。</div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
+                    <RadioGroupItem id="review-stage-outcome-accept-minor" value="accept_after_minor_revision" className="mt-1" />
+                    <div className="space-y-1">
+                      <Label htmlFor="review-stage-outcome-accept-minor" className="cursor-pointer font-medium">
+                        Recommend Accept After Minor Revision
+                      </Label>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑小修后接收。</div>
+                    </div>
+                  </label>
                   <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
                     <RadioGroupItem id="review-stage-outcome-major" value="major_revision" className="mt-1" />
                     <div className="space-y-1">
@@ -1460,30 +1475,21 @@ export default function EditorManuscriptDetailPage() {
                     </div>
                   </label>
                   <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
-                    <RadioGroupItem id="review-stage-outcome-minor" value="minor_revision" className="mt-1" />
+                    <RadioGroupItem id="review-stage-outcome-reject-resubmit" value="reject_resubmit" className="mt-1" />
                     <div className="space-y-1">
-                      <Label htmlFor="review-stage-outcome-minor" className="cursor-pointer font-medium">
-                        Recommend Minor Revision
+                      <Label htmlFor="review-stage-outcome-reject-resubmit" className="cursor-pointer font-medium">
+                        Recommend Reject and Encourage Resubmitting
                       </Label>
-                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑小修。</div>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编拒稿，但鼓励作者重写后重新投稿。</div>
                     </div>
                   </label>
                   <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
-                    <RadioGroupItem id="review-stage-outcome-reject" value="reject" className="mt-1" />
+                    <RadioGroupItem id="review-stage-outcome-reject-decline" value="reject_decline" className="mt-1" />
                     <div className="space-y-1">
-                      <Label htmlFor="review-stage-outcome-reject" className="cursor-pointer font-medium">
-                        Recommend Reject
+                      <Label htmlFor="review-stage-outcome-reject-decline" className="cursor-pointer font-medium">
+                        Recommend Reject and Decline Resubmitting
                       </Label>
-                      <div className="text-xs text-muted-foreground">建议学术编辑/主编考虑拒稿。</div>
-                    </div>
-                  </label>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-3">
-                    <RadioGroupItem id="review-stage-outcome-add-reviewer" value="add_reviewer" className="mt-1" />
-                    <div className="space-y-1">
-                      <Label htmlFor="review-stage-outcome-add-reviewer" className="cursor-pointer font-medium">
-                        Recommend Add Reviewer
-                      </Label>
-                      <div className="text-xs text-muted-foreground">建议学术编辑/主编补充新的 reviewer 再做判断。</div>
+                      <div className="text-xs text-muted-foreground">建议学术编辑/主编拒稿，且不鼓励作者重新投稿。</div>
                     </div>
                   </label>
                 </RadioGroup>

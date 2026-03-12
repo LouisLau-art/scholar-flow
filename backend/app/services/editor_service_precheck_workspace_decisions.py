@@ -14,6 +14,9 @@ logger = logging.getLogger("scholarflow.editor_precheck_workspace")
 
 
 class EditorServicePrecheckWorkspaceDecisionMixin:
+    def _uses_bound_academic_assignment_scope(self, roles: set[str]) -> bool:
+        return bool({"academic_editor", "editor_in_chief"} & roles) and not bool({"admin", "managing_editor"} & roles)
+
     def submit_technical_check(
         self,
         manuscript_id: UUID,
@@ -28,7 +31,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         AE technical check:
         - pass -> under_review（跳过 academic pre-check）
         - academic -> pre_check/academic（送 EIC 预审，可选）
-        - revision -> minor_revision
+        - revision -> revision_before_review
         """
         manuscript_id_str = str(manuscript_id)
         ae_id_str = str(ae_id)
@@ -45,7 +48,10 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         owner_ae = str(ms.get("assistant_editor_id") or "")
 
         if status != ManuscriptStatus.PRE_CHECK.value:
-            if normalized_decision == "revision" and status == ManuscriptStatus.MINOR_REVISION.value:
+            if normalized_decision == "revision" and status in {
+                ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                ManuscriptStatus.MINOR_REVISION.value,
+            }:
                 return dict(ms)
             if normalized_decision == "pass" and status == ManuscriptStatus.UNDER_REVIEW.value:
                 return dict(ms)
@@ -147,10 +153,13 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
 
         updated = self.editorial.update_status(
             manuscript_id=manuscript_id_str,
-            to_status=ManuscriptStatus.MINOR_REVISION.value,
+            to_status=ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
             changed_by=ae_id_str,
             comment=comment_clean,
             allow_skip=False,
+            extra_updates={
+                "ae_sla_started_at": str(ms.get("ae_sla_started_at") or "").strip() or self._now(),
+            },
             payload={
                 "action": "precheck_technical_revision",
                 "pre_check_from": PreCheckStatus.TECHNICAL.value,
@@ -327,11 +336,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         rows = getattr(resp, "data", None) or []
         out = self._enrich_precheck_rows(rows)
 
-        pure_academic_editor = (
-            "academic_editor" in normalized_roles
-            and not bool({"admin", "managing_editor", "editor_in_chief"} & normalized_roles)
-        )
-        if pure_academic_editor:
+        if self._uses_bound_academic_assignment_scope(normalized_roles):
             viewer_id_str = str(viewer_user_id or "").strip()
             out = [
                 row for row in out if str(row.get("academic_editor_id") or "").strip() == viewer_id_str
@@ -389,11 +394,7 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         resp = q.execute()
         rows = getattr(resp, "data", None) or []
 
-        pure_academic_editor = (
-            "academic_editor" in normalized_roles
-            and not bool({"admin", "managing_editor", "editor_in_chief"} & normalized_roles)
-        )
-        if pure_academic_editor:
+        if self._uses_bound_academic_assignment_scope(normalized_roles):
             viewer_id_str = str(viewer_user_id or "").strip()
             rows = [
                 row for row in rows if str(row.get("academic_editor_id") or "").strip() == viewer_id_str
@@ -463,23 +464,26 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
-        EIC academic check:
-        - review -> under_review
-        - decision_phase -> decision
+        EIC / Academic Editor academic check:
+        - 仅记录学术 recommendation
+        - 不直接推进 manuscript 主状态
+        - 后续由编辑部执行 under_review / decision 等真实流转
         """
         manuscript_id_str = str(manuscript_id)
         actor = str(changed_by) if changed_by else None
         d = str(decision or "").strip().lower()
         if d not in {"review", "decision_phase"}:
             raise HTTPException(status_code=422, detail="decision must be review or decision_phase")
-        to_status = ManuscriptStatus.UNDER_REVIEW.value if d == "review" else ManuscriptStatus.DECISION.value
+        recommended_next_status = (
+            ManuscriptStatus.UNDER_REVIEW.value
+            if d == "review"
+            else ManuscriptStatus.DECISION.value
+        )
 
         ms = self._get_manuscript(manuscript_id_str)
         status = normalize_status(str(ms.get("status") or ""))
         pre = self._normalize_precheck_status(ms.get("pre_check_status"))
         if status != ManuscriptStatus.PRE_CHECK.value:
-            if status == to_status:
-                return ms
             raise HTTPException(status_code=409, detail="Academic check conflict: manuscript state changed")
         if pre != PreCheckStatus.ACADEMIC.value:
             raise HTTPException(status_code=409, detail=f"Academic check only allowed in academic stage, current={pre}")
@@ -490,33 +494,63 @@ class EditorServicePrecheckWorkspaceDecisionMixin:
         if (
             actor_id
             and "admin" not in normalized_actor_roles
-            and "editor_in_chief" not in normalized_actor_roles
             and bound_academic_editor_id != actor_id
         ):
             raise HTTPException(status_code=403, detail="Only the bound academic editor can submit academic check")
 
-        payload_action = "precheck_academic_to_review" if d == "review" else "precheck_academic_to_decision"
-        updated = self.editorial.update_status(
+        now = self._now()
+        comment_clean = (comment or "").strip() or None
+        update_payload = {
+            "academic_completed_at": now,
+            "updated_at": now,
+        }
+        q = (
+            self.client.table("manuscripts")
+            .update(update_payload)
+            .eq("id", manuscript_id_str)
+            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+            .eq("pre_check_status", PreCheckStatus.ACADEMIC.value)
+        )
+        if actor_id and "admin" not in normalized_actor_roles:
+            q = q.eq("academic_editor_id", actor_id)
+        resp = q.execute()
+        rows = getattr(resp, "data", None) or []
+        if not rows:
+            latest = self._get_manuscript(manuscript_id_str)
+            latest_status = normalize_status(str(latest.get("status") or ""))
+            latest_pre = self._normalize_precheck_status(latest.get("pre_check_status"))
+            latest_academic_editor_id = str(latest.get("academic_editor_id") or "").strip()
+            if latest_status == ManuscriptStatus.PRE_CHECK.value and latest_pre == PreCheckStatus.ACADEMIC.value:
+                if "admin" in normalized_actor_roles or not actor_id or latest_academic_editor_id == actor_id:
+                    mapped_latest = self._map_precheck_row(latest)
+                    mapped_latest["academic_recommendation"] = d
+                    mapped_latest["academic_recommendation_comment"] = comment_clean
+                    return mapped_latest
+            raise HTTPException(status_code=409, detail="Academic check conflict: manuscript state changed")
+
+        updated = self._map_precheck_row(rows[0])
+        updated["academic_recommendation"] = d
+        updated["academic_recommendation_comment"] = comment_clean
+        self._safe_insert_transition_log(
             manuscript_id=manuscript_id_str,
-            to_status=to_status,
-            changed_by=actor,
-            comment=(comment or "").strip() or None,
-            allow_skip=False,
-            extra_updates={
-                "pre_check_status": None,
-                "academic_completed_at": self._now(),
-            },
+            from_status=ManuscriptStatus.PRE_CHECK.value,
+            to_status=ManuscriptStatus.PRE_CHECK.value,
+            changed_by=actor_id or None,
+            comment=comment_clean,
             payload={
-                "action": payload_action,
+                "action": "precheck_academic_recommendation_submitted",
                 "pre_check_from": PreCheckStatus.ACADEMIC.value,
-                "pre_check_to": None,
+                "pre_check_to": PreCheckStatus.ACADEMIC.value,
                 "assistant_editor_before": str(ms.get("assistant_editor_id") or "") or None,
                 "assistant_editor_after": str(ms.get("assistant_editor_id") or "") or None,
                 "academic_editor_before": str(ms.get("academic_editor_id") or "") or None,
                 "academic_editor_after": str(ms.get("academic_editor_id") or "") or None,
                 "decision": d,
+                "recommended_next_status": recommended_next_status,
+                "execution_required": True,
                 "idempotency_key": idempotency_key,
             },
+            created_at=now,
         )
         return updated
 

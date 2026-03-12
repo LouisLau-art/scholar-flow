@@ -8,23 +8,13 @@ import { EditorApi } from '@/services/editorApi'
 import { DecisionWorkspaceLayout } from '@/components/editor/decision/DecisionWorkspaceLayout'
 import { ReviewReportComparison } from '@/components/editor/decision/ReviewReportComparison'
 import { DecisionEditor } from '@/components/editor/decision/DecisionEditor'
-import type { DecisionContext } from '@/types/decision'
+import { getDecisionOptionLabel } from '@/lib/decision-labels'
+import type { AcademicRecommendation, DecisionContext, DecisionSubmissionMode } from '@/types/decision'
 
 function getReviewStageExitRequestedOutcomeLabel(
-  outcome: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer'
+  outcome: AcademicRecommendation
 ): string {
-  switch (outcome) {
-    case 'major_revision':
-      return 'Major Revision'
-    case 'minor_revision':
-      return 'Minor Revision'
-    case 'reject':
-      return 'Reject'
-    case 'add_reviewer':
-      return 'Add Reviewer'
-    default:
-      return String(outcome)
-  }
+  return getDecisionOptionLabel(outcome)
 }
 
 export default function DecisionWorkspacePage() {
@@ -96,6 +86,9 @@ export default function DecisionWorkspacePage() {
     )
   }
 
+  const submissionMode: DecisionSubmissionMode =
+    context.permissions?.submission_mode === 'recommendation' ? 'recommendation' : 'execute'
+
   return (
     <DecisionWorkspaceLayout
       manuscriptId={manuscriptId}
@@ -138,19 +131,39 @@ export default function DecisionWorkspacePage() {
               ) : null}
             </div>
           ) : null}
+          {context.latest_decision_recommendation ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+              <div className="font-semibold">Latest Academic Recommendation</div>
+              <div className="mt-1">
+                {getDecisionOptionLabel(context.latest_decision_recommendation.decision)}
+              </div>
+              {context.latest_decision_recommendation.content ? (
+                <div className="mt-1 text-[11px] text-emerald-100/80">
+                  {context.latest_decision_recommendation.content}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
-            {String(context.manuscript.status || '').toLowerCase() === 'decision'
+            {submissionMode === 'recommendation'
               ? (
                   <>
-                    <strong>First Decision</strong> 会执行实际处理结果；
-                    <strong>Add Reviewer</strong> 会把稿件退回 <code>under_review</code>。
+                    <strong>{String(context.manuscript.status || '').toLowerCase() === 'decision' ? 'First Recommendation' : 'Final Recommendation'}</strong>
+                    只记录学术结论，不直接变更稿件状态，也不会直接通知作者。
                   </>
                 )
-              : (
-                  <>
-                    <strong>Final Decision</strong> 会触发最终状态流转与作者通知。
-                  </>
-                )}
+              : String(context.manuscript.status || '').toLowerCase() === 'decision'
+                ? (
+                    <>
+                      <strong>First Decision</strong> 会执行实际处理结果；
+                      <strong>Add Additional Reviewer</strong> 会把稿件退回 <code>under_review</code>。
+                    </>
+                  )
+                : (
+                    <>
+                      <strong>Final Decision</strong> 会触发最终状态流转与作者通知。
+                    </>
+                  )}
           </div>
           <DecisionEditor
             manuscriptId={manuscriptId}
@@ -164,12 +177,13 @@ export default function DecisionWorkspacePage() {
             hasSubmittedAuthorRevision={Boolean(context.permissions?.has_submitted_author_revision)}
             finalBlockingReasons={context.permissions?.final_blocking_reasons || []}
             isReadOnly={Boolean(context.permissions?.is_read_only)}
+            submissionMode={submissionMode}
             onDirtyChange={setDirty}
             onSubmitted={(_status) => {
               setDirty(false)
               const nextStatus = String(_status || '').toLowerCase()
               // 提交后若稿件离开 decision/decision_done，直接回详情页，避免停留在错误的工作台。
-              if (nextStatus && !['decision', 'decision_done'].includes(nextStatus)) {
+              if (submissionMode === 'execute' && nextStatus && !['decision', 'decision_done'].includes(nextStatus)) {
                 router.replace(`/editor/manuscript/${encodeURIComponent(manuscriptId)}`)
                 return
               }

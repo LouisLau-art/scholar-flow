@@ -65,7 +65,7 @@ export default function SubmitRevisionPage() {
         if (!msData.success) throw new Error('Failed to load manuscript')
         
         const ms = msData.data
-        if (!['major_revision', 'minor_revision', 'revision_requested'].includes(ms.status)) {
+        if (!['revision_before_review', 'major_revision', 'minor_revision', 'revision_requested'].includes(ms.status)) {
           toast.error('This manuscript is not awaiting revision.')
           router.push('/dashboard')
           return

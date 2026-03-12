@@ -22,6 +22,8 @@ export type PrecheckQueueItem = {
   technical_completed_at?: string | null
   academic_submitted_at?: string | null
   academic_completed_at?: string | null
+  academic_recommendation?: string | null
+  academic_recommendation_comment?: string | null
   updated_at?: string | null
 }
 

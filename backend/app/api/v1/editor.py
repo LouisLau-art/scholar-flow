@@ -313,11 +313,12 @@ async def patch_manuscript_status(
     # - 但未分配 AE 会导致稿件离开 Intake 后无人跟进，属于危险流转。
     # - 这里做服务端硬门禁，避免任何前端入口绕过检查。
     target_status = (to_status or "").strip().lower()
-    if target_status == "under_review":
+    transition_payload = None
+    if target_status in {ManuscriptStatus.UNDER_REVIEW.value, ManuscriptStatus.DECISION.value}:
         try:
             ms_resp = (
                 supabase_admin.table("manuscripts")
-                .select("id,status,assistant_editor_id")
+                .select("id,status,pre_check_status,assistant_editor_id")
                 .eq("id", id)
                 .single()
                 .execute()
@@ -326,12 +327,26 @@ async def patch_manuscript_status(
         except Exception:
             ms_row = {}
         source_status = normalize_status(str(ms_row.get("status") or ""))
+        source_precheck_status = str(ms_row.get("pre_check_status") or "").strip().lower()
         assigned_ae = str(ms_row.get("assistant_editor_id") or "").strip()
-        if source_status == ManuscriptStatus.PRE_CHECK.value and not assigned_ae:
+        if target_status == ManuscriptStatus.UNDER_REVIEW.value and source_status == ManuscriptStatus.PRE_CHECK.value and not assigned_ae:
             raise HTTPException(
                 status_code=409,
                 detail="Assistant Editor must be assigned before moving to under_review.",
             )
+        if source_status == ManuscriptStatus.PRE_CHECK.value and source_precheck_status == "academic":
+            if target_status == ManuscriptStatus.UNDER_REVIEW.value:
+                transition_payload = {
+                    "action": "precheck_academic_to_review",
+                    "decision": "review",
+                    "source_pre_check_status": "academic",
+                }
+            elif target_status == ManuscriptStatus.DECISION.value:
+                transition_payload = {
+                    "action": "precheck_academic_to_decision",
+                    "decision": "decision_phase",
+                    "source_pre_check_status": "academic",
+                }
 
     updated = EditorialService().update_status(
         manuscript_id=id,
@@ -339,6 +354,7 @@ async def patch_manuscript_status(
         changed_by=str(current_user.get("id")),
         comment=str(comment) if comment is not None else None,
         allow_skip=bool(allow_skip),
+        payload=transition_payload,
     )
     return {"success": True, "data": updated}
 

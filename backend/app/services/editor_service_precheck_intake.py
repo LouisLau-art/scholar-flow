@@ -23,7 +23,7 @@ class EditorServicePrecheckIntakeMixin:
         """
         ME Intake Queue:
         - Active: status=pre_check & pre_check_status=intake
-        - Passive placeholder: status=minor_revision 且来源于 precheck_intake_revision（等待作者 resubmit）
+        - Passive placeholder: status=revision_before_review（兼容旧 minor_revision）且来源于 precheck_intake_revision（等待作者 resubmit）
         """
         selects = [
             "id,title,created_at,updated_at,status,pre_check_status,assistant_editor_id,owner_id,author_id,journal_id,journals(title,slug)",
@@ -68,7 +68,13 @@ class EditorServicePrecheckIntakeMixin:
                 query = (
                     self.client.table("manuscripts")
                     .select(select_clause)
-                    .eq("status", ManuscriptStatus.MINOR_REVISION.value)
+                    .in_(
+                        "status",
+                        [
+                            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                            ManuscriptStatus.MINOR_REVISION.value,
+                        ],
+                    )
                     .order("updated_at", desc=True)
                     .order("created_at", desc=True)
                     .range(0, fetch_end)
@@ -275,6 +281,7 @@ class EditorServicePrecheckIntakeMixin:
             "assistant_editor_id": ae_id_str,
             "pre_check_status": PreCheckStatus.TECHNICAL.value,
             "updated_at": now,
+            "ae_sla_started_at": now,
         }
         owner_override = str(owner_id or "").strip()
         if owner_override:
@@ -381,8 +388,8 @@ class EditorServicePrecheckIntakeMixin:
 
         中文注释:
         - 仅允许在 pre_check/intake 阶段执行；
-        - 结果流转到 minor_revision，作者修回后再进入流程；
-        - 幂等处理：若已在 minor_revision，重复提交直接返回当前稿件。
+        - 结果流转到 revision_before_review，作者修回后再进入流程；
+        - 幂等处理：若已在 revision_before_review，重复提交直接返回当前稿件。
         """
         manuscript_id_str = str(manuscript_id)
         actor = str(current_user_id)
@@ -394,7 +401,10 @@ class EditorServicePrecheckIntakeMixin:
         status = normalize_status(str(ms.get("status") or ""))
         pre = self._normalize_precheck_status(ms.get("pre_check_status"))
 
-        if status == ManuscriptStatus.MINOR_REVISION.value:
+        if status in {
+            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            ManuscriptStatus.MINOR_REVISION.value,
+        }:
             return dict(ms)
 
         if status != ManuscriptStatus.PRE_CHECK.value:
@@ -404,7 +414,7 @@ class EditorServicePrecheckIntakeMixin:
 
         updated = self.editorial.update_status(
             manuscript_id=manuscript_id_str,
-            to_status=ManuscriptStatus.MINOR_REVISION.value,
+            to_status=ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
             changed_by=actor,
             comment=comment_clean,
             allow_skip=False,

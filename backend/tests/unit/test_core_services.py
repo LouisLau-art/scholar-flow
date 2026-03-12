@@ -143,14 +143,14 @@ async def test_process_quality_check_failed_with_notes(monkeypatch):
 
     class DummySvc:
         def update_status(self, **_kwargs):
-            return {"id": str(manuscript_id), "status": "minor_revision", "owner_id": str(owner_id)}
+            return {"id": str(manuscript_id), "status": "revision_before_review", "owner_id": str(owner_id)}
 
     monkeypatch.setattr(editorial_service, "EditorialService", lambda: DummySvc())
     result = await editorial_service.process_quality_check(
         manuscript_id, False, owner_id, revision_notes="Need fixes"
     )
 
-    assert result["status"] == "minor_revision"
+    assert result["status"] == "revision_before_review"
 
 
 @pytest.mark.asyncio

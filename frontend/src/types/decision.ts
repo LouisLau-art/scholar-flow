@@ -1,4 +1,13 @@
 export type FinalDecision = 'accept' | 'reject' | 'major_revision' | 'minor_revision' | 'add_reviewer'
+export type AcademicRecommendation =
+  | 'accept'
+  | 'accept_after_minor_revision'
+  | 'major_revision'
+  | 'reject_resubmit'
+  | 'reject_decline'
+export type DecisionSubmissionMode = 'recommendation' | 'execute'
+export type DecisionSelectionValue = FinalDecision | AcademicRecommendation
+export type DecisionLabelValue = FinalDecision | AcademicRecommendation
 
 export type DecisionAttachment = {
   id: string
@@ -27,7 +36,7 @@ export type DecisionReport = {
 export type DecisionDraft = {
   id: string
   content: string
-  decision: FinalDecision
+  decision: DecisionSelectionValue
   status: 'draft' | 'final'
   last_updated_at: string
   attachments: DecisionAttachment[]
@@ -46,9 +55,18 @@ export type DecisionContext = {
   draft?: DecisionDraft | null
   review_stage_exit_request?: {
     target_stage: 'first' | 'final' | 'major_revision' | 'minor_revision'
-    requested_outcome?: 'major_revision' | 'minor_revision' | 'reject' | 'add_reviewer' | null
+    requested_outcome?: AcademicRecommendation | null
     recipient_emails?: string[] | null
     note?: string | null
+    changed_at?: string | null
+    changed_by?: string | null
+  } | null
+  latest_decision_recommendation?: {
+    decision: DecisionSelectionValue
+    workflow_decision?: FinalDecision | null
+    decision_stage?: 'first' | 'final' | null
+    content?: string | null
+    attachments?: DecisionAttachment[] | null
     changed_at?: string | null
     changed_by?: string | null
   } | null
@@ -61,5 +79,6 @@ export type DecisionContext = {
     final_blocking_reasons?: string[]
     has_submitted_author_revision?: boolean
     is_read_only: boolean
+    submission_mode?: DecisionSubmissionMode
   }
 }

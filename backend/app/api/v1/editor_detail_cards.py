@@ -151,7 +151,9 @@ async def get_editor_manuscript_cards_context_impl(
 
     assigned_at = None
     technical_completed_at = None
-    academic_completed_at = None
+    academic_completed_at = str(ms.get("academic_completed_at") or "").strip() or None
+    academic_recommendation = None
+    academic_recommendation_comment = None
     academic_submitted_at = str(ms.get("academic_submitted_at") or "").strip() or None
     for row in tl_rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
@@ -163,8 +165,21 @@ async def get_editor_manuscript_cards_context_impl(
             assigned_at = created_at or assigned_at
         if action in {"precheck_technical_pass", "precheck_technical_revision", "precheck_technical_to_under_review"}:
             technical_completed_at = created_at or technical_completed_at
-        if action in {"precheck_academic_to_review", "precheck_academic_to_decision"}:
+        if action in {
+            "precheck_academic_recommendation_submitted",
+            "precheck_academic_to_review",
+            "precheck_academic_to_decision",
+        }:
             academic_completed_at = created_at or academic_completed_at
+            decision = str(payload.get("decision") or "").strip().lower()
+            if not decision:
+                if action == "precheck_academic_to_review":
+                    decision = "review"
+                elif action == "precheck_academic_to_decision":
+                    decision = "decision_phase"
+            academic_recommendation = decision or academic_recommendation
+            comment = str(row.get("comment") or "").strip()
+            academic_recommendation_comment = comment or academic_recommendation_comment
 
     role_queue = {
         "current_role": current_role,
@@ -174,6 +189,8 @@ async def get_editor_manuscript_cards_context_impl(
         "technical_completed_at": technical_completed_at,
         "academic_submitted_at": academic_submitted_at,
         "academic_completed_at": academic_completed_at,
+        "academic_recommendation": academic_recommendation,
+        "academic_recommendation_comment": academic_recommendation_comment,
     }
 
     return {

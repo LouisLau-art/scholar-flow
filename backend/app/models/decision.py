@@ -6,17 +6,61 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-DecisionSubmissionValue = Literal["accept", "reject", "major_revision", "minor_revision", "add_reviewer"]
+WorkflowDecisionBucket = Literal["accept", "reject", "major_revision", "minor_revision", "add_reviewer"]
+DecisionSubmissionMode = Literal["execute", "recommendation"]
+AcademicRecommendationValue = Literal[
+    "accept",
+    "accept_after_minor_revision",
+    "major_revision",
+    "reject_resubmit",
+    "reject_decline",
+]
+DecisionSubmissionValue = Literal[
+    "accept",
+    "reject",
+    "major_revision",
+    "minor_revision",
+    "add_reviewer",
+    "accept_after_minor_revision",
+    "reject_resubmit",
+    "reject_decline",
+]
 DecisionLetterDecision = Literal["accept", "reject", "major_revision", "minor_revision"]
 DecisionLetterStatus = Literal["draft", "final"]
 ReviewStageExitTarget = Literal["first", "final", "major_revision", "minor_revision"]
 ReviewStageExitPendingAction = Literal["cancel", "wait"]
-ReviewStageExitRequestedOutcome = Literal[
+ReviewStageExitRequestedOutcome = AcademicRecommendationValue
+
+_WORKFLOW_DECISION_BUCKETS: set[str] = {
+    "accept",
+    "reject",
     "major_revision",
     "minor_revision",
-    "reject",
     "add_reviewer",
-]
+}
+
+_ACADEMIC_RECOMMENDATION_TO_WORKFLOW_BUCKET: dict[str, WorkflowDecisionBucket] = {
+    "accept": "accept",
+    "accept_after_minor_revision": "minor_revision",
+    "major_revision": "major_revision",
+    "reject_resubmit": "reject",
+    "reject_decline": "reject",
+}
+
+
+def get_workflow_decision_bucket(decision: str) -> WorkflowDecisionBucket:
+    normalized = str(decision or "").strip().lower()
+    if normalized in _WORKFLOW_DECISION_BUCKETS:
+        return normalized  # type: ignore[return-value]
+    bucket = _ACADEMIC_RECOMMENDATION_TO_WORKFLOW_BUCKET.get(normalized)
+    if bucket is None:
+        raise ValueError(f"Unsupported decision: {decision}")
+    return bucket
+
+
+def is_academic_recommendation_value(decision: str) -> bool:
+    normalized = str(decision or "").strip().lower()
+    return normalized in _ACADEMIC_RECOMMENDATION_TO_WORKFLOW_BUCKET
 
 
 class DecisionSubmitRequest(BaseModel):
@@ -153,5 +197,6 @@ class DecisionContextResponse(BaseModel):
     reports: list[dict]
     draft: dict | None = None
     review_stage_exit_request: ReviewStageExitRequestSummary | None = None
+    latest_decision_recommendation: dict | None = None
     templates: list[dict] = Field(default_factory=list)
     permissions: dict = Field(default_factory=dict)

@@ -91,6 +91,7 @@ def _humanize_status(status: str) -> str:
     mapping = {
         "submitted": "投稿",
         "pre_check": "预审",
+        "revision_before_review": "外审前技术修回",
         "under_review": "外审中",
         "revision_requested": "需要修回",
         "resubmitted": "作者已修回",
@@ -110,7 +111,10 @@ def _humanize_status(status: str) -> str:
 def _humanize_decision(decision: str) -> str:
     mapping = {
         "accept": "接收",
+        "accept_after_minor_revision": "小修后接收",
         "reject": "拒稿",
+        "reject_resubmit": "拒稿并鼓励重投",
+        "reject_decline": "拒稿且不鼓励重投",
         "minor_revision": "小修",
         "major_revision": "大修",
     }

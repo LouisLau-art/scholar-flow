@@ -70,11 +70,11 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
         if (!open && !isSubmitting) onClose()
       }}
     >
-      <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Academic Pre-check Routing</DialogTitle>
+          <DialogTitle>Academic Pre-check Recommendation</DialogTitle>
           <DialogDescription>
-            Choose the next route for this manuscript. Sending it to the decision workspace does not finalize the manuscript; it hands the case to the academic/editorial decision stage.
+            Submit an academic recommendation for the editorial office. This step records your recommendation only; it does not directly move the manuscript to the next status.
           </DialogDescription>
         </DialogHeader>
 
@@ -83,13 +83,13 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
             <div className="flex items-start gap-2">
               <RadioGroupItem id="academic-check-review" value="review" />
               <Label htmlFor="academic-check-review" className="cursor-pointer text-sm font-medium">
-                Route to External Review
+                Recommend External Review
               </Label>
             </div>
             <div className="flex items-start gap-2">
               <RadioGroupItem id="academic-check-decision" value="decision_phase" />
               <Label htmlFor="academic-check-decision" className="cursor-pointer text-sm font-medium">
-                Send to Decision Workspace
+                Recommend Decision Workspace
               </Label>
             </div>
           </RadioGroup>
@@ -102,7 +102,7 @@ export const AcademicCheckModal: React.FC<AcademicCheckModalProps> = ({ isOpen, 
               onChange={(e) => setComment(e.target.value)}
               maxLength={2000}
               disabled={isSubmitting}
-              placeholder="Add context for the academic recommendation or routing decision..."
+              placeholder="Add context for the academic recommendation to help the editorial office execute the next step..."
               className="min-h-[96px]"
             />
             {error ? <div className="text-xs text-destructive">{error}</div> : null}

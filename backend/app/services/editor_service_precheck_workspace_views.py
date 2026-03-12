@@ -256,6 +256,8 @@ class EditorServicePrecheckWorkspaceViewMixin:
                 row["assigned_at"] = precheck_override.get("assigned_at")
                 row["technical_completed_at"] = precheck_override.get("technical_completed_at")
                 row["academic_completed_at"] = precheck_override.get("academic_completed_at")
+                row["academic_recommendation"] = precheck_override.get("academic_recommendation")
+                row["academic_recommendation_comment"] = precheck_override.get("academic_recommendation_comment")
 
             normalized_status = normalize_status(str(row.get("status") or ""))
             if not normalized_status:
@@ -480,6 +482,8 @@ class EditorServicePrecheckWorkspaceViewMixin:
                 row["assigned_at"] = precheck_override.get("assigned_at")
                 row["technical_completed_at"] = precheck_override.get("technical_completed_at")
                 row["academic_completed_at"] = precheck_override.get("academic_completed_at")
+                row["academic_recommendation"] = precheck_override.get("academic_recommendation")
+                row["academic_recommendation_comment"] = precheck_override.get("academic_recommendation_comment")
 
             normalized_status = normalize_status(str(row.get("status") or ""))
             normalized_precheck = self._normalize_precheck_status(row.get("pre_check_status"))

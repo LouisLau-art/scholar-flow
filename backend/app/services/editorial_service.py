@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.lib.api_client import supabase_admin
-from app.models.manuscript import ManuscriptStatus, normalize_status
+from app.models.manuscript import ManuscriptStatus, PreCheckStatus, normalize_status
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class EditorialService:
         try:
             resp = (
                 self.client.table("manuscripts")
-                .select("id,status,updated_at,invoice_metadata,owner_id,editor_id")
+                .select("id,status,pre_check_status,updated_at,invoice_metadata,owner_id,editor_id")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
@@ -137,6 +137,7 @@ class EditorialService:
             raise HTTPException(status_code=422, detail="Invalid status")
 
         from_norm = normalize_status(from_status) or ManuscriptStatus.PRE_CHECK.value
+        pre_check_status = str(ms.get("pre_check_status") or "").strip().lower()
 
         # 中文注释：流程强约束，预审/外审/修回阶段禁止直接拒稿。
         if to_norm == ManuscriptStatus.REJECTED.value and from_norm in {
@@ -147,6 +148,16 @@ class EditorialService:
             raise HTTPException(
                 status_code=400,
                 detail=f"Reject is only allowed in decision/decision_done flow. Current: {from_norm}",
+            )
+
+        if (
+            from_norm == ManuscriptStatus.PRE_CHECK.value
+            and to_norm == ManuscriptStatus.DECISION.value
+            and pre_check_status != PreCheckStatus.ACADEMIC.value
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="pre_check -> decision is only allowed from academic stage.",
             )
 
         if not allow_skip:
@@ -168,6 +179,7 @@ class EditorialService:
             and to_norm
             not in {
                 ManuscriptStatus.PRE_CHECK.value,
+                ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
                 ManuscriptStatus.MINOR_REVISION.value,
                 ManuscriptStatus.MAJOR_REVISION.value,
             }
@@ -287,10 +299,10 @@ async def process_quality_check(
 
     028 约定:
     - 质检通过：pre_check -> under_review
-    - 质检不通过：进入 minor_revision（等同“退回作者补材料/改格式”）
+    - 质检不通过：进入 revision_before_review（等同“退回作者补材料/改格式”）
     """
     svc = EditorialService()
-    to_status = ManuscriptStatus.UNDER_REVIEW.value if passed else ManuscriptStatus.MINOR_REVISION.value
+    to_status = ManuscriptStatus.UNDER_REVIEW.value if passed else ManuscriptStatus.REVISION_BEFORE_REVIEW.value
     updated = svc.update_status(
         manuscript_id=str(manuscript_id),
         to_status=to_status,

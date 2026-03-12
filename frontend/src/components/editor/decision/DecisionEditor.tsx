@@ -9,7 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { assembleLetter } from '@/lib/decision-utils'
-import type { DecisionAttachment, DecisionDraft, DecisionReport, FinalDecision } from '@/types/decision'
+import { ACADEMIC_RECOMMENDATION_OPTIONS, getDecisionOptionLabel } from '@/lib/decision-labels'
+import type {
+  DecisionAttachment,
+  DecisionDraft,
+  DecisionReport,
+  DecisionSelectionValue,
+  DecisionSubmissionMode,
+} from '@/types/decision'
 
 type LocalAttachment = DecisionAttachment & { ref: string }
 
@@ -25,12 +32,22 @@ type DecisionEditorProps = {
   hasSubmittedAuthorRevision: boolean
   finalBlockingReasons: string[]
   isReadOnly: boolean
+  submissionMode?: DecisionSubmissionMode
   onDirtyChange: (dirty: boolean) => void
   onSubmitted: (manuscriptStatus: string) => void
 }
 
-export function getDecisionOptionsForStage(manuscriptStatus?: string | null): FinalDecision[] {
+export function getDecisionOptionsForStage(
+  manuscriptStatus?: string | null,
+  submissionMode: DecisionSubmissionMode = 'execute'
+): DecisionSelectionValue[] {
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
+  if (submissionMode === 'recommendation') {
+    if (normalizedStatus === 'decision' || normalizedStatus === 'decision_done') {
+      return [...ACADEMIC_RECOMMENDATION_OPTIONS]
+    }
+    return []
+  }
   if (normalizedStatus === 'decision_done') {
     return ['accept', 'minor_revision', 'major_revision', 'reject']
   }
@@ -39,6 +56,8 @@ export function getDecisionOptionsForStage(manuscriptStatus?: string | null): Fi
   }
   return []
 }
+
+export { getDecisionOptionLabel }
 
 function toAttachmentRef(attachment: DecisionAttachment): string {
   return `${attachment.id}|${attachment.path}`
@@ -65,10 +84,11 @@ export function DecisionEditor({
   canSubmitFinal,
   finalBlockingReasons,
   isReadOnly,
+  submissionMode = 'execute',
   onDirtyChange,
   onSubmitted,
 }: DecisionEditorProps) {
-  const [decision, setDecision] = useState<FinalDecision>('minor_revision')
+  const [decision, setDecision] = useState<DecisionSelectionValue>('accept')
   const [content, setContent] = useState('')
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<LocalAttachment[]>([])
@@ -80,14 +100,20 @@ export function DecisionEditor({
   const normalizedStatus = String(manuscriptStatus || '').toLowerCase()
   const isDecisionWorkspaceStage = ['decision', 'decision_done'].includes(normalizedStatus)
   const currentDecisionStage: 'first' | 'final' = normalizedStatus === 'decision_done' ? 'final' : 'first'
-  const canEditDraft = (canRecordFirst || canSubmitFinal) && normalizedStatus === 'decision'
-  const decisionOptions = useMemo(() => getDecisionOptionsForStage(manuscriptStatus), [manuscriptStatus])
+  const canEditDraft = submissionMode === 'execute' && (canRecordFirst || canSubmitFinal) && normalizedStatus === 'decision'
+  const decisionOptions = useMemo(
+    () => getDecisionOptionsForStage(manuscriptStatus, submissionMode),
+    [manuscriptStatus, submissionMode]
+  )
   const decisionSelectValue = decisionOptions.includes(decision)
     ? decision
     : decisionOptions.length === 0
       ? '__decision-stage-only__'
       : decisionOptions[0]
   const decisionSpecificBlockingReasons = useMemo(() => {
+    if (submissionMode === 'recommendation') {
+      return []
+    }
     const reasons = [...finalBlockingReasons]
     if (currentDecisionStage === 'first') {
       if (decision === 'accept') {
@@ -111,9 +137,12 @@ export function DecisionEditor({
       reasons.push('Final reject requires manuscript status in decision/decision_done')
     }
     return reasons
-  }, [currentDecisionStage, decision, finalBlockingReasons, normalizedStatus])
+  }, [currentDecisionStage, decision, finalBlockingReasons, normalizedStatus, submissionMode])
 
-  const canSubmitDecisionNow = canSubmitFinal && decisionSpecificBlockingReasons.length === 0
+  const canSubmitDecisionNow =
+    submissionMode === 'recommendation'
+      ? isDecisionWorkspaceStage && (currentDecisionStage === 'first' ? canRecordFirst : canSubmitFinal)
+      : canSubmitFinal && decisionSpecificBlockingReasons.length === 0
 
   const snapshot = useMemo(
     () =>
@@ -127,16 +156,18 @@ export function DecisionEditor({
   )
 
   useEffect(() => {
-    const availableOptions = getDecisionOptionsForStage(manuscriptStatus)
-    const fallbackDecision: FinalDecision = normalizedStatus === 'decision_done' ? 'accept' : 'minor_revision'
-    const fromDraft = initialDraft
+    const availableOptions = getDecisionOptionsForStage(manuscriptStatus, submissionMode)
+    const fallbackDecision: DecisionSelectionValue =
+      availableOptions[0] || (submissionMode === 'recommendation' ? 'accept' : normalizedStatus === 'decision_done' ? 'accept' : 'minor_revision')
+    const effectiveDraft = submissionMode === 'execute' ? initialDraft : null
+    const fromDraft = effectiveDraft
       ? {
-          decision: availableOptions.includes(initialDraft.decision)
-            ? initialDraft.decision
+          decision: availableOptions.includes(effectiveDraft.decision)
+            ? effectiveDraft.decision
             : availableOptions[0] || fallbackDecision,
-          content: initialDraft.content || '',
-          lastUpdatedAt: initialDraft.last_updated_at || null,
-          attachments: (initialDraft.attachments || []).map((item) =>
+          content: effectiveDraft.content || '',
+          lastUpdatedAt: effectiveDraft.last_updated_at || null,
+          attachments: (effectiveDraft.attachments || []).map((item) =>
             normalizeAttachment({ ...item, ref: toAttachmentRef(item) })
           ),
         }
@@ -159,7 +190,7 @@ export function DecisionEditor({
       attachments: fromDraft.attachments.map((item) => ({ id: item.id, path: item.path, ref: item.ref })),
     })
     onDirtyChange(false)
-  }, [initialDraft, manuscriptStatus, normalizedStatus, templateContent, onDirtyChange])
+  }, [initialDraft, manuscriptStatus, normalizedStatus, submissionMode, templateContent, onDirtyChange])
 
   useEffect(() => {
     onDirtyChange(snapshot !== baselineRef.current && !isReadOnly)
@@ -231,20 +262,33 @@ export function DecisionEditor({
 
   const submit = async (isFinal: boolean) => {
     if (isReadOnly) return
+    if (submissionMode === 'recommendation' && !isFinal) {
+      toast.error('Recommendation mode does not support draft save')
+      return
+    }
     if (!isFinal && !canEditDraft) {
       toast.error('First decision draft is only available in decision stage')
       return
     }
-    if (isFinal && decision !== 'add_reviewer' && !content.trim()) {
+    if (submissionMode !== 'recommendation' && isFinal && decision !== 'add_reviewer' && !content.trim()) {
       toast.error(`${currentDecisionStage === 'first' ? 'First' : 'Final'} decision requires letter content`)
       return
     }
-    if (isFinal && !canSubmitFinal) {
-      toast.error(`Current role cannot submit ${currentDecisionStage} decision`)
+    const canSubmitCurrentStage =
+      currentDecisionStage === 'first' ? canRecordFirst || canSubmitFinal : canSubmitFinal
+    if (isFinal && !canSubmitCurrentStage) {
+      toast.error(
+        submissionMode === 'recommendation'
+          ? `Current role cannot submit ${currentDecisionStage} recommendation`
+          : `Current role cannot submit ${currentDecisionStage} decision`
+      )
       return
     }
     if (isFinal && !canSubmitDecisionNow) {
-      toast.error(decisionSpecificBlockingReasons[0] || `${currentDecisionStage} decision is blocked by workflow requirements`)
+      toast.error(
+        decisionSpecificBlockingReasons[0] ||
+          `${currentDecisionStage} ${submissionMode === 'recommendation' ? 'recommendation' : 'decision'} is blocked by workflow requirements`
+      )
       return
     }
 
@@ -268,9 +312,11 @@ export function DecisionEditor({
 
       if (isFinal) {
         toast.success(
-          decision === 'add_reviewer'
-            ? 'Manuscript returned to under review'
-            : `${currentDecisionStage === 'first' ? 'First' : 'Final'} decision submitted`
+          submissionMode === 'recommendation'
+            ? `${currentDecisionStage === 'first' ? 'First' : 'Final'} recommendation recorded`
+            : decision === 'add_reviewer'
+              ? 'Manuscript returned to under review'
+              : `${currentDecisionStage === 'first' ? 'First' : 'Final'} decision submitted`
         )
         onSubmitted(String(res.data.manuscript_status || ''))
       } else {
@@ -285,23 +331,29 @@ export function DecisionEditor({
 
   return (
     <aside className="rounded-lg border border-border bg-card p-4">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Decision Letter</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+        {submissionMode === 'recommendation' ? 'Academic Recommendation' : 'Decision Letter'}
+      </h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        {currentDecisionStage === 'first'
-          ? 'First decision can be saved as a draft in the decision queue. Submitting add reviewer will immediately return the manuscript to under review.'
-          : 'Final decision is only available in the final decision queue and will trigger the manuscript state transition.'}
+        {submissionMode === 'recommendation'
+          ? currentDecisionStage === 'first'
+            ? 'First recommendation records the academic conclusion only. Editorial staff will decide the actual manuscript transition and author communication.'
+            : 'Final recommendation records the academic conclusion only. It does not directly change manuscript status or notify the author.'
+          : currentDecisionStage === 'first'
+            ? 'First decision can be saved as a draft in the decision queue. Submitting Add Additional Reviewer will immediately return the manuscript to under review.'
+            : 'Final decision is only available in the final decision queue and will trigger the manuscript state transition.'}
       </p>
       {!isDecisionWorkspaceStage ? (
         <p className="mt-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
           当前稿件尚未进入 `decision / decision_done`，请先通过 `Exit Review Stage` 推进流程。
         </p>
       ) : null}
-      {!canSubmitFinal ? (
+      {!canSubmitFinal && submissionMode !== 'recommendation' ? (
         <p className="mt-1 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
           当前账号仅可记录 First Decision 草稿；提交当前决策动作需具备对应阶段的提交权限。
         </p>
       ) : null}
-      {canSubmitFinal && !canSubmitDecisionNow ? (
+      {submissionMode !== 'recommendation' && canSubmitFinal && !canSubmitDecisionNow ? (
         <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
           <div className="font-semibold">{currentDecisionStage === 'first' ? 'First decision blocked' : 'Final decision blocked'}</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
@@ -314,10 +366,12 @@ export function DecisionEditor({
 
       <div className="mt-4 space-y-4">
         <div>
-          <label htmlFor="decision-letter-select" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Decision</label>
+          <label htmlFor="decision-letter-select" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {submissionMode === 'recommendation' ? 'Recommendation' : 'Decision'}
+          </label>
           <Select
             value={decisionSelectValue}
-            onValueChange={(value) => setDecision(value as FinalDecision)}
+            onValueChange={(value) => setDecision(value as DecisionSelectionValue)}
             disabled={isReadOnly || isSavingDraft || isSubmittingFinal || decisionOptions.length === 0}
           >
             <SelectTrigger id="decision-letter-select">
@@ -327,15 +381,7 @@ export function DecisionEditor({
               {decisionOptions.length > 0 ? (
                 decisionOptions.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option === 'accept'
-                      ? 'Accept'
-                      : option === 'add_reviewer'
-                        ? 'Add Reviewer'
-                      : option === 'minor_revision'
-                        ? 'Minor Revision'
-                        : option === 'major_revision'
-                          ? 'Major Revision'
-                          : 'Reject'}
+                    {getDecisionOptionLabel(option)}
                   </SelectItem>
                 ))
               ) : (
@@ -349,17 +395,21 @@ export function DecisionEditor({
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <label htmlFor="decision-letter-content" className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Letter Content (Markdown)</label>
-            <Button
-              type="button"
-              onClick={handleGenerateDraft}
-              disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
-              variant="ghost"
-              className="inline-flex items-center gap-1 px-0 text-xs font-semibold text-primary hover:underline disabled:opacity-60"
-            >
-              <WandSparkles className="h-3.5 w-3.5" />
-              Generate Letter Draft
-            </Button>
+            <label htmlFor="decision-letter-content" className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {submissionMode === 'recommendation' ? 'Recommendation Note (Optional)' : 'Letter Content (Markdown)'}
+            </label>
+            {submissionMode === 'execute' ? (
+              <Button
+                type="button"
+                onClick={handleGenerateDraft}
+                disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
+                variant="ghost"
+                className="inline-flex items-center gap-1 px-0 text-xs font-semibold text-primary hover:underline disabled:opacity-60"
+              >
+                <WandSparkles className="h-3.5 w-3.5" />
+                Generate Letter Draft
+              </Button>
+            ) : null}
           </div>
           <Textarea
             id="decision-letter-content"
@@ -368,7 +418,7 @@ export function DecisionEditor({
             onChange={(event) => setContent(event.target.value)}
             disabled={isReadOnly}
             className="w-full rounded-md border border-border px-3 py-2 font-mono text-sm leading-6"
-            placeholder="Write decision letter..."
+            placeholder={submissionMode === 'recommendation' ? 'Write recommendation note...' : 'Write decision letter...'}
           />
         </div>
 
@@ -413,29 +463,35 @@ export function DecisionEditor({
           {isUploading ? <Loader2 className="mt-2 h-4 w-4 animate-spin text-muted-foreground" /> : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            type="button"
-            onClick={() => void submit(false)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
-            variant="outline"
-            className="inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60"
-          >
-            {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save First Decision Draft
-          </Button>
+        <div className={`grid grid-cols-1 gap-2 ${submissionMode === 'execute' ? 'sm:grid-cols-2' : ''}`}>
+          {submissionMode === 'execute' ? (
+            <Button
+              type="button"
+              onClick={() => void submit(false)}
+              disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canEditDraft}
+              variant="outline"
+              className="inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60"
+            >
+              {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save First Decision Draft
+            </Button>
+          ) : null}
           <Button
             type="button"
             onClick={() => void submit(true)}
-            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitFinal || !canSubmitDecisionNow}
+            disabled={isReadOnly || isSavingDraft || isSubmittingFinal || !canSubmitDecisionNow}
             className="inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60"
           >
             {isSubmittingFinal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {decision === 'add_reviewer'
-              ? 'Return To Under Review'
-              : currentDecisionStage === 'first'
-                ? 'Submit First Decision'
-                : 'Submit Final Decision'}
+            {submissionMode === 'recommendation'
+              ? currentDecisionStage === 'first'
+                ? 'Submit First Recommendation'
+                : 'Submit Final Recommendation'
+              : decision === 'add_reviewer'
+                ? 'Return To Under Review'
+                : currentDecisionStage === 'first'
+                  ? 'Submit First Decision'
+                  : 'Submit Final Decision'}
           </Button>
         </div>
       </div>

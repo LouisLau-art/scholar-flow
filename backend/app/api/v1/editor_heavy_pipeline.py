@@ -188,10 +188,18 @@ async def get_editor_pipeline_impl(
                 .order("updated_at", desc=True)
             )
             if hasattr(rr_query, "in_"):
-                rr_query = rr_query.in_("status", ["major_revision", "minor_revision"])
+                rr_query = rr_query.in_("status", ["revision_before_review", "major_revision", "minor_revision"])
                 revision_requested = extract_data_fn(_with_limit(rr_query).execute()) or []
             else:
                 # fallback: 两次 eq 合并（不阻断）
+                pre_review = extract_data_fn(
+                    _with_limit(
+                        db.table("manuscripts")
+                        .select(pipeline_select_fields)
+                        .eq("status", "revision_before_review")
+                        .order("updated_at", desc=True)
+                    ).execute()
+                ) or []
                 maj = extract_data_fn(
                     _with_limit(
                         db.table("manuscripts")
@@ -208,7 +216,7 @@ async def get_editor_pipeline_impl(
                         .order("updated_at", desc=True)
                     ).execute()
                 ) or []
-                revision_requested = (maj or []) + (minor or [])
+                revision_requested = (pre_review or []) + (maj or []) + (minor or [])
         except Exception as e:
             print(f"Pipeline revision_requested fallback empty: {e}")
 

@@ -18,6 +18,8 @@ interface Manuscript {
   title: string
   status?: string
   pre_check_status?: string
+  academic_recommendation?: string | null
+  academic_recommendation_comment?: string | null
   academic_editor_id?: string | null
   academic_submitted_at?: string | null
   current_assignee?: {
@@ -32,6 +34,13 @@ interface Manuscript {
     decision?: string
     updated_at?: string
   } | null
+}
+
+function getAcademicRecommendationLabel(value?: string | null): string {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'review') return 'Recommend External Review'
+  if (normalized === 'decision_phase') return 'Recommend Decision Workspace'
+  return 'Pending'
 }
 
 export default function EICAcademicQueuePage() {
@@ -100,7 +109,7 @@ export default function EICAcademicQueuePage() {
             </div>
             <div>
               <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Academic Editor Workspace</h1>
-              <p className="mt-1 text-muted-foreground font-medium">Review manuscripts routed for academic pre-check before they enter external review or the decision workspace.</p>
+              <p className="mt-1 text-muted-foreground font-medium">Review manuscripts routed for academic pre-check and record recommendation for the editorial office.</p>
             </div>
           </div>
 
@@ -128,6 +137,7 @@ export default function EICAcademicQueuePage() {
                 <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Journal</th>
                 <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Academic Editor</th>
                 <th className="w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="w-56 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommendation</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
                 <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
@@ -136,11 +146,11 @@ export default function EICAcademicQueuePage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</td>
                 </tr>
               ) : academicManuscripts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {scopeHint ? 'No manuscript in your assigned journal scope.' : 'No manuscripts awaiting academic check.'}
                   </td>
                 </tr>
@@ -153,6 +163,14 @@ export default function EICAcademicQueuePage() {
                       {m.current_assignee?.full_name || m.current_assignee?.email || m.academic_editor_id || '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{m.pre_check_status}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">
+                      <div>{getAcademicRecommendationLabel(m.academic_recommendation)}</div>
+                      {m.academic_recommendation_comment ? (
+                        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {m.academic_recommendation_comment}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {m.academic_submitted_at ? new Date(m.academic_submitted_at).toLocaleString() : '—'}
                     </td>
@@ -169,7 +187,7 @@ export default function EICAcademicQueuePage() {
                           onClick={() => openDecisionModal(m.id)}
                           className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100"
                         >
-                          Submit Academic Decision
+                          Submit Recommendation
                         </button>
                       </div>
                     </td>

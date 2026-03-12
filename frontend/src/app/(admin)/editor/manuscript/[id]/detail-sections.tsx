@@ -25,6 +25,13 @@ import {
 } from './helpers'
 import type { ReviewerFeedbackItem } from './types'
 
+function getAcademicRecommendationLabel(value: string | null | undefined): string {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'review') return 'Recommend External Review'
+  if (normalized === 'decision_phase') return 'Recommend Decision Workspace'
+  return 'Pending'
+}
+
 type DetailTopHeaderProps = {
   journalTitle?: string | null
   manuscriptTitle?: string | null
@@ -1223,6 +1230,16 @@ export function PrecheckRoleQueueCard({
                   {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
                 </span>
               </div>
+              <div>
+                <span className="font-medium text-foreground">Academic Recommendation:</span>{' '}
+                <span className="text-foreground">
+                  {getAcademicRecommendationLabel(roleQueue?.academic_recommendation)}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">Recommendation Note:</span>{' '}
+                <span className="text-foreground">{roleQueue?.academic_recommendation_comment || '—'}</span>
+              </div>
             </div>
             <div className="mt-3 text-xs text-muted-foreground">Detailed role actions are merged into the Activity Timeline below.</div>
           </>
@@ -1248,6 +1265,12 @@ export function PrecheckRoleQueueCard({
               Academic completed:{' '}
               <span className="font-medium text-foreground">
                 {roleQueue?.academic_completed_at ? formatDateTimeLocal(roleQueue.academic_completed_at) : '—'}
+              </span>
+            </div>
+            <div className="text-foreground">
+              Academic recommendation:{' '}
+              <span className="font-medium text-foreground">
+                {getAcademicRecommendationLabel(roleQueue?.academic_recommendation)}
               </span>
             </div>
             <div className="pt-1 text-xs text-muted-foreground">
