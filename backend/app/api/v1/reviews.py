@@ -124,6 +124,9 @@ class AssignmentEmailActionPayload(BaseModel):
     idempotency_key: str | None = None
     subject_override: str | None = None
     body_html_override: str | None = None
+    cc_emails: list[EmailStr] | None = None
+    bcc_emails: list[EmailStr] | None = None
+    reply_to_emails: list[EmailStr] | None = None
 
     @field_validator("recipient_email", mode="before")
     @classmethod
@@ -139,19 +142,11 @@ class AssignmentEmailActionPayload(BaseModel):
         normalized = str(value).strip()
         return normalized or None
 
-
-class AssignmentExternalEmailPayload(AssignmentEmailActionPayload):
-    channel: str | None = "other"
-    subject: str | None = None
-    cc_emails: list[EmailStr] = []
-    bcc_emails: list[EmailStr] = []
-    reply_to_emails: list[EmailStr] = []
-
     @field_validator("cc_emails", "bcc_emails", "reply_to_emails", mode="before")
     @classmethod
-    def _normalize_email_list(cls, value: Any) -> list[str]:
+    def _normalize_email_list(cls, value: Any) -> list[str] | None:
         if value is None:
-            return []
+            return None
         if isinstance(value, str):
             value = [value]
         normalized: list[str] = []
@@ -160,6 +155,11 @@ class AssignmentExternalEmailPayload(AssignmentEmailActionPayload):
             if email and email not in normalized:
                 normalized.append(email)
         return normalized
+
+
+class AssignmentExternalEmailPayload(AssignmentEmailActionPayload):
+    channel: str | None = "other"
+    subject: str | None = None
 
     @field_validator("channel", "subject", mode="before")
     @classmethod
@@ -476,6 +476,61 @@ def _build_assignment_email_context(
     }
 
 
+def _normalize_assignment_email_list(emails: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in emails or []:
+        email = normalize_email(item)
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        normalized.append(email)
+    return normalized
+
+
+def _resolve_assignment_email_envelope(
+    *,
+    recipient_email: str,
+    journal_public_editorial_email: str | None,
+    payload: AssignmentEmailActionPayload,
+) -> dict[str, list[str]]:
+    to_recipients = [recipient_email] if recipient_email else []
+    default_cc = (
+        [journal_public_editorial_email]
+        if journal_public_editorial_email and journal_public_editorial_email != recipient_email
+        else []
+    )
+    default_reply_to = [journal_public_editorial_email] if journal_public_editorial_email else []
+
+    cc_recipients = (
+        _normalize_assignment_email_list(payload.cc_emails)
+        if payload.cc_emails is not None
+        else list(default_cc)
+    )
+    bcc_recipients = (
+        _normalize_assignment_email_list(payload.bcc_emails)
+        if payload.bcc_emails is not None
+        else []
+    )
+    reply_to_recipients = (
+        _normalize_assignment_email_list(payload.reply_to_emails)
+        if payload.reply_to_emails is not None
+        else list(default_reply_to)
+    )
+
+    to_set = set(to_recipients)
+    cc_recipients = [email for email in cc_recipients if email not in to_set]
+    cc_set = set(cc_recipients)
+    bcc_recipients = [email for email in bcc_recipients if email not in to_set and email not in cc_set]
+
+    return {
+        "to": to_recipients,
+        "cc": cc_recipients,
+        "bcc": bcc_recipients,
+        "reply_to": reply_to_recipients,
+    }
+
+
 def _resolve_assignment_email_payload_template_key(payload: AssignmentEmailActionPayload) -> str:
     return str(payload.template_key or payload.template or "reviewer_invitation_standard")
 
@@ -582,7 +637,9 @@ def _prepare_assignment_email_resources(
 
     manuscript_id = str(manuscript.get("id") or "").strip()
     manuscript_title = str(manuscript.get("title") or "").strip() or "Manuscript"
-    journal_title = _resolve_journal_title_for_assignment(manuscript)
+    journal_context = _resolve_journal_contact_for_assignment(manuscript)
+    journal_title = str(journal_context.get("journal_title") or "ScholarFlow Journal").strip() or "ScholarFlow Journal"
+    journal_public_editorial_email = normalize_email(journal_context.get("journal_public_editorial_email"))
     requested_recipient_email = normalize_email(payload.recipient_email)
     recipient_email = requested_recipient_email or reviewer_email
     recipient_overridden = bool(requested_recipient_email and requested_recipient_email != reviewer_email)
@@ -601,6 +658,7 @@ def _prepare_assignment_email_resources(
         "manuscript_id": manuscript_id,
         "manuscript_title": manuscript_title,
         "journal_title": journal_title,
+        "journal_public_editorial_email": journal_public_editorial_email,
         "reviewer_id": reviewer_id,
         "reviewer_email": reviewer_email,
         "reviewer_name": reviewer_name,
@@ -791,23 +849,32 @@ def _ensure_review_management_access(
     )
 
 
-def _resolve_journal_title_for_assignment(manuscript: dict[str, Any]) -> str:
+def _resolve_journal_contact_for_assignment(manuscript: dict[str, Any]) -> dict[str, str | None]:
     journal_id = str(manuscript.get("journal_id") or "").strip()
     if not journal_id:
-        return "ScholarFlow Journal"
+        return {
+            "journal_title": "ScholarFlow Journal",
+            "journal_public_editorial_email": None,
+        }
     try:
         row = (
             supabase_admin.table("journals")
-            .select("title")
+            .select("title, public_editorial_email")
             .eq("id", journal_id)
             .single()
             .execute()
         )
         payload = getattr(row, "data", None) or {}
         title = str(payload.get("title") or "").strip()
-        return title or "ScholarFlow Journal"
+        return {
+            "journal_title": title or "ScholarFlow Journal",
+            "journal_public_editorial_email": normalize_email(payload.get("public_editorial_email")),
+        }
     except Exception:
-        return "ScholarFlow Journal"
+        return {
+            "journal_title": "ScholarFlow Journal",
+            "journal_public_editorial_email": None,
+        }
 
 
 def _normalize_template_key(raw_key: str) -> str:
@@ -1296,6 +1363,11 @@ async def preview_assignment_email(
         context=context,
         payload=body,
     )
+    envelope = _resolve_assignment_email_envelope(
+        recipient_email=prepared["recipient_email"],
+        journal_public_editorial_email=prepared.get("journal_public_editorial_email"),
+        payload=body,
+    )
     return {
         "success": True,
         "data": {
@@ -1309,9 +1381,13 @@ async def preview_assignment_email(
             "recipient_overridden": prepared["recipient_overridden"],
             "journal_title": prepared["journal_title"],
             "review_url": context["review_url"],
+            "resolved_recipients": envelope,
             "subject": preview["subject"],
             "html": preview["html"],
             "text": preview["text"],
+            "reply_to": envelope["reply_to"],
+            "delivery_mode": "manual",
+            "can_send": True,
         },
     }
 
@@ -1435,10 +1511,20 @@ async def send_assignment_email(
         context=context,
         payload=body,
     )
+    envelope = _resolve_assignment_email_envelope(
+        recipient_email=recipient_email,
+        journal_public_editorial_email=prepared.get("journal_public_editorial_email"),
+        payload=body,
+    )
     subject_preview = str(rendered_preview.get("subject") or "(no subject)").strip() or "(no subject)"
 
+    audit_context["delivery_mode"] = "manual"
+    audit_context["communication_status"] = "system_sent"
     delivery = email_service.send_rendered_email(
         to_email=recipient_email,
+        cc_emails=envelope["cc"],
+        bcc_emails=envelope["bcc"],
+        reply_to_emails=envelope["reply_to"],
         template_key=template_key,
         subject=rendered_preview["subject"],
         html_body=rendered_preview["html"],
@@ -1552,6 +1638,11 @@ async def mark_assignment_email_external_sent(
     )
     audit_context["delivery_mode"] = "manual"
     audit_context["communication_status"] = "external_sent"
+    envelope = _resolve_assignment_email_envelope(
+        recipient_email=recipient_email,
+        journal_public_editorial_email=prepared.get("journal_public_editorial_email"),
+        payload=body,
+    )
 
     email_service.log_attempt(
         recipient=recipient_email,
@@ -1559,10 +1650,10 @@ async def mark_assignment_email_external_sent(
         template_name=template_key,
         status=EmailStatus.SENT,
         provider=channel_value,
-        to_recipients=[recipient_email],
-        cc_recipients=list(body.cc_emails or []),
-        bcc_recipients=list(body.bcc_emails or []),
-        reply_to_recipients=list(body.reply_to_emails or []),
+        to_recipients=envelope["to"],
+        cc_recipients=envelope["cc"],
+        bcc_recipients=envelope["bcc"],
+        reply_to_recipients=envelope["reply_to"],
         audit_context=audit_context,
     )
 

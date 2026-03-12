@@ -7,6 +7,8 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import MagicMock, patch
 
+from app.api.v1.reviews import _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES
+
 
 class _Resp:
     def __init__(self, data: Any):
@@ -822,5 +824,234 @@ async def test_proofreading_email_mark_external_sent_logs_external_delivery(
     assert log_kwargs["provider"] == "gmail_web"
     assert log_kwargs["to_recipients"] == ["corr@example.org"]
     assert log_kwargs["cc_recipients"] == ["co@example.org", "office@example.org"]
+    assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
+    assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_email_preview_returns_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    assignment_id = UUID("ffffffff-ffff-ffff-ffff-fffffffff111")
+    manuscript_id = UUID("abababab-abab-abab-abab-ababababab11")
+    reviewer_id = UUID("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcd11")
+
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                }
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Reviewer Invitation Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": "editor-1",
+                    "status": "pre_check",
+                }
+            ],
+            "user_profiles": [
+                {
+                    "email": "reviewer@example.org",
+                    "full_name": "Reviewer One",
+                }
+            ],
+            "journals": [
+                {
+                    "title": "Journal One",
+                    "public_editorial_email": "office@example.org",
+                }
+            ],
+        }
+    )
+
+    with (
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.api.v1.reviews._ensure_review_management_access", return_value=None),
+        patch(
+            "app.api.v1.reviews._load_review_assignment_template",
+            return_value=dict(_DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES["reviewer_invitation_standard"]),
+        ),
+        patch("app.api.v1.reviews._safe_create_assignment_magic_link", return_value="token-1"),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/preview-email",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["resolved_recipients"]["to"] == ["reviewer@example.org"]
+    assert data["resolved_recipients"]["cc"] == ["office@example.org"]
+    assert data["reply_to"] == ["office@example.org"]
+    assert data["delivery_mode"] == "manual"
+    assert data["can_send"] is True
+
+
+@pytest.mark.asyncio
+async def test_reviewer_email_send_uses_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    assignment_id = UUID("ffffffff-ffff-ffff-ffff-fffffffff112")
+    manuscript_id = UUID("abababab-abab-abab-abab-ababababab12")
+    reviewer_id = UUID("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcd12")
+
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                },
+                [],
+                [],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Reviewer Send Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": "editor-1",
+                    "status": "pre_check",
+                },
+                [],
+            ],
+            "user_profiles": [
+                {
+                    "email": "reviewer@example.org",
+                    "full_name": "Reviewer One",
+                }
+            ],
+            "journals": [
+                {
+                    "title": "Journal One",
+                    "public_editorial_email": "office@example.org",
+                }
+            ],
+        }
+    )
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Invitation to Review - Journal One",
+            "provider_id": "re_rev_123",
+            "error_message": None,
+        }
+    )
+
+    with (
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.api.v1.reviews._ensure_review_management_access", return_value=None),
+        patch(
+            "app.api.v1.reviews._load_review_assignment_template",
+            return_value=dict(_DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES["reviewer_invitation_standard"]),
+        ),
+        patch("app.api.v1.reviews._safe_create_assignment_magic_link", return_value="token-1"),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/send-email",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["delivery_status"] == "sent"
+    send_kwargs = send_mock.call_args.kwargs
+    assert send_kwargs["to_email"] == "reviewer@example.org"
+    assert send_kwargs["cc_emails"] == ["office@example.org"]
+    assert send_kwargs["reply_to_emails"] == ["office@example.org"]
+    assert send_kwargs["audit_context"]["communication_status"] == "system_sent"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_email_mark_external_sent_logs_external_delivery_with_default_cc(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    assignment_id = UUID("ffffffff-ffff-ffff-ffff-fffffffff113")
+    manuscript_id = UUID("abababab-abab-abab-abab-ababababab13")
+    reviewer_id = UUID("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcd13")
+
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                },
+                [],
+                [],
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Reviewer External Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": "editor-1",
+                    "status": "pre_check",
+                },
+                [],
+            ],
+            "user_profiles": [
+                {
+                    "email": "reviewer@example.org",
+                    "full_name": "Reviewer One",
+                }
+            ],
+            "journals": [
+                {
+                    "title": "Journal One",
+                    "public_editorial_email": "office@example.org",
+                }
+            ],
+        }
+    )
+    log_mock = MagicMock()
+
+    with (
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.api.v1.reviews._ensure_review_management_access", return_value=None),
+        patch(
+            "app.api.v1.reviews._load_review_assignment_template",
+            return_value=dict(_DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES["reviewer_invitation_standard"]),
+        ),
+        patch("app.api.v1.reviews.email_service.log_attempt", log_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/mark-external-sent",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"channel": "gmail_web"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["communication_status"] == "external_sent"
+    log_kwargs = log_mock.call_args.kwargs
+    assert log_kwargs["to_recipients"] == ["reviewer@example.org"]
+    assert log_kwargs["cc_recipients"] == ["office@example.org"]
     assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
     assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
