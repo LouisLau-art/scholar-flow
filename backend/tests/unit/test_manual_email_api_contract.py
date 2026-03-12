@@ -286,3 +286,171 @@ async def test_invoice_email_mark_external_sent_logs_external_delivery(
     assert log_kwargs["cc_recipients"] == ["co@example.org", "office@example.org"]
     assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
     assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
+
+
+@pytest.mark.asyncio
+async def test_technical_revision_email_preview_returns_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc11")
+
+    supabase_admin = _Client(
+        {
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Technical Revision Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+
+    with (
+        patch("app.api.v1.editor_precheck.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_precheck.ensure_manuscript_scope_access", return_value=None),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/emails/technical-revision/preview",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"editor_message": "Please update formatting and ethics statement."},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["resolved_recipients"]["to"] == ["corr@example.org"]
+    assert data["resolved_recipients"]["cc"] == ["co@example.org", "office@example.org"]
+    assert data["reply_to"] == ["office@example.org"]
+    assert data["delivery_mode"] == "manual"
+    assert data["can_send"] is True
+    assert "Please update formatting and ethics statement." in data["html"]
+
+
+@pytest.mark.asyncio
+async def test_technical_revision_email_send_uses_resolved_recipients(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc12")
+
+    supabase_admin = _Client(
+        {
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Technical Revision Send Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Technical Revision Requested",
+            "provider_id": "re_tr_123",
+            "error_message": None,
+        }
+    )
+
+    with (
+        patch("app.api.v1.editor_precheck.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_precheck.ensure_manuscript_scope_access", return_value=None),
+        patch("app.api.v1.editor_precheck.email_service.send_rendered_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/emails/technical-revision/send",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"editor_message": "Please upload a clean manuscript package."},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["delivery_status"] == "sent"
+    send_kwargs = send_mock.call_args.kwargs
+    assert send_kwargs["to_emails"] == ["corr@example.org"]
+    assert send_kwargs["cc_emails"] == ["co@example.org", "office@example.org"]
+    assert send_kwargs["reply_to_emails"] == ["office@example.org"]
+    assert send_kwargs["template_key"] == "technical_revision"
+    assert send_kwargs["audit_context"]["communication_status"] == "system_sent"
+
+
+@pytest.mark.asyncio
+async def test_technical_revision_email_mark_external_sent_logs_external_delivery(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    manuscript_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccc13")
+
+    supabase_admin = _Client(
+        {
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Technical Revision External Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+    log_mock = MagicMock()
+
+    with (
+        patch("app.api.v1.editor_precheck.supabase_admin", supabase_admin),
+        patch("app.api.v1.editor_precheck.ensure_manuscript_scope_access", return_value=None),
+        patch("app.api.v1.editor_precheck.email_service.log_attempt", log_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/emails/technical-revision/mark-external-sent",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "editor_message": "Please provide missing declarations.",
+                "channel": "gmail_web",
+            },
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["communication_status"] == "external_sent"
+    assert data["recipient"] == "corr@example.org"
+    log_kwargs = log_mock.call_args.kwargs
+    assert log_kwargs["provider"] == "gmail_web"
+    assert log_kwargs["to_recipients"] == ["corr@example.org"]
+    assert log_kwargs["cc_recipients"] == ["co@example.org", "office@example.org"]
+    assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
+    assert log_kwargs["audit_context"]["communication_status"] == "external_sent"

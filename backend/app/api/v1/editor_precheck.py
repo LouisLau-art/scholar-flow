@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 from app.api.v1.editor_common import (
     AcademicCheckRequest,
@@ -14,12 +16,15 @@ from app.api.v1.editor_common import (
     resolve_author_notification_target,
 )
 from app.core.auth_utils import get_current_user
+from app.core.email_normalization import normalize_email
 from app.core.journal_scope import ensure_manuscript_scope_access
+from app.core.mail import email_service
 from app.core.role_matrix import normalize_roles
 from app.core.roles import require_any_role
 from app.core.short_ttl_cache import ShortTTLCache
 from app.lib.api_client import supabase_admin
 from app.models.manuscript import normalize_status
+from app.models.email_log import EmailStatus
 from app.services.editor_service import EditorService
 from app.services.editorial_service import EditorialService
 from app.services.notification_service import NotificationService
@@ -29,6 +34,152 @@ _AE_WORKSPACE_CACHE_TTL_SEC = 8.0
 _ME_WORKSPACE_CACHE_TTL_SEC = 8.0
 _ae_workspace_cache = ShortTTLCache[list[dict]](max_entries=1024)
 _me_workspace_cache = ShortTTLCache[list[dict]](max_entries=1024)
+
+
+class TechnicalRevisionEmailPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    editor_message: str
+    subject_override: str | None = None
+    html_override: str | None = None
+    idempotency_key: str | None = None
+    channel: str | None = "other"
+    to_override: list[EmailStr] | None = None
+    cc_override: list[EmailStr] | None = None
+    bcc_override: list[EmailStr] | None = None
+    reply_to_override: list[EmailStr] | None = None
+
+    @field_validator("editor_message", "subject_override", "html_override", "idempotency_key", "channel", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @field_validator("to_override", "cc_override", "bcc_override", "reply_to_override", mode="before")
+    @classmethod
+    def _normalize_email_list(cls, value: Any) -> list[str] | None:
+        if value is None:
+            return None
+        raw = [value] if isinstance(value, str) else list(value)
+        normalized: list[str] = []
+        for item in raw:
+            email = normalize_email(item)
+            if email and email not in normalized:
+                normalized.append(email)
+        return normalized
+
+
+def _normalize_manual_email_list(emails: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in emails or []:
+        email = normalize_email(item)
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        normalized.append(email)
+    return normalized
+
+
+def _ensure_technical_revision_email_context(manuscript_id: UUID) -> dict[str, Any]:
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, title, author_id, journal_id, submission_email, author_contacts")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    manuscript = getattr(ms_resp, "data", None) or {}
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    target = resolve_author_notification_target(
+        manuscript=manuscript,
+        manuscript_id=str(manuscript_id),
+        supabase_client=supabase_admin,
+    )
+    if not target.get("recipient_email"):
+        raise HTTPException(status_code=422, detail="No author email available for technical revision delivery")
+
+    manuscript_title = str(manuscript.get("title") or "Manuscript").strip() or "Manuscript"
+    recipient_name = str(target.get("recipient_name") or "Author").strip() or "Author"
+    return {
+        "manuscript": manuscript,
+        "target": target,
+        "manuscript_title": manuscript_title,
+        "recipient_name": recipient_name,
+    }
+
+
+def _resolve_technical_revision_email_envelope(
+    *,
+    target: dict[str, Any],
+    payload: TechnicalRevisionEmailPayload,
+) -> dict[str, list[str]]:
+    to_recipients = _normalize_manual_email_list(payload.to_override) or _normalize_manual_email_list(target.get("to_recipients"))
+    cc_recipients = (
+        _normalize_manual_email_list(payload.cc_override)
+        if payload.cc_override is not None
+        else _normalize_manual_email_list(target.get("cc_recipients"))
+    )
+    bcc_recipients = (
+        _normalize_manual_email_list(payload.bcc_override)
+        if payload.bcc_override is not None
+        else _normalize_manual_email_list(target.get("bcc_recipients"))
+    )
+    reply_to_recipients = (
+        _normalize_manual_email_list(payload.reply_to_override)
+        if payload.reply_to_override is not None
+        else _normalize_manual_email_list(target.get("reply_to_recipients"))
+    )
+    if not to_recipients:
+        recipient_email = normalize_email(target.get("recipient_email"))
+        if recipient_email:
+            to_recipients = [recipient_email]
+    return {
+        "to": to_recipients,
+        "cc": cc_recipients,
+        "bcc": bcc_recipients,
+        "reply_to": reply_to_recipients,
+    }
+
+
+def _build_technical_revision_email_preview(
+    manuscript_id: UUID,
+    payload: TechnicalRevisionEmailPayload,
+) -> dict[str, Any]:
+    if not payload.editor_message:
+        raise HTTPException(status_code=422, detail="editor_message is required")
+
+    context = _ensure_technical_revision_email_context(manuscript_id)
+    subject = str(payload.subject_override or "Technical Revision Requested").strip() or "Technical Revision Requested"
+    default_html = email_service.render_template(
+        "status_update.html",
+        {
+            "recipient_name": context["recipient_name"],
+            "manuscript_title": context["manuscript_title"],
+            "decision_label": "Technical Revision Requested",
+            "comment": payload.editor_message,
+        },
+    )
+    html = str(payload.html_override or default_html).strip() or default_html
+    envelope = _resolve_technical_revision_email_envelope(target=context["target"], payload=payload)
+    return {
+        "manuscript_id": str(manuscript_id),
+        "recipient_source": context["target"].get("source"),
+        "resolved_recipients": envelope,
+        "subject": subject,
+        "html": html,
+        "text": email_service.derive_plain_text_from_html(html),
+        "reply_to": envelope["reply_to"],
+        "attachments": [],
+        "delivery_mode": "manual",
+        "idempotency_key": str(payload.idempotency_key or f"technical-revision/{manuscript_id}"),
+        "can_send": True,
+        "context": context,
+    }
 
 
 def _is_force_refresh_request(request: Request) -> bool:
@@ -159,6 +310,115 @@ async def submit_intake_revision(
     except Exception as e:
         print(f"[IntakeRevision] failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/manuscripts/{id}/emails/technical-revision/preview")
+async def preview_technical_revision_email(
+    id: UUID,
+    payload: TechnicalRevisionEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_technical_revision_email_preview(id, payload)
+    return {"success": True, "data": {k: v for k, v in preview.items() if k != "context"}}
+
+
+@router.post("/manuscripts/{id}/emails/technical-revision/send")
+async def send_technical_revision_email(
+    id: UUID,
+    payload: TechnicalRevisionEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_technical_revision_email_preview(id, payload)
+    result = email_service.send_rendered_email(
+        to_emails=preview["resolved_recipients"]["to"],
+        cc_emails=preview["resolved_recipients"]["cc"],
+        bcc_emails=preview["resolved_recipients"]["bcc"],
+        reply_to_emails=preview["resolved_recipients"]["reply_to"],
+        template_key="technical_revision",
+        subject=preview["subject"],
+        html_body=preview["html"],
+        text_body=preview["text"],
+        idempotency_key=preview["idempotency_key"],
+        audit_context={
+            "manuscript_id": str(id),
+            "actor_user_id": str(current_user.get("id") or "").strip() or None,
+            "scene": "technical_revision",
+            "event_type": "technical_revision_email",
+            "delivery_mode": "manual",
+            "communication_status": "system_sent",
+            "idempotency_key": preview["idempotency_key"],
+        },
+    )
+    return {
+        "success": True,
+        "data": {
+            "manuscript_id": str(id),
+            "recipient": preview["resolved_recipients"]["to"][0] if preview["resolved_recipients"]["to"] else None,
+            "delivery_status": str(result.get("status") or EmailStatus.FAILED.value),
+            "delivery_error": result.get("error_message"),
+            "provider_id": result.get("provider_id"),
+        },
+    }
+
+
+@router.post("/manuscripts/{id}/emails/technical-revision/mark-external-sent")
+async def mark_technical_revision_email_external_sent(
+    id: UUID,
+    payload: TechnicalRevisionEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_technical_revision_email_preview(id, payload)
+    channel = str(payload.channel or "other").strip() or "other"
+    email_service.log_attempt(
+        recipient=preview["resolved_recipients"]["to"][0],
+        subject=preview["subject"],
+        template_name="technical_revision",
+        status=EmailStatus.SENT,
+        provider=channel,
+        to_recipients=preview["resolved_recipients"]["to"],
+        cc_recipients=preview["resolved_recipients"]["cc"],
+        bcc_recipients=preview["resolved_recipients"]["bcc"],
+        reply_to_recipients=preview["resolved_recipients"]["reply_to"],
+        audit_context={
+            "manuscript_id": str(id),
+            "actor_user_id": str(current_user.get("id") or "").strip() or None,
+            "scene": "technical_revision",
+            "event_type": "technical_revision_email",
+            "delivery_mode": "manual",
+            "communication_status": "external_sent",
+            "idempotency_key": preview["idempotency_key"],
+        },
+    )
+    return {
+        "success": True,
+        "data": {
+            "manuscript_id": str(id),
+            "recipient": preview["resolved_recipients"]["to"][0],
+            "communication_status": "external_sent",
+            "provider": channel,
+        },
+    }
 
 
 @router.get("/workspace")
