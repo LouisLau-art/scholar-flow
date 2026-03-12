@@ -264,8 +264,14 @@ class EditorServicePrecheckIntakeMixin:
         ae_before = str(ms.get("assistant_editor_id") or "")
         owner_before = str(ms.get("owner_id") or "")
 
-        if status != ManuscriptStatus.PRE_CHECK.value:
-            raise HTTPException(status_code=400, detail="AE assignment only allowed in pre_check")
+        if status not in {
+            ManuscriptStatus.PRE_CHECK.value,
+            ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+        }:
+            raise HTTPException(
+                status_code=400,
+                detail="AE assignment only allowed in pre_check or revision_before_review",
+            )
         if pre not in {PreCheckStatus.INTAKE.value, PreCheckStatus.TECHNICAL.value}:
             raise HTTPException(status_code=409, detail=f"Invalid pre-check stage for assignment: {pre}")
         if pre == PreCheckStatus.TECHNICAL.value and ae_before == ae_id_str:
@@ -276,7 +282,7 @@ class EditorServicePrecheckIntakeMixin:
             out["updated_at"] = now
             return self._map_precheck_row(out)
 
-        action = "precheck_reassign_ae" if pre == PreCheckStatus.TECHNICAL.value and ae_before else "precheck_assign_ae"
+        action = "precheck_reassign_ae" if ae_before else "precheck_assign_ae"
         data = {
             "assistant_editor_id": ae_id_str,
             "pre_check_status": PreCheckStatus.TECHNICAL.value,
@@ -306,7 +312,7 @@ class EditorServicePrecheckIntakeMixin:
             self.client.table("manuscripts")
             .update(data)
             .eq("id", manuscript_id_str)
-            .eq("status", ManuscriptStatus.PRE_CHECK.value)
+            .eq("status", status)
         )
         if pre == PreCheckStatus.INTAKE.value:
             q = q.or_("pre_check_status.eq.intake,pre_check_status.is.null")
@@ -317,7 +323,7 @@ class EditorServicePrecheckIntakeMixin:
         if not rows:
             latest = self._get_manuscript(manuscript_id_str)
             if (
-                normalize_status(str(latest.get("status") or "")) == ManuscriptStatus.PRE_CHECK.value
+                normalize_status(str(latest.get("status") or "")) == status
                 and self._normalize_precheck_status(latest.get("pre_check_status")) == PreCheckStatus.TECHNICAL.value
                 and str(latest.get("assistant_editor_id") or "") == ae_id_str
             ):
@@ -328,8 +334,8 @@ class EditorServicePrecheckIntakeMixin:
         owner_after = (data.get("owner_id") if data.get("owner_id") else (owner_before or None))
         self._safe_insert_transition_log(
             manuscript_id=manuscript_id_str,
-            from_status=ManuscriptStatus.PRE_CHECK.value,
-            to_status=ManuscriptStatus.PRE_CHECK.value,
+            from_status=status,
+            to_status=status,
             changed_by=actor,
             comment=f"assign ae: {ae_id_str}",
             payload={

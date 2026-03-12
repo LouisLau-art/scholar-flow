@@ -165,6 +165,91 @@ def test_assign_ae_idempotent_when_same_ae_already_assigned():
     assert out["assistant_editor_id"] == str(ae_id)
 
 
+def test_assign_ae_allows_waiting_author_from_intake_and_switches_resume_stage_to_technical():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    ae_id = uuid4()
+    operator = uuid4()
+
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+            "assistant_editor_id": None,
+            "owner_id": None,
+        }
+    )
+
+    client = Mock()
+    for method in ("table", "update", "eq", "or_", "execute"):
+        getattr(client, method).return_value = client
+    client.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": str(manuscript_id),
+                "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_id": str(ae_id),
+            }
+        ]
+    )
+    svc.client = client
+
+    out = svc.assign_ae(manuscript_id, ae_id, operator)
+
+    assert out["status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert out["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+    assert out["assistant_editor_id"] == str(ae_id)
+    update_payload = client.update.call_args[0][0]
+    assert update_payload["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+    assert update_payload["assistant_editor_id"] == str(ae_id)
+
+
+def test_assign_ae_allows_waiting_author_reassignment_from_technical():
+    svc = _new_service()
+    manuscript_id = uuid4()
+    old_ae_id = uuid4()
+    new_ae_id = uuid4()
+    operator = uuid4()
+
+    svc._get_manuscript = Mock(  # type: ignore[method-assign]
+        return_value={
+            "id": str(manuscript_id),
+            "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+            "pre_check_status": PreCheckStatus.TECHNICAL.value,
+            "assistant_editor_id": str(old_ae_id),
+            "owner_id": None,
+        }
+    )
+
+    client = Mock()
+    for method in ("table", "update", "eq", "or_", "execute"):
+        getattr(client, method).return_value = client
+    client.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": str(manuscript_id),
+                "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                "assistant_editor_id": str(new_ae_id),
+            }
+        ]
+    )
+    svc.client = client
+
+    out = svc.assign_ae(manuscript_id, new_ae_id, operator)
+
+    assert out["status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert out["pre_check_status"] == PreCheckStatus.TECHNICAL.value
+    assert out["assistant_editor_id"] == str(new_ae_id)
+    log_kwargs = svc._safe_insert_transition_log.call_args.kwargs
+    assert log_kwargs["from_status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert log_kwargs["to_status"] == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+    assert log_kwargs["payload"]["assistant_editor_before"] == str(old_ae_id)
+    assert log_kwargs["payload"]["assistant_editor_after"] == str(new_ae_id)
+
+
 def test_assign_ae_raises_409_when_state_changed_concurrently():
     svc = _new_service()
     manuscript_id = uuid4()
