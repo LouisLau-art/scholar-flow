@@ -264,6 +264,9 @@ AE 选择 `Academic` 后，稿件进入：
   - `pre_check/academic` 中 academic recommendation 提交后，由编辑部执行推进到 `decision`，会分别写入 recommendation 与 execution 审计
   - `review-stage-exit` 进入 `first decision` 时，会向指定收件人发出 first decision request email，且邮件里携带新的 academic recommendation label
   - `final decision` 中内部执行粗粒度 `reject` 时，如最近 recommendation 为 `reject_resubmit`，作者邮件会优先使用 `decision_reject_resubmit`
+- 当前已补最小前端 mocked Playwright smoke，锁定：
+  - `Decision Workspace` execute mode 仍支持 draft + final submit
+  - academic recommendation-only mode 会隐藏 draft 保存入口，并以 `Submit First Recommendation / Submit Final Recommendation` 作为唯一提交动作
 
 ## 6. Reviewer 外审阶段
 

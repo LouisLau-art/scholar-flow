@@ -131,6 +131,12 @@
   - `pre_check/academic recommendation -> editorial execute(under_review)` 会写入 `precheck_academic_recommendation_submitted` 与 `precheck_academic_to_review`
   - `review-stage-exit -> first decision` 会发出 first decision request email，并携带新的 academic recommendation label
   - `final decision execute(reject)` 会优先复用最近一条 `reject_resubmit` recommendation，对作者邮件使用 `decision_reject_resubmit`
+- 已完成最小前端 mocked Playwright smoke：
+  - `decision_workspace.spec.ts` 覆盖 internal execute mode 与 academic recommendation-only mode
+  - `decision_workspace.visual.spec.ts` 已同步到当前 `Decision Workspace` 标题文案
+- 已完成一个可选真实环境 deployed smoke 入口：
+  - `deployed_smoke.spec.ts` 新增 `SMOKE_DECISION_MANUSCRIPT_ID`
+  - 配置真实 admin 账号与 decision 稿件后，可验证 `/editor/decision/[id]` 真实页面可达
 - 尚未完成 admin email template 管理、真实模板内容运营化，以及更高层 rollout script 集成
 
 - 邮件模板映射 recommendation -> author template

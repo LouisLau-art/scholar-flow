@@ -5,6 +5,7 @@ import { LoginPage } from '../pages/login.page'
 const smokeEmail = process.env.SMOKE_ADMIN_EMAIL?.trim() || ''
 const smokePassword = process.env.SMOKE_ADMIN_PASSWORD?.trim() || ''
 const smokePublishedArticleId = process.env.SMOKE_PUBLISHED_ARTICLE_ID?.trim() || ''
+const smokeDecisionManuscriptId = process.env.SMOKE_DECISION_MANUSCRIPT_ID?.trim() || ''
 
 test.describe('Deployed UAT smoke', () => {
   test('public homepage loads', async ({ page, baseURL }) => {
@@ -57,5 +58,22 @@ test.describe('Deployed UAT smoke', () => {
     await page.goto(`/articles/${smokePublishedArticleId}`)
     await expect(page.getByText(/Article not found/i)).not.toBeVisible()
     await expect(page.getByRole('button', { name: /Download PDF/i })).toBeVisible({ timeout: 20000 })
+  })
+
+  test('decision workspace route loads after real login', async ({ page }) => {
+    test.skip(
+      !smokeEmail || !smokePassword || !smokeDecisionManuscriptId,
+      '需要配置 SMOKE_ADMIN_EMAIL / SMOKE_ADMIN_PASSWORD / SMOKE_DECISION_MANUSCRIPT_ID'
+    )
+
+    const loginPage = new LoginPage(page)
+    await loginPage.goto()
+    await loginPage.login(smokeEmail, smokePassword)
+
+    await page.goto(`/editor/decision/${smokeDecisionManuscriptId}`)
+    await expect(page.getByText(/Decision workspace is unavailable/i)).not.toBeVisible()
+    await expect(page.getByRole('link', { name: '返回稿件详情' })).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('decision-workspace-mode-banner')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByText('Review Reports')).toBeVisible({ timeout: 20000 })
   })
 })

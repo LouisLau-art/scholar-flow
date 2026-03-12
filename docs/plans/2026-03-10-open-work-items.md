@@ -203,6 +203,11 @@
     - `academic recommendation -> editorial execute(under_review)` 审计链路
     - `review-stage-exit -> first decision request email` 链路
     - `final decision -> author email-first template key` 链路
+  - 已补最小前端 mocked Playwright smoke：
+    - `decision workspace execute mode`
+    - `decision workspace recommendation-only mode`
+  - 已补可选真实环境 smoke：
+    - `deployed_smoke.spec.ts` 支持 `SMOKE_DECISION_MANUSCRIPT_ID`
 - 减少脆弱的 network-level wait，更多转向页面级稳定断言
 
 ## 六、建议执行顺序

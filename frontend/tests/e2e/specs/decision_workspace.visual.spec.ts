@@ -50,7 +50,7 @@ test.describe('Decision Workspace visual layout (mocked)', () => {
 
     await page.goto(`/editor/decision/${manuscriptId}`)
 
-    await expect(page.getByText('Final Decision Workspace')).toBeVisible()
+    await expect(page.getByText('Decision Workspace', { exact: true })).toBeVisible()
     await expect(page.getByText('Review Reports')).toBeVisible()
     await expect(page.getByText('Decision Letter')).toBeVisible()
     await expect(page.getByRole('link', { name: '返回稿件详情' })).toBeVisible()

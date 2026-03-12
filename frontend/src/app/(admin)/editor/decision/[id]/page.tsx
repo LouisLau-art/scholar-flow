@@ -144,7 +144,10 @@ export default function DecisionWorkspacePage() {
               ) : null}
             </div>
           ) : null}
-          <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+          <div
+            data-testid="decision-workspace-mode-banner"
+            className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary"
+          >
             {submissionMode === 'recommendation'
               ? (
                   <>

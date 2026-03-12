@@ -87,7 +87,7 @@ test.describe('Decision Workspace flow (mocked)', () => {
 
     await page.goto(`/editor/decision/${manuscriptId}`)
 
-    await expect(page.getByText('Final Decision Workspace')).toBeVisible()
+    await expect(page.getByText('Decision Workspace', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Decision Workspace Mock Manuscript' })).toBeVisible()
     await expect(page.getByText('Review Reports')).toBeVisible()
     await expect(page.getByText('Decision Letter')).toBeVisible()
@@ -101,5 +101,93 @@ test.describe('Decision Workspace flow (mocked)', () => {
     await expect.poll(() => decisionPayloads.length).toBe(2)
     expect(decisionPayloads[0]?.is_final).toBe(false)
     expect(decisionPayloads[1]?.is_final).toBe(true)
+  })
+
+  test('shows recommendation-only mode for academic editors and submits one recommendation action', async ({ page }) => {
+    const manuscriptId = '00000000-0000-0000-0000-000000009998'
+    await page.context().setExtraHTTPHeaders({ 'x-scholarflow-e2e': '1' })
+    await seedSession(page, buildSession('22222222-2222-2222-2222-222222222222', 'academic@example.com'))
+
+    const decisionPayloads: any[] = []
+
+    await page.route('**/api/v1/**', async (route) => {
+      const req = route.request()
+      const pathname = new URL(req.url()).pathname
+
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/decision-context`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            manuscript: {
+              id: manuscriptId,
+              title: 'Academic Recommendation Mock Manuscript',
+              abstract: 'Mock abstract',
+              status: 'decision',
+              version: 2,
+              pdf_url: 'https://example.com/mock.pdf',
+            },
+            reports: [
+              {
+                id: 'r-1',
+                reviewer_id: 'rv-1',
+                reviewer_name: 'Reviewer One',
+                status: 'completed',
+                score: 4,
+                comments_for_author: 'Please clarify the data source.',
+                confidential_comments_to_editor: 'Academic board review recommended.',
+                attachment: null,
+              },
+            ],
+            draft: null,
+            review_stage_exit_request: {
+              target_stage: 'first',
+              requested_outcome: 'accept_after_minor_revision',
+              recipient_emails: ['chief@example.com'],
+              note: 'AE suggests accept after minor revision.',
+            },
+            templates: [{ id: 'default', name: 'Default', content: 'Template from backend' }],
+            permissions: {
+              can_submit: true,
+              can_record_first: true,
+              can_submit_final: true,
+              has_submitted_author_revision: true,
+              final_blocking_reasons: [],
+              is_read_only: false,
+              submission_mode: 'recommendation',
+            },
+          },
+        })
+      }
+
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/submit-decision` && req.method() === 'POST') {
+        const body = req.postDataJSON()
+        decisionPayloads.push(body)
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            decision_letter_id: 'dl-2',
+            status: 'final',
+            manuscript_status: 'decision',
+            updated_at: new Date().toISOString(),
+          },
+        })
+      }
+
+      return route.fulfill({ status: 404, body: 'not mocked' })
+    })
+
+    await page.goto(`/editor/decision/${manuscriptId}`)
+
+    await expect(page.getByTestId('decision-workspace-mode-banner')).toContainText('First Recommendation')
+    await expect(page.getByRole('heading', { name: 'Academic Recommendation', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save First Decision Draft' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Submit First Recommendation' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Submit First Recommendation' }).click()
+
+    await expect.poll(() => decisionPayloads.length).toBe(1)
+    expect(decisionPayloads[0]?.is_final).toBe(true)
+    expect(decisionPayloads[0]?.decision_stage).toBe('first')
+    expect(decisionPayloads[0]?.decision).toBe('accept')
   })
 })
