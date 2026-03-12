@@ -393,6 +393,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
         recipient_email?: string
         subject_override?: string
         body_html_override?: string
+        cc_emails?: string[]
+        reply_to_emails?: string[]
       }
     ) {
       const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/send-email`, {
@@ -410,6 +412,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
         recipient_email?: string
         subject_override?: string
         body_html_override?: string
+        cc_emails?: string[]
+        reply_to_emails?: string[]
       }
     ) {
       const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/preview-email`, {

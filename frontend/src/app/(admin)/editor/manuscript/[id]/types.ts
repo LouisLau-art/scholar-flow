@@ -96,7 +96,16 @@ export type ReviewerEmailPreviewData = {
   recipient_overridden: boolean
   journal_title?: string | null
   review_url: string
+  resolved_recipients?: {
+    to?: string[]
+    cc?: string[]
+    bcc?: string[]
+    reply_to?: string[]
+  } | null
   subject: string
   html: string
   text: string
+  reply_to?: string[] | null
+  delivery_mode?: 'manual' | 'semi_auto' | 'auto' | string
+  can_send?: boolean
 }

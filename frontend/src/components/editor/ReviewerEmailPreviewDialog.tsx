@@ -18,11 +18,15 @@ type ReviewerEmailPreviewDialogProps = {
   sending: boolean
   preview: ReviewerEmailPreviewData | null
   recipientEmail: string
+  ccValue: string
+  replyToValue: string
   subjectValue: string
   htmlValue: string
   onSubjectChange: (value: string) => void
   onHtmlChange: (value: string) => void
   onRecipientEmailChange: (value: string) => void
+  onCcChange: (value: string) => void
+  onReplyToChange: (value: string) => void
   onClose: () => void
   onSend: () => void
 }
@@ -33,11 +37,15 @@ export function ReviewerEmailPreviewDialog({
   sending,
   preview,
   recipientEmail,
+  ccValue,
+  replyToValue,
   subjectValue,
   htmlValue,
   onSubjectChange,
   onHtmlChange,
   onRecipientEmailChange,
+  onCcChange,
+  onReplyToChange,
   onClose,
   onSend,
 }: ReviewerEmailPreviewDialogProps) {
@@ -99,6 +107,31 @@ export function ReviewerEmailPreviewDialog({
                       当前收件人已改为非 reviewer 邮箱。本次只会发送测试/预览邮件，不会推进 assignment 到 invited，也不会影响稿件状态。
                     </div>
                   ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reviewer-email-preview-cc">CC</Label>
+                  <Input
+                    id="reviewer-email-preview-cc"
+                    value={ccValue}
+                    disabled={sending}
+                    onChange={(event) => onCcChange(event.target.value)}
+                    placeholder={(preview.resolved_recipients?.cc || []).join(', ')}
+                    autoComplete="off"
+                  />
+                  <div className="text-xs text-muted-foreground">多个邮箱可用逗号分隔。</div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reviewer-email-preview-reply-to">Reply-To</Label>
+                  <Input
+                    id="reviewer-email-preview-reply-to"
+                    value={replyToValue}
+                    disabled={sending}
+                    onChange={(event) => onReplyToChange(event.target.value)}
+                    placeholder={(preview.reply_to || preview.resolved_recipients?.reply_to || []).join(', ')}
+                    autoComplete="off"
+                  />
                 </div>
 
                 <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">

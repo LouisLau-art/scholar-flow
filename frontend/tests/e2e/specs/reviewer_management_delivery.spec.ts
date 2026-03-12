@@ -204,8 +204,9 @@ test.describe('Reviewer management delivery evidence (mocked backend)', () => {
       recipient_email: 'reviewer@example.com',
       subject_override: 'Custom reviewer subject',
     })
-    expect(String(sendPayload?.body_html_override || '')).toContain('Review Link')
-    expect(String(sendPayload?.body_html_override || '')).toContain('https://example.com/review/invite?token=abc')
+    const sentBody = (sendPayload ?? {}) as Record<string, unknown>
+    expect(String(sentBody.body_html_override || '')).toContain('Review Link')
+    expect(String(sentBody.body_html_override || '')).toContain('https://example.com/review/invite?token=abc')
   })
 
   test('treats previous-round reviewers as explicit reuse suggestions', async ({ page }) => {

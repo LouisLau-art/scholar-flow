@@ -101,6 +101,10 @@ function normalizeRecipientEmails(value: string): string[] {
   return Array.from(new Set(parts))
 }
 
+function normalizeEmailListInput(value: string): string[] {
+  return normalizeRecipientEmails(value)
+}
+
 function getReviewStageExitLabel(target: ReviewStageExitTarget): string {
   switch (target) {
     case 'major_revision':
@@ -169,6 +173,8 @@ export default function EditorManuscriptDetailPage() {
   const [reviewerEmailPreviewSending, setReviewerEmailPreviewSending] = useState(false)
   const [reviewerEmailPreviewData, setReviewerEmailPreviewData] = useState<ReviewerEmailPreviewData | null>(null)
   const [reviewerEmailPreviewRecipient, setReviewerEmailPreviewRecipient] = useState('')
+  const [reviewerEmailPreviewCc, setReviewerEmailPreviewCc] = useState('')
+  const [reviewerEmailPreviewReplyTo, setReviewerEmailPreviewReplyTo] = useState('')
   const [reviewerEmailPreviewSubject, setReviewerEmailPreviewSubject] = useState('')
   const [reviewerEmailPreviewHtml, setReviewerEmailPreviewHtml] = useState('')
   const [reviewerEmailPreviewAssignmentId, setReviewerEmailPreviewAssignmentId] = useState('')
@@ -997,12 +1003,26 @@ export default function EditorManuscriptDetailPage() {
         }
         setReviewerEmailPreviewData((res.data as ReviewerEmailPreviewData) || null)
         setReviewerEmailPreviewRecipient(String(res?.data?.recipient_email || '').trim())
+        setReviewerEmailPreviewCc(
+          Array.isArray(res?.data?.resolved_recipients?.cc)
+            ? res.data.resolved_recipients.cc.join(', ')
+            : ''
+        )
+        setReviewerEmailPreviewReplyTo(
+          Array.isArray(res?.data?.reply_to)
+            ? res.data.reply_to.join(', ')
+            : Array.isArray(res?.data?.resolved_recipients?.reply_to)
+              ? res.data.resolved_recipients.reply_to.join(', ')
+              : ''
+        )
         setReviewerEmailPreviewSubject(String(res?.data?.subject || '').trim())
         setReviewerEmailPreviewHtml(String(res?.data?.html || '').trim())
       } catch (e) {
         setReviewerEmailPreviewOpen(false)
         setReviewerEmailPreviewData(null)
         setReviewerEmailPreviewRecipient('')
+        setReviewerEmailPreviewCc('')
+        setReviewerEmailPreviewReplyTo('')
         setReviewerEmailPreviewSubject('')
         setReviewerEmailPreviewHtml('')
         setReviewerEmailPreviewAssignmentId('')
@@ -1021,6 +1041,8 @@ export default function EditorManuscriptDetailPage() {
     setReviewerEmailPreviewLoading(false)
     setReviewerEmailPreviewData(null)
     setReviewerEmailPreviewRecipient('')
+    setReviewerEmailPreviewCc('')
+    setReviewerEmailPreviewReplyTo('')
     setReviewerEmailPreviewSubject('')
     setReviewerEmailPreviewHtml('')
     setReviewerEmailPreviewAssignmentId('')
@@ -1030,6 +1052,8 @@ export default function EditorManuscriptDetailPage() {
     const assignmentId = String(reviewerEmailPreviewAssignmentId || '').trim()
     const templateKey = String(reviewerEmailPreviewData?.template_key || '').trim()
     const recipientEmail = String(reviewerEmailPreviewRecipient || '').trim()
+    const ccEmails = normalizeEmailListInput(reviewerEmailPreviewCc)
+    const replyToEmails = normalizeEmailListInput(reviewerEmailPreviewReplyTo)
     const subjectOverride = String(reviewerEmailPreviewSubject || '').trim()
     const bodyHtmlOverride = String(reviewerEmailPreviewHtml || '').trim()
     if (!assignmentId || !templateKey || !recipientEmail || !subjectOverride || !bodyHtmlOverride) {
@@ -1044,6 +1068,8 @@ export default function EditorManuscriptDetailPage() {
         recipient_email: recipientEmail,
         subject_override: subjectOverride,
         body_html_override: bodyHtmlOverride,
+        cc_emails: ccEmails,
+        reply_to_emails: replyToEmails,
       })
       if (!res?.success) {
         throw new Error(normalizeApiErrorMessage(res, 'Failed to send reviewer email'))
@@ -1075,8 +1101,10 @@ export default function EditorManuscriptDetailPage() {
     refreshDetail,
     reviewerEmailPreviewAssignmentId,
     reviewerEmailPreviewData?.template_key,
+    reviewerEmailPreviewCc,
     reviewerEmailPreviewHtml,
     reviewerEmailPreviewRecipient,
+    reviewerEmailPreviewReplyTo,
     reviewerEmailPreviewSubject,
   ])
 
@@ -1366,11 +1394,15 @@ export default function EditorManuscriptDetailPage() {
         sending={reviewerEmailPreviewSending}
         preview={reviewerEmailPreviewData}
         recipientEmail={reviewerEmailPreviewRecipient}
+        ccValue={reviewerEmailPreviewCc}
+        replyToValue={reviewerEmailPreviewReplyTo}
         subjectValue={reviewerEmailPreviewSubject}
         htmlValue={reviewerEmailPreviewHtml}
         onSubjectChange={setReviewerEmailPreviewSubject}
         onHtmlChange={setReviewerEmailPreviewHtml}
         onRecipientEmailChange={setReviewerEmailPreviewRecipient}
+        onCcChange={setReviewerEmailPreviewCc}
+        onReplyToChange={setReviewerEmailPreviewReplyTo}
         onClose={handleCloseReviewerEmailPreview}
         onSend={handleConfirmReviewerTemplateEmail}
       />

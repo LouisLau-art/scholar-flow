@@ -32,18 +32,31 @@ const preview: ReviewerEmailPreviewData = {
   recipient_overridden: false,
   journal_title: 'Journal One',
   review_url: 'https://example.com/review/invite?token=abc',
+  resolved_recipients: {
+    to: ['reviewer@example.com'],
+    cc: ['office@example.org'],
+    bcc: [],
+    reply_to: ['office@example.org'],
+  },
   subject: 'Invitation to Review - Journal One',
   html: '<p>Hello <a href="https://example.com/review/invite?token=abc">Review Link</a></p>',
   text: 'Hello reviewer',
+  reply_to: ['office@example.org'],
+  delivery_mode: 'manual',
+  can_send: true,
 }
 
 describe('ReviewerEmailPreviewDialog', () => {
-  it('allows editing subject/html and keeps plain text derived from current html', () => {
+  it('allows editing envelope and content while keeping plain text derived from current html', () => {
     const onRecipientEmailChange = vi.fn()
+    const onCcChange = vi.fn()
+    const onReplyToChange = vi.fn()
     const onSend = vi.fn()
 
     function Wrapper() {
       const [recipient, setRecipient] = useState('assistant@example.com')
+      const [cc, setCc] = useState('office@example.org')
+      const [replyTo, setReplyTo] = useState('office@example.org')
       const [subject, setSubject] = useState(preview.subject)
       const [html, setHtml] = useState(preview.html)
 
@@ -54,6 +67,8 @@ describe('ReviewerEmailPreviewDialog', () => {
           sending={false}
           preview={preview}
           recipientEmail={recipient}
+          ccValue={cc}
+          replyToValue={replyTo}
           subjectValue={subject}
           htmlValue={html}
           onSubjectChange={setSubject}
@@ -61,6 +76,14 @@ describe('ReviewerEmailPreviewDialog', () => {
           onRecipientEmailChange={(value) => {
             setRecipient(value)
             onRecipientEmailChange(value)
+          }}
+          onCcChange={(value) => {
+            setCc(value)
+            onCcChange(value)
+          }}
+          onReplyToChange={(value) => {
+            setReplyTo(value)
+            onReplyToChange(value)
           }}
           onClose={vi.fn()}
           onSend={onSend}
@@ -90,5 +113,11 @@ describe('ReviewerEmailPreviewDialog', () => {
 
     fireEvent.change(screen.getByLabelText('Recipient'), { target: { value: 'owner@example.com' } })
     expect(onRecipientEmailChange).toHaveBeenCalledWith('owner@example.com')
+
+    fireEvent.change(screen.getByLabelText('CC'), { target: { value: 'board@example.com, office@example.org' } })
+    expect(onCcChange).toHaveBeenCalledWith('board@example.com, office@example.org')
+
+    fireEvent.change(screen.getByLabelText('Reply-To'), { target: { value: 'reply@example.org' } })
+    expect(onReplyToChange).toHaveBeenCalledWith('reply@example.org')
   })
 })
