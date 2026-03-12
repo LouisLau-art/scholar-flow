@@ -1307,6 +1307,84 @@ def test_exit_review_stage_allows_zero_submitted_reports(
     ]
 
 
+def test_exit_review_stage_does_not_block_when_single_assignment_reviewer_already_submitted_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "under_review",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "me-1",
+            "assistant_editor_id": "ae-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        svc,
+        "_list_submitted_reports",
+        lambda _id: [
+            {
+                "id": "rr-1",
+                "reviewer_id": "reviewer-1",
+                "status": "completed",
+                "created_at": "2026-03-09T03:00:00Z",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        svc,
+        "_list_current_round_review_assignments",
+        lambda **_kwargs: [
+            {
+                "id": "acc-1",
+                "reviewer_id": "reviewer-1",
+                "status": "pending",
+                "accepted_at": "2026-03-09T02:00:00Z",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        svc,
+        "_send_cancellation_email_for_stage_exit",
+        lambda **_kwargs: {"status": "sent"},
+    )
+    cancelled: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        svc,
+        "_cancel_assignment_for_stage_exit",
+        lambda **kwargs: cancelled.append((kwargs["assignment_id"], kwargs["reason"], kwargs["via"])),
+    )
+    monkeypatch.setattr(
+        svc,
+        "editorial",
+        SimpleNamespace(update_status=lambda **kwargs: {"status": kwargs["to_status"]}),
+    )
+
+    out = svc.exit_review_stage(
+        manuscript_id="ms-1",
+        user_id="ae-1",
+        profile_roles=["assistant_editor"],
+        request=ReviewStageExitRequest(
+            target_stage="first",
+            requested_outcome="major_revision",
+            recipient_emails=["chief@example.com"],
+            note="Current round already has submitted report",
+            accepted_pending_resolutions=[],
+        ),
+    )
+
+    assert out["manuscript_status"] == "decision"
+    assert out["auto_cancelled_assignment_ids"] == []
+    assert out["manually_cancelled_assignment_ids"] == []
+    assert out["remaining_pending_assignment_ids"] == []
+    assert cancelled == []
+
+
 @pytest.mark.parametrize(
     ("target_stage", "expected_status"),
     [

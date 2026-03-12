@@ -563,17 +563,11 @@ export function ReviewerManagementCard({
                   const openedText = invite?.opened_at ? formatDateTimeLocal(invite.opened_at) : '—'
                   const remindedText = invite?.last_reminded_at ? formatDateTimeLocal(invite.last_reminded_at) : '—'
                   const deliveryMeta = resolveDeliveryMeta(invite)
-                  const selectedAudit = formatAuditActorLine({
-                    label: 'Selected',
-                    actorName: invite?.added_by_name,
-                    actorEmail: invite?.added_by_email,
-                    via: invite?.added_via,
-                  })
                   const invitedAudit = formatAuditActorLine({
                     label: 'Invited',
                     actorName: invite?.invited_by_name,
                     actorEmail: invite?.invited_by_email,
-                    via: invite?.invited_via,
+                    via: null,
                   })
                   const roundNumber =
                     typeof invite?.round_number === 'number'
@@ -627,24 +621,10 @@ export function ReviewerManagementCard({
                             Delivery: {deliveryMeta.label}
                             {deliveryMeta.at ? ` · ${formatDateTimeLocal(deliveryMeta.at)}` : ''}
                           </div>
-                          <div>Invited: {invitedText}</div>
+                          {invitedAudit ? <div>{invitedAudit}</div> : null}
+                          <div>{invitedText}</div>
                           <div>Opened: {openedText}</div>
                           <div>Reminded: {remindedText}</div>
-                          {selectedAudit ? <div>{selectedAudit}</div> : null}
-                          {invitedAudit ? <div>{invitedAudit}</div> : null}
-                          {Array.isArray(invite?.email_events) && invite.email_events.length > 0 ? (
-                            <div className="pt-1 space-y-1 border-t border-border/60">
-                              {invite.email_events.slice(0, 2).map((event, eventIdx) => {
-                                const eventLabel = formatReviewerEmailEventLabel(event)
-                                const eventAt = event?.created_at ? formatDateTimeLocal(event.created_at) : '—'
-                                return (
-                                  <div key={`${assignmentId || idx}-event-${eventIdx}`}>
-                                    {eventLabel} · {eventAt}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          ) : null}
                           {deliveryMeta.error ? <div className="text-destructive">Error: {deliveryMeta.error}</div> : null}
                         </div>
                       </TableCell>

@@ -383,6 +383,44 @@ class DecisionService(
             return "invited"
         return "selected"
 
+    def _build_review_stage_report_fallback(self, assignments: list[dict[str, Any]], reports: list[dict[str, Any]]) -> dict[str, str]:
+        """
+        中文注释:
+        - 云端有些环境的 review_assignments 还没有 submitted_at，Exit Review Stage 会误把“已提交报告”的 reviewer
+          当成 accepted pending。
+        - review_reports 目前没有 assignment_id，无法做绝对精确映射。
+        - 这里仅在“当前轮该 reviewer 只有一个 assignment”时做保守 fallback；多 assignment 场景不猜。
+        """
+        reviewer_assignment_counts: dict[str, int] = {}
+        for row in assignments:
+            reviewer_id = str(row.get("reviewer_id") or "").strip()
+            if not reviewer_id:
+                continue
+            reviewer_assignment_counts[reviewer_id] = reviewer_assignment_counts.get(reviewer_id, 0) + 1
+
+        submitted_report_at_by_reviewer: dict[str, str] = {}
+        for row in reports:
+            reviewer_id = str(row.get("reviewer_id") or "").strip()
+            created_at = str(row.get("created_at") or "").strip()
+            if reviewer_id and created_at and reviewer_id not in submitted_report_at_by_reviewer:
+                submitted_report_at_by_reviewer[reviewer_id] = created_at
+
+        fallback_by_assignment_id: dict[str, str] = {}
+        for row in assignments:
+            assignment_id = str(row.get("id") or "").strip()
+            reviewer_id = str(row.get("reviewer_id") or "").strip()
+            if not assignment_id or not reviewer_id:
+                continue
+            if row.get("submitted_at"):
+                continue
+            if reviewer_assignment_counts.get(reviewer_id, 0) != 1:
+                continue
+            submitted_at = submitted_report_at_by_reviewer.get(reviewer_id)
+            if submitted_at:
+                fallback_by_assignment_id[assignment_id] = submitted_at
+
+        return fallback_by_assignment_id
+
     def _list_current_round_review_assignments(
         self,
         *,
@@ -661,16 +699,31 @@ class DecisionService(
             manuscript_id=manuscript_id,
             manuscript_version=int(manuscript.get("version") or 1),
         )
+        submitted_report_fallback: dict[str, str] = {}
+        if assignments and any(not row.get("submitted_at") for row in assignments):
+            submitted_report_fallback = self._build_review_stage_report_fallback(
+                assignments,
+                self._list_submitted_reports(manuscript_id),
+            )
+
+        def _state_for_exit(row: dict[str, Any]) -> str:
+            assignment_id = str(row.get("id") or "").strip()
+            submitted_at = submitted_report_fallback.get(assignment_id)
+            if not submitted_at:
+                return self._resolve_review_stage_assignment_state(row)
+            augmented_row = dict(row)
+            augmented_row["submitted_at"] = submitted_at
+            return self._resolve_review_stage_assignment_state(augmented_row)
 
         accepted_pending = [
             row
             for row in assignments
-            if self._resolve_review_stage_assignment_state(row) == "accepted"
+            if _state_for_exit(row) == "accepted"
         ]
         auto_cancel_candidates = [
             row
             for row in assignments
-            if self._resolve_review_stage_assignment_state(row) in {"selected", "invited", "opened"}
+            if _state_for_exit(row) in {"selected", "invited", "opened"}
         ]
 
         resolution_map: dict[str, dict[str, str]] = {}
@@ -714,7 +767,7 @@ class DecisionService(
             assignment_id = str(row.get("id") or "").strip()
             if not assignment_id:
                 continue
-            state = self._resolve_review_stage_assignment_state(row)
+            state = _state_for_exit(row)
             reason = (
                 stage_note
                 or f"Review stage exited to {target_label}; {state} reviewer assignment closed automatically"
@@ -1057,7 +1110,6 @@ class DecisionService(
         if submission_mode != "recommendation" and request.is_final and workflow_decision != "add_reviewer" and not content:
             raise HTTPException(status_code=422, detail="Decision letter content is required")
 
-        reports = self._list_submitted_reports(manuscript_id)
         current_status = normalize_status(str(manuscript.get("status") or "")) or ManuscriptStatus.PRE_CHECK.value
         if request.decision_stage == "first":
             if current_status != ManuscriptStatus.DECISION.value:
