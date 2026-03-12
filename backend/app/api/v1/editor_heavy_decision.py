@@ -228,17 +228,30 @@ async def submit_final_decision_impl(
             if author_email and background_tasks is not None:
                 from app.core.mail import email_service
 
-                # 1. Decision Email
+                decision_context = {
+                    "recipient_name": recipient_name,
+                    "manuscript_title": manuscript_title,
+                    "decision_label": decision_label,
+                    "comment": comment or "",
+                }
+                rendered_html = email_service.render_template("status_update.html", decision_context)
+                rendered_text = email_service.derive_plain_text_from_html(rendered_html)
                 background_tasks.add_task(
-                    email_service.send_email_background,
-                    to_email=author_email,
+                    email_service.send_rendered_email,
+                    to_emails=target.get("to_recipients") or [author_email],
+                    cc_emails=target.get("cc_recipients") or [],
+                    reply_to_emails=target.get("reply_to_recipients") or [],
+                    template_key="status_update",
                     subject=decision_title,
-                    template_name="status_update.html",
-                    context={
-                        "recipient_name": recipient_name,
-                        "manuscript_title": manuscript_title,
-                        "decision_label": decision_label,
-                        "comment": comment or "",
+                    html_body=rendered_html,
+                    text_body=rendered_text,
+                    audit_context={
+                        "manuscript_id": manuscript_id,
+                        "actor_user_id": str(current_user.get("id") or "").strip() or None,
+                        "scene": "decision",
+                        "event_type": "final_decision",
+                        "delivery_mode": "auto",
+                        "communication_status": "system_sent",
                     },
                 )
 

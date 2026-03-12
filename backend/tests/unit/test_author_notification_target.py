@@ -68,9 +68,9 @@ def _normalize_target(email: str, name: str):
         "corresponding_author": {"name": name, "email": email, "is_corresponding": True},
         "source": "corresponding_author_email",
         "to_recipients": [email],
-        "cc_recipients": [],
+        "cc_recipients": ["coauthor@example.org", "office@example.org"],
         "bcc_recipients": [],
-        "reply_to_recipients": [],
+        "reply_to_recipients": ["office@example.org"],
         "author_profile": None,
     }
 
@@ -254,8 +254,11 @@ async def test_submit_final_decision_impl_uses_resolved_author_target_for_decisi
     assert len(background_tasks.tasks) == 2
     invoice_pdf_task = background_tasks.tasks[0]
     decision_task = background_tasks.tasks[1]
-    assert decision_task.kwargs["to_email"] == "submission@example.org"
-    assert decision_task.kwargs["context"]["recipient_name"] == "Corr Author"
+    assert decision_task.kwargs["to_emails"] == ["submission@example.org"]
+    assert decision_task.kwargs["cc_emails"] == ["coauthor@example.org", "office@example.org"]
+    assert decision_task.kwargs["reply_to_emails"] == ["office@example.org"]
+    assert decision_task.kwargs["template_key"] == "status_update"
+    assert "Corr Author" in decision_task.kwargs["html_body"]
     assert invoice_pdf_task.func.__name__ == "generate_and_store_invoice_pdf_safe"
 
 
