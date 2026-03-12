@@ -22,6 +22,7 @@ interface Manuscript {
   pre_check_status?: string | null
   workspace_bucket?:
     | 'intake'
+    | 'awaiting_author'
     | 'technical_followup'
     | 'academic_pending'
     | 'under_review'
@@ -37,6 +38,7 @@ interface Manuscript {
 
 type WorkspaceBucket =
   | 'intake'
+  | 'awaiting_author'
   | 'technical_followup'
   | 'academic_pending'
   | 'under_review'
@@ -53,6 +55,7 @@ type SectionMeta = {
 
 const SECTION_ORDER: WorkspaceBucket[] = [
   'intake',
+  'awaiting_author',
   'technical_followup',
   'academic_pending',
   'under_review',
@@ -71,6 +74,10 @@ const SECTION_META: Record<WorkspaceBucket, SectionMeta> = {
   intake: {
     label: 'Intake 待分派',
     description: '新投稿待 ME 完成入口审查与 AE 分派。',
+  },
+  awaiting_author: {
+    label: '等待作者修回',
+    description: '外审前技术修回已发出，作者修回前 ME 可继续保留或改派 AE。',
   },
   technical_followup: {
     label: 'AE 技术处理中',
@@ -119,6 +126,7 @@ function deriveBucket(m: Manuscript): WorkspaceBucket {
   const status = String(m.status || '').toLowerCase()
   const pre = String(m.pre_check_status || '').toLowerCase()
   if (status === 'pre_check' && (!pre || pre === 'intake')) return 'intake'
+  if (status === 'revision_before_review') return 'awaiting_author'
   if (status === 'pre_check' && pre === 'technical') return 'technical_followup'
   if (status === 'pre_check' && pre === 'academic') return 'academic_pending'
   if (status === 'under_review') return 'under_review'
