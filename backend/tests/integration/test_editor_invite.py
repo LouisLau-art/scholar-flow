@@ -529,7 +529,7 @@ async def test_send_assignment_email_marks_invited_and_advances_manuscript(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{assignment_id}/send-email",
@@ -713,7 +713,7 @@ async def test_send_assignment_email_with_recipient_override_does_not_advance_as
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{assignment_id}/send-email",
@@ -1462,7 +1462,7 @@ async def test_send_assignment_email_uses_fresh_idempotency_key_for_reinvited_as
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{assignment_id}/send-email",
@@ -1474,7 +1474,8 @@ async def test_send_assignment_email_uses_fresh_idempotency_key_for_reinvited_as
     assert send_mock.call_count == 1
     send_kwargs = send_mock.call_args.kwargs
     assert send_kwargs["idempotency_key"].startswith(f"reviewer-invitation-resend/{assignment_id}/")
-    assert send_kwargs["context"]["review_url"].startswith("https://scholar-flow-q1yw.vercel.app/review/invite?token=")
+    assert "https://scholar-flow-q1yw.vercel.app/review/invite?token=" in str(send_kwargs["html_body"])
+    assert "https://scholar-flow-q1yw.vercel.app/review/invite?token=" in str(send_kwargs["text_body"])
 
 
 @pytest.mark.asyncio
@@ -1565,7 +1566,7 @@ async def test_send_assignment_email_reinvites_declined_assignment_with_fresh_at
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -1662,7 +1663,7 @@ async def test_send_assignment_email_blocks_reminder_for_declined_assignment(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -1742,7 +1743,7 @@ async def test_send_assignment_email_declined_invitation_does_not_create_fresh_a
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{declined_assignment_id}/send-email",
@@ -1831,7 +1832,7 @@ async def test_send_assignment_email_does_not_mark_invited_when_delivery_fails(
         patch("app.lib.api_client.supabase", supabase),
         patch("app.lib.api_client.supabase_admin", supabase_admin),
         patch("app.core.roles.supabase", supabase),
-        patch("app.api.v1.reviews.email_service.send_inline_email", send_mock),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
     ):
         resp = await client.post(
             f"/api/v1/reviews/assignments/{assignment_id}/send-email",
