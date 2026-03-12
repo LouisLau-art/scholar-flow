@@ -218,6 +218,7 @@ export function ManagingWorkspacePanel() {
 
     const buckets: Record<WorkspaceBucket, Manuscript[]> = {
       intake: [],
+      awaiting_author: [],
       technical_followup: [],
       academic_pending: [],
       under_review: [],
