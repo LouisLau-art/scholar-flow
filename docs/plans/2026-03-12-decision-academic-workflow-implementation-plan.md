@@ -34,7 +34,7 @@
 - [x] Phase 2: 学术结论 5 选项模型落地（兼容底座）
 - [x] Phase 3: `revision_before_review` + AE SLA 起点
 - [x] Phase 4: recommendation-only 与编辑部执行分层
-- [ ] Phase 5: reviewer 多轮显式选择
+- [x] Phase 5: reviewer 多轮显式选择
 - [ ] Phase 6: 邮件模板与 smoke/UAT 文档收尾（进行中）
 
 ## Phase Breakdown
@@ -103,7 +103,11 @@
 - 已完成第一刀：作者在 `major_revision` 修回后，系统不再自动复用上一轮 completed reviewer 创建新一轮 `review_assignments`
 - 当前 major/minor revision 修回统一回到 `resubmitted`，是否再次进入 `under_review`、以及发给哪些 reviewer，改由编辑部后续手动决定
 - 已完成第二刀：`review-stage-exit.target_stage = first` 的 `requested_outcome` 已从旧的 workflow bucket 收口为 5 个 academic recommendation 值，Decision Workspace / manuscript detail 的展示文案已同步到 recommendation 语义
-- 尚未完成 reviewer selection UI/文案的进一步收口；当前 reviewer assignment modal 仍是手动勾选式，但还缺更明确的“继续哪些 reviewer / 新增哪些 reviewer”分层表达
+- 已完成第三刀：reviewer assignment modal 现在会显式区分
+  - `Current Round Reviewers`
+  - `Previous Round Reviewers`
+- 当 `/reviews/assignments/{manuscript_id}` 返回的是上一轮 reviewer 时，前端只把他们展示为 `Previous Round Reviewers` 可复用建议，不再自动算作当前轮已选 reviewer
+- 当前轮已分配 reviewer 继续保留 `Remove` 动作；上一轮 reviewer 改为显式 `Add to Selection`，由编辑部自行决定是否延续到当前轮
 
 - `add additional reviewer` 只表达建议扩充 reviewer 池
 - 下一轮具体发给谁，由编辑部显式勾选：

@@ -1,13 +1,21 @@
-type ExistingReviewer = {
+export type ExistingReviewer = {
   id: string
+  reviewer_id?: string
   reviewer_name?: string
   reviewer_email?: string
   status?: string
+  round_number?: number
 }
+
+type ExistingReviewersPanelMode = 'current_round' | 'previous_round_reuse'
 
 type ExistingReviewersPanelProps = {
   existingReviewers: ExistingReviewer[]
-  onRequestRemove: (reviewer: ExistingReviewer) => void
+  mode: ExistingReviewersPanelMode
+  targetRound?: number | null
+  selectedReviewerIds?: string[]
+  onRequestRemove?: (reviewer: ExistingReviewer) => void
+  onToggleReuse?: (reviewerId: string) => void
 }
 
 function resolveAssignmentBadge(statusRaw: string | undefined) {
@@ -31,15 +39,34 @@ function resolveAssignmentBadge(statusRaw: string | undefined) {
 }
 
 export function ExistingReviewersPanel(props: ExistingReviewersPanelProps) {
-  const { existingReviewers, onRequestRemove } = props
+  const {
+    existingReviewers,
+    mode,
+    targetRound,
+    selectedReviewerIds = [],
+    onRequestRemove,
+    onToggleReuse,
+  } = props
   if (!existingReviewers.length) return null
+
+  const isPreviousRoundReuse = mode === 'previous_round_reuse'
+  const panelTitle = isPreviousRoundReuse
+    ? `Previous Round Reviewers (${existingReviewers.length})`
+    : `Current Round Reviewers (${existingReviewers.length})`
 
   return (
     <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
-      <h3 className="font-semibold text-foreground mb-3">Current Round Reviewers ({existingReviewers.length})</h3>
+      <h3 className="font-semibold text-foreground mb-3">{panelTitle}</h3>
+      {isPreviousRoundReuse ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          These reviewers are from round {targetRound || 'the previous round'}. Reuse is explicit; none are auto-selected for the current round.
+        </p>
+      ) : null}
       <div className="space-y-2">
         {existingReviewers.map((r) => {
           const badge = resolveAssignmentBadge(r.status)
+          const reviewerId = String(r.reviewer_id || '').trim()
+          const isSelectedForCurrentRound = reviewerId ? selectedReviewerIds.includes(reviewerId) : false
           return (
             <div key={r.id} className="flex items-center justify-between bg-card p-3 rounded border border-border shadow-sm">
               <div className="flex items-center gap-3">
@@ -55,13 +82,29 @@ export function ExistingReviewersPanel(props: ExistingReviewersPanelProps) {
                 <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${badge.className}`}>
                   {badge.label}
                 </span>
-                <button
-                  onClick={() => onRequestRemove(r)}
-                  className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                  data-testid={`reviewer-remove-${r.id}`}
-                >
-                  Remove
-                </button>
+                {isPreviousRoundReuse && reviewerId ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleReuse?.(reviewerId)}
+                    className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
+                      isSelectedForCurrentRound
+                        ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                        : 'text-primary hover:text-primary hover:bg-primary/10'
+                    }`}
+                    data-testid={`reviewer-reuse-${reviewerId}`}
+                  >
+                    {isSelectedForCurrentRound ? 'Selected for Current Round' : 'Add to Selection'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onRequestRemove?.(r)}
+                    className="text-red-600 hover:text-red-800 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    data-testid={`reviewer-remove-${r.id}`}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </div>
           )

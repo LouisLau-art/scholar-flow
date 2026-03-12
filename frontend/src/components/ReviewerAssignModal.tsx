@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { ReviewerCandidateList } from '@/components/editor/reviewer-assign-modal/ReviewerCandidateList'
 import { AssignActionBar } from '@/components/editor/reviewer-assign-modal/AssignActionBar'
 import { useReviewerPolicy } from '@/components/editor/reviewer-assign-modal/useReviewerPolicy'
-import { ExistingReviewersPanel } from '@/components/editor/reviewer-assign-modal/ExistingReviewersPanel'
+import { ExistingReviewersPanel, type ExistingReviewer } from '@/components/editor/reviewer-assign-modal/ExistingReviewersPanel'
 import { AiRecommendationPanel } from '@/components/editor/reviewer-assign-modal/AiRecommendationPanel'
 import type { InvitePolicy, ReviewerWithPolicy } from '@/components/editor/reviewer-assign-modal/types'
 
@@ -30,6 +30,12 @@ type AssignOptions = {
 type AssignFailure = {
   reviewerId: string
   detail: string
+}
+
+type ExistingReviewerSelectionMeta = {
+  manuscript_version?: number | null
+  target_round?: number | null
+  selection_scope?: 'current_round' | 'previous_round_reuse'
 }
 
 type AssignResultPayload = {
@@ -91,9 +97,12 @@ export default function ReviewerAssignModal({
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   // 019: Existing Reviewers State
-  const [existingReviewers, setExistingReviewers] = useState<any[]>([])
+  const [existingReviewers, setExistingReviewers] = useState<ExistingReviewer[]>([])
+  const [existingReviewerMeta, setExistingReviewerMeta] = useState<ExistingReviewerSelectionMeta>({
+    selection_scope: 'current_round',
+  })
   const [loadingExisting, setLoadingExisting] = useState(false)
-  const [pendingRemove, setPendingRemove] = useState<any | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<ExistingReviewer | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const reviewerSearchRequestSeq = useRef(0)
   const normalizedViewerRoles = useMemo(
@@ -135,12 +144,22 @@ export default function ReviewerAssignModal({
       if (!res.ok || !data?.success) {
         toast.error(data?.detail || data?.message || 'Failed to load current reviewers')
         setExistingReviewers([])
+        setExistingReviewerMeta({ selection_scope: 'current_round' })
         return
       }
-      setExistingReviewers(data.data || [])
+      const selectionScope =
+        data?.meta?.selection_scope === 'previous_round_reuse' ? 'previous_round_reuse' : 'current_round'
+      setExistingReviewerMeta({
+        manuscript_version:
+          typeof data?.meta?.manuscript_version === 'number' ? data.meta.manuscript_version : null,
+        target_round: typeof data?.meta?.target_round === 'number' ? data.meta.target_round : null,
+        selection_scope: selectionScope,
+      })
+      setExistingReviewers((data.data || []) as ExistingReviewer[])
     } catch (e) {
       console.error("Failed to load existing reviewers", e)
       toast.error('Failed to load current reviewers')
+      setExistingReviewerMeta({ selection_scope: 'current_round' })
     } finally {
       setLoadingExisting(false)
     }
@@ -233,6 +252,7 @@ export default function ReviewerAssignModal({
     setAiMessage(null)
     setPendingRemove(null)
     setPolicyMeta({})
+    setExistingReviewerMeta({ selection_scope: 'current_round' })
     setReviewers([])
     setReviewerPage(1)
     setHasMoreReviewers(false)
@@ -353,17 +373,27 @@ export default function ReviewerAssignModal({
   // Feature 030: “添加审稿人”与“指派审稿人”解耦：这里仅允许从 Reviewer Library 选取并指派。
 
   // Derived state for quick lookup
+  const currentRoundReviewers = useMemo(
+    () => (existingReviewerMeta.selection_scope === 'current_round' ? existingReviewers : []),
+    [existingReviewerMeta.selection_scope, existingReviewers]
+  )
+
+  const previousRoundReusableReviewers = useMemo(
+    () => (existingReviewerMeta.selection_scope === 'previous_round_reuse' ? existingReviewers : []),
+    [existingReviewerMeta.selection_scope, existingReviewers]
+  )
+
   const assignedIds = useMemo(
     () =>
-      (existingReviewers || [])
+      (currentRoundReviewers || [])
         .map((r) => String(r?.reviewer_id || '').trim())
         .filter(Boolean),
-    [existingReviewers]
+    [currentRoundReviewers]
   )
 
   const pinnedAssignedUsers: User[] = useMemo(
     () =>
-      (existingReviewers || [])
+      (currentRoundReviewers || [])
         .map((r) => ({
           id: String(r?.reviewer_id || '').trim(),
           email: String(r?.reviewer_email || '').trim(),
@@ -373,7 +403,7 @@ export default function ReviewerAssignModal({
           is_verified: true,
         }))
         .filter((u) => u.id && u.email),
-    [existingReviewers]
+    [currentRoundReviewers]
   )
 
   const { isReviewerBlocked, reviewerNeedsOverride, getPolicyBadgeClass } = useReviewerPolicy({
@@ -451,8 +481,16 @@ export default function ReviewerAssignModal({
 
           <div className="p-6 overflow-y-auto flex-1">
             <ExistingReviewersPanel
-              existingReviewers={existingReviewers}
+              existingReviewers={currentRoundReviewers}
+              mode="current_round"
               onRequestRemove={(reviewer) => setPendingRemove(reviewer)}
+            />
+            <ExistingReviewersPanel
+              existingReviewers={previousRoundReusableReviewers}
+              mode="previous_round_reuse"
+              targetRound={existingReviewerMeta.target_round}
+              selectedReviewerIds={selectedReviewers}
+              onToggleReuse={toggleReviewer}
             />
 
             <AiRecommendationPanel

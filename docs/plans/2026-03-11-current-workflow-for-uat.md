@@ -320,6 +320,18 @@ Reviewer 当前主入口为邮件中的 magic link：
 
 当前已去掉默认 `score 5` 这类无意义评分项。
 
+### 6.4 多轮 reviewer 选择
+
+当前系统在作者修回后：
+
+- 不会自动把上一轮 reviewer 复制到当前轮
+- reviewer assignment modal 会显式区分：
+  - `Current Round Reviewers`
+  - `Previous Round Reviewers`
+- `Current Round Reviewers` 表示当前轮已经选入 reviewer list，可直接移除
+- `Previous Round Reviewers` 只是上一轮 reviewer 的复用建议，不会自动算作当前轮已选
+- 如果编辑部要继续沿用上一轮 reviewer，必须手动点击 `Add to Selection`
+
 ## 7. AE 离开 Under Review 的规则
 
 ### 7.1 当前系统已放开的口径

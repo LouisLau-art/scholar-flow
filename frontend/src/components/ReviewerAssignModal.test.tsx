@@ -270,6 +270,67 @@ describe('ReviewerAssignModal AI Recommendations', () => {
     expect(within(list).getByText('Selected')).toBeInTheDocument()
   })
 
+  it('shows previous-round reviewers as reusable suggestions instead of auto-selected current assignments', async () => {
+    globalThis.fetch = vi.fn((url: any) => {
+      if (String(url).includes('/api/v1/reviews/assignments/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            meta: {
+              manuscript_version: 2,
+              target_round: 1,
+              selection_scope: 'previous_round_reuse',
+            },
+            data: [
+              {
+                id: 'a-prev-1',
+                status: 'completed',
+                due_at: null,
+                round_number: 1,
+                reviewer_id: 'r-prev',
+                reviewer_name: 'Previous Reviewer',
+                reviewer_email: 'prev@test.com',
+              },
+            ],
+          }),
+        }) as any
+      }
+      if (String(url).includes('/api/v1/editor/reviewer-library')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, data: [] }),
+        }) as any
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true, data: [] }),
+      }) as any
+    }) as any
+
+    const onAssign = vi.fn()
+    const onClose = vi.fn()
+
+    render(<ReviewerAssignModal isOpen={true} onClose={onClose} onAssign={onAssign} manuscriptId="ms-1" />)
+
+    expect(await screen.findByText(/Previous Round Reviewers/i)).toBeInTheDocument()
+    expect(screen.getByText(/These reviewers are from round 1/i)).toBeInTheDocument()
+    expect(screen.getByTestId('reviewer-assign')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('reviewer-reuse-r-prev'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reviewer-assign')).toHaveTextContent('Save Selection (1)')
+    })
+
+    fireEvent.click(screen.getByTestId('reviewer-assign'))
+
+    await waitFor(() => {
+      expect(onAssign).toHaveBeenCalledWith(['r-prev'])
+      expect(onClose).toHaveBeenCalled()
+    })
+  })
+
   it('submits cooldown override reason when selected reviewer requires override', async () => {
     globalThis.fetch = vi.fn((url: any) => {
       if (String(url).includes('/api/v1/editor/manuscripts/')) {

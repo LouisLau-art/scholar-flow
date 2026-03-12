@@ -431,6 +431,17 @@ async def get_manuscript_assignments_impl(
         return {
             "success": True,
             "data": _enrich_assignment_rows(assignments=assignments, profiles_by_id=profiles_by_id),
+            "meta": {
+                "manuscript_version": manuscript_version,
+                "target_round": target_round,
+                "selection_scope": (
+                    "previous_round_reuse"
+                    if manuscript_version is not None
+                    and target_round is not None
+                    and int(target_round) != int(manuscript_version)
+                    else "current_round"
+                ),
+            },
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to load reviewer assignments") from exc
