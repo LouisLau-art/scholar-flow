@@ -1,13 +1,17 @@
 from fastapi import APIRouter, HTTPException, Body, Depends, BackgroundTasks, Query, UploadFile, File
 import logging
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from app.lib.api_client import supabase, supabase_admin
 from app.core.auth_utils import get_current_user
+from app.core.email_normalization import normalize_email
+from app.core.mail import email_service
 from app.core.roles import require_any_role
 from app.core.journal_scope import ensure_manuscript_scope_access
 from app.core.role_matrix import can_perform_action
 from app.core.storage_filename import sanitize_storage_filename
 from datetime import datetime
 from app.models.revision import RevisionCreate, RevisionRequestResponse
+from app.models.email_log import EmailStatus
 from datetime import timezone
 from app.services.post_acceptance_service import publish_manuscript
 from app.services.editorial_service import EditorialService
@@ -20,7 +24,7 @@ from app.services.matchmaking_service import MatchmakingService  # noqa: F401 (m
 from app.services.editor_service import EditorService  # noqa: F401 (monkeypatch compat)
 from app.services.decision_service import DecisionService
 from app.models.decision import DecisionSubmitRequest, ReviewStageExitRequest
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 from app.api.v1.editor_internal_collaboration import router as internal_collab_router
 from app.api.v1.editor_production import router as production_router
@@ -32,6 +36,7 @@ from app.api.v1.editor_reviewer_library import router as editor_reviewer_library
 from app.api.v1.editor_common import (
     InvoiceInfoUpdatePayload,
     BindAcademicEditorRequest,
+    resolve_author_notification_target,
     auth_user_exists as _auth_user_exists,
     ensure_bucket_exists as _ensure_bucket_exists,
     get_signed_url as _get_signed_url,
@@ -53,6 +58,42 @@ logger = logging.getLogger("scholarflow.editor")
 INTERNAL_COLLAB_ALLOWED_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "production_editor", "editor_in_chief", "owner"]
 EDITOR_SCOPE_COMPAT_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "production_editor", "editor_in_chief"]
 EDITOR_DECISION_ROLES = ["admin", "managing_editor", "assistant_editor", "academic_editor", "editor_in_chief"]
+
+
+class RevisionRequestEmailPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    decision_type: Literal["major", "minor"]
+    editor_message: str
+    subject_override: str | None = None
+    html_override: str | None = None
+    idempotency_key: str | None = None
+    channel: str | None = "other"
+    to_override: list[EmailStr] | None = None
+    cc_override: list[EmailStr] | None = None
+    bcc_override: list[EmailStr] | None = None
+    reply_to_override: list[EmailStr] | None = None
+
+    @field_validator("editor_message", "subject_override", "html_override", "idempotency_key", "channel", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @field_validator("to_override", "cc_override", "bcc_override", "reply_to_override", mode="before")
+    @classmethod
+    def _normalize_email_list(cls, value: Any) -> list[str] | None:
+        if value is None:
+            return None
+        raw = [value] if isinstance(value, str) else list(value)
+        normalized: list[str] = []
+        for item in raw:
+            email = normalize_email(item)
+            if email and email not in normalized:
+                normalized.append(email)
+        return normalized
 
 
 async def get_editor_pipeline_test():
@@ -96,6 +137,118 @@ def _extract_supabase_error(response):
     if isinstance(response, tuple) and len(response) == 2:
         return response[0]
     return None
+
+
+def _normalize_manual_email_list(emails: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in emails or []:
+        email = normalize_email(item)
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        normalized.append(email)
+    return normalized
+
+
+def _ensure_revision_request_email_context(manuscript_id: UUID) -> dict[str, Any]:
+    ms_resp = (
+        supabase_admin.table("manuscripts")
+        .select("id, title, author_id, journal_id, submission_email, author_contacts")
+        .eq("id", str(manuscript_id))
+        .single()
+        .execute()
+    )
+    manuscript = getattr(ms_resp, "data", None) or {}
+    if not manuscript:
+        raise HTTPException(status_code=404, detail="Manuscript not found")
+
+    target = resolve_author_notification_target(
+        manuscript=manuscript,
+        manuscript_id=str(manuscript_id),
+        supabase_client=supabase_admin,
+    )
+    if not target.get("recipient_email"):
+        raise HTTPException(status_code=422, detail="No author email available for revision request delivery")
+
+    manuscript_title = str(manuscript.get("title") or "Manuscript").strip() or "Manuscript"
+    recipient_name = str(target.get("recipient_name") or "Author").strip() or "Author"
+    return {
+        "manuscript": manuscript,
+        "target": target,
+        "manuscript_title": manuscript_title,
+        "recipient_name": recipient_name,
+    }
+
+
+def _resolve_revision_request_email_envelope(
+    *,
+    target: dict[str, Any],
+    payload: RevisionRequestEmailPayload,
+) -> dict[str, list[str]]:
+    to_recipients = _normalize_manual_email_list(payload.to_override) or _normalize_manual_email_list(target.get("to_recipients"))
+    cc_recipients = (
+        _normalize_manual_email_list(payload.cc_override)
+        if payload.cc_override is not None
+        else _normalize_manual_email_list(target.get("cc_recipients"))
+    )
+    bcc_recipients = (
+        _normalize_manual_email_list(payload.bcc_override)
+        if payload.bcc_override is not None
+        else _normalize_manual_email_list(target.get("bcc_recipients"))
+    )
+    reply_to_recipients = (
+        _normalize_manual_email_list(payload.reply_to_override)
+        if payload.reply_to_override is not None
+        else _normalize_manual_email_list(target.get("reply_to_recipients"))
+    )
+    if not to_recipients:
+        recipient_email = normalize_email(target.get("recipient_email"))
+        if recipient_email:
+            to_recipients = [recipient_email]
+    return {
+        "to": to_recipients,
+        "cc": cc_recipients,
+        "bcc": bcc_recipients,
+        "reply_to": reply_to_recipients,
+    }
+
+
+def _build_revision_request_email_preview(
+    manuscript_id: UUID,
+    payload: RevisionRequestEmailPayload,
+) -> dict[str, Any]:
+    if not payload.editor_message:
+        raise HTTPException(status_code=422, detail="editor_message is required")
+
+    context = _ensure_revision_request_email_context(manuscript_id)
+    decision_label = f"{payload.decision_type.capitalize()} Revision Requested"
+    subject = str(payload.subject_override or "Revision Requested").strip() or "Revision Requested"
+    default_html = email_service.render_template(
+        "status_update.html",
+        {
+            "recipient_name": context["recipient_name"],
+            "manuscript_title": context["manuscript_title"],
+            "decision_label": decision_label,
+            "comment": payload.editor_message,
+        },
+    )
+    html = str(payload.html_override or default_html).strip() or default_html
+    envelope = _resolve_revision_request_email_envelope(target=context["target"], payload=payload)
+    return {
+        "manuscript_id": str(manuscript_id),
+        "recipient_source": context["target"].get("source"),
+        "resolved_recipients": envelope,
+        "subject": subject,
+        "html": html,
+        "text": email_service.derive_plain_text_from_html(html),
+        "reply_to": envelope["reply_to"],
+        "attachments": [],
+        "delivery_mode": "manual",
+        "idempotency_key": str(payload.idempotency_key or f"revision-request/{manuscript_id}"),
+        "can_send": True,
+        "context": context,
+    }
 
 
 def _is_missing_column_error(error_text: str) -> bool:
@@ -704,6 +857,115 @@ async def request_revision(
         supabase_admin_client=supabase_admin,
     )
     return RevisionRequestResponse(data=result["data"]["revision"])
+
+
+@router.post("/manuscripts/{id}/emails/revision-request/preview")
+async def preview_revision_request_email(
+    id: UUID,
+    payload: RevisionRequestEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_revision_request_email_preview(id, payload)
+    return {"success": True, "data": {k: v for k, v in preview.items() if k != "context"}}
+
+
+@router.post("/manuscripts/{id}/emails/revision-request/send")
+async def send_revision_request_email(
+    id: UUID,
+    payload: RevisionRequestEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_revision_request_email_preview(id, payload)
+    result = email_service.send_rendered_email(
+        to_emails=preview["resolved_recipients"]["to"],
+        cc_emails=preview["resolved_recipients"]["cc"],
+        bcc_emails=preview["resolved_recipients"]["bcc"],
+        reply_to_emails=preview["resolved_recipients"]["reply_to"],
+        template_key="revision_request",
+        subject=preview["subject"],
+        html_body=preview["html"],
+        text_body=preview["text"],
+        idempotency_key=preview["idempotency_key"],
+        audit_context={
+            "manuscript_id": str(id),
+            "actor_user_id": str(current_user.get("id") or "").strip() or None,
+            "scene": "revision_request",
+            "event_type": "revision_request_email",
+            "delivery_mode": "manual",
+            "communication_status": "system_sent",
+            "idempotency_key": preview["idempotency_key"],
+        },
+    )
+    return {
+        "success": True,
+        "data": {
+            "manuscript_id": str(id),
+            "recipient": preview["resolved_recipients"]["to"][0] if preview["resolved_recipients"]["to"] else None,
+            "delivery_status": str(result.get("status") or EmailStatus.FAILED.value),
+            "delivery_error": result.get("error_message"),
+            "provider_id": result.get("provider_id"),
+        },
+    }
+
+
+@router.post("/manuscripts/{id}/emails/revision-request/mark-external-sent")
+async def mark_revision_request_email_external_sent(
+    id: UUID,
+    payload: RevisionRequestEmailPayload,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
+):
+    ensure_manuscript_scope_access(
+        manuscript_id=str(id),
+        user_id=str(current_user.get("id") or ""),
+        roles=profile.get("roles") or [],
+        allow_admin_bypass=True,
+    )
+    preview = _build_revision_request_email_preview(id, payload)
+    channel = str(payload.channel or "other").strip() or "other"
+    email_service.log_attempt(
+        recipient=preview["resolved_recipients"]["to"][0],
+        subject=preview["subject"],
+        template_name="revision_request",
+        status=EmailStatus.SENT,
+        provider=channel,
+        to_recipients=preview["resolved_recipients"]["to"],
+        cc_recipients=preview["resolved_recipients"]["cc"],
+        bcc_recipients=preview["resolved_recipients"]["bcc"],
+        reply_to_recipients=preview["resolved_recipients"]["reply_to"],
+        audit_context={
+            "manuscript_id": str(id),
+            "actor_user_id": str(current_user.get("id") or "").strip() or None,
+            "scene": "revision_request",
+            "event_type": "revision_request_email",
+            "delivery_mode": "manual",
+            "communication_status": "external_sent",
+            "idempotency_key": preview["idempotency_key"],
+        },
+    )
+    return {
+        "success": True,
+        "data": {
+            "manuscript_id": str(id),
+            "recipient": preview["resolved_recipients"]["to"][0],
+            "communication_status": "external_sent",
+            "provider": channel,
+        },
+    }
 
 
 @router.get("/available-reviewers")
