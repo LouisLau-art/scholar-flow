@@ -19,6 +19,7 @@ interface Manuscript {
   id: string
   title: string
   status?: string
+  assistant_editor_id?: string | null
   created_at?: string
   author?: { id: string; full_name?: string; email?: string; affiliation?: string } | null
   owner?: { id: string; full_name?: string; email?: string } | null
@@ -93,6 +94,7 @@ export default function MEIntakePage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
+  const [assignMode, setAssignMode] = useState<'pass_and_assign' | 'bind_only'>('pass_and_assign')
   const [queryInput, setQueryInput] = useState('')
   const [query, setQuery] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
@@ -188,8 +190,9 @@ export default function MEIntakePage() {
     }, 600)
   }, [])
 
-  const openAssignModal = (id: string) => {
+  const openAssignModal = (id: string, mode: 'pass_and_assign' | 'bind_only' = 'pass_and_assign') => {
     setSelectedManuscriptId(id)
+    setAssignMode(mode)
     setAssignModalOpen(true)
   }
 
@@ -255,7 +258,7 @@ export default function MEIntakePage() {
               <div>
                 <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Managing Editor Intake Queue</h1>
                 <p className="mt-1 text-muted-foreground font-medium">
-                  ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿会以灰态保留，直至作者修回。
+                  ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿会保留在列表中，等待作者修回期间仍可预分配或改派 AE。
                 </p>
               </div>
             </div>
@@ -365,16 +368,27 @@ export default function MEIntakePage() {
                       <td className="px-4 py-3 text-sm text-muted-foreground">{renderPriority(m)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{renderIntakeStatus(m.pre_check_status)}</td>
                       <td className="px-4 py-3">
-                        {m.intake_actionable === false || m.waiting_resubmit ? (
+                        {m.waiting_resubmit ? (
                           <div className="space-y-1">
-                            <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
-                              等待作者修回（不可操作）
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => openAssignModal(m.id, 'bind_only')}>
+                                {m.assistant_editor_id ? '改派 AE' : '分配 AE'}
+                              </Button>
+                              <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
+                                等待作者修回
+                              </Badge>
+                            </div>
                             {m.waiting_resubmit_reason ? (
                               <div className="sf-max-w-280 truncate text-xs text-muted-foreground" title={m.waiting_resubmit_reason}>
                                 退回原因：{m.waiting_resubmit_reason}
                               </div>
                             ) : null}
+                          </div>
+                        ) : m.intake_actionable === false ? (
+                          <div className="space-y-1">
+                            <Badge variant="outline" className="border-border/80 bg-muted text-muted-foreground">
+                              当前不可操作
+                            </Badge>
                           </div>
                         ) : (
                           <div className="flex flex-wrap items-center gap-2">
@@ -401,6 +415,7 @@ export default function MEIntakePage() {
               isOpen={assignModalOpen}
               onClose={() => setAssignModalOpen(false)}
               manuscriptId={selectedManuscriptId}
+              mode={assignMode}
               onAssignSuccess={handleAssignSuccess}
             />
           )}

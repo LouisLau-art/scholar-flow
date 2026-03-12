@@ -22,6 +22,7 @@ interface AssignAEModalProps {
   onClose: () => void
   manuscriptId: string
   onAssignSuccess: () => void
+  mode?: 'pass_and_assign' | 'bind_only'
 }
 
 type SearchablePickerProps = {
@@ -181,7 +182,14 @@ function SearchablePicker(props: SearchablePickerProps) {
   )
 }
 
-export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, manuscriptId, onAssignSuccess }) => {
+export const AssignAEModal: React.FC<AssignAEModalProps> = ({
+  isOpen,
+  onClose,
+  manuscriptId,
+  onAssignSuccess,
+  mode = 'pass_and_assign',
+}) => {
+  const isBindOnly = mode === 'bind_only'
   const [selectedAE, setSelectedAE] = React.useState('')
   const [selectedOwner, setSelectedOwner] = React.useState('')
   const [openPickerId, setOpenPickerId] = React.useState<string | null>(null)
@@ -283,6 +291,11 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
 
   const selectedAeLabel = aeOptions.find((x) => x.id === selectedAE)?.label || '未选择'
   const selectedOwnerLabel = ownerOptions.find((x) => x.id === selectedOwner)?.label || '留空（默认当前 ME）'
+  const dialogTitle = isBindOnly ? '分配 / 改派 AE' : '通过并分配 AE'
+  const dialogDescription = isBindOnly
+    ? '先选择 Assistant Editor。该操作只绑定或改派责任 AE，不会立即推进到 under_review；作者修回后稿件将直接回到当前 AE 的 technical 队列。'
+    : '先选择 Assistant Editor（必填）。可选指定 Owner。确认后稿件将推进到 under_review。'
+  const submitLabel = isBindOnly ? '保存 AE 分配' : '分配并进入外审'
 
   const handleAssign = async () => {
     if (!selectedAE) return
@@ -290,9 +303,9 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
     setError('')
     try {
       await editorService.assignAE(manuscriptId, selectedAE, {
-        startExternalReview: true,
-        bindOwnerIfEmpty: !selectedOwner,
-        ownerId: selectedOwner || undefined,
+        startExternalReview: !isBindOnly,
+        bindOwnerIfEmpty: !isBindOnly && !selectedOwner,
+        ownerId: !isBindOnly && selectedOwner ? selectedOwner : undefined,
       })
       onAssignSuccess()
       onClose()
@@ -307,10 +320,8 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-w-md overflow-visible">
         <DialogHeader>
-          <DialogTitle>通过并分配 AE</DialogTitle>
-          <DialogDescription>
-            先选择 Assistant Editor（必填）。可选指定 Owner。确认后稿件将推进到 <code>under_review</code>。
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -329,40 +340,51 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             onChange={setSelectedAE}
           />
 
-          <details className="rounded-md border border-border/70 bg-muted/30 px-3 py-2">
-            <summary className="cursor-pointer text-sm font-medium text-foreground">高级选项：Owner（可选）</summary>
-            <div className="mt-3">
-              <SearchablePicker
-                pickerId="owner"
-                label="Owner（可选）"
-                value={selectedOwner}
-                options={ownerOptions}
-                placeholder={isLoadingOwners && ownerOptions.length === 0 ? '加载 Owner 中…' : '不指定 Owner'}
-                searchPlaceholder="搜索 Owner：姓名 / 邮箱 / ID"
-                emptyText="没有匹配的 Owner"
-                isOpen={openPickerId === 'owner'}
-                disabled={isSubmitting || isLoadingOwners}
-                loading={isLoadingOwners}
-                onOpenChange={(open) => setOpenPickerId(open ? 'owner' : null)}
-                onChange={setSelectedOwner}
-              />
-              {selectedOwner ? (
-                <div className="mt-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedOwner('')} disabled={isSubmitting}>
-                    清空 Owner 选择
-                  </Button>
+          {!isBindOnly ? (
+            <details className="rounded-md border border-border/70 bg-muted/30 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-foreground">高级选项：Owner（可选）</summary>
+              <div className="mt-3">
+                <SearchablePicker
+                  pickerId="owner"
+                  label="Owner（可选）"
+                  value={selectedOwner}
+                  options={ownerOptions}
+                  placeholder={isLoadingOwners && ownerOptions.length === 0 ? '加载 Owner 中…' : '不指定 Owner'}
+                  searchPlaceholder="搜索 Owner：姓名 / 邮箱 / ID"
+                  emptyText="没有匹配的 Owner"
+                  isOpen={openPickerId === 'owner'}
+                  disabled={isSubmitting || isLoadingOwners}
+                  loading={isLoadingOwners}
+                  onOpenChange={(open) => setOpenPickerId(open ? 'owner' : null)}
+                  onChange={setSelectedOwner}
+                />
+                {selectedOwner ? (
+                  <div className="mt-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedOwner('')} disabled={isSubmitting}>
+                      清空 Owner 选择
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="mt-2 text-xs text-muted-foreground">
+                  不指定时，系统将按现有逻辑默认绑定当前 ME（UAT 提速策略）。
                 </div>
-              ) : null}
-              <div className="mt-2 text-xs text-muted-foreground">
-                不指定时，系统将按现有逻辑默认绑定当前 ME（UAT 提速策略）。
               </div>
-            </div>
-          </details>
+            </details>
+          ) : null}
 
           <div className="rounded-md border border-border/70 bg-card px-3 py-2 text-xs text-foreground">
-            摘要：AE = <span className="font-medium">{selectedAeLabel}</span>；Owner ={' '}
-            <span className="font-medium">{selectedOwnerLabel}</span>；下一状态 ={' '}
-            <span className="font-medium">under_review</span>
+            摘要：AE = <span className="font-medium">{selectedAeLabel}</span>
+            {isBindOnly ? (
+              <>
+                {' '}；当前状态 = <span className="font-medium">等待作者修回</span>；作者修回后流向 ={' '}
+                <span className="font-medium">pre_check / technical</span>
+              </>
+            ) : (
+              <>
+                ；Owner = <span className="font-medium">{selectedOwnerLabel}</span>；下一状态 ={' '}
+                <span className="font-medium">under_review</span>
+              </>
+            )}
           </div>
 
           {error ? <div className="text-xs text-destructive">{error}</div> : null}
@@ -373,7 +395,7 @@ export const AssignAEModal: React.FC<AssignAEModalProps> = ({ isOpen, onClose, m
             取消
           </Button>
           <Button onClick={handleAssign} disabled={!selectedAE || isSubmitting || isLoadingAEs}>
-            {isSubmitting ? '处理中…' : '分配并进入外审'}
+            {isSubmitting ? '处理中…' : submitLabel}
           </Button>
         </div>
       </DialogContent>
