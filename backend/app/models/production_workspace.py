@@ -65,6 +65,18 @@ class UpdateProductionCycleEditorsRequest(BaseModel):
     collaborator_editor_ids: list[UUID] | None = None
 
 
+class UpdateProductionCycleAssignmentsRequest(BaseModel):
+    coordinator_ae_id: UUID | None = None
+    typesetter_id: UUID | None = None
+    language_editor_id: UUID | None = None
+    pdf_editor_id: UUID | None = None
+
+
+class TransitionProductionCycleRequest(BaseModel):
+    target_stage: ProductionCycleStage
+    comment: str | None = None
+
+
 class CorrectionItemInput(BaseModel):
     line_ref: str | None = None
     original_text: str | None = None

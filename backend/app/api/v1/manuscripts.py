@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     UploadFile,
     File,
+    Form,
     HTTPException,
     Body,
     Depends,
@@ -320,6 +321,55 @@ async def get_proofreading_context(
     return {"success": True, "data": data}
 
 
+@router.post("/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/author-feedback")
+async def submit_author_feedback(
+    manuscript_id: UUID,
+    cycle_id: str,
+    decision: str = Form(...),
+    summary: str | None = Form(None),
+    corrections_json: str | None = Form(None),
+    attachment: UploadFile | None = File(None),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_current_profile),
+):
+    """
+    Feature 042 / SOP: 作者提交校对反馈（带附件与 correction_items）
+    """
+    import json
+    corrections = []
+    if corrections_json:
+        try:
+            corrections = json.loads(corrections_json)
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid corrections_json format")
+
+    payload = SubmitProofreadingRequest(
+        decision=decision,
+        summary=summary,
+        corrections=corrections
+    )
+    
+    attachment_content = None
+    attachment_filename = None
+    attachment_content_type = None
+    
+    if attachment:
+        attachment_content = await attachment.read()
+        attachment_filename = attachment.filename
+        attachment_content_type = attachment.content_type
+
+    data = ProductionWorkspaceService().submit_proofreading(
+        manuscript_id=str(manuscript_id),
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+        attachment_content=attachment_content,
+        attachment_filename=attachment_filename,
+        attachment_content_type=attachment_content_type,
+    )
+    return {"success": True, "data": {"response": data}}
+
 @router.post("/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading")
 async def submit_proofreading_response(
     manuscript_id: UUID,
@@ -329,7 +379,7 @@ async def submit_proofreading_response(
     profile: dict = Depends(get_current_profile),
 ):
     """
-    Feature 042: 作者提交校对反馈（confirm_clean / submit_corrections）。
+    Feature 042: (Legacy) 作者提交校对反馈（confirm_clean / submit_corrections）。
     """
     data = ProductionWorkspaceService().submit_proofreading(
         manuscript_id=str(manuscript_id),

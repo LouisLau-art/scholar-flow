@@ -249,6 +249,234 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
         )
         return self._format_cycle(row, include_signed_url=False)
 
+    def update_assignments(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        request: Any,  # UpdateProductionCycleAssignmentsRequest
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        if not roles.intersection(_MANAGER_ROLES):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(
+            manuscript=manuscript,
+            user_id=user_id,
+            roles=roles,
+            cycle=cycle,
+            purpose="write",
+        )
+
+        patch: dict[str, Any] = {"updated_at": utc_now_iso()}
+        
+        # Verify roles for the new assignees
+        if request.coordinator_ae_id is not None:
+            patch["coordinator_ae_id"] = str(request.coordinator_ae_id)
+        if request.typesetter_id is not None:
+            patch["typesetter_id"] = str(request.typesetter_id)
+        if request.language_editor_id is not None:
+            patch["language_editor_id"] = str(request.language_editor_id)
+        if request.pdf_editor_id is not None:
+            patch["pdf_editor_id"] = str(request.pdf_editor_id)
+
+        if set(patch.keys()) == {"updated_at"}:
+            return self._format_cycle(cycle, include_signed_url=False)
+
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .update(patch)
+                .eq("id", cycle_id)
+                .eq("manuscript_id", manuscript_id)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to update production cycle assignments")
+            row = rows[0]
+        except HTTPException:
+            raise
+        except Exception as exc:
+            if any(is_missing_column_error(exc, col) for col in ["coordinator_ae_id", "typesetter_id", "language_editor_id", "pdf_editor_id"]):
+                # Legacy fallback: just don't update if schema not ready
+                return self._format_cycle(cycle, include_signed_url=False)
+            raise HTTPException(status_code=500, detail=f"Failed to update production cycle assignments: {exc}") from exc
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=str(cycle.get("status") or ""),
+            to_status=str(row.get("status") or ""),
+            changed_by=user_id,
+            comment="production cycle assignments updated",
+            payload={
+                "event_type": "production_cycle_assignments_updated",
+                "cycle_id": cycle_id,
+                **patch
+            },
+        )
+        return self._format_cycle(row, include_signed_url=False)
+
+    def upload_artifact(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        artifact_kind: str,
+        filename: str,
+        content: bytes,
+        version_note: str,
+        content_type: str | None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        if not content:
+            raise HTTPException(status_code=400, detail="Artifact file is empty")
+        if len(content) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Artifact file too large (max 50MB)")
+            
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(
+            manuscript=manuscript,
+            user_id=user_id,
+            roles=roles,
+            cycle=cycle,
+            purpose="write",
+        )
+
+        self._ensure_bucket("production-proofs", public=False)
+        object_path = (
+            f"production_cycles/{manuscript_id}/"
+            f"cycle-{int(cycle.get('cycle_no') or 0)}/{uuid4()}_{safe_filename(filename)}"
+        )
+        try:
+            self.client.storage.from_("production-proofs").upload(
+                object_path,
+                content,
+                {"content-type": content_type or "application/octet-stream"},
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to upload artifact: {exc}") from exc
+            
+        artifact_id = None
+        try:
+            artifact_resp = self.client.table("production_cycle_artifacts").insert({
+                "cycle_id": cycle_id,
+                "manuscript_id": manuscript_id,
+                "artifact_kind": artifact_kind,
+                "storage_bucket": "production-proofs",
+                "storage_path": object_path,
+                "file_name": filename,
+                "mime_type": content_type or "application/octet-stream",
+                "uploaded_by": user_id,
+                "metadata": {"version_note": version_note}
+            }).execute()
+            artifact_id = (getattr(artifact_resp, "data", [{}]) or [{}])[0].get("id")
+        except Exception as e:
+            if is_table_missing_error(e, "production_cycle_artifacts"):
+                pass
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to save artifact metadata: {e}")
+
+        from app.services.production_workspace_service import _derive_cycle_stage
+        current_stage = _derive_cycle_stage(status=cycle.get("status"), stage=cycle.get("stage"))
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=str(cycle.get("status") or ""),
+            to_status=str(cycle.get("status") or ""),
+            changed_by=user_id,
+            comment=f"{artifact_kind} uploaded",
+            payload={
+                "event_type": f"{artifact_kind}_uploaded",
+                "from_stage": current_stage,
+                "to_stage": current_stage,
+                "cycle_id": cycle_id,
+                "artifact_id": artifact_id,
+                "path": object_path,
+                "version_note": version_note,
+            },
+        )
+        
+        # Reload cycle to include new artifact
+        updated_cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        return self._format_cycle(updated_cycle, include_signed_url=False)
+
+    def transition_stage(
+        self,
+        *,
+        manuscript_id: str,
+        cycle_id: str,
+        user_id: str,
+        profile_roles: list[str] | None,
+        target_stage: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        manuscript = self._get_manuscript(manuscript_id)
+        roles = self._roles(profile_roles)
+        cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
+        self._ensure_editor_access(
+            manuscript=manuscript,
+            user_id=user_id,
+            roles=roles,
+            cycle=cycle,
+            purpose="write",
+        )
+
+        from app.services.production_workspace_service import _derive_cycle_stage
+        current_stage = _derive_cycle_stage(status=cycle.get("status"), stage=cycle.get("stage"))
+        
+        patch = {"updated_at": utc_now_iso()}
+        try:
+            resp = (
+                self.client.table("production_cycles")
+                .update({**patch, "stage": target_stage})
+                .eq("id", cycle_id)
+                .eq("manuscript_id", manuscript_id)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=500, detail="Failed to transition cycle stage")
+            row = rows[0]
+        except Exception as exc:
+            if is_missing_column_error(exc, "stage"):
+                # fallback, just update updated_at
+                resp = (
+                    self.client.table("production_cycles")
+                    .update(patch)
+                    .eq("id", cycle_id)
+                    .eq("manuscript_id", manuscript_id)
+                    .execute()
+                )
+                rows = getattr(resp, "data", None) or []
+                if not rows:
+                    raise HTTPException(status_code=500, detail="Failed to transition cycle stage")
+                row = rows[0]
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to transition cycle stage: {exc}") from exc
+
+        self._insert_log(
+            manuscript_id=manuscript_id,
+            from_status=str(cycle.get("status") or ""),
+            to_status=str(cycle.get("status") or ""),
+            changed_by=user_id,
+            comment=comment or f"Transitioned to {target_stage}",
+            payload={
+                "event_type": "stage_transition",
+                "from_stage": current_stage,
+                "to_stage": target_stage,
+                "cycle_id": cycle_id,
+            },
+        )
+        return self._format_cycle(row, include_signed_url=False)
+
     def upload_galley(
         self,
         *,

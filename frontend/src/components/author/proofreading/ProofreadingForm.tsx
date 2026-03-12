@@ -48,6 +48,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
   const [decision, setDecision] = useState<ProofreadingDecision>('confirm_clean')
   const [summary, setSummary] = useState('')
   const [items, setItems] = useState<DraftCorrectionItem[]>([toDraftItem()])
+  const [attachment, setAttachment] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const isReadOnly = !context.can_submit || context.is_read_only
@@ -69,7 +70,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
     setSummary(String(latest.summary || ''))
 
     if (latest.decision === 'submit_corrections') {
-      const normalized = (latest.corrections || []).map((row) => ({
+      const normalized = (latest.corrections || []).map((row: any) => ({
         id: row.id,
         line_ref: row.line_ref || '',
         original_text: row.original_text || '',
@@ -77,7 +78,7 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
         reason: row.reason || '',
         sort_order: row.sort_order,
       }))
-      setItems(normalized.length > 0 ? normalized.map((row) => toDraftItem(row)) : [toDraftItem()])
+      setItems(normalized.length > 0 ? normalized.map((row: any) => toDraftItem(row)) : [toDraftItem()])
     } else {
       setItems([toDraftItem()])
     }
@@ -100,6 +101,14 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
     setItems((prev) => prev.filter((_, i) => i !== idx))
   }
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setAttachment(e.target.files[0])
+    } else {
+      setAttachment(null)
+    }
+  }
+
   const submit = async () => {
     if (!canSubmit) {
       toast.error('请完善校对内容后再提交')
@@ -108,23 +117,30 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
 
     setSubmitting(true)
     try {
-      const payload = {
-        decision,
-        summary: summary || undefined,
-        corrections:
-          decision === 'submit_corrections'
-            ? items
-                .map((item) => ({
-                  line_ref: item.line_ref || undefined,
-                  original_text: item.original_text || undefined,
-                  suggested_text: String(item.suggested_text || '').trim(),
-                  reason: item.reason || undefined,
-                }))
-                .filter((item) => item.suggested_text.length > 0)
-            : [],
+      const formData = new FormData()
+      formData.append('decision', decision)
+      if (summary) {
+        formData.append('summary', summary)
+      }
+      
+      if (decision === 'submit_corrections') {
+        const validItems = items
+          .map((item) => ({
+            line_ref: item.line_ref || undefined,
+            original_text: item.original_text || undefined,
+            suggested_text: String(item.suggested_text || '').trim(),
+            reason: item.reason || undefined,
+          }))
+          .filter((item) => item.suggested_text.length > 0)
+          
+        formData.append('corrections_json', JSON.stringify(validItems))
       }
 
-      const res = await ManuscriptApi.submitProofreading(manuscriptId, context.cycle.id, payload)
+      if (attachment) {
+        formData.append('attachment', attachment)
+      }
+
+      const res = await ManuscriptApi.submitAuthorFeedback(manuscriptId, context.cycle.id, formData)
       if (!res?.success) {
         throw new Error(res?.detail || res?.message || '提交校对失败')
       }
@@ -182,63 +198,89 @@ export function ProofreadingForm({ manuscriptId, context, onSubmitted }: Props) 
       </div>
 
       {decision === 'submit_corrections' ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Correction Items</p>
-            <Button
-              type="button"
-              onClick={addItem}
-              disabled={isReadOnly}
-              variant="ghost"
-              size="sm"
-              className="gap-1 text-primary hover:text-primary"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Item
-            </Button>
-          </div>
-
-          {items.map((item, idx) => (
-            <div key={item._localId} className="space-y-2 rounded-md border border-border p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">Item #{idx + 1}</p>
-                <Button
-                  type="button"
-                  onClick={() => removeItem(idx)}
-                  disabled={isReadOnly || items.length <= 1}
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-rose-600 hover:text-rose-600"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Remove
-                </Button>
-              </div>
-
+        <div className="space-y-4">
+          <div>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Annotated Proof (Optional)
+            </Label>
+            {isReadOnly ? (
+              latest?.attachment_file_name ? (
+                <p className="text-sm text-foreground">{latest.attachment_file_name}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No attachment provided</p>
+              )
+            ) : (
               <Input
-                value={item.line_ref || ''}
-                onChange={(event) => updateItem(idx, { line_ref: event.target.value })}
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
                 disabled={isReadOnly}
-                placeholder="Line/Paragraph reference (e.g. Page 3, para 2)"
+                className="w-full text-sm"
               />
-              <Textarea
-                value={item.original_text || ''}
-                onChange={(event) => updateItem(idx, { original_text: event.target.value })}
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              您可以上传带有批注的 PDF 格式清样文件（最大 50MB）作为补充说明。
+            </p>
+          </div>
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Correction Items</p>
+              <Button
+                type="button"
+                onClick={addItem}
                 disabled={isReadOnly}
-                placeholder="Original text"
-              />
-              <Textarea
-                value={item.suggested_text || ''}
-                onChange={(event) => updateItem(idx, { suggested_text: event.target.value })}
-                disabled={isReadOnly}
-                placeholder="Suggested correction (required)"
-              />
-              <Textarea
-                value={item.reason || ''}
-                onChange={(event) => updateItem(idx, { reason: event.target.value })}
-                disabled={isReadOnly}
-                placeholder="Reason"
-              />
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-primary hover:text-primary"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Item
+              </Button>
             </div>
-          ))}
+
+            {items.map((item, idx) => (
+              <div key={item._localId} className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-foreground">Item #{idx + 1}</p>
+                  <Button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    disabled={isReadOnly || items.length <= 1}
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-rose-600 hover:text-rose-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </Button>
+                </div>
+
+                <Input
+                  value={item.line_ref || ''}
+                  onChange={(event) => updateItem(idx, { line_ref: event.target.value })}
+                  disabled={isReadOnly}
+                  placeholder="Line/Paragraph reference (e.g. Page 3, para 2)"
+                />
+                <Textarea
+                  value={item.original_text || ''}
+                  onChange={(event) => updateItem(idx, { original_text: event.target.value })}
+                  disabled={isReadOnly}
+                  placeholder="Original text"
+                />
+                <Textarea
+                  value={item.suggested_text || ''}
+                  onChange={(event) => updateItem(idx, { suggested_text: event.target.value })}
+                  disabled={isReadOnly}
+                  placeholder="Suggested correction (required)"
+                />
+                <Textarea
+                  value={item.reason || ''}
+                  onChange={(event) => updateItem(idx, { reason: event.target.value })}
+                  disabled={isReadOnly}
+                  placeholder="Reason"
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 

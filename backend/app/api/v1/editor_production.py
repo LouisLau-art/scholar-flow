@@ -14,7 +14,12 @@ from app.core.mail import email_service
 from app.core.roles import require_any_role
 from app.lib.api_client import supabase_admin
 from app.models.email_log import EmailStatus
-from app.models.production_workspace import CreateProductionCycleRequest, UpdateProductionCycleEditorsRequest
+from app.models.production_workspace import (
+    CreateProductionCycleRequest, 
+    UpdateProductionCycleEditorsRequest,
+    UpdateProductionCycleAssignmentsRequest,
+    TransitionProductionCycleRequest,
+)
 from app.services.production_service import ProductionService
 from app.services.production_workspace_service import ProductionWorkspaceService
 
@@ -334,6 +339,81 @@ async def update_production_cycle_editors(
         user_id=str(current_user.get("id") or ""),
         profile_roles=profile.get("roles") or [],
         request=payload,
+    )
+    return {"success": True, "data": {"cycle": data}}
+
+@router.patch("/manuscripts/{id}/production-cycles/{cycle_id}/assignments")
+async def update_production_cycle_assignments(
+    id: str,
+    cycle_id: str,
+    payload: UpdateProductionCycleAssignmentsRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
+):
+    _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
+    data = ProductionWorkspaceService().update_assignments(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        request=payload,
+    )
+    return {"success": True, "data": {"cycle": data}}
+
+
+@router.post("/manuscripts/{id}/production-cycles/{cycle_id}/artifacts")
+async def upload_production_artifact(
+    id: str,
+    cycle_id: str,
+    artifact_kind: str = Form(...),
+    version_note: str = Form(""),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
+):
+    _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
+    raw = await file.read()
+    data = ProductionWorkspaceService().upload_artifact(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        artifact_kind=artifact_kind,
+        filename=file.filename or "artifact.bin",
+        content=raw,
+        version_note=version_note,
+        content_type=file.content_type,
+    )
+    
+    # Locate the created artifact in the returned cycle
+    artifacts = data.get("artifacts") or []
+    if artifacts:
+        # Just grab the last one or something that matches
+        artifacts.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+        artifact = artifacts[0]
+    else:
+        # Fallback
+        artifact = {"artifact_kind": artifact_kind}
+        
+    return {"success": True, "data": {"cycle": data, "artifact": artifact}}
+
+
+@router.post("/manuscripts/{id}/production-cycles/{cycle_id}/transitions")
+async def transition_production_cycle(
+    id: str,
+    cycle_id: str,
+    payload: TransitionProductionCycleRequest,
+    current_user: dict = Depends(get_current_user),
+    profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
+):
+    _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
+    data = ProductionWorkspaceService().transition_stage(
+        manuscript_id=id,
+        cycle_id=cycle_id,
+        user_id=str(current_user.get("id") or ""),
+        profile_roles=profile.get("roles") or [],
+        target_stage=payload.target_stage,
+        comment=payload.comment,
     )
     return {"success": True, "data": {"cycle": data}}
 

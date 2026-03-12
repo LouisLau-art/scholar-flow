@@ -42,4 +42,19 @@ export const ManuscriptApi = {
     )
     return res.json()
   },
+
+  async submitAuthorFeedback(
+    manuscriptId: string,
+    cycleId: string,
+    formData: FormData
+  ) {
+    const res = await authedFetch(
+      `/api/v1/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/author-feedback`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    )
+    return res.json()
+  },
 }

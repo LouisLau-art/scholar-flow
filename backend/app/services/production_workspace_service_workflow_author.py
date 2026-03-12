@@ -99,6 +99,9 @@ class ProductionWorkspaceWorkflowAuthorMixin:
         user_id: str,
         profile_roles: list[str] | None,
         request: SubmitProofreadingRequest,
+        attachment_content: bytes | None = None,
+        attachment_filename: str | None = None,
+        attachment_content_type: str | None = None,
     ) -> dict[str, Any]:
         manuscript = self._get_manuscript(manuscript_id)
         cycle = self._get_cycle(manuscript_id=manuscript_id, cycle_id=cycle_id)
@@ -140,26 +143,85 @@ class ProductionWorkspaceWorkflowAuthorMixin:
 
         submitted_at = now.isoformat()
         response_reused = False
+        
+        attachment_bucket = None
+        attachment_path = None
+        attachment_file_name_val = None
+        
+        if attachment_content and attachment_filename:
+            from uuid import uuid4
+            from app.core.storage_filename import sanitize_storage_filename
+            self._ensure_bucket("production-proof-attachments", public=False)
+            attachment_bucket = "production-proof-attachments"
+            attachment_file_name_val = attachment_filename
+            safe_name = sanitize_storage_filename(attachment_filename, default_name="annotated")
+            attachment_path = f"production_feedback/{manuscript_id}/{uuid4()}_{safe_name}"
+            
+            try:
+                self.client.storage.from_(attachment_bucket).upload(
+                    attachment_path,
+                    attachment_content,
+                    {"content-type": attachment_content_type or "application/octet-stream"},
+                )
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {exc}") from exc
+                
+            try:
+                self.client.table("production_cycle_artifacts").insert({
+                    "cycle_id": cycle_id,
+                    "manuscript_id": manuscript_id,
+                    "artifact_kind": "author_annotated_proof",
+                    "storage_bucket": attachment_bucket,
+                    "storage_path": attachment_path,
+                    "file_name": attachment_file_name_val,
+                    "mime_type": attachment_content_type or "application/octet-stream",
+                    "uploaded_by": user_id,
+                    "metadata": {"source": "author_feedback"}
+                }).execute()
+            except Exception:
+                pass
+                
         try:
             if existing and not existing_is_current and str(existing.get("id") or "").strip():
                 response_reused = True
                 response_id = str(existing.get("id") or "").strip()
-                resp = (
-                    self.client.table("production_proofreading_responses")
-                    .update(
-                        {
-                            "author_id": user_id,
-                            "decision": decision,
-                            "summary": request.summary,
-                            "submitted_at": submitted_at,
-                            "is_late": bool(due_at and now > due_at),
-                        }
+                update_payload = {
+                    "author_id": user_id,
+                    "decision": decision,
+                    "summary": request.summary,
+                    "submitted_at": submitted_at,
+                    "is_late": bool(due_at and now > due_at),
+                }
+                if attachment_path:
+                    update_payload["attachment_bucket"] = attachment_bucket
+                    update_payload["attachment_path"] = attachment_path
+                    update_payload["attachment_file_name"] = attachment_file_name_val
+                
+                try:
+                    resp = (
+                        self.client.table("production_proofreading_responses")
+                        .update(update_payload)
+                        .eq("id", response_id)
+                        .eq("cycle_id", cycle_id)
+                        .eq("manuscript_id", manuscript_id)
+                        .execute()
                     )
-                    .eq("id", response_id)
-                    .eq("cycle_id", cycle_id)
-                    .eq("manuscript_id", manuscript_id)
-                    .execute()
-                )
+                except Exception as e:
+                    if is_missing_column_error(e, "attachment_bucket"):
+                        update_payload.pop("attachment_bucket", None)
+                        update_payload.pop("attachment_path", None)
+                        update_payload.pop("attachment_file_name", None)
+                        resp = (
+                            self.client.table("production_proofreading_responses")
+                            .update(update_payload)
+                            .eq("id", response_id)
+                            .eq("cycle_id", cycle_id)
+                            .eq("manuscript_id", manuscript_id)
+                            .execute()
+                        )
+                    else:
+                        raise e
+                        
                 rows = getattr(resp, "data", None) or []
                 if not rows:
                     raise HTTPException(status_code=500, detail="Failed to update proofreading response")
@@ -175,7 +237,22 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                     "is_late": bool(due_at and now > due_at),
                     "created_at": submitted_at,
                 }
-                resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+                if attachment_path:
+                    response_payload["attachment_bucket"] = attachment_bucket
+                    response_payload["attachment_path"] = attachment_path
+                    response_payload["attachment_file_name"] = attachment_file_name_val
+                    
+                try:
+                    resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+                except Exception as e:
+                    if is_missing_column_error(e, "attachment_bucket"):
+                        response_payload.pop("attachment_bucket", None)
+                        response_payload.pop("attachment_path", None)
+                        response_payload.pop("attachment_file_name", None)
+                        resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+                    else:
+                        raise e
+                        
                 rows = getattr(resp, "data", None) or []
                 if not rows:
                     raise HTTPException(status_code=500, detail="Failed to save proofreading response")
@@ -260,10 +337,13 @@ class ProductionWorkspaceWorkflowAuthorMixin:
             comment="proofreading submitted",
             payload={
                 "event_type": "proofreading_submitted",
+                "from_stage": "author_proofreading",
+                "to_stage": "ae_final_review",
                 "cycle_id": cycle_id,
                 "decision": decision,
                 "response_id": response_row.get("id"),
                 "response_reused": response_reused,
+                "attachment_path": attachment_path,
             },
         )
 
@@ -300,4 +380,5 @@ class ProductionWorkspaceWorkflowAuthorMixin:
             "cycle_id": cycle_id,
             "decision": decision,
             "submitted_at": response_row.get("submitted_at") or submitted_at,
+            "attachment_file_name": response_row.get("attachment_file_name"),
         }
