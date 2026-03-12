@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 from enum import Enum
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EmailStatus(str, Enum):
@@ -27,6 +27,15 @@ class EmailLog(BaseModel):
     idempotency_key: Optional[str] = None
     scene: Optional[str] = None
     event_type: Optional[str] = None
+    to_recipients: list[str] = Field(default_factory=list)
+    cc_recipients: list[str] = Field(default_factory=list)
+    bcc_recipients: list[str] = Field(default_factory=list)
+    reply_to_recipients: list[str] = Field(default_factory=list)
+    delivery_mode: Optional[str] = None
+    communication_status: Optional[str] = None
+    provider: Optional[str] = None
+    attachment_count: int = 0
+    attachment_manifest: list[dict[str, Any]] = Field(default_factory=list)
     provider_id: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0
@@ -46,6 +55,15 @@ class EmailLogCreate(BaseModel):
     idempotency_key: Optional[str] = None
     scene: Optional[str] = None
     event_type: Optional[str] = None
+    to_recipients: list[str] = Field(default_factory=list)
+    cc_recipients: list[str] = Field(default_factory=list)
+    bcc_recipients: list[str] = Field(default_factory=list)
+    reply_to_recipients: list[str] = Field(default_factory=list)
+    delivery_mode: Optional[str] = None
+    communication_status: Optional[str] = None
+    provider: Optional[str] = None
+    attachment_count: int = 0
+    attachment_manifest: list[dict[str, Any]] = Field(default_factory=list)
     provider_id: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int = 0

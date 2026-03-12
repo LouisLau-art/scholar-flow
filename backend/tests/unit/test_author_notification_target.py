@@ -66,12 +66,16 @@ def _normalize_target(email: str, name: str):
         "recipient_email": email,
         "recipient_name": name,
         "corresponding_author": {"name": name, "email": email, "is_corresponding": True},
-        "source": "submission_email",
+        "source": "corresponding_author_email",
+        "to_recipients": [email],
+        "cc_recipients": [],
+        "bcc_recipients": [],
+        "reply_to_recipients": [],
         "author_profile": None,
     }
 
 
-def test_resolve_author_notification_target_prefers_submission_email_and_corresponding_name():
+def test_resolve_author_notification_target_prefers_corresponding_author_email_and_ccs_other_authors():
     manuscript = {
         "submission_email": "Submissions@Example.org ",
         "author_contacts": [
@@ -92,21 +96,35 @@ def test_resolve_author_notification_target_prefers_submission_email_and_corresp
 
     target = resolve_author_notification_target(manuscript=manuscript)
 
-    assert target["recipient_email"] == "submissions@example.org"
+    assert target["recipient_email"] == "corr@example.org"
     assert target["recipient_name"] == "Dr. Alice Author"
-    assert target["source"] == "submission_email"
+    assert target["source"] == "corresponding_author_email"
+    assert target["to_recipients"] == ["corr@example.org"]
+    assert target["cc_recipients"] == ["bob@example.org"]
 
 
-def test_resolve_author_notification_target_falls_back_to_corresponding_email_then_profile_name():
+def test_resolve_author_notification_target_includes_all_corresponding_authors_in_to():
     manuscript = {
-        "submission_email": "",
+        "submission_email": "submission@example.org",
         "author_contacts": [
             {
-                "name": "Corr Author",
-                "email": "corr@example.org",
+                "name": "Corr Author One",
+                "email": "corr1@example.org",
                 "affiliation": "Example U",
                 "is_corresponding": True,
-            }
+            },
+            {
+                "name": "Corr Author Two",
+                "email": "corr2@example.org",
+                "affiliation": "Example U",
+                "is_corresponding": True,
+            },
+            {
+                "name": "Co Author",
+                "email": "co@example.org",
+                "affiliation": "Example U",
+                "is_corresponding": False,
+            },
         ],
     }
     target = resolve_author_notification_target(
@@ -114,9 +132,11 @@ def test_resolve_author_notification_target_falls_back_to_corresponding_email_th
         author_profile={"email": "account@example.org", "full_name": "Account Author"},
     )
 
-    assert target["recipient_email"] == "corr@example.org"
-    assert target["recipient_name"] == "Corr Author"
+    assert target["recipient_email"] == "corr1@example.org"
+    assert target["recipient_name"] == "Corr Author One"
     assert target["source"] == "corresponding_author_email"
+    assert target["to_recipients"] == ["corr1@example.org", "corr2@example.org"]
+    assert target["cc_recipients"] == ["co@example.org"]
 
 
 def test_resolve_author_notification_target_falls_back_to_profile_email_when_submission_fields_missing():
@@ -128,6 +148,7 @@ def test_resolve_author_notification_target_falls_back_to_profile_email_when_sub
     assert target["recipient_email"] == "author.profile@example.org"
     assert target["recipient_name"] == "Profile Author"
     assert target["source"] == "author_profile_email"
+    assert target["to_recipients"] == ["author.profile@example.org"]
 
 
 @pytest.mark.asyncio

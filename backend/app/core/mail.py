@@ -1,8 +1,11 @@
 import logging
 import re
 import smtplib
+from dataclasses import dataclass, field
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import COMMASPACE
 from html import unescape
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
@@ -27,6 +30,18 @@ _HTML_PARAGRAPH_CLOSE_RE = re.compile(r"</(p|div|h[1-6]|section|article)>", flag
 _HTML_BLOCK_CLOSE_RE = re.compile(r"</(li|ul|ol|tr|table)>", flags=re.IGNORECASE)
 _HTML_LIST_OPEN_RE = re.compile(r"<li\b[^>]*>", flags=re.IGNORECASE)
 _SCRIPT_STYLE_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", flags=re.IGNORECASE | re.DOTALL)
+
+
+@dataclass(frozen=True)
+class EmailEnvelope:
+    to_emails: list[str]
+    subject: str
+    html_body: str
+    text_body: str | None = None
+    cc_emails: list[str] = field(default_factory=list)
+    bcc_emails: list[str] = field(default_factory=list)
+    reply_to_emails: list[str] = field(default_factory=list)
+    attachments: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _is_retryable_resend_exception(exc: Exception) -> bool:
@@ -195,6 +210,190 @@ class EmailService:
             normalized[key[:128]] = value[:1024]
         return normalized or None
 
+    def _normalize_email_list(self, emails: Sequence[str] | str | None) -> list[str]:
+        raw_values: Sequence[str] | list[str]
+        if emails is None:
+            raw_values = []
+        elif isinstance(emails, str):
+            raw_values = [emails]
+        else:
+            raw_values = emails
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in raw_values:
+            value = str(item or "").strip()
+            if not value:
+                continue
+            lowered = value.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized.append(value)
+        return normalized
+
+    def _normalize_attachment_payloads(
+        self,
+        attachments: Sequence[Mapping[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for raw in attachments or []:
+            payload = dict(raw or {})
+            filename = str(payload.get("filename") or "").strip() or None
+            path = str(payload.get("path") or "").strip() or None
+            content = payload.get("content")
+            content_type = str(payload.get("content_type") or "").strip() or None
+            content_id = str(payload.get("content_id") or "").strip() or None
+
+            if content is None and not path:
+                continue
+
+            item: dict[str, Any] = {}
+            if filename:
+                item["filename"] = filename
+            if path:
+                item["path"] = path
+            if content is not None:
+                item["content"] = content
+            if content_type:
+                item["content_type"] = content_type
+            if content_id:
+                item["content_id"] = content_id
+            normalized.append(item)
+        return normalized
+
+    def _coerce_attachment_bytes(self, content: Any) -> bytes:
+        if isinstance(content, bytes):
+            return content
+        if isinstance(content, bytearray):
+            return bytes(content)
+        if isinstance(content, str):
+            return content.encode("utf-8")
+        return bytes(content)
+
+    def _build_attachment_manifest(
+        self,
+        attachments: Sequence[Mapping[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        manifest: list[dict[str, Any]] = []
+        for raw in attachments or []:
+            payload = dict(raw or {})
+            item: dict[str, Any] = {}
+            filename = str(payload.get("filename") or "").strip() or None
+            path = str(payload.get("path") or "").strip() or None
+            content_type = str(payload.get("content_type") or "").strip() or None
+            content_id = str(payload.get("content_id") or "").strip() or None
+            if filename:
+                item["filename"] = filename
+            if path:
+                item["path"] = path
+            if content_type:
+                item["content_type"] = content_type
+            if content_id:
+                item["content_id"] = content_id
+            if item:
+                manifest.append(item)
+        return manifest
+
+    def _build_resend_attachments(
+        self,
+        attachments: Sequence[Mapping[str, Any]] | None,
+    ) -> list[dict[str, Any]] | None:
+        normalized: list[dict[str, Any]] = []
+        for raw in attachments or []:
+            payload = dict(raw or {})
+            item: dict[str, Any] = {}
+            if payload.get("path"):
+                item["path"] = str(payload["path"]).strip()
+                filename = str(payload.get("filename") or "").strip()
+                if filename:
+                    item["filename"] = filename
+            else:
+                content = payload.get("content")
+                if content is None:
+                    continue
+                if isinstance(content, str):
+                    item["content"] = content
+                elif isinstance(content, (bytes, bytearray)):
+                    item["content"] = list(bytes(content))
+                else:
+                    item["content"] = list(content)
+                filename = str(payload.get("filename") or "").strip()
+                if filename:
+                    item["filename"] = filename
+
+            content_type = str(payload.get("content_type") or "").strip()
+            content_id = str(payload.get("content_id") or "").strip()
+            if content_type:
+                item["content_type"] = content_type
+            if content_id:
+                item["content_id"] = content_id
+            if item:
+                normalized.append(item)
+        return normalized or None
+
+    def _build_email_envelope(
+        self,
+        *,
+        to_email: str | None = None,
+        to_emails: Sequence[str] | None = None,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
+        subject: str,
+        html_body: str,
+        text_body: str | None = None,
+        attachments: Sequence[Mapping[str, Any]] | None = None,
+    ) -> EmailEnvelope:
+        all_to: list[str] = []
+        if to_email:
+            all_to.append(to_email)
+        if to_emails:
+            all_to.extend(list(to_emails))
+
+        normalized_to = self._normalize_email_list(all_to)
+        if not normalized_to:
+            raise ValueError("at least one recipient is required")
+
+        seen = {item.lower() for item in normalized_to}
+        normalized_cc: list[str] = []
+        for item in self._normalize_email_list(cc_emails):
+            lowered = item.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized_cc.append(item)
+
+        normalized_bcc: list[str] = []
+        for item in self._normalize_email_list(bcc_emails):
+            lowered = item.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized_bcc.append(item)
+
+        normalized_reply_to = self._normalize_email_list(reply_to_emails)
+        normalized_attachments = self._normalize_attachment_payloads(attachments)
+
+        return EmailEnvelope(
+            to_emails=normalized_to,
+            cc_emails=normalized_cc,
+            bcc_emails=normalized_bcc,
+            reply_to_emails=normalized_reply_to,
+            subject=str(subject or "").strip() or "(no subject)",
+            html_body=html_body,
+            text_body=text_body,
+            attachments=normalized_attachments,
+        )
+
+    def _reply_to_param(self, reply_to_emails: Sequence[str] | None) -> str | list[str] | None:
+        normalized = self._normalize_email_list(reply_to_emails)
+        if not normalized:
+            return None
+        if len(normalized) == 1:
+            return normalized[0]
+        return normalized
+
     def _build_plain_text_from_html(self, html_body: str) -> str:
         def _replace_link(match: re.Match[str]) -> str:
             href = unescape(str(match.group(1) or "").strip())
@@ -259,10 +458,15 @@ class EmailService:
     def send_email(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
+        to_emails: Sequence[str] | None = None,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
         subject: str,
         html_body: str,
         text_body: str | None = None,
+        attachments: Sequence[Mapping[str, Any]] | None = None,
         idempotency_key: str | None = None,
         tags: Sequence[Mapping[str, str]] | None = None,
         headers: Mapping[str, str] | None = None,
@@ -274,23 +478,68 @@ class EmailService:
         - 单测默认走 SMTP 路径（会 patch smtplib.SMTP）。
         - 若 SMTP 未配置但 Resend 已配置，则自动降级走 Resend。
         """
+        envelope = self._build_email_envelope(
+            to_email=to_email,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            bcc_emails=bcc_emails,
+            reply_to_emails=reply_to_emails,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            attachments=attachments,
+        )
+
         if self.smtp_config:
             try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
+                recipients = envelope.to_emails + envelope.cc_emails + envelope.bcc_emails
+                has_attachments = bool(envelope.attachments)
+                msg = MIMEMultipart("mixed" if has_attachments else "alternative")
+                msg["Subject"] = envelope.subject
                 msg["From"] = self.smtp_config.from_email
-                msg["To"] = to_email
+                msg["To"] = COMMASPACE.join(envelope.to_emails)
+                if envelope.cc_emails:
+                    msg["Cc"] = COMMASPACE.join(envelope.cc_emails)
+                if envelope.reply_to_emails:
+                    msg["Reply-To"] = COMMASPACE.join(envelope.reply_to_emails)
 
-                if text_body:
-                    msg.attach(MIMEText(text_body, "plain", "utf-8"))
-                msg.attach(MIMEText(html_body, "html", "utf-8"))
+                alternative = MIMEMultipart("alternative")
+                if envelope.text_body:
+                    alternative.attach(MIMEText(envelope.text_body, "plain", "utf-8"))
+                alternative.attach(MIMEText(envelope.html_body, "html", "utf-8"))
+
+                if has_attachments:
+                    msg.attach(alternative)
+                    for attachment in envelope.attachments:
+                        if attachment.get("path") and attachment.get("content") is None:
+                            raise ValueError("SMTP attachments require inline content")
+                        payload = self._coerce_attachment_bytes(attachment.get("content"))
+                        part = MIMEApplication(payload)
+                        content_type = str(attachment.get("content_type") or "").strip()
+                        if content_type:
+                            part.set_type(content_type)
+                        filename = str(attachment.get("filename") or "attachment").strip() or "attachment"
+                        part.add_header("Content-Disposition", "attachment", filename=filename)
+                        content_id = str(attachment.get("content_id") or "").strip()
+                        if content_id:
+                            part.add_header("Content-ID", f"<{content_id}>")
+                        msg.attach(part)
+                else:
+                    msg = alternative
+                    msg["Subject"] = envelope.subject
+                    msg["From"] = self.smtp_config.from_email
+                    msg["To"] = COMMASPACE.join(envelope.to_emails)
+                    if envelope.cc_emails:
+                        msg["Cc"] = COMMASPACE.join(envelope.cc_emails)
+                    if envelope.reply_to_emails:
+                        msg["Reply-To"] = COMMASPACE.join(envelope.reply_to_emails)
 
                 with smtplib.SMTP(self.smtp_config.host, self.smtp_config.port) as server:
                     if self.smtp_config.use_starttls:
                         server.starttls()
                     if self.smtp_config.user and self.smtp_config.password:
                         server.login(self.smtp_config.user, self.smtp_config.password)
-                    server.sendmail(self.smtp_config.from_email, [to_email], msg.as_string())
+                    server.sendmail(self.smtp_config.from_email, recipients, msg.as_string())
                 return True
             except Exception as e:
                 logger.warning("[SMTP] send failed: %s", e)
@@ -300,10 +549,14 @@ class EmailService:
         if resend_cfg:
             try:
                 self._send_resend_message(
-                    to_email=to_email,
-                    subject=subject,
-                    html_body=html_body,
-                    text_body=text_body,
+                    to_emails=envelope.to_emails,
+                    cc_emails=envelope.cc_emails,
+                    bcc_emails=envelope.bcc_emails,
+                    reply_to_emails=envelope.reply_to_emails,
+                    subject=envelope.subject,
+                    html_body=envelope.html_body,
+                    text_body=envelope.text_body,
+                    attachments=envelope.attachments,
                     sender=resend_cfg.sender,
                     idempotency_key=idempotency_key,
                     tags=tags,
@@ -527,20 +780,37 @@ class EmailService:
     def send_rendered_email(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
+        to_emails: Sequence[str] | None = None,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
         template_key: str,
         subject: str,
         html_body: str,
         text_body: str | None = None,
+        attachments: Sequence[Mapping[str, Any]] | None = None,
         idempotency_key: str | None = None,
         tags: Sequence[Mapping[str, str]] | None = None,
         headers: Mapping[str, str] | None = None,
         audit_context: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        envelope = self._build_email_envelope(
+            to_email=to_email,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            bcc_emails=bcc_emails,
+            reply_to_emails=reply_to_emails,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            attachments=attachments,
+        )
+
         result = {
             "ok": False,
             "status": EmailStatus.FAILED.value,
-            "subject": str(subject or "(no subject)").strip() or "(no subject)",
+            "subject": envelope.subject,
             "provider_id": None,
             "error_message": None,
         }
@@ -549,21 +819,49 @@ class EmailService:
             return result
 
         subject_value = result["subject"]
-        text_value = text_body if text_body is not None else self._build_plain_text_from_html(html_body)
+        text_value = envelope.text_body if envelope.text_body is not None else self._build_plain_text_from_html(envelope.html_body)
+        attachment_manifest = self._build_attachment_manifest(envelope.attachments)
 
         if self.smtp_config:
-            ok = self.send_email(to_email=to_email, subject=subject_value, html_body=html_body, text_body=text_value)
+            ok = self.send_email(
+                to_emails=envelope.to_emails,
+                cc_emails=envelope.cc_emails,
+                bcc_emails=envelope.bcc_emails,
+                reply_to_emails=envelope.reply_to_emails,
+                subject=subject_value,
+                html_body=envelope.html_body,
+                text_body=text_value,
+                attachments=envelope.attachments,
+            )
             if ok:
-                self._log_attempt(to_email, subject_value, template_key, EmailStatus.SENT, audit_context=audit_context)
+                self._log_attempt(
+                    envelope.to_emails[0],
+                    subject_value,
+                    template_key,
+                    EmailStatus.SENT,
+                    provider="smtp",
+                    to_recipients=envelope.to_emails,
+                    cc_recipients=envelope.cc_emails,
+                    bcc_recipients=envelope.bcc_emails,
+                    reply_to_recipients=envelope.reply_to_emails,
+                    attachment_manifest=attachment_manifest,
+                    audit_context=audit_context,
+                )
                 result["ok"] = True
                 result["status"] = EmailStatus.SENT.value
             else:
                 self._log_attempt(
-                    to_email,
+                    envelope.to_emails[0],
                     subject_value,
                     template_key,
                     EmailStatus.FAILED,
+                    provider="smtp",
                     error_message="send failed",
+                    to_recipients=envelope.to_emails,
+                    cc_recipients=envelope.cc_emails,
+                    bcc_recipients=envelope.bcc_emails,
+                    reply_to_recipients=envelope.reply_to_emails,
+                    attachment_manifest=attachment_manifest,
                     audit_context=audit_context,
                 )
                 result["error_message"] = "send failed"
@@ -577,10 +875,14 @@ class EmailService:
         merged_tags = self._merge_inline_email_tags(template_key=template_key, tags=tags)
         try:
             res = self._send_resend_message(
-                to_email=to_email,
+                to_emails=envelope.to_emails,
+                cc_emails=envelope.cc_emails,
+                bcc_emails=envelope.bcc_emails,
+                reply_to_emails=envelope.reply_to_emails,
                 subject=subject_value,
-                html_body=html_body,
+                html_body=envelope.html_body,
                 text_body=text_value,
+                attachments=envelope.attachments,
                 sender=resend_cfg.sender,
                 idempotency_key=idempotency_key,
                 tags=merged_tags,
@@ -588,11 +890,17 @@ class EmailService:
             )
             provider_id = (res or {}).get("id") if isinstance(res, dict) else None
             self._log_attempt(
-                to_email,
+                envelope.to_emails[0],
                 subject_value,
                 template_key,
                 EmailStatus.SENT,
+                provider="resend",
                 provider_id=provider_id,
+                to_recipients=envelope.to_emails,
+                cc_recipients=envelope.cc_emails,
+                bcc_recipients=envelope.bcc_emails,
+                reply_to_recipients=envelope.reply_to_emails,
+                attachment_manifest=attachment_manifest,
                 audit_context=audit_context,
             )
             result["ok"] = True
@@ -601,11 +909,17 @@ class EmailService:
         except Exception as e:
             logger.warning("[Resend] send failed: %s", e)
             self._log_attempt(
-                to_email,
+                envelope.to_emails[0],
                 subject_value,
                 template_key,
                 EmailStatus.FAILED,
+                provider="resend",
                 error_message=str(e),
+                to_recipients=envelope.to_emails,
+                cc_recipients=envelope.cc_emails,
+                bcc_recipients=envelope.bcc_emails,
+                reply_to_recipients=envelope.reply_to_emails,
+                attachment_manifest=attachment_manifest,
                 audit_context=audit_context,
             )
             result["error_message"] = str(e)
@@ -635,10 +949,15 @@ class EmailService:
     def _send_resend_message(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
+        to_emails: Sequence[str] | None = None,
+        cc_emails: Sequence[str] | None = None,
+        bcc_emails: Sequence[str] | None = None,
+        reply_to_emails: Sequence[str] | None = None,
         subject: str,
         html_body: str,
         text_body: str | None,
+        attachments: Sequence[Mapping[str, Any]] | None = None,
         sender: str,
         idempotency_key: str | None,
         tags: Sequence[Mapping[str, str]] | None,
@@ -651,12 +970,24 @@ class EmailService:
 
         params = {
             "from": sender or "ScholarFlow <no-reply@scholarflow.local>",
-            "to": [to_email],
+            "to": self._normalize_email_list(([to_email] if to_email else []) + list(to_emails or [])),
             "subject": subject,
             "html": html_body,
         }
         if text_body:
             params["text"] = text_body
+        normalized_cc = self._normalize_email_list(cc_emails)
+        if normalized_cc:
+            params["cc"] = normalized_cc
+        normalized_bcc = self._normalize_email_list(bcc_emails)
+        if normalized_bcc:
+            params["bcc"] = normalized_bcc
+        reply_to_param = self._reply_to_param(reply_to_emails)
+        if reply_to_param:
+            params["reply_to"] = reply_to_param
+        normalized_attachments = self._build_resend_attachments(attachments)
+        if normalized_attachments:
+            params["attachments"] = normalized_attachments
         normalized_headers = self._normalize_headers(headers)
         if normalized_headers:
             params["headers"] = normalized_headers
@@ -687,13 +1018,30 @@ class EmailService:
         template_name: str,
         status: EmailStatus,
         provider_id: Optional[str] = None,
+        provider: Optional[str] = None,
         error_message: Optional[str] = None,
+        to_recipients: Sequence[str] | None = None,
+        cc_recipients: Sequence[str] | None = None,
+        bcc_recipients: Sequence[str] | None = None,
+        reply_to_recipients: Sequence[str] | None = None,
+        attachment_manifest: Sequence[Mapping[str, Any]] | None = None,
         audit_context: Mapping[str, Any] | None = None,
     ):
         try:
             if self._supabase is None:
                 return
             context = dict(audit_context or {})
+            normalized_to = self._normalize_email_list(to_recipients or [recipient])
+            normalized_cc = self._normalize_email_list(cc_recipients)
+            normalized_bcc = self._normalize_email_list(bcc_recipients)
+            normalized_reply_to = self._normalize_email_list(reply_to_recipients)
+            delivery_mode = str(context.get("delivery_mode") or "").strip() or None
+            communication_status = (
+                str(context.get("communication_status") or "").strip()
+                or ("system_sent" if status == EmailStatus.SENT else "system_failed")
+            )
+            normalized_provider = str(provider or context.get("provider") or "").strip() or None
+            normalized_attachment_manifest = self._build_attachment_manifest(attachment_manifest)
             data = {
                 "recipient": recipient,
                 "subject": subject,
@@ -705,6 +1053,15 @@ class EmailService:
                 "idempotency_key": str(context.get("idempotency_key") or "").strip() or None,
                 "scene": str(context.get("scene") or "").strip() or None,
                 "event_type": str(context.get("event_type") or "").strip() or None,
+                "to_recipients": normalized_to,
+                "cc_recipients": normalized_cc,
+                "bcc_recipients": normalized_bcc,
+                "reply_to_recipients": normalized_reply_to,
+                "delivery_mode": delivery_mode,
+                "communication_status": communication_status,
+                "provider": normalized_provider,
+                "attachment_count": len(normalized_attachment_manifest),
+                "attachment_manifest": normalized_attachment_manifest,
                 "provider_id": provider_id,
                 "error_message": error_message,
                 # Simple retry count tracking logic: if failed, we likely retried 2 more times (total 3).
@@ -720,6 +1077,15 @@ class EmailService:
                 or "email_logs.idempotency_key" in lowered
                 or "email_logs.scene" in lowered
                 or "email_logs.event_type" in lowered
+                or "email_logs.to_recipients" in lowered
+                or "email_logs.cc_recipients" in lowered
+                or "email_logs.bcc_recipients" in lowered
+                or "email_logs.reply_to_recipients" in lowered
+                or "email_logs.delivery_mode" in lowered
+                or "email_logs.communication_status" in lowered
+                or "email_logs.provider" in lowered
+                or "email_logs.attachment_count" in lowered
+                or "email_logs.attachment_manifest" in lowered
                 or "schema cache" in lowered
             ):
                 try:
