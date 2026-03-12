@@ -138,6 +138,7 @@
 - 已完成最小前端 mocked Playwright smoke：
   - `decision_workspace.spec.ts` 覆盖 internal execute mode 与 academic recommendation-only mode
   - `decision_workspace.visual.spec.ts` 已同步到当前 `Decision Workspace` 标题文案
+  - `reviewer_management_delivery.spec.ts` 已覆盖 previous-round reviewer 只作为显式复用建议展示，不会自动计入当前轮 selection
 - 已完成一个可选真实环境 deployed smoke 入口：
   - `deployed_smoke.spec.ts` 新增 `SMOKE_DECISION_MANUSCRIPT_ID`
   - 配置真实 admin 账号与 decision 稿件后，可验证 `/editor/decision/[id]` 真实页面可达
