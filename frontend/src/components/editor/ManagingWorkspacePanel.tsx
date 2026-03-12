@@ -143,12 +143,17 @@ function buildCacheKey(q: string): string {
   return `q=${encodeURIComponent(String(q || '').trim().toLowerCase())}`
 }
 
-export function ManagingWorkspacePanel() {
+interface ManagingWorkspacePanelProps {
+  initialBucket?: string
+}
+
+export function ManagingWorkspacePanel({ initialBucket }: ManagingWorkspacePanelProps = {}) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([])
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [query, setQuery] = useState('')
+  const [activeBucket, setActiveBucket] = useState<string>(initialBucket || 'all')
   
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
@@ -262,6 +267,11 @@ export function ManagingWorkspacePanel() {
     })).filter((section) => section.items.length > 0)
   }, [manuscripts])
 
+  const visibleSections = useMemo(() => {
+    if (activeBucket === 'all') return groupedSections
+    return groupedSections.filter(s => s.key === activeBucket)
+  }, [groupedSections, activeBucket])
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -338,12 +348,12 @@ export function ManagingWorkspacePanel() {
 
       {loading ? (
         <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">Loading…</div>
-      ) : groupedSections.length === 0 ? (
+      ) : visibleSections.length === 0 ? (
         <div className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
           No manuscripts in current scope.
         </div>
       ) : (
-        groupedSections.map((section) => (
+        visibleSections.map((section) => (
           <section key={section.key} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="border-b border-border bg-muted/50 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">

@@ -1,10 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MEIntakePage from './page'
 import { editorService } from '@/services/editorService'
-
-const assignModalMock = vi.fn()
 
 vi.mock('@/components/layout/SiteHeader', () => ({
   default: () => <div data-testid="site-header" />,
@@ -14,76 +12,34 @@ vi.mock('@/components/providers/QueryProvider', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
-vi.mock('@/components/AssignAEModal', () => ({
-  AssignAEModal: (props: {
-    isOpen: boolean
-    mode?: 'pass_and_assign' | 'bind_only'
-    manuscriptId: string
-  }) => {
-    assignModalMock(props)
-    return props.isOpen ? <div data-testid="assign-ae-modal">{props.mode}</div> : null
-  },
-}))
-
-vi.mock('@/services/assistantEditorsCache', () => ({
-  getAssistantEditors: vi.fn().mockResolvedValue([]),
+vi.mock('@/components/editor/ManagingWorkspacePanel', () => ({
+  ManagingWorkspacePanel: ({ initialBucket }: { initialBucket?: string }) => (
+    <div data-testid="managing-workspace-panel" data-initial-bucket={initialBucket}>
+      Managing Workspace Panel Mock
+    </div>
+  ),
 }))
 
 vi.mock('@/services/editorService', () => ({
   editorService: {
     getIntakeQueue: vi.fn(),
-    submitIntakeRevision: vi.fn(),
   },
 }))
 
-describe('MEIntakePage waiting author actions', () => {
+describe('MEIntakePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('keeps waiting-author manuscripts assignable and opens bind-only mode', async () => {
-    ;(editorService.getIntakeQueue as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
-      {
-        id: 'wait-1',
-        title: 'Waiting Author No AE',
-        pre_check_status: 'awaiting_resubmit',
-        waiting_resubmit: true,
-        waiting_resubmit_reason: 'Please update the formatting.',
-        author: { full_name: 'Author One' },
-        journal: { title: 'Computer Science' },
-      },
-      {
-        id: 'wait-2',
-        title: 'Waiting Author With AE',
-        pre_check_status: 'awaiting_resubmit',
-        waiting_resubmit: true,
-        waiting_resubmit_reason: 'Please revise the figures.',
-        assistant_editor_id: 'ae-2',
-        author: { full_name: 'Author Two' },
-        journal: { title: 'Computer Science' },
-      },
-    ])
-
+  it('renders transition message and uses ManagingWorkspacePanel with intake bucket', async () => {
     render(<MEIntakePage />)
 
-    await waitFor(() => {
-      expect(editorService.getIntakeQueue).toHaveBeenCalled()
-    })
+    // Should render the mock panel
+    const panel = screen.getByTestId('managing-workspace-panel')
+    expect(panel).toBeInTheDocument()
+    expect(panel).toHaveAttribute('data-initial-bucket', 'intake')
 
-    expect(await screen.findByText('Waiting Author No AE')).toBeInTheDocument()
-    expect(screen.queryByText('等待作者修回（不可操作）')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '分配 AE' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '改派 AE' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '分配 AE' }))
-
-    expect(await screen.findByTestId('assign-ae-modal')).toHaveTextContent('bind_only')
-    expect(assignModalMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        isOpen: true,
-        manuscriptId: 'wait-1',
-        mode: 'bind_only',
-      }),
-    )
+    // Should NOT call getIntakeQueue
+    expect(editorService.getIntakeQueue).not.toHaveBeenCalled()
   })
 })
