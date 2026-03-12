@@ -893,6 +893,7 @@ type EditorialActionsCardProps = {
   onReload: () => void
   onOpenTransitionDialog: (nextStatus: string) => void
   getTransitionActionLabel: (nextStatus: string) => string
+  onOpenAuthorEmailPreview?: (mode: 'technical' | 'revision') => void
 }
 
 export function EditorialActionsCard({
@@ -922,6 +923,7 @@ export function EditorialActionsCard({
   onReload,
   onOpenTransitionDialog,
   getTransitionActionLabel,
+  onOpenAuthorEmailPreview,
 }: EditorialActionsCardProps) {
   return (
     <Card className="border-t-4 border-t-purple-500 shadow-sm">
@@ -967,6 +969,25 @@ export function EditorialActionsCard({
         {!isPostAcceptance && !canOpenDecisionWorkspaceStage && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             Decision Workspace 仅在 `decision / decision_done` 阶段开放。外审阶段请先使用 `Exit Review Stage`。
+          </div>
+        )}
+
+        {/* Author Communication Section */}
+        {!['published', 'rejected'].includes(statusLower) && (
+          <div className="space-y-2 pt-2 border-t border-border/60">
+            <div className="text-xs font-semibold text-muted-foreground mb-2">AUTHOR COMMUNICATION</div>
+            {['pre_check', 'revision_before_review'].includes(statusLower) && (
+              <Button className="w-full justify-start" variant="outline" onClick={() => onOpenAuthorEmailPreview?.('technical')}>
+                <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+                Send Technical Revision Email
+              </Button>
+            )}
+            {['under_review', 'resubmitted', 'decision', 'decision_done', 'major_revision', 'minor_revision'].includes(statusLower) && (
+              <Button className="w-full justify-start" variant="outline" onClick={() => onOpenAuthorEmailPreview?.('revision')}>
+                <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+                Send Formal Revision Request Email
+              </Button>
+            )}
           </div>
         )}
 

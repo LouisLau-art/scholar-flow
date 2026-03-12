@@ -454,6 +454,60 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       return authedGetJsonCached(url, options)
     },
 
+    async previewTechnicalRevisionEmail(manuscriptId: string, payload: import('./types').TechnicalRevisionEmailPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/technical-revision/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to preview technical revision email' }))
+    },
+
+    async sendTechnicalRevisionEmail(manuscriptId: string, payload: import('./types').ManualEmailSendPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/technical-revision/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to send technical revision email' }))
+    },
+
+    async markTechnicalRevisionEmailExternalSent(manuscriptId: string, payload: import('./types').MarkExternalSentPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/technical-revision/mark-external-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to mark external sent' }))
+    },
+
+    async previewRevisionRequestEmail(manuscriptId: string, payload: import('./types').RevisionRequestEmailPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/revision-request/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to preview revision request email' }))
+    },
+
+    async sendRevisionRequestEmail(manuscriptId: string, payload: import('./types').ManualEmailSendPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/revision-request/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to send revision request email' }))
+    },
+
+    async markRevisionRequestEmailExternalSent(manuscriptId: string, payload: import('./types').MarkExternalSentPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/emails/revision-request/mark-external-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to mark external sent' }))
+    },
+
     invalidateAEWorkspaceCache() {
       aeWorkspaceCache.clear()
       aeWorkspaceInflight.clear()

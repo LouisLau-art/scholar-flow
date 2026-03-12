@@ -27,7 +27,7 @@ const ACTIVE_LEGACY_STATUSES: ReadonlySet<ProductionCycleStatus> = new Set([
 export function hasActiveProductionCycle(cycles: ProductionCycle[]): boolean {
   return cycles.some((cycle) => {
     const stage = String(cycle.stage || '').trim()
-    if (stage) return ACTIVE_PRODUCTION_STAGES.has(stage)
+    if (stage) return ACTIVE_PRODUCTION_STAGES.has(stage as ProductionCycleStage)
     return ACTIVE_LEGACY_STATUSES.has(cycle.status)
   })
 }

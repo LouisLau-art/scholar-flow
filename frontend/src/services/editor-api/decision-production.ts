@@ -120,6 +120,33 @@ export function createDecisionProductionApi(deps: DecisionProductionApiDeps) {
       return res.json()
     },
 
+    async previewProofreadingEmail(manuscriptId: string, cycleId: string, payload: import('./types').ProofreadingEmailPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/proofreading-email/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to preview proofreading email' }))
+    },
+
+    async sendProofreadingEmail(manuscriptId: string, cycleId: string, payload: import('./types').ManualEmailSendPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/proofreading-email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to send proofreading email' }))
+    },
+
+    async markProofreadingEmailExternalSent(manuscriptId: string, cycleId: string, payload: import('./types').MarkExternalSentPayload) {
+      const res = await authedFetch(`/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/proofreading-email/mark-external-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      return res.json().catch(() => ({ success: false, detail: 'Failed to mark external sent' }))
+    },
+
     async approveProductionCycle(manuscriptId: string, cycleId: string) {
       const res = await authedFetch(
         `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/approve`,

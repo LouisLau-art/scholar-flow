@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Loader2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
 import type { ProductionCycle } from '@/types/production'
@@ -12,6 +12,7 @@ type Props = {
   activeCycle: ProductionCycle | null
   canApprove: boolean
   onApproved: () => Promise<void>
+  onOpenProofreadingEmail?: () => void
 }
 
 function statusHint(status: string | undefined): string {
@@ -33,7 +34,7 @@ function statusHint(status: string | undefined): string {
   }
 }
 
-export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, onApproved }: Props) {
+export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, onApproved, onOpenProofreadingEmail }: Props) {
   const [loading, setLoading] = useState(false)
 
   const latest = useMemo(() => activeCycle?.latest_response || null, [activeCycle])
@@ -96,15 +97,29 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
           <p className="text-xs text-muted-foreground">暂无作者反馈。</p>
         )}
 
-        <button
-          type="button"
-          onClick={() => void handleApprove()}
-          disabled={loading || !activeCycle || !canApprove || !canApproveProductionCycle(activeCycle.status)}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Approve for Publication
-        </button>
+        <div className="space-y-2 pt-2 border-t border-border">
+          {activeCycle && onOpenProofreadingEmail && (
+            <button
+              type="button"
+              onClick={onOpenProofreadingEmail}
+              disabled={loading || !activeCycle}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+            >
+              <Mail className="h-4 w-4" />
+              Send Proofreading Reminder
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleApprove()}
+            disabled={loading || !activeCycle || !canApprove || !canApproveProductionCycle(activeCycle.status)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Approve for Publication
+          </button>
+        </div>
       </div>
     </section>
   )

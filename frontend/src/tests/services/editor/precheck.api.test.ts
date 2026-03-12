@@ -87,7 +87,7 @@ describe('EditorApi precheck endpoints', () => {
     await EditorApi.getManagingWorkspace(1, 20)
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
 
-    await EditorApi.submitIntakeRevision('manuscript-1', 'reason')
+    await EditorApi.submitIntakeRevision('manuscript-1', { comment: 'reason' })
 
     await EditorApi.getManagingWorkspace(1, 20)
     expect(globalThis.fetch).toHaveBeenCalledTimes(3)
@@ -164,7 +164,7 @@ describe('EditorApi precheck endpoints', () => {
     await EditorApi.getManagingWorkspace(1, 20)
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
 
-    await EditorApi.submitAcademicCheck('manuscript-1', { decision: 'pass' })
+    await EditorApi.submitAcademicCheck('manuscript-1', { decision: 'review' })
 
     await EditorApi.getManagingWorkspace(1, 20)
     expect(globalThis.fetch).toHaveBeenCalledTimes(3)

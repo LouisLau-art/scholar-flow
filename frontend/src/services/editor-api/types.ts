@@ -149,3 +149,46 @@ export type ReviewEmailTemplateListResponse = {
   detail?: string
   message?: string
 }
+
+export type AuthorEmailPreviewData = {
+  subject: string
+  html: string
+  recipient_email: string
+  resolved_recipients?: {
+    to: string[]
+    cc: string[]
+    bcc: string[]
+    reply_to: string[]
+  }
+}
+
+export type TechnicalRevisionEmailPayload = {
+  editor_message: string
+  subject_override?: string
+  html_override?: string
+}
+
+export type RevisionRequestEmailPayload = {
+  decision_type: 'major' | 'minor'
+  editor_message: string
+  subject_override?: string
+  html_override?: string
+}
+
+export type ProofreadingEmailPayload = {
+  editor_message: string
+  subject_override?: string
+  html_override?: string
+}
+
+export type ManualEmailSendPayload = {
+  recipient_email?: string
+  subject_override?: string
+  body_html_override?: string
+  cc_emails?: string[]
+  reply_to_emails?: string[]
+}
+
+export type MarkExternalSentPayload = {
+  note?: string
+}

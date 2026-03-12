@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ReviewerEmailPreviewDialog } from '@/components/editor/ReviewerEmailPreviewDialog'
+import { AuthorEmailPreviewDialog } from '@/components/editor/AuthorEmailPreviewDialog'
 import { toast } from 'sonner'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import { InvoiceInfoModal, type InvoiceInfoForm } from '@/components/editor/InvoiceInfoModal'
@@ -23,6 +24,7 @@ import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 import type { EditorRbacContext } from '@/types/rbac'
 import type { AcademicRecommendation } from '@/types/decision'
 import { deriveEditorCapability } from '@/lib/rbac'
+import type { AuthorEmailPreviewData } from '@/services/editor-api/types'
 import {
   allowedNext,
   buildAuthorResponseHistory,
@@ -178,6 +180,18 @@ export default function EditorManuscriptDetailPage() {
   const [reviewerEmailPreviewSubject, setReviewerEmailPreviewSubject] = useState('')
   const [reviewerEmailPreviewHtml, setReviewerEmailPreviewHtml] = useState('')
   const [reviewerEmailPreviewAssignmentId, setReviewerEmailPreviewAssignmentId] = useState('')
+
+  const [authorEmailPreviewOpen, setAuthorEmailPreviewOpen] = useState(false)
+  const [authorEmailPreviewMode, setAuthorEmailPreviewMode] = useState<'technical' | 'revision' | null>(null)
+  const [authorEmailPreviewLoading, setAuthorEmailPreviewLoading] = useState(false)
+  const [authorEmailPreviewSending, setAuthorEmailPreviewSending] = useState(false)
+  const [authorEmailPreviewData, setAuthorEmailPreviewData] = useState<AuthorEmailPreviewData | null>(null)
+  const [authorEmailPreviewRecipient, setAuthorEmailPreviewRecipient] = useState('')
+  const [authorEmailPreviewCc, setAuthorEmailPreviewCc] = useState('')
+  const [authorEmailPreviewReplyTo, setAuthorEmailPreviewReplyTo] = useState('')
+  const [authorEmailPreviewSubject, setAuthorEmailPreviewSubject] = useState('')
+  const [authorEmailPreviewHtml, setAuthorEmailPreviewHtml] = useState('')
+
   const [reviewerHistoryOpen, setReviewerHistoryOpen] = useState(false)
   const [reviewerHistoryLoading, setReviewerHistoryLoading] = useState(false)
   const [reviewerHistoryError, setReviewerHistoryError] = useState<string | null>(null)
@@ -1175,6 +1189,109 @@ export default function EditorManuscriptDetailPage() {
     reviewerEmailPreviewSubject,
   ])
 
+  const handleOpenAuthorEmailPreview = useCallback(async (mode: 'technical' | 'revision') => {
+    setAuthorEmailPreviewMode(mode)
+    setAuthorEmailPreviewOpen(true)
+    setAuthorEmailPreviewLoading(true)
+    try {
+      let res
+      if (mode === 'technical') {
+        res = await EditorApi.previewTechnicalRevisionEmail(id, { editor_message: '' })
+      } else {
+        const decisionType = statusLower === 'minor_revision' ? 'minor' : 'major'
+        res = await EditorApi.previewRevisionRequestEmail(id, { decision_type: decisionType, editor_message: '' })
+      }
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to preview author email'))
+      const preview = res.data as AuthorEmailPreviewData
+      setAuthorEmailPreviewData(preview)
+      setAuthorEmailPreviewRecipient(String(preview.recipient_email || '').trim())
+      setAuthorEmailPreviewCc((preview.resolved_recipients?.cc || []).join(', '))
+      setAuthorEmailPreviewReplyTo((preview.resolved_recipients?.reply_to || []).join(', '))
+      setAuthorEmailPreviewSubject(String(preview.subject || '').trim())
+      setAuthorEmailPreviewHtml(String(preview.html || '').trim())
+    } catch (e) {
+      setAuthorEmailPreviewOpen(false)
+      toast.error(e instanceof Error ? e.message : 'Failed to preview author email')
+    } finally {
+      setAuthorEmailPreviewLoading(false)
+    }
+  }, [id, statusLower])
+
+  const handleCloseAuthorEmailPreview = useCallback(() => {
+    if (authorEmailPreviewSending) return
+    setAuthorEmailPreviewOpen(false)
+    setAuthorEmailPreviewData(null)
+    setAuthorEmailPreviewMode(null)
+  }, [authorEmailPreviewSending])
+
+  const handleSendAuthorEmail = useCallback(async () => {
+    if (!authorEmailPreviewMode) return
+    const recipientEmail = String(authorEmailPreviewRecipient || '').trim()
+    const ccEmails = normalizeEmailListInput(authorEmailPreviewCc)
+    const replyToEmails = normalizeEmailListInput(authorEmailPreviewReplyTo)
+    const subjectOverride = String(authorEmailPreviewSubject || '').trim()
+    const bodyHtmlOverride = String(authorEmailPreviewHtml || '').trim()
+    
+    if (!recipientEmail || !subjectOverride || !bodyHtmlOverride) {
+      toast.error('Recipient, Subject, and Body are required.')
+      return
+    }
+
+    setAuthorEmailPreviewSending(true)
+    try {
+      const payload = {
+        recipient_email: recipientEmail,
+        cc_emails: ccEmails,
+        reply_to_emails: replyToEmails,
+        subject_override: subjectOverride,
+        body_html_override: bodyHtmlOverride,
+      }
+      let res
+      if (authorEmailPreviewMode === 'technical') {
+        res = await EditorApi.sendTechnicalRevisionEmail(id, payload)
+      } else {
+        res = await EditorApi.sendRevisionRequestEmail(id, payload)
+      }
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to send author email'))
+      
+      const isPreview = Boolean(res?.data?.preview_send)
+      if (isPreview) {
+        toast.success(`Preview email sent to ${recipientEmail}.`)
+      } else {
+        toast.success(`Author email sent successfully.`)
+        await refreshDetail({ force: true })
+      }
+      handleCloseAuthorEmailPreview()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send author email')
+    } finally {
+      setAuthorEmailPreviewSending(false)
+    }
+  }, [authorEmailPreviewMode, authorEmailPreviewRecipient, authorEmailPreviewCc, authorEmailPreviewReplyTo, authorEmailPreviewSubject, authorEmailPreviewHtml, id, handleCloseAuthorEmailPreview, refreshDetail])
+
+  const handleMarkExternalSentAuthorEmail = useCallback(async () => {
+    if (!authorEmailPreviewMode) return
+    
+    setAuthorEmailPreviewSending(true)
+    try {
+      let res
+      if (authorEmailPreviewMode === 'technical') {
+        res = await EditorApi.markTechnicalRevisionEmailExternalSent(id, { note: 'Sent manually by editor via external system' })
+      } else {
+        res = await EditorApi.markRevisionRequestEmailExternalSent(id, { note: 'Sent manually by editor via external system' })
+      }
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to mark as sent externally'))
+      
+      toast.success('Successfully marked as sent externally.')
+      await refreshDetail({ force: true })
+      handleCloseAuthorEmailPreview()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to mark as sent externally')
+    } finally {
+      setAuthorEmailPreviewSending(false)
+    }
+  }, [authorEmailPreviewMode, id, handleCloseAuthorEmailPreview, refreshDetail])
+
   const handleReviewerTemplateChange = useCallback((args: { assignmentId: string; templateKey: string }) => {
     const assignmentId = String(args.assignmentId || '').trim()
     const templateKey = String(args.templateKey || '').trim()
@@ -1392,6 +1509,7 @@ export default function EditorManuscriptDetailPage() {
             onReload={() => void refreshDetail({ force: true })}
             onOpenTransitionDialog={openTransitionDialog}
             getTransitionActionLabel={getTransitionActionLabel}
+            onOpenAuthorEmailPreview={handleOpenAuthorEmailPreview}
           />
 
           <TaskSlaSummaryCard
@@ -1437,6 +1555,32 @@ export default function EditorManuscriptDetailPage() {
           if (saved) toast.success('Invoice info updated')
         }}
         onSaveAndSend={handleSaveAndSendInvoiceEmail}
+      />
+
+      <AuthorEmailPreviewDialog
+        open={authorEmailPreviewOpen}
+        title={authorEmailPreviewMode === 'technical' ? 'Preview Technical Revision Email' : 'Preview Revision Request Email'}
+        description={
+          authorEmailPreviewMode === 'technical'
+            ? '发送技术退修邮件给作者。邮件发出后需要人工将稿件推进到 revision_before_review 状态。'
+            : '发送修回请求给作者。邮件发出后需确认稿件已处于正确的状态。'
+        }
+        loading={authorEmailPreviewLoading}
+        sending={authorEmailPreviewSending}
+        preview={authorEmailPreviewData}
+        recipientEmail={authorEmailPreviewRecipient}
+        ccValue={authorEmailPreviewCc}
+        replyToValue={authorEmailPreviewReplyTo}
+        subjectValue={authorEmailPreviewSubject}
+        htmlValue={authorEmailPreviewHtml}
+        onSubjectChange={setAuthorEmailPreviewSubject}
+        onHtmlChange={setAuthorEmailPreviewHtml}
+        onRecipientEmailChange={setAuthorEmailPreviewRecipient}
+        onCcChange={setAuthorEmailPreviewCc}
+        onReplyToChange={setAuthorEmailPreviewReplyTo}
+        onClose={handleCloseAuthorEmailPreview}
+        onSend={handleSendAuthorEmail}
+        onMarkExternalSent={handleMarkExternalSentAuthorEmail}
       />
 
       <ReviewerEmailPreviewDialog

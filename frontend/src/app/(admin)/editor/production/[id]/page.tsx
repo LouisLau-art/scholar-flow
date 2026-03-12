@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -9,13 +9,31 @@ import { EditorApi } from '@/services/editorApi'
 import { ProductionWorkspacePanel } from '@/components/editor/production/ProductionWorkspacePanel'
 import { ProductionActionPanel } from '@/components/editor/production/ProductionActionPanel'
 import { ProductionTimeline } from '@/components/editor/production/ProductionTimeline'
+import { AuthorEmailPreviewDialog } from '@/components/editor/AuthorEmailPreviewDialog'
 import type { ProductionWorkspaceContext } from '@/types/production'
+import type { AuthorEmailPreviewData } from '@/services/editor-api/types'
+import { normalizeApiErrorMessage } from '@/lib/normalizeApiError'
 
 type StaffOption = {
   id: string
   name: string
   email?: string | null
   roles?: string[] | null
+}
+
+function normalizeRecipientEmails(value: string): string[] {
+  const normalized = String(value || '')
+    .replace(/;/g, ',')
+    .replace(/\n/g, ',')
+  const parts = normalized
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  return Array.from(new Set(parts))
+}
+
+function normalizeEmailListInput(value: string): string[] {
+  return normalizeRecipientEmails(value)
 }
 
 export default function EditorProductionWorkspacePage() {
@@ -25,6 +43,101 @@ export default function EditorProductionWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [context, setContext] = useState<ProductionWorkspaceContext | null>(null)
   const [staff, setStaff] = useState<StaffOption[]>([])
+
+  const [emailPreviewOpen, setEmailPreviewOpen] = useState(false)
+  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false)
+  const [emailPreviewSending, setEmailPreviewSending] = useState(false)
+  const [emailPreviewData, setEmailPreviewData] = useState<AuthorEmailPreviewData | null>(null)
+  const [emailPreviewRecipient, setEmailPreviewRecipient] = useState('')
+  const [emailPreviewCc, setEmailPreviewCc] = useState('')
+  const [emailPreviewReplyTo, setEmailPreviewReplyTo] = useState('')
+  const [emailPreviewSubject, setEmailPreviewSubject] = useState('')
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState('')
+
+  const handleOpenProofreadingEmail = useCallback(async () => {
+    if (!context?.active_cycle?.id) return
+    setEmailPreviewOpen(true)
+    setEmailPreviewLoading(true)
+    try {
+      const res = await EditorApi.previewProofreadingEmail(manuscriptId, context.active_cycle.id, { editor_message: '' })
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to preview proofreading email'))
+      const preview = res.data as AuthorEmailPreviewData
+      setEmailPreviewData(preview)
+      setEmailPreviewRecipient(String(preview.recipient_email || '').trim())
+      setEmailPreviewCc((preview.resolved_recipients?.cc || []).join(', '))
+      setEmailPreviewReplyTo((preview.resolved_recipients?.reply_to || []).join(', '))
+      setEmailPreviewSubject(String(preview.subject || '').trim())
+      setEmailPreviewHtml(String(preview.html || '').trim())
+    } catch (e) {
+      setEmailPreviewOpen(false)
+      toast.error(e instanceof Error ? e.message : 'Failed to preview proofreading email')
+    } finally {
+      setEmailPreviewLoading(false)
+    }
+  }, [manuscriptId, context?.active_cycle?.id])
+
+  const handleCloseEmailPreview = useCallback(() => {
+    if (emailPreviewSending) return
+    setEmailPreviewOpen(false)
+    setEmailPreviewData(null)
+  }, [emailPreviewSending])
+
+  const handleSendEmail = useCallback(async () => {
+    if (!context?.active_cycle?.id) return
+    const recipientEmail = String(emailPreviewRecipient || '').trim()
+    const ccEmails = emailPreviewCc.replace(/;/g, ',').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    const replyToEmails = emailPreviewReplyTo.replace(/;/g, ',').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    const subjectOverride = String(emailPreviewSubject || '').trim()
+    const bodyHtmlOverride = String(emailPreviewHtml || '').trim()
+    
+    if (!recipientEmail || !subjectOverride || !bodyHtmlOverride) {
+      toast.error('Recipient, Subject, and Body are required.')
+      return
+    }
+
+    setEmailPreviewSending(true)
+    try {
+      const payload = {
+        recipient_email: recipientEmail,
+        cc_emails: ccEmails,
+        reply_to_emails: replyToEmails,
+        subject_override: subjectOverride,
+        body_html_override: bodyHtmlOverride,
+      }
+      const res = await EditorApi.sendProofreadingEmail(manuscriptId, context.active_cycle.id, payload)
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to send proofreading email'))
+      
+      const isPreview = Boolean(res?.data?.preview_send)
+      if (isPreview) {
+        toast.success(`Preview email sent to ${recipientEmail}.`)
+      } else {
+        toast.success(`Proofreading reminder sent successfully.`)
+        // maybe reload context
+      }
+      handleCloseEmailPreview()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send proofreading email')
+    } finally {
+      setEmailPreviewSending(false)
+    }
+  }, [context?.active_cycle?.id, emailPreviewRecipient, emailPreviewCc, emailPreviewReplyTo, emailPreviewSubject, emailPreviewHtml, manuscriptId, handleCloseEmailPreview])
+
+  const handleMarkExternalSentEmail = useCallback(async () => {
+    if (!context?.active_cycle?.id) return
+    
+    setEmailPreviewSending(true)
+    try {
+      const res = await EditorApi.markProofreadingEmailExternalSent(manuscriptId, context.active_cycle.id, { note: 'Sent manually by editor via external system' })
+      if (!res?.success) throw new Error(normalizeApiErrorMessage(res, 'Failed to mark as sent externally'))
+      
+      toast.success('Successfully marked as sent externally.')
+      handleCloseEmailPreview()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to mark as sent externally')
+    } finally {
+      setEmailPreviewSending(false)
+    }
+  }, [context?.active_cycle?.id, manuscriptId, handleCloseEmailPreview])
 
   const load = async () => {
     setLoading(true)
@@ -130,9 +243,32 @@ export default function EditorProductionWorkspacePage() {
             activeCycle={context.active_cycle || null}
             canApprove={Boolean(context.permissions?.can_approve)}
             onApproved={load}
+            onOpenProofreadingEmail={handleOpenProofreadingEmail}
           />
         </section>
       </div>
+
+      <AuthorEmailPreviewDialog
+        open={emailPreviewOpen}
+        title="Preview Proofreading Reminder Email"
+        description="发送清样校对提醒邮件给作者。"
+        loading={emailPreviewLoading}
+        sending={emailPreviewSending}
+        preview={emailPreviewData}
+        recipientEmail={emailPreviewRecipient}
+        ccValue={emailPreviewCc}
+        replyToValue={emailPreviewReplyTo}
+        subjectValue={emailPreviewSubject}
+        htmlValue={emailPreviewHtml}
+        onSubjectChange={setEmailPreviewSubject}
+        onHtmlChange={setEmailPreviewHtml}
+        onRecipientEmailChange={setEmailPreviewRecipient}
+        onCcChange={setEmailPreviewCc}
+        onReplyToChange={setEmailPreviewReplyTo}
+        onClose={handleCloseEmailPreview}
+        onSend={handleSendEmail}
+        onMarkExternalSent={handleMarkExternalSentEmail}
+      />
     </main>
   )
 }
