@@ -332,6 +332,17 @@ Reviewer 当前主入口为邮件中的 magic link：
 - `Previous Round Reviewers` 只是上一轮 reviewer 的复用建议，不会自动算作当前轮已选
 - 如果编辑部要继续沿用上一轮 reviewer，必须手动点击 `Add to Selection`
 
+### 6.5 Reviewer 邮件发送前编辑
+
+当前 reviewer email preview 弹窗已改成发送前 compose：
+
+- `Subject` 可由 AE / ME 直接编辑
+- `Email Body` 可由 AE / ME 直接在富文本编辑器中修改
+- `Plain Text` 不再单独人工维护，而是根据当前 HTML 自动生成，只读展示
+- 本次修改只影响当前这一封 reviewer 邮件
+- 不会回写底层 `email_templates`
+- 如果收件人改成非 reviewer 邮箱，仍只做 preview/test send，不推进 assignment 状态
+
 ## 7. AE 离开 Under Review 的规则
 
 ### 7.1 当前系统已放开的口径

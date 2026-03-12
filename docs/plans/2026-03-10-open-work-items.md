@@ -136,6 +136,10 @@
   - 发送前先预览
   - 支持改收件人
   - 支持查看变量已渲染后的 HTML
+  - reviewer email preview 已改成 compose-only：
+    - `Subject` 可编辑
+    - `HTML Body` 可编辑
+    - `Plain Text` 由当前 HTML 自动派生，只读
   - override 收件人时按 preview/test-send 处理，不推进 reviewer 状态机
 
 ## 三、Reviewer / Decision 仍需继续收口

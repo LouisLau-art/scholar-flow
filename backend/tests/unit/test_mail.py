@@ -143,3 +143,17 @@ def test_send_inline_email_deduplicates_template_tag_for_resend():
         {"name": "assignment_id", "value": "assignment_1"},
         {"name": "template", "value": "reviewer_invitation_standard"},
     ]
+
+
+def test_derive_plain_text_from_html_preserves_link_targets():
+    service = EmailService(
+        smtp_config=None,
+        resend_config=None,
+        supabase_client=None,
+    )
+
+    text = service.derive_plain_text_from_html(
+        '<p>Hello <a href="https://example.com/review">Review Link</a></p><p>Thanks</p>'
+    )
+
+    assert text == "Hello Review Link (https://example.com/review)\n\nThanks"

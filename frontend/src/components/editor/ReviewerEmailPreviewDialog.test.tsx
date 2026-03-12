@@ -1,9 +1,25 @@
+import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ReviewerEmailPreviewData } from '@/app/(admin)/editor/manuscript/[id]/types'
 
 import { ReviewerEmailPreviewDialog } from './ReviewerEmailPreviewDialog'
+
+vi.mock('./ReviewerEmailComposeEditor', () => ({
+  ReviewerEmailComposeEditor: (props: {
+    value: string
+    disabled?: boolean
+    onChange: (value: string) => void
+  }) => (
+    <textarea
+      data-testid="reviewer-email-compose-editor"
+      value={props.value}
+      readOnly={Boolean(props.disabled)}
+      onChange={(event) => props.onChange(event.target.value)}
+    />
+  ),
+}))
 
 const preview: ReviewerEmailPreviewData = {
   assignment_id: 'assignment-1',
@@ -17,29 +33,60 @@ const preview: ReviewerEmailPreviewData = {
   journal_title: 'Journal One',
   review_url: 'https://example.com/review/invite?token=abc',
   subject: 'Invitation to Review - Journal One',
-  html: '<p>Hello reviewer</p>',
+  html: '<p>Hello <a href="https://example.com/review/invite?token=abc">Review Link</a></p>',
   text: 'Hello reviewer',
 }
 
 describe('ReviewerEmailPreviewDialog', () => {
-  it('renders preview content and override warning when recipient changes', () => {
+  it('allows editing subject/html and keeps plain text derived from current html', () => {
     const onRecipientEmailChange = vi.fn()
+    const onSend = vi.fn()
+
+    function Wrapper() {
+      const [recipient, setRecipient] = useState('assistant@example.com')
+      const [subject, setSubject] = useState(preview.subject)
+      const [html, setHtml] = useState(preview.html)
+
+      return (
+        <ReviewerEmailPreviewDialog
+          open
+          loading={false}
+          sending={false}
+          preview={preview}
+          recipientEmail={recipient}
+          subjectValue={subject}
+          htmlValue={html}
+          onSubjectChange={setSubject}
+          onHtmlChange={setHtml}
+          onRecipientEmailChange={(value) => {
+            setRecipient(value)
+            onRecipientEmailChange(value)
+          }}
+          onClose={vi.fn()}
+          onSend={onSend}
+        />
+      )
+    }
+
     render(
-      <ReviewerEmailPreviewDialog
-        open
-        loading={false}
-        sending={false}
-        preview={preview}
-        recipientEmail="assistant@example.com"
-        onRecipientEmailChange={onRecipientEmailChange}
-        onClose={vi.fn()}
-        onSend={vi.fn()}
-      />
+      <Wrapper />
     )
 
     expect(screen.getByRole('heading', { name: 'Preview Reviewer Email' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('Invitation to Review - Journal One')).toBeInTheDocument()
     expect(screen.getByText(/本次只会发送测试\/预览邮件/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Plain Text')).toHaveValue(
+      'Hello Review Link (https://example.com/review/invite?token=abc)'
+    )
+    expect(screen.getByLabelText('Plain Text')).toHaveAttribute('readonly')
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Custom subject' } })
+    expect(screen.getByDisplayValue('Custom subject')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByTestId('reviewer-email-compose-editor'), {
+      target: { value: '<p>Updated <strong>body</strong> <a href="https://example.com/next">Go</a></p>' },
+    })
+    expect(screen.getByLabelText('Plain Text')).toHaveValue('Updated body Go (https://example.com/next)')
 
     fireEvent.change(screen.getByLabelText('Recipient'), { target: { value: 'owner@example.com' } })
     expect(onRecipientEmailChange).toHaveBeenCalledWith('owner@example.com')

@@ -388,7 +388,12 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
 
     async sendReviewerAssignmentEmail(
       assignmentId: string,
-      payload: { template_key: string; recipient_email?: string }
+      payload: {
+        template_key: string
+        recipient_email?: string
+        subject_override?: string
+        body_html_override?: string
+      }
     ) {
       const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/send-email`, {
         method: 'POST',
@@ -400,7 +405,12 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
 
     async previewReviewerAssignmentEmail(
       assignmentId: string,
-      payload: { template_key: string; recipient_email?: string }
+      payload: {
+        template_key: string
+        recipient_email?: string
+        subject_override?: string
+        body_html_override?: string
+      }
     ) {
       const res = await authedFetch(`/api/v1/reviews/assignments/${encodeURIComponent(assignmentId)}/preview-email`, {
         method: 'POST',

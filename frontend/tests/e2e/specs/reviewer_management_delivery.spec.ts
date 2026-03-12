@@ -7,6 +7,207 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
 }
 
 test.describe('Reviewer management delivery evidence (mocked backend)', () => {
+  test('reviewer email compose uses editable subject and derived plain text overrides', async ({ page }) => {
+    await enableE2EAuthBypass(page)
+    await seedSession(page, buildSession('00000000-0000-0000-0000-000000000001', 'editor@example.com'))
+
+    const manuscriptId = '00000000-0000-0000-0000-000000000304'
+    const reviewerId = 'reviewer-2'
+    const assignmentId = 'ra-2'
+    let sendPayload: Record<string, unknown> | null = null
+
+    await page.route('**/api/v1/**', async (route) => {
+      const req = route.request()
+      const pathname = new URL(req.url()).pathname
+
+      if (pathname === '/api/v1/cms/menu') {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+      if (pathname === '/api/v1/user/profile') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: { roles: ['admin', 'managing_editor', 'assistant_editor'] },
+        })
+      }
+      if (pathname === '/api/v1/notifications') {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+      if (pathname === '/api/v1/editor/rbac/context') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            user_id: '00000000-0000-0000-0000-000000000001',
+            roles: ['admin', 'managing_editor', 'assistant_editor'],
+            normalized_roles: ['admin', 'managing_editor', 'assistant_editor'],
+            allowed_actions: [
+              'process:view',
+              'manuscript:view_detail',
+              'review:assign',
+              'review:view_assignments',
+              'review:unassign',
+            ],
+            journal_scope: {
+              enforcement_enabled: false,
+              allowed_journal_ids: [],
+              is_admin: true,
+            },
+          },
+        })
+      }
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}` && req.method() === 'GET') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            id: manuscriptId,
+            title: 'Reviewer Email Compose Manuscript',
+            status: 'under_review',
+            updated_at: '2026-03-09T12:00:00Z',
+            created_at: '2026-03-09T10:00:00Z',
+            is_deferred_context_loaded: true,
+            journals: { title: 'Journal C' },
+            owner: { full_name: 'Owner User', email: 'owner@example.com' },
+            editor: { full_name: 'Editor User', email: 'editor@example.com' },
+            assistant_editor: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+            assistant_editor_id: 'ae-1',
+            role_queue: {
+              current_role: 'assistant_editor',
+              current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+            },
+            files: [],
+            signed_files: {},
+            reviewer_invites: [
+              {
+                id: assignmentId,
+                reviewer_id: reviewerId,
+                reviewer_name: 'Reviewer User',
+                reviewer_email: 'reviewer@example.com',
+                status: 'selected',
+                round_number: 1,
+                due_at: '2026-03-16T00:00:00Z',
+                invited_at: null,
+                opened_at: null,
+                accepted_at: null,
+                declined_at: null,
+                last_reminded_at: null,
+                submitted_at: null,
+                latest_email_status: null,
+                latest_email_at: null,
+                latest_email_error: null,
+                email_events: [],
+              },
+            ],
+            author_response_history: [],
+          },
+        })
+      }
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/cards-context`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            task_summary: {
+              open_tasks_count: 0,
+              overdue_tasks_count: 0,
+              is_overdue: false,
+              nearest_due_at: null,
+            },
+            role_queue: {
+              current_role: 'assistant_editor',
+              current_assignee: { id: 'ae-1', full_name: 'AE User', email: 'ae@example.com' },
+              current_assignee_label: null,
+              assigned_at: '2026-03-09T10:00:00Z',
+              technical_completed_at: null,
+              academic_completed_at: null,
+            },
+          },
+        })
+      }
+      if (pathname === `/api/v1/manuscripts/${manuscriptId}/reviews`) {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+      if (pathname === '/api/v1/reviews/email-templates') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: [
+            {
+              template_key: 'reviewer_invitation_standard',
+              display_name: '审稿邀请信（正式）',
+              scene: 'reviewer_assignment',
+              event_type: 'invitation',
+            },
+          ],
+        })
+      }
+      if (pathname === `/api/v1/reviews/assignments/${assignmentId}/preview-email` && req.method() === 'POST') {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            assignment_id: assignmentId,
+            template_key: 'reviewer_invitation_standard',
+            template_display_name: '审稿邀请信（正式）',
+            event_type: 'invitation',
+            reviewer_email: 'reviewer@example.com',
+            reviewer_name: 'Reviewer User',
+            recipient_email: 'reviewer@example.com',
+            recipient_overridden: false,
+            journal_title: 'Journal C',
+            review_url: 'https://example.com/review/invite?token=abc',
+            subject: 'Invitation to Review - Journal C',
+            html: '<p>Hello <a href="https://example.com/review/invite?token=abc">Review Link</a></p>',
+            text: 'MISMATCHED TEXT',
+          },
+        })
+      }
+      if (pathname === `/api/v1/reviews/assignments/${assignmentId}/send-email` && req.method() === 'POST') {
+        sendPayload = JSON.parse(req.postData() || '{}')
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            assignment_id: assignmentId,
+            template_key: 'reviewer_invitation_standard',
+            template_display_name: '审稿邀请信（正式）',
+            event_type: 'invitation',
+            recipient: 'reviewer@example.com',
+            reviewer_email: 'reviewer@example.com',
+            recipient_overridden: false,
+            preview_send: false,
+            journal_title: 'Journal C',
+            idempotency_key: 'preview-send-1',
+            delivery_status: 'sent',
+            delivery_error: null,
+            delivery_subject: 'Custom reviewer subject',
+          },
+        })
+      }
+
+      return fulfillJson(route, 200, { success: true, data: [] })
+    })
+
+    await page.goto(`/editor/manuscript/${manuscriptId}`, { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('heading', { name: 'Reviewer Email Compose Manuscript' })).toBeVisible({ timeout: 15000 })
+    await page.getByTestId(`reviewer-send-template-${assignmentId}`).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByRole('heading', { name: 'Preview Reviewer Email' })).toBeVisible()
+    await expect(dialog.getByLabel('Plain Text')).toHaveValue(
+      'Hello Review Link (https://example.com/review/invite?token=abc)'
+    )
+
+    await dialog.getByLabel('Subject').fill('Custom reviewer subject')
+    await dialog.getByRole('button', { name: 'Send Email' }).click()
+
+    await expect
+      .poll(() => sendPayload, { message: 'reviewer send payload should include compose overrides' })
+      .not.toBeNull()
+    expect(sendPayload).toMatchObject({
+      template_key: 'reviewer_invitation_standard',
+      recipient_email: 'reviewer@example.com',
+      subject_override: 'Custom reviewer subject',
+    })
+    expect(String(sendPayload?.body_html_override || '')).toContain('Review Link')
+    expect(String(sendPayload?.body_html_override || '')).toContain('https://example.com/review/invite?token=abc')
+  })
+
   test('treats previous-round reviewers as explicit reuse suggestions', async ({ page }) => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('00000000-0000-0000-0000-000000000001', 'editor@example.com'))

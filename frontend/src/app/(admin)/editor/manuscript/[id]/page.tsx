@@ -169,6 +169,8 @@ export default function EditorManuscriptDetailPage() {
   const [reviewerEmailPreviewSending, setReviewerEmailPreviewSending] = useState(false)
   const [reviewerEmailPreviewData, setReviewerEmailPreviewData] = useState<ReviewerEmailPreviewData | null>(null)
   const [reviewerEmailPreviewRecipient, setReviewerEmailPreviewRecipient] = useState('')
+  const [reviewerEmailPreviewSubject, setReviewerEmailPreviewSubject] = useState('')
+  const [reviewerEmailPreviewHtml, setReviewerEmailPreviewHtml] = useState('')
   const [reviewerEmailPreviewAssignmentId, setReviewerEmailPreviewAssignmentId] = useState('')
   const [reviewerHistoryOpen, setReviewerHistoryOpen] = useState(false)
   const [reviewerHistoryLoading, setReviewerHistoryLoading] = useState(false)
@@ -995,10 +997,14 @@ export default function EditorManuscriptDetailPage() {
         }
         setReviewerEmailPreviewData((res.data as ReviewerEmailPreviewData) || null)
         setReviewerEmailPreviewRecipient(String(res?.data?.recipient_email || '').trim())
+        setReviewerEmailPreviewSubject(String(res?.data?.subject || '').trim())
+        setReviewerEmailPreviewHtml(String(res?.data?.html || '').trim())
       } catch (e) {
         setReviewerEmailPreviewOpen(false)
         setReviewerEmailPreviewData(null)
         setReviewerEmailPreviewRecipient('')
+        setReviewerEmailPreviewSubject('')
+        setReviewerEmailPreviewHtml('')
         setReviewerEmailPreviewAssignmentId('')
         toast.error(e instanceof Error ? e.message : 'Failed to preview reviewer email')
       } finally {
@@ -1015,6 +1021,8 @@ export default function EditorManuscriptDetailPage() {
     setReviewerEmailPreviewLoading(false)
     setReviewerEmailPreviewData(null)
     setReviewerEmailPreviewRecipient('')
+    setReviewerEmailPreviewSubject('')
+    setReviewerEmailPreviewHtml('')
     setReviewerEmailPreviewAssignmentId('')
   }, [reviewerEmailPreviewSending])
 
@@ -1022,7 +1030,9 @@ export default function EditorManuscriptDetailPage() {
     const assignmentId = String(reviewerEmailPreviewAssignmentId || '').trim()
     const templateKey = String(reviewerEmailPreviewData?.template_key || '').trim()
     const recipientEmail = String(reviewerEmailPreviewRecipient || '').trim()
-    if (!assignmentId || !templateKey || !recipientEmail) {
+    const subjectOverride = String(reviewerEmailPreviewSubject || '').trim()
+    const bodyHtmlOverride = String(reviewerEmailPreviewHtml || '').trim()
+    if (!assignmentId || !templateKey || !recipientEmail || !subjectOverride || !bodyHtmlOverride) {
       toast.error('Reviewer email preview is incomplete.')
       return
     }
@@ -1032,6 +1042,8 @@ export default function EditorManuscriptDetailPage() {
       const res = await EditorApi.sendReviewerAssignmentEmail(assignmentId, {
         template_key: templateKey,
         recipient_email: recipientEmail,
+        subject_override: subjectOverride,
+        body_html_override: bodyHtmlOverride,
       })
       if (!res?.success) {
         throw new Error(normalizeApiErrorMessage(res, 'Failed to send reviewer email'))
@@ -1063,7 +1075,9 @@ export default function EditorManuscriptDetailPage() {
     refreshDetail,
     reviewerEmailPreviewAssignmentId,
     reviewerEmailPreviewData?.template_key,
+    reviewerEmailPreviewHtml,
     reviewerEmailPreviewRecipient,
+    reviewerEmailPreviewSubject,
   ])
 
   const handleReviewerTemplateChange = useCallback((args: { assignmentId: string; templateKey: string }) => {
@@ -1352,6 +1366,10 @@ export default function EditorManuscriptDetailPage() {
         sending={reviewerEmailPreviewSending}
         preview={reviewerEmailPreviewData}
         recipientEmail={reviewerEmailPreviewRecipient}
+        subjectValue={reviewerEmailPreviewSubject}
+        htmlValue={reviewerEmailPreviewHtml}
+        onSubjectChange={setReviewerEmailPreviewSubject}
+        onHtmlChange={setReviewerEmailPreviewHtml}
         onRecipientEmailChange={setReviewerEmailPreviewRecipient}
         onClose={handleCloseReviewerEmailPreview}
         onSend={handleConfirmReviewerTemplateEmail}

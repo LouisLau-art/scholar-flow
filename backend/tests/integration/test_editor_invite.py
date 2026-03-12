@@ -737,6 +737,193 @@ async def test_send_assignment_email_with_recipient_override_does_not_advance_as
 
 
 @pytest.mark.asyncio
+async def test_preview_assignment_email_accepts_compose_overrides(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://scholar-flow-q1yw.vercel.app")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccad")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaace")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbac")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": None,
+                    "last_reminded_at": None,
+                    "invited_by": None,
+                    "invited_via": None,
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Preview Override Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/preview-email",
+            json={
+                "template_key": "reviewer_invitation_standard",
+                "subject_override": "Custom reviewer subject",
+                "body_html_override": '<p>Hello <a href="https://example.com/review">Review Link</a></p>',
+            },
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    data = payload["data"]
+    assert data["subject"] == "Custom reviewer subject"
+    assert data["html"] == '<p>Hello <a href="https://example.com/review">Review Link</a></p>'
+    assert data["text"] == "Hello Review Link (https://example.com/review)"
+
+
+@pytest.mark.asyncio
+async def test_send_assignment_email_uses_compose_overrides_without_advancing_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    monkeypatch.setenv("MAGIC_LINK_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://scholar-flow-q1yw.vercel.app")
+
+    assignment_id = UUID("cccccccc-cccc-cccc-cccc-ccccccccccae")
+    manuscript_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaacf")
+    reviewer_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbad")
+    editor_id = "00000000-0000-0000-0000-000000000000"
+
+    supabase = _Client(
+        {
+            "user_profiles": [
+                [{"id": editor_id, "email": "test@example.com", "roles": ["managing_editor"]}],
+            ],
+        }
+    )
+    supabase_admin = _Client(
+        {
+            "email_templates": [],
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "selected",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "invited_at": None,
+                    "last_reminded_at": None,
+                    "invited_by": None,
+                    "invited_via": None,
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Override Send Manuscript",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": editor_id,
+                    "status": "pre_check",
+                },
+            ],
+            "user_profiles": [
+                {"email": "reviewer@example.com", "full_name": "Reviewer X"},
+            ],
+            "journals": [
+                {"title": "Journal One"},
+            ],
+        }
+    )
+
+    send_mock = MagicMock(
+        return_value={
+            "ok": True,
+            "status": "sent",
+            "subject": "Custom reviewer subject",
+            "provider_id": "re_mock_id",
+            "error_message": None,
+        }
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    with (
+        patch("app.api.v1.reviews.supabase", supabase),
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.services.reviewer_service.supabase_admin", supabase_admin),
+        patch("app.lib.api_client.supabase", supabase),
+        patch("app.lib.api_client.supabase_admin", supabase_admin),
+        patch("app.core.roles.supabase", supabase),
+        patch("app.api.v1.reviews.email_service.send_rendered_email", send_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/send-email",
+            json={
+                "template_key": "reviewer_invitation_standard",
+                "recipient_email": "assistant@example.com",
+                "subject_override": "Custom reviewer subject",
+                "body_html_override": '<p>Hello <a href="https://example.com/review">Review Link</a></p>',
+            },
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload.get("success") is True
+    assert payload["data"]["delivery_status"] == "sent"
+    assert payload["data"]["preview_send"] is True
+    assert payload["data"]["recipient_overridden"] is True
+    assert payload["data"]["recipient"] == "assistant@example.com"
+    assert send_mock.call_args.kwargs["to_email"] == "assistant@example.com"
+    assert send_mock.call_args.kwargs["subject"] == "Custom reviewer subject"
+    assert send_mock.call_args.kwargs["html_body"] == '<p>Hello <a href="https://example.com/review">Review Link</a></p>'
+    assert send_mock.call_args.kwargs["text_body"] == "Hello Review Link (https://example.com/review)"
+    assert supabase_admin._update_calls.get("review_assignments") in (None, [])
+    assert supabase_admin._update_calls.get("manuscripts") in (None, [])
+
+
+@pytest.mark.asyncio
 async def test_cancel_assignment_marks_cancel_audit_and_preserves_history(
     client: AsyncClient,
     auth_token: str,

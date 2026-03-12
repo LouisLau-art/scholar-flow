@@ -122,11 +122,21 @@ class AssignmentEmailActionPayload(BaseModel):
     template: str | None = None
     recipient_email: EmailStr | None = None
     idempotency_key: str | None = None
+    subject_override: str | None = None
+    body_html_override: str | None = None
 
     @field_validator("recipient_email", mode="before")
     @classmethod
     def _normalize_recipient_email(cls, value: Any) -> Any:
         normalized = normalize_email(value)
+        return normalized or None
+
+    @field_validator("subject_override", "body_html_override", mode="before")
+    @classmethod
+    def _normalize_string_override(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        normalized = str(value).strip()
         return normalized or None
 
 
@@ -384,6 +394,38 @@ def _build_assignment_email_context(
 
 def _resolve_assignment_email_payload_template_key(payload: AssignmentEmailActionPayload) -> str:
     return str(payload.template_key or payload.template or "reviewer_invitation_standard")
+
+
+def _render_assignment_email_preview_payload(
+    *,
+    subject_template: str,
+    body_html_template: str,
+    context: dict[str, str],
+    payload: AssignmentEmailActionPayload,
+) -> dict[str, str]:
+    subject_override = str(payload.subject_override or "").strip() or None
+    html_override = str(payload.body_html_override or "").strip() or None
+    if subject_override is None and html_override is None:
+        return email_service.render_inline_email_preview(
+            subject_template=subject_template,
+            body_html_template=body_html_template,
+            body_text_template=None,
+            context=context,
+        )
+
+    rendered_subject = subject_override
+    if rendered_subject is None:
+        rendered_subject = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
+
+    rendered_html = html_override
+    if rendered_html is None:
+        rendered_html = email_service.render_inline_template(body_html_template, context)
+
+    return {
+        "subject": rendered_subject or "(no subject)",
+        "html": rendered_html,
+        "text": email_service.derive_plain_text_from_html(rendered_html),
+    }
 
 
 def _prepare_assignment_email_resources(
@@ -1164,11 +1206,11 @@ async def preview_assignment_email(
         due_at=due_at,
         review_url=_build_review_assignment_url(token=token),
     )
-    preview = email_service.render_inline_email_preview(
+    preview = _render_assignment_email_preview_payload(
         subject_template=prepared["subject_template"],
         body_html_template=prepared["body_html_template"],
-        body_text_template=prepared["body_text_template"],
         context=context,
+        payload=body,
     )
     return {
         "success": True,
@@ -1217,7 +1259,6 @@ async def send_assignment_email(
     template_key = prepared["template_key"]
     subject_template = prepared["subject_template"]
     body_html_template = prepared["body_html_template"]
-    body_text_template = prepared["body_text_template"]
     event_type = prepared["event_type"]
     assignment = prepared["assignment"]
     manuscript = prepared["manuscript"]
@@ -1304,18 +1345,20 @@ async def send_assignment_email(
         due_at=effective_due_at,
         review_url=_build_review_assignment_url(token=token),
     )
-    try:
-        subject_preview = email_service.render_inline_template(subject_template, context).strip() or "(no subject)"
-    except Exception:
-        subject_preview = subject_template or "(queued)"
-
-    delivery = email_service.send_inline_email(
-        to_email=recipient_email,
-        template_key=template_key,
+    rendered_preview = _render_assignment_email_preview_payload(
         subject_template=subject_template,
         body_html_template=body_html_template,
-        body_text_template=body_text_template,
         context=context,
+        payload=body,
+    )
+    subject_preview = str(rendered_preview.get("subject") or "(no subject)").strip() or "(no subject)"
+
+    delivery = email_service.send_rendered_email(
+        to_email=recipient_email,
+        template_key=template_key,
+        subject=rendered_preview["subject"],
+        html_body=rendered_preview["html"],
+        text_body=rendered_preview["text"],
         idempotency_key=idempotency_key,
         tags=email_tags,
         headers=email_headers,

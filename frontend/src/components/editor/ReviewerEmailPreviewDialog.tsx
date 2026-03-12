@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { derivePlainTextFromHtml } from '@/lib/derive-plain-text-from-html'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SafeDialog, SafeDialogContent } from '@/components/ui/safe-dialog'
 import type { ReviewerEmailPreviewData } from '@/app/(admin)/editor/manuscript/[id]/types'
+import { ReviewerEmailComposeEditor } from './ReviewerEmailComposeEditor'
 
 type ReviewerEmailPreviewDialogProps = {
   open: boolean
@@ -16,6 +18,10 @@ type ReviewerEmailPreviewDialogProps = {
   sending: boolean
   preview: ReviewerEmailPreviewData | null
   recipientEmail: string
+  subjectValue: string
+  htmlValue: string
+  onSubjectChange: (value: string) => void
+  onHtmlChange: (value: string) => void
   onRecipientEmailChange: (value: string) => void
   onClose: () => void
   onSend: () => void
@@ -27,6 +33,10 @@ export function ReviewerEmailPreviewDialog({
   sending,
   preview,
   recipientEmail,
+  subjectValue,
+  htmlValue,
+  onSubjectChange,
+  onHtmlChange,
   onRecipientEmailChange,
   onClose,
   onSend,
@@ -34,6 +44,7 @@ export function ReviewerEmailPreviewDialog({
   const reviewerEmail = String(preview?.reviewer_email || '').trim().toLowerCase()
   const normalizedRecipient = String(recipientEmail || '').trim().toLowerCase()
   const recipientOverridden = Boolean(normalizedRecipient && reviewerEmail && normalizedRecipient !== reviewerEmail)
+  const derivedPlainText = derivePlainTextFromHtml(htmlValue)
 
   return (
     <SafeDialog open={open} onClose={onClose} closeDisabled={sending}>
@@ -56,19 +67,16 @@ export function ReviewerEmailPreviewDialog({
               <div className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="reviewer-email-preview-subject">Subject</Label>
-                  <Input id="reviewer-email-preview-subject" value={preview.subject} readOnly />
+                  <Input
+                    id="reviewer-email-preview-subject"
+                    value={subjectValue}
+                    disabled={sending}
+                    onChange={(event) => onSubjectChange(event.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="reviewer-email-preview-html">HTML Preview</Label>
-                  <div className="overflow-hidden rounded-md border bg-white">
-                    <iframe
-                      id="reviewer-email-preview-html"
-                      title="Reviewer email HTML preview"
-                      srcDoc={preview.html}
-                      className="h-[420px] w-full bg-white"
-                      sandbox=""
-                    />
-                  </div>
+                  <Label htmlFor="reviewer-email-preview-html">Email Body</Label>
+                  <ReviewerEmailComposeEditor value={htmlValue} disabled={sending} onChange={onHtmlChange} />
                 </div>
               </div>
 
@@ -109,7 +117,7 @@ export function ReviewerEmailPreviewDialog({
                   <Label htmlFor="reviewer-email-preview-text">Plain Text</Label>
                   <Textarea
                     id="reviewer-email-preview-text"
-                    value={preview.text}
+                    value={derivedPlainText}
                     readOnly
                     className="min-h-[220px] resize-y text-xs"
                   />

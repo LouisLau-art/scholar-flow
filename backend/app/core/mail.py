@@ -21,6 +21,11 @@ _TAG_TOKEN_RE = re.compile(r"[^A-Za-z0-9_-]+")
 _IDEMPOTENCY_TOKEN_RE = re.compile(r"[^A-Za-z0-9_:/.\-]+")
 _SPACE_RE = re.compile(r"\s+")
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_LINK_RE = re.compile(r"<a\b[^>]*href=['\"]?([^'\">\s]+)[^>]*>(.*?)</a>", flags=re.IGNORECASE | re.DOTALL)
+_HTML_BREAK_RE = re.compile(r"<br\s*/?>", flags=re.IGNORECASE)
+_HTML_PARAGRAPH_CLOSE_RE = re.compile(r"</(p|div|h[1-6]|section|article)>", flags=re.IGNORECASE)
+_HTML_BLOCK_CLOSE_RE = re.compile(r"</(li|ul|ol|tr|table)>", flags=re.IGNORECASE)
+_HTML_LIST_OPEN_RE = re.compile(r"<li\b[^>]*>", flags=re.IGNORECASE)
 _SCRIPT_STYLE_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", flags=re.IGNORECASE | re.DOTALL)
 
 
@@ -191,11 +196,31 @@ class EmailService:
         return normalized or None
 
     def _build_plain_text_from_html(self, html_body: str) -> str:
+        def _replace_link(match: re.Match[str]) -> str:
+            href = unescape(str(match.group(1) or "").strip())
+            inner_html = str(match.group(2) or "")
+            inner_text = _HTML_TAG_RE.sub(" ", inner_html)
+            inner_text = unescape(_SPACE_RE.sub(" ", inner_text).strip())
+            if inner_text and href:
+                return inner_text if inner_text == href else f"{inner_text} ({href})"
+            return inner_text or href
+
         cleaned = _SCRIPT_STYLE_RE.sub(" ", str(html_body or ""))
+        cleaned = _HTML_LINK_RE.sub(_replace_link, cleaned)
+        cleaned = _HTML_BREAK_RE.sub("\n", cleaned)
+        cleaned = _HTML_PARAGRAPH_CLOSE_RE.sub("\n\n", cleaned)
+        cleaned = _HTML_BLOCK_CLOSE_RE.sub("\n", cleaned)
+        cleaned = _HTML_LIST_OPEN_RE.sub("- ", cleaned)
         cleaned = _HTML_TAG_RE.sub(" ", cleaned)
         cleaned = unescape(cleaned)
-        cleaned = _SPACE_RE.sub(" ", cleaned).strip()
+        cleaned = cleaned.replace("\r", "")
+        cleaned = re.sub(r"[ \t\f\v]+", " ", cleaned)
+        cleaned = re.sub(r" *\n *", "\n", cleaned)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
         return cleaned[:10_000]
+
+    def derive_plain_text_from_html(self, html_body: str) -> str:
+        return self._build_plain_text_from_html(html_body)
 
     def render_inline_email_preview(
         self,
@@ -487,16 +512,55 @@ class EmailService:
             result["error_message"] = str(e)
             return result
 
+        return self.send_rendered_email(
+            to_email=to_email,
+            template_key=template_key,
+            subject=subject,
+            html_body=html,
+            text_body=text,
+            idempotency_key=idempotency_key,
+            tags=tags,
+            headers=headers,
+            audit_context=audit_context,
+        )
+
+    def send_rendered_email(
+        self,
+        *,
+        to_email: str,
+        template_key: str,
+        subject: str,
+        html_body: str,
+        text_body: str | None = None,
+        idempotency_key: str | None = None,
+        tags: Sequence[Mapping[str, str]] | None = None,
+        headers: Mapping[str, str] | None = None,
+        audit_context: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        result = {
+            "ok": False,
+            "status": EmailStatus.FAILED.value,
+            "subject": str(subject or "(no subject)").strip() or "(no subject)",
+            "provider_id": None,
+            "error_message": None,
+        }
+        if not self.is_configured():
+            result["error_message"] = "Email provider is not configured"
+            return result
+
+        subject_value = result["subject"]
+        text_value = text_body if text_body is not None else self._build_plain_text_from_html(html_body)
+
         if self.smtp_config:
-            ok = self.send_email(to_email=to_email, subject=subject, html_body=html, text_body=text)
+            ok = self.send_email(to_email=to_email, subject=subject_value, html_body=html_body, text_body=text_value)
             if ok:
-                self._log_attempt(to_email, subject, template_key, EmailStatus.SENT, audit_context=audit_context)
+                self._log_attempt(to_email, subject_value, template_key, EmailStatus.SENT, audit_context=audit_context)
                 result["ok"] = True
                 result["status"] = EmailStatus.SENT.value
             else:
                 self._log_attempt(
                     to_email,
-                    subject,
+                    subject_value,
                     template_key,
                     EmailStatus.FAILED,
                     error_message="send failed",
@@ -514,9 +578,9 @@ class EmailService:
         try:
             res = self._send_resend_message(
                 to_email=to_email,
-                subject=subject,
-                html_body=html,
-                text_body=text,
+                subject=subject_value,
+                html_body=html_body,
+                text_body=text_value,
                 sender=resend_cfg.sender,
                 idempotency_key=idempotency_key,
                 tags=merged_tags,
@@ -525,7 +589,7 @@ class EmailService:
             provider_id = (res or {}).get("id") if isinstance(res, dict) else None
             self._log_attempt(
                 to_email,
-                subject,
+                subject_value,
                 template_key,
                 EmailStatus.SENT,
                 provider_id=provider_id,
@@ -538,7 +602,7 @@ class EmailService:
             logger.warning("[Resend] send failed: %s", e)
             self._log_attempt(
                 to_email,
-                subject,
+                subject_value,
                 template_key,
                 EmailStatus.FAILED,
                 error_message=str(e),
