@@ -119,6 +119,34 @@ def _ensure_author_role_membership(user_id: str, email: str | None) -> None:
         print(f"[SubmissionAuthorRole] failed to ensure author role: {e}", flush=True)
 
 
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    text = str(error or "").lower()
+    column = str(column_name or "").strip().lower()
+    return bool(column and column in text and ("column" in text or "schema cache" in text or "pgrst" in text))
+
+
+def _insert_manuscript_with_schema_compat(data: dict) -> object:
+    """
+    中文注释:
+    - 云端迁移刚落完时，PostgREST schema cache 可能短暂还看不到新增列。
+    - 当前投稿创建最早依赖的是 initial_submitted_at。
+    - 这里在检测到该列的 schema cache 缺列报错时，做一次兼容重试，避免作者投稿直接 500。
+    """
+    try:
+        return _m().supabase.table("manuscripts").insert(data).execute()
+    except Exception as error:
+        if not _is_missing_column_error(error, "initial_submitted_at"):
+            raise
+
+        fallback_data = dict(data)
+        fallback_data.pop("initial_submitted_at", None)
+        print(
+            "[SubmissionCompat] retry insert without initial_submitted_at because schema cache is stale",
+            flush=True,
+        )
+        return _m().supabase.table("manuscripts").insert(fallback_data).execute()
+
+
 @router.post("/manuscripts/upload")
 async def upload_manuscript(
     background_tasks: BackgroundTasks, file: UploadFile = File(...)
@@ -626,7 +654,6 @@ async def create_manuscript(
         submission_email = str(manuscript.submission_email or "").strip().lower()
         author_contacts = [item.model_dump(mode="json") for item in manuscript.author_contacts]
         author_names = [str(item.get("name") or "").strip() for item in author_contacts if str(item.get("name") or "").strip()]
-        corresponding_author = next((item for item in author_contacts if item.get("is_corresponding")), None) or {}
 
         cover_letter_path = str(manuscript.cover_letter_path or "").strip()
         cover_letter_filename = str(manuscript.cover_letter_filename or "").strip() or None
@@ -667,7 +694,7 @@ async def create_manuscript(
             "initial_submitted_at": now_iso,
         }
 
-        response = _m().supabase.table("manuscripts").insert(data).execute()
+        response = _insert_manuscript_with_schema_compat(data)
 
         if response.data:
             created = response.data[0]

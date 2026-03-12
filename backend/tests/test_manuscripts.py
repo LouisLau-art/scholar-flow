@@ -167,6 +167,59 @@ async def test_create_manuscript_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_manuscript_retries_without_initial_submitted_at_when_schema_cache_is_stale(
+    client: AsyncClient,
+):
+    manuscript_id = str(uuid.uuid4())
+    mock_data = {
+        "id": manuscript_id,
+        "title": "Compat Manuscript",
+        "abstract": "This is a sufficiently long abstract content for validation.",
+        "submission_email": "corresponding@example.org",
+        "authors": ["Alice Author", "Bob Author"],
+        "author_contacts": required_author_contacts(),
+        "author_id": "00000000-0000-0000-0000-000000000000",
+        "status": "pre_check",
+        "created_at": "2026-01-28T00:00:00.000000+00:00",
+        "updated_at": "2026-01-28T00:00:00.000000+00:00",
+    }
+    mock = get_full_mock([mock_data])
+    admin_mock = get_full_mock([{"id": str(uuid.uuid4())}])
+    mock_token = generate_test_token()
+
+    stale_schema_error = RuntimeError(
+        "Could not find the 'initial_submitted_at' column of 'manuscripts' in the schema cache (PGRST204)"
+    )
+    successful_insert_response = MagicMock()
+    successful_insert_response.data = [mock_data]
+    mock.execute.side_effect = [stale_schema_error, successful_insert_response]
+
+    with patch("app.lib.api_client.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase", mock), \
+         patch("app.api.v1.manuscripts.supabase_admin", admin_mock):
+        response = await client.post(
+            "/api/v1/manuscripts",
+            json={
+                "title": "Compat Manuscript",
+                "abstract": "This is a sufficiently long abstract content for validation.",
+                "submission_email": "corresponding@example.org",
+                "author_contacts": required_author_contacts(),
+                "author_id": "00000000-0000-0000-0000-000000000000",
+                **required_zip_submission_files("00000000-0000-0000-0000-000000000000"),
+            },
+            headers={"Authorization": f"Bearer {mock_token}"},
+        )
+
+    assert response.status_code == 200
+    assert mock.insert.call_count == 2
+
+    first_payload = mock.insert.call_args_list[0].args[0]
+    second_payload = mock.insert.call_args_list[1].args[0]
+    assert "initial_submitted_at" in first_payload
+    assert "initial_submitted_at" not in second_payload
+
+
+@pytest.mark.asyncio
 async def test_create_manuscript_submission_ack_uses_resolved_author_target(client: AsyncClient):
     """投稿确认邮件应统一使用解析后的作者通知目标，而不是回退到登录账号邮箱。"""
     manuscript_id = str(uuid.uuid4())
