@@ -15,7 +15,7 @@ describe('ManagingWorkspacePanel awaiting author bucket', () => {
     vi.clearAllMocks()
   })
 
-  it('renders revision_before_review manuscripts inside 等待作者修回 bucket', async () => {
+  it('renders revision_before_review manuscripts inside 等待作者修回 bucket with quick actions', async () => {
     ;(editorService.getManagingWorkspace as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
         id: 'wait-1',
@@ -29,6 +29,7 @@ describe('ManagingWorkspacePanel awaiting author bucket', () => {
           full_name: 'AE Waiting',
           email: 'ae-waiting@example.com',
         },
+        intake_return_reason: 'Missing figures',
       },
     ])
 
@@ -40,5 +41,9 @@ describe('ManagingWorkspacePanel awaiting author bucket', () => {
 
     expect(await screen.findByText('等待作者修回')).toBeInTheDocument()
     expect(screen.getByText('Waiting Author Manuscript')).toBeInTheDocument()
+    
+    // Quick actions
+    expect(screen.getByText('改派 AE')).toBeInTheDocument()
+    expect(screen.getByText(/退回原因: Missing figures/)).toBeInTheDocument()
   })
 })

@@ -12,6 +12,9 @@ import { formatDateTimeLocal } from '@/lib/date-display'
 import { getStatusLabel } from '@/lib/statusStyles'
 import { cn } from '@/lib/utils'
 import { editorService } from '@/services/editorService'
+import { AssignAEModal } from '@/components/AssignAEModal'
+import { ReturnToAuthorDialog } from '@/components/editor/ReturnToAuthorDialog'
+import { ManagingWorkspaceQuickActions } from '@/components/editor/ManagingWorkspaceQuickActions'
 
 interface Manuscript {
   id: string
@@ -146,13 +149,27 @@ export function ManagingWorkspacePanel() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [query, setQuery] = useState('')
+  
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [selectedManuscriptId, setSelectedManuscriptId] = useState<string | null>(null)
+  const [assignMode, setAssignMode] = useState<'pass_and_assign' | 'bind_only'>('pass_and_assign')
+  const [returnModalOpen, setReturnModalOpen] = useState(false)
+  const [returnTarget, setReturnTarget] = useState<{ id: string; title: string } | null>(null)
+
   const manuscriptsRef = useRef<Manuscript[]>([])
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    manuscriptsRef.current = manuscripts
-  }, [manuscripts])
+  const openAssignModal = useCallback((id: string, mode: 'pass_and_assign' | 'bind_only' = 'pass_and_assign') => {
+    setSelectedManuscriptId(id)
+    setAssignMode(mode)
+    setAssignModalOpen(true)
+  }, [])
+
+  const openReturnModal = useCallback((target: { id: string; title: string }) => {
+    setReturnTarget(target)
+    setReturnModalOpen(true)
+  }, [])
 
   const fetchWorkspace = useCallback(
     async (options?: { preferCache?: boolean; silent?: boolean; forceRefresh?: boolean; queryOverride?: string }) => {
@@ -198,6 +215,11 @@ export function ManagingWorkspacePanel() {
     },
     [query]
   )
+
+  const handleSubmitReturn = async (id: string, comment: string) => {
+    await editorService.submitIntakeRevision(id, comment)
+    void fetchWorkspace({ silent: true, forceRefresh: true })
+  }
 
   useEffect(() => {
     void fetchWorkspace({ preferCache: true })
@@ -370,9 +392,23 @@ export function ManagingWorkspacePanel() {
                       <TableCell className="text-sm text-foreground">{m.journal?.title || '—'}</TableCell>
 
                       <TableCell>
-                        <Link href={detailHref} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }))}>
-                          Open Detail
-                        </Link>
+                        {section.key === 'intake' || section.key === 'awaiting_author' ? (
+                          <div className="flex flex-col gap-2 items-start">
+                            <ManagingWorkspaceQuickActions
+                              manuscript={m}
+                              bucket={section.key}
+                              onOpenAssignModal={openAssignModal}
+                              onOpenReturnModal={openReturnModal}
+                            />
+                            <Link href={detailHref} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }))}>
+                              Open Detail
+                            </Link>
+                          </div>
+                        ) : (
+                          <Link href={detailHref} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }))}>
+                            Open Detail
+                          </Link>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -382,6 +418,24 @@ export function ManagingWorkspacePanel() {
           </section>
         ))
       )}
+
+      {selectedManuscriptId && (
+        <AssignAEModal
+          isOpen={assignModalOpen}
+          onClose={() => setAssignModalOpen(false)}
+          manuscriptId={selectedManuscriptId}
+          mode={assignMode}
+          onAssignSuccess={() => void fetchWorkspace({ silent: true, forceRefresh: true })}
+        />
+      )}
+
+      <ReturnToAuthorDialog
+        open={returnModalOpen}
+        onOpenChange={setReturnModalOpen}
+        targetId={returnTarget?.id || null}
+        targetTitle={returnTarget?.title || null}
+        onSubmit={handleSubmitReturn}
+      />
     </>
   )
 }
