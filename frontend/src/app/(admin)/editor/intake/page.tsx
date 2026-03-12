@@ -258,7 +258,7 @@ export default function MEIntakePage() {
               <div>
                 <h1 className="text-3xl font-serif font-bold text-foreground tracking-tight">Managing Editor Intake Queue</h1>
                 <p className="mt-1 text-muted-foreground font-medium">
-                  ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿会保留在列表中，等待作者修回期间仍可预分配或改派 AE。
+                  ME 先完成入口技术筛查，再决定退回作者或分配 AE 进入外审准备。技术退回稿默认转入 Managing Workspace 的“等待作者修回”分组；如历史数据仍出现在本列表，仍可直接预分配或改派 AE。
                 </p>
               </div>
             </div>
