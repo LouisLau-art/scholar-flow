@@ -16,6 +16,8 @@ describe('EditorApi precheck endpoints', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    EditorApi.invalidateManagingWorkspaceCache()
+    EditorApi.invalidateIntakeQueueCache()
   })
 
   it('getIntakeQueue sends pagination params and bearer token', async () => {
@@ -35,11 +37,23 @@ describe('EditorApi precheck endpoints', () => {
     )
   })
 
-  it('assignAE posts request body', async () => {
-    ;(globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'ok' }),
+  it('assignAE posts request body and invalidates managing workspace cache', async () => {
+    ;(globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('managing-workspace')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ message: 'ok' }),
+      })
     })
+
+    // Pre-populate cache
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
 
     await EditorApi.assignAE('manuscript-1', { ae_id: 'ae-1', idempotency_key: 'idem-1' })
 
@@ -50,13 +64,51 @@ describe('EditorApi precheck endpoints', () => {
         body: JSON.stringify({ ae_id: 'ae-1', idempotency_key: 'idem-1' }),
       })
     )
+
+    // Should fetch again because cache was invalidated
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
   })
 
-  it('submitTechnicalCheck posts decision and comment', async () => {
-    ;(globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'ok' }),
+  it('submitIntakeRevision invalidates managing workspace cache', async () => {
+    ;(globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('managing-workspace')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ message: 'ok' }),
+      })
     })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+    await EditorApi.submitIntakeRevision('manuscript-1', 'reason')
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('submitTechnicalCheck posts decision and comment and invalidates managing workspace cache', async () => {
+    ;(globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('managing-workspace')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ message: 'ok' }),
+      })
+    })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
 
     await EditorApi.submitTechnicalCheck('manuscript-2', { decision: 'revision', comment: 'need fixes' })
 
@@ -67,6 +119,55 @@ describe('EditorApi precheck endpoints', () => {
         body: JSON.stringify({ decision: 'revision', comment: 'need fixes' }),
       })
     )
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('revertTechnicalCheck invalidates managing workspace cache', async () => {
+    ;(globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('managing-workspace')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ message: 'ok' }),
+      })
+    })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+    await EditorApi.revertTechnicalCheck('manuscript-1', { reason: 'revert' })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('submitAcademicCheck invalidates managing workspace cache', async () => {
+    ;(globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('managing-workspace')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ message: 'ok' }),
+      })
+    })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+    await EditorApi.submitAcademicCheck('manuscript-1', { decision: 'pass' })
+
+    await EditorApi.getManagingWorkspace(1, 20)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
   })
 
   it('listAssistantEditors passes search query', async () => {

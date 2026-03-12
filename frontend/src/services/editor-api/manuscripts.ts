@@ -129,6 +129,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       if (res.ok) {
         intakeQueueCache.clear()
         intakeQueueInflight.clear()
+        managingWorkspaceCache.clear()
+        managingWorkspaceInflight.clear()
         invalidateProcessRowsCache()
         invalidateManuscriptDetailCache(manuscriptId)
       }
@@ -145,6 +147,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       if (res.ok) {
         intakeQueueCache.clear()
         intakeQueueInflight.clear()
+        managingWorkspaceCache.clear()
+        managingWorkspaceInflight.clear()
         invalidateProcessRowsCache()
         invalidateManuscriptDetailCache(manuscriptId)
       }
@@ -242,6 +246,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       })
       const json = await res.json()
       if (res.ok) {
+        managingWorkspaceCache.clear()
+        managingWorkspaceInflight.clear()
         invalidateProcessRowsCache()
         invalidateManuscriptDetailCache(manuscriptId)
       }
@@ -256,6 +262,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       })
       const json = await res.json()
       if (res.ok) {
+        managingWorkspaceCache.clear()
+        managingWorkspaceInflight.clear()
         invalidateProcessRowsCache()
         invalidateManuscriptDetailCache(manuscriptId)
       }
@@ -286,6 +294,8 @@ export function createManuscriptsApi(deps: ManuscriptsApiDeps) {
       })
       const json = await res.json()
       if (res.ok) {
+        managingWorkspaceCache.clear()
+        managingWorkspaceInflight.clear()
         invalidateProcessRowsCache()
         invalidateManuscriptDetailCache(manuscriptId)
       }
