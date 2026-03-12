@@ -37,8 +37,8 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; helper: string }> = 
   { value: 'assistant_editor', label: 'Assistant Editor', helper: '仅可处理分配到自己的稿件' },
   { value: 'production_editor', label: 'Production Editor', helper: '排版与校对协作（仅可处理分配到自己的 Production Cycle）' },
   { value: 'managing_editor', label: 'Managing Editor', helper: 'Intake 与分配（必须绑定期刊）' },
-  { value: 'academic_editor', label: 'Academic Editor', helper: '学术预审与 First Decision（必须绑定期刊）' },
-  { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: '主编终审与期刊学术把关（必须绑定期刊）' },
+  { value: 'academic_editor', label: 'Academic Editor', helper: '学术预审与学术决策（可做 Final Decision，必须绑定期刊）' },
+  { value: 'editor_in_chief', label: 'Editor-in-Chief', helper: '主编角色与期刊学术把关（同样可做 Final Decision，必须绑定期刊）' },
   { value: 'admin', label: 'Admin', helper: '全局管理权限' },
 ]
 
@@ -132,7 +132,7 @@ export function UserRoleDialog({ isOpen, onClose, onConfirm, user }: UserRoleDia
       return
     }
     if (scopeRequired && selectedJournalIds.length === 0) {
-      setError('Managing Editor / Editor-in-Chief must bind at least one journal.')
+      setError('Managing Editor / Academic Editor / Editor-in-Chief must bind at least one journal.')
       return
     }
 

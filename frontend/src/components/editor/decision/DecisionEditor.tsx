@@ -240,7 +240,7 @@ export function DecisionEditor({
       return
     }
     if (isFinal && !canSubmitFinal) {
-      toast.error(`Only Editor-in-Chief/Admin can submit ${currentDecisionStage} decision`)
+      toast.error(`Current role cannot submit ${currentDecisionStage} decision`)
       return
     }
     if (isFinal && !canSubmitDecisionNow) {
@@ -298,7 +298,7 @@ export function DecisionEditor({
       ) : null}
       {!canSubmitFinal ? (
         <p className="mt-1 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
-          当前账号仅可记录 First Decision 草稿；提交决策动作需由 Editor-in-Chief/Admin 执行。
+          当前账号仅可记录 First Decision 草稿；提交当前决策动作需具备对应阶段的提交权限。
         </p>
       ) : null}
       {canSubmitFinal && !canSubmitDecisionNow ? (

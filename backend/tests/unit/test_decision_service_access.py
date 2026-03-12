@@ -199,6 +199,47 @@ def test_get_decision_context_returns_role_based_permission_flags(
     ]
 
 
+def test_get_decision_context_allows_academic_editor_to_submit_final(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svc = _svc()
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "title": "Demo",
+            "abstract": "A",
+            "status": "decision_done",
+            "file_path": "manuscripts/demo.pdf",
+            "version": 2,
+            "author_id": "author-1",
+            "editor_id": "editor-1",
+            "assistant_editor_id": "ae-1",
+            "academic_editor_id": "academic-1",
+            "updated_at": "2026-02-12T00:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_internal_decision_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_list_submitted_reports", lambda _id: [{"id": "r1"}])
+    monkeypatch.setattr(svc, "_get_latest_letter", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_get_latest_review_stage_exit_request", lambda _id: None)
+    monkeypatch.setattr(svc, "_build_template", lambda _reports: "template")
+    monkeypatch.setattr(svc, "_signed_url", lambda _bucket, _path: "https://signed/url")
+
+    context = svc.get_decision_context(
+        manuscript_id="ms-1",
+        user_id="academic-1",
+        profile_roles=["academic_editor"],
+    )
+
+    permissions = context.get("permissions") or {}
+    assert permissions.get("can_record_first") is True
+    assert permissions.get("can_submit_final") is True
+    assert permissions.get("can_submit") is True
+
+
 def test_review_stage_exit_request_requires_requested_outcome_for_first_target() -> None:
     with pytest.raises(ValueError, match="requested_outcome is required"):
         ReviewStageExitRequest(

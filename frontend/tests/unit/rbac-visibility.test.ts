@@ -85,6 +85,20 @@ describe('rbac visibility helpers', () => {
     expect(canUseDecisionStage(meCapability, 'first')).toBe(true)
     expect(canUseDecisionStage(meCapability, 'final')).toBe(false)
 
+    const academicCapability = deriveEditorCapability({
+      user_id: 'u-6a',
+      roles: ['academic_editor'],
+      normalized_roles: ['academic_editor'],
+      allowed_actions: ['decision:record_first', 'decision:submit_final'],
+      journal_scope: {
+        enforcement_enabled: false,
+        allowed_journal_ids: ['j-1'],
+        is_admin: false,
+      },
+    })
+    expect(canUseDecisionStage(academicCapability, 'first')).toBe(true)
+    expect(canUseDecisionStage(academicCapability, 'final')).toBe(true)
+
     const eicCapability = deriveEditorCapability({
       user_id: 'u-6',
       roles: ['editor_in_chief'],

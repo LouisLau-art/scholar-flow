@@ -52,6 +52,7 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "academic:process",
         "manuscript:view_detail",
         "decision:record_first",
+        "decision:submit_final",
     },
     "editor_in_chief": {
         "academic:view_queue",
