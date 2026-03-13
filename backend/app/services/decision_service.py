@@ -616,6 +616,8 @@ class DecisionService(
         idempotency_key = f"direct-revision-request/{revision_token}/{recipient_email}"
         delivery = email_service.send_inline_email(
             to_email=recipient_email,
+            cc_emails=list(target.get("cc_recipients") or []),
+            reply_to_emails=list(target.get("reply_to_recipients") or []),
             template_key="direct_revision_request",
             subject_template="[{{ manuscript_title }}] {{ decision_label }}",
             body_html_template=(

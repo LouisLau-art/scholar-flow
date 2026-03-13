@@ -26,13 +26,34 @@ class NotificationOrchestrator:
         supabase_client: Any | None = None,
         author_profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        manuscript_data = dict(manuscript or {})
+        if supabase_client and manuscript_id and (
+            not normalize_email(manuscript_data.get("submission_email"))
+            or not isinstance(manuscript_data.get("author_contacts"), list)
+        ):
+            try:
+                fetched = (
+                    supabase_client.table("manuscripts")
+                    .select("submission_email, author_contacts")
+                    .eq("id", str(manuscript_id))
+                    .single()
+                    .execute()
+                )
+                fetched_data = getattr(fetched, "data", None) or {}
+                if isinstance(fetched_data, dict):
+                    for key in ("submission_email", "author_contacts"):
+                        if manuscript_data.get(key) in (None, "", []):
+                            manuscript_data[key] = fetched_data.get(key)
+            except Exception:
+                pass
+
         target = self.recipient_resolver.resolve_author_email_targets(
-            manuscript=manuscript,
+            manuscript=manuscript_data,
             manuscript_id=manuscript_id,
             supabase_client=supabase_client,
             author_profile=author_profile,
         )
-        submission_email = normalize_email((manuscript or {}).get("submission_email"))
+        submission_email = normalize_email(manuscript_data.get("submission_email"))
         corresponding_authors = target.get("corresponding_authors") or []
         if (
             not submission_email
@@ -44,7 +65,7 @@ class NotificationOrchestrator:
         cc_recipients: list[str] = []
         seen = {submission_email}
         submission_contact_name = ""
-        raw_contacts = (manuscript or {}).get("author_contacts")
+        raw_contacts = manuscript_data.get("author_contacts")
         if isinstance(raw_contacts, list):
             for item in raw_contacts:
                 if not isinstance(item, dict):

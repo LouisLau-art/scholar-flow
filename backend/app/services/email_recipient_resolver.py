@@ -192,6 +192,8 @@ class EmailRecipientResolver:
             "recipient_name": recipient_name or "Author",
             "corresponding_author": corresponding_contacts[0] if corresponding_contacts else None,
             "corresponding_authors": corresponding_contacts,
+            "submission_email": submission_email,
+            "author_contacts": contacts,
             "source": source,
             "author_profile": profile_data or None,
             "to_recipients": to_recipients,

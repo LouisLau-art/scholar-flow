@@ -1196,3 +1196,81 @@ async def test_review_stage_exit_direct_minor_revision_returns_author_email_deli
         assert manuscript["status"] == "minor_revision"
     finally:
         _cleanup(supabase_admin_client, manuscript_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_stage_exit_direct_minor_revision_preserves_email_first_envelope(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_direct_minor_envelope_{suffix}@example.com")
+    author = make_user(email=f"decision_author_direct_minor_envelope_{suffix}@example.com")
+    set_admin_emails([editor.email])
+    _require_decision_schema(supabase_admin_client)
+
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="under_review",
+        title="Review Stage Exit Direct Minor Revision Envelope Manuscript",
+        version=2,
+        file_path=f"manuscripts/{manuscript_id}/v2.pdf",
+        submission_email="delegate@example.com",
+    )
+    supabase_admin_client.table("manuscripts").update(
+        {
+            "author_contacts": [
+                {
+                    "name": "Lead Author",
+                    "email": "lead.author@example.com",
+                    "is_corresponding": False,
+                }
+            ]
+        }
+    ).eq("id", manuscript_id).execute()
+
+    email_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.services.decision_service.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
+
+    try:
+        res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/review-stage-exit",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "target_stage": "minor_revision",
+                "note": "Preserve submission email as primary and contact email in cc.",
+                "accepted_pending_resolutions": [],
+            },
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["success"] is True
+        assert payload["data"]["author_revision_email_sent_recipient"] == "delegate@example.com"
+        assert payload["data"]["author_revision_email_failed_recipient"] is None
+        assert email_calls
+        assert email_calls[0]["to_email"] == "delegate@example.com"
+        assert email_calls[0]["cc_emails"] == ["lead.author@example.com"]
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id)
