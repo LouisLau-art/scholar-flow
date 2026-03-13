@@ -48,6 +48,11 @@ def _require_schema(db) -> None:
 
 
 def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
+    try:
+        # 固定邮箱在共享云端库里会被重复复用，先清掉残留 profile，避免 email 唯一约束撞车。
+        db.table("user_profiles").delete().eq("email", email).execute()
+    except Exception:
+        pass
     db.table("user_profiles").upsert(
         {
             "id": user_id,
@@ -80,11 +85,21 @@ def _seed_invoice_paid(db, *, manuscript_id: str) -> None:
 
 
 def _seed_cycle(db, *, manuscript_id: str, editor_id: str, author_id: str, status: str) -> None:
+    stage = {
+        "awaiting_author": "author_proofreading",
+        "approved_for_publish": "ready_to_publish",
+        "author_confirmed": "ae_final_review",
+        "author_corrections_submitted": "ae_final_review",
+        "in_layout_revision": "typesetting",
+        "draft": "received",
+        "cancelled": "cancelled",
+    }.get(status, "received")
     db.table("production_cycles").insert(
         {
             "manuscript_id": manuscript_id,
             "cycle_no": 1,
             "status": status,
+            "stage": stage,
             "layout_editor_id": editor_id,
             "proofreader_author_id": author_id,
             "galley_bucket": "production-proofs",

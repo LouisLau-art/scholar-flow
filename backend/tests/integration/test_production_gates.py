@@ -10,6 +10,23 @@ from .test_utils import insert_manuscript, make_user
 from .test_production_workspace_api import _require_schema
 
 
+def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
+    try:
+        # 共享云端测试库中，旧失败用例可能残留同邮箱 profile；先清掉再按当前 user_id 重建。
+        db.table("user_profiles").delete().eq("email", email).execute()
+    except Exception:
+        pass
+    db.table("user_profiles").upsert(
+        {
+            "id": user_id,
+            "email": email,
+            "roles": roles,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        on_conflict="id",
+    ).execute()
+
+
 def _load_transition_logs_or_skip(db, manuscript_id: str) -> list[dict]:
     try:
         resp = (
@@ -47,6 +64,8 @@ async def test_production_advance_enforces_gates_and_writes_audit_logs(
     )
 
     try:
+        _ensure_profile(supabase_admin_client, user_id=editor.id, email=editor.email, roles=["admin", "editor", "author"])
+        _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
         inv_id = str(uuid4())
         supabase_admin_client.table("invoices").insert(
             {
@@ -119,6 +138,8 @@ async def test_payment_gate_blocks_publish_step(
     )
 
     try:
+        _ensure_profile(supabase_admin_client, user_id=editor.id, email=editor.email, roles=["admin", "editor", "author"])
+        _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
         supabase_admin_client.table("invoices").insert(
             {
                 "id": str(uuid4()),
@@ -165,6 +186,8 @@ async def test_production_gate_can_be_disabled(
     )
 
     try:
+        _ensure_profile(supabase_admin_client, user_id=editor.id, email=editor.email, roles=["admin", "editor", "author"])
+        _ensure_profile(supabase_admin_client, user_id=author.id, email=author.email, roles=["author"])
         supabase_admin_client.table("invoices").insert(
             {
                 "id": str(uuid4()),

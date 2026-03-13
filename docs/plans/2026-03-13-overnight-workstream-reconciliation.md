@@ -88,7 +88,10 @@
 - `publish gate` 现在会把 `production_cycles.stage` / `production_cycles` 缺失统一抛成 `503`，不再把已归一的 schema 错误二次包成 `500`。
 - `publish gate` 额外补齐了 `invoices` 读失败、`manuscripts.final_pdf_path` 缺列、`approved_at / galley_path` 缺列这些旧 schema 漏口；审计链路里的 `status_transition_logs.payload` 与 `production_cycle_events` 缺失也不再 silently no-op。
 - `workspace context / queue / proofreading-email preview` 等读路径与手工邮件预览入口也已接入统一 schema-missing 归一逻辑。
-- `Task 3` 当前 backend 全量定向回归已通过：`tests/unit/test_production_workspace_service.py`、`tests/integration/test_production_workspace_api.py`、`tests/integration/test_production_sop_flow.py`、`tests/unit/test_production_service.py`、`tests/integration/test_production_gates.py`、`tests/integration/test_production_publish_gate.py`、`tests/integration/test_proofreading_author_flow.py`，结果为 `42 passed, 17 skipped`。
+- 当前会话随后已把 linked Supabase 缺失的 3 条 migration 推到云端：`20260312120000_production_sop_stage_artifacts_events.sql`、`20260312193000_add_journal_public_editorial_email.sql`、`20260312194000_expand_email_logs_delivery_envelope.sql`。
+- migration 推送后，`tests/integration/test_proofreading_author_flow.py` 已从 skip 转为真实执行并通过：`4 passed`。
+- post-migration 又收掉 3 个残留点：`author-feedback` multipart 允许 attachment-only correction submit；`EditorialService` 审计日志保留 `approved_for_publish` 等 SOP 扩展状态；production integration tests 的 `user_profiles` seed 改为按邮箱可重入，避免共享云端测试库重复运行时撞唯一索引。
+- 当前 backend 最终定向回归已通过：`tests/unit/test_editorial_service.py`、`tests/unit/test_production_service.py`、`tests/unit/test_production_workspace_service.py`、`tests/integration/test_production_workspace_api.py`、`tests/integration/test_production_workspace_audit.py`、`tests/integration/test_production_sop_flow.py`、`tests/integration/test_production_gates.py`、`tests/integration/test_production_publish_gate.py`、`tests/integration/test_proofreading_author_flow.py`，结果为 `69 passed`。
 
 ### 收口风险
 

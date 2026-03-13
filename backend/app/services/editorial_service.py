@@ -131,12 +131,16 @@ class EditorialService:
         """
         ms = self.get_manuscript(manuscript_id)
         from_status = str(ms.get("status") or "")
+        raw_from_status = from_status.strip().lower()
 
         to_norm = normalize_status(to_status)
         if to_norm is None:
             raise HTTPException(status_code=422, detail="Invalid status")
 
-        from_norm = normalize_status(from_status) or ManuscriptStatus.PRE_CHECK.value
+        # 中文注释：
+        # - 审计日志应保留 SOP 扩展状态（如 approved_for_publish），不能把未知状态错误回写成 pre_check；
+        # - 对未纳入 ManuscriptStatus 枚举但已存在于当前工作流的状态，保留原始值。
+        from_norm = normalize_status(from_status) or raw_from_status or ManuscriptStatus.PRE_CHECK.value
         pre_check_status = str(ms.get("pre_check_status") or "").strip().lower()
 
         # 中文注释：流程强约束，预审/外审/修回阶段禁止直接拒稿。

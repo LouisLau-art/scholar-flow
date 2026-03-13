@@ -20,13 +20,19 @@
 - `backend tests`：已通过定向回归 `tests/unit/test_production_service.py`、`tests/integration/test_production_gates.py`、`tests/integration/test_production_publish_gate.py`，结果为 `10 passed, 4 skipped`。
 - `frontend tests`：已通过 mocked Playwright 定向回归 `tests/e2e/specs/production_flow.spec.ts`、`tests/e2e/specs/publish_flow.spec.ts`。
 - `backend task 3 tests`：已通过 `tests/unit/test_production_workspace_service.py`、`tests/integration/test_production_workspace_api.py`、`tests/integration/test_production_sop_flow.py`，结果为 `19 passed, 7 skipped`。
+- `cloud migrations`：已将 linked Supabase 缺失的 `20260312120000_production_sop_stage_artifacts_events.sql`、`20260312193000_add_journal_public_editorial_email.sql`、`20260312194000_expand_email_logs_delivery_envelope.sql` 推到云端，之前因 `production_cycles.stage` 缺列而 skip 的 author proofreading flow 已转为真实执行。
+- `post-migration fixes`：已补齐 3 个收尾问题：
+  1. `author-feedback` multipart 允许“仅上传带批注 PDF、无 correction_items”走 `submit_corrections`。
+  2. `EditorialService.update_status()` 的审计日志会保留 `approved_for_publish` 这类 SOP 扩展状态，不再错误回写成 `pre_check`。
+  3. production integration tests 的 `user_profiles` seed 现已按邮箱可重入，避免共享云端库重复执行时撞唯一索引或残留脏 profile。
+- `final backend regression`：已通过 `tests/unit/test_editorial_service.py`、`tests/unit/test_production_service.py`、`tests/unit/test_production_workspace_service.py`、`tests/integration/test_production_workspace_api.py`、`tests/integration/test_production_workspace_audit.py`、`tests/integration/test_production_sop_flow.py`、`tests/integration/test_production_gates.py`、`tests/integration/test_production_publish_gate.py`、`tests/integration/test_proofreading_author_flow.py`，结果为 `69 passed`。
 
 当前完成度判断：
 
 - `Task 1` 已完成核心边界收口：detail 页不再直接发布，workspace 成为发布动作入口；仍可后续再压缩重复入口 UI。
 - `Task 2` 已实质完成，当前 publish gate / manuscript status 契约已锁定到测试与接口文档。
 - `Task 3` 已实质完成，当前 production schema-missing / migration fallback 行为已统一到明确错误口径，且写路径不再静默回退到 legacy schema。
-- `Task 4` 已完成前端文案和入口口径的一部分，但尚未覆盖作者反馈链路的完整对齐。
+- `Task 4` 已实质完成，作者反馈链路的 multipart 提交与 post-migration fixture 也已收口。
 
 ---
 
@@ -215,7 +221,8 @@ cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p pytest_asyncio.plugin -
 
 Observed:
 
-- `42 passed, 17 skipped`
+- 云端 migration 推送前：`42 passed, 17 skipped`
+- 云端 migration 推送并补齐 post-migration 修复后：`69 passed`
 
 **Step 5: Commit**
 
@@ -239,6 +246,8 @@ git commit -m "fix: standardize production sop schema fallback"
 ### Task 4: 对齐 workspace 动作面板与作者反馈链路
 
 > 进度：已完成 workspace 基础文案收口与对应 Vitest；作者反馈链路与动作可见性仍待继续收口。
+>
+> 2026-03-13 更新：作者反馈链路的 backend multipart 提交与 post-migration integration fixture 已完成收口，当前剩余工作主要是后续若再扩前端交互时保持 stage/action 显示一致。
 
 **Files:**
 - Modify: `frontend/src/app/(admin)/editor/production/page.tsx`

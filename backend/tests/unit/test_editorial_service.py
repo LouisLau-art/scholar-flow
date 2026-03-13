@@ -116,6 +116,25 @@ def test_update_status_allows_skip_when_admin(supabase_admin):
     assert out["status"] == "published"
 
 
+def test_update_status_preserves_unknown_from_status_in_audit_log(supabase_admin):
+    svc = editorial_service_module.EditorialService()
+
+    manuscripts = supabase_admin.table("manuscripts")
+    manuscripts.execute.side_effect = [
+        _Resp(data={"id": "m1", "status": "approved_for_publish"}),
+        _Resp(data=[{"id": "m1", "status": "published"}]),
+    ]
+
+    logs = supabase_admin.table("status_transition_logs")
+    logs.execute.return_value = _Resp(data=[{"id": "l1"}])
+
+    svc.update_status(manuscript_id="m1", to_status="published", changed_by="u1", allow_skip=True)
+
+    inserted = logs.insert.call_args[0][0]
+    assert inserted["from_status"] == "approved_for_publish"
+    assert inserted["to_status"] == "published"
+
+
 def test_update_invoice_info_updates_metadata_and_writes_audit_log(supabase_admin):
     svc = editorial_service_module.EditorialService()
 

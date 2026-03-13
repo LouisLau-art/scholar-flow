@@ -33,6 +33,7 @@ from app.services.post_acceptance_service import publish_manuscript as publish_m
 from app.services.decision_service import DecisionService
 from app.services.production_workspace_service import ProductionWorkspaceService
 from app.models.production_workspace import SubmitProofreadingRequest
+from pydantic import ValidationError
 from uuid import UUID
 import os
 import time
@@ -343,12 +344,6 @@ async def submit_author_feedback(
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid corrections_json format")
 
-    payload = SubmitProofreadingRequest(
-        decision=decision,
-        summary=summary,
-        corrections=corrections
-    )
-    
     attachment_content = None
     attachment_filename = None
     attachment_content_type = None
@@ -357,6 +352,25 @@ async def submit_author_feedback(
         attachment_content = await attachment.read()
         attachment_filename = attachment.filename
         attachment_content_type = attachment.content_type
+
+    try:
+        if decision == "submit_corrections" and attachment_content is not None and not corrections:
+            # 允许作者仅上传带批注 PDF，结构化 correction_items 可为空。
+            payload = SubmitProofreadingRequest.model_construct(
+                decision=decision,
+                summary=summary,
+                corrections=corrections,
+            )
+        else:
+            payload = SubmitProofreadingRequest(
+                decision=decision,
+                summary=summary,
+                corrections=corrections
+            )
+    except ValidationError as exc:
+        first_error = exc.errors()[0] if exc.errors() else {}
+        detail = str(first_error.get("msg") or "Invalid proofreading payload")
+        raise HTTPException(status_code=422, detail=detail) from exc
 
     data = ProductionWorkspaceService().submit_proofreading(
         manuscript_id=str(manuscript_id),

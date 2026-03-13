@@ -58,6 +58,10 @@ def _require_schema(db) -> None:
 
 
 def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
+    try:
+        db.table("user_profiles").delete().eq("email", email).execute()
+    except Exception:
+        pass
     db.table("user_profiles").upsert(
         {
             "id": user_id,
