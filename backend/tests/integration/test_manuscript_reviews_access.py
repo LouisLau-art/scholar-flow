@@ -395,3 +395,74 @@ async def test_author_context_keeps_late_public_review_visible_after_manuscript_
         safe_delete_by_id(supabase_admin_client, "manuscripts", manuscript_id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", author.id)
         safe_delete_by_id(supabase_admin_client, "user_profiles", reviewer.id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_author_context_returns_submission_email_and_author_contacts(
+    client: AsyncClient,
+    supabase_admin_client,
+):
+    _require_schema(supabase_admin_client)
+
+    author = make_user(email=f"author_ctx_email_{uuid4().hex[:8]}@example.com")
+    manuscript_id = str(uuid4())
+
+    supabase_admin_client.table("user_profiles").upsert(
+        {
+            "id": author.id,
+            "email": author.email,
+            "full_name": "Author Context Email User",
+            "roles": ["author"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        on_conflict="id",
+    ).execute()
+
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="major_revision",
+        title="Author Context Contact Snapshot",
+        submission_email="delegate@example.com",
+    )
+    supabase_admin_client.table("manuscripts").update(
+        {
+            "author_contacts": [
+                {
+                    "name": "Lead Author",
+                    "email": "lead.author@example.com",
+                    "affiliation": "Wuhan University",
+                    "city": "Wuhan",
+                    "country_or_region": "China",
+                    "is_corresponding": True,
+                },
+                {
+                    "name": "Co Author",
+                    "email": "co.author@example.com",
+                    "affiliation": "Huazhong University",
+                    "city": "Wuhan",
+                    "country_or_region": "China",
+                    "is_corresponding": False,
+                },
+            ]
+        }
+    ).eq("id", manuscript_id).execute()
+
+    try:
+        res = await client.get(
+            f"/api/v1/manuscripts/{manuscript_id}/author-context",
+            headers={"Authorization": f"Bearer {author.token}"},
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["success"] is True
+        manuscript = body["data"]["manuscript"]
+        assert manuscript["submission_email"] == "delegate@example.com"
+        assert manuscript["author_contacts"][0]["email"] == "lead.author@example.com"
+        assert manuscript["author_contacts"][0]["is_corresponding"] is True
+        assert manuscript["author_contacts"][1]["email"] == "co.author@example.com"
+    finally:
+        safe_delete_by_id(supabase_admin_client, "manuscripts", manuscript_id)
+        safe_delete_by_id(supabase_admin_client, "user_profiles", author.id)

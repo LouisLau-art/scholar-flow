@@ -47,8 +47,8 @@ def resolve_author_notification_target(
     统一解析作者侧邮件接收目标。
 
     优先级：
-    1. manuscripts.submission_email
-    2. author_contacts 中的通讯作者邮箱
+    1. author_contacts 中的通讯作者邮箱
+    2. manuscripts.submission_email
     3. user_profiles.email（作者账号邮箱）
     """
     resolver = EmailRecipientResolver()

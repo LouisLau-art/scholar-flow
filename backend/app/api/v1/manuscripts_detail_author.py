@@ -26,7 +26,7 @@ async def get_manuscript_author_context_impl(
         ms_resp = (
             utils._m()
             .supabase_admin.table("manuscripts")
-            .select("id,title,status,created_at,updated_at,author_id,file_path,journal_id")
+            .select("id,title,status,created_at,updated_at,author_id,file_path,journal_id,submission_email,author_contacts")
             .eq("id", str(manuscript_id))
             .single()
             .execute()
@@ -251,6 +251,20 @@ async def get_manuscript_author_context_impl(
 
     current_pdf_url = utils._sign_storage_url(bucket="manuscripts", path=str(ms.get("file_path") or ""), expires_in_sec=60 * 10)
     proofreading_task = utils._load_latest_author_proofreading_task(manuscript_id_str, author_id=user_id)
+    author_contacts: list[dict] = []
+    for raw in ms.get("author_contacts") if isinstance(ms.get("author_contacts"), list) else []:
+        if not isinstance(raw, dict):
+            continue
+        author_contacts.append(
+            {
+                "name": str(raw.get("name") or "").strip(),
+                "email": str(raw.get("email") or "").strip().lower(),
+                "affiliation": str(raw.get("affiliation") or "").strip(),
+                "city": str(raw.get("city") or "").strip(),
+                "country_or_region": str(raw.get("country_or_region") or "").strip(),
+                "is_corresponding": bool(raw.get("is_corresponding")),
+            }
+        )
 
     return {
         "success": True,
@@ -262,6 +276,8 @@ async def get_manuscript_author_context_impl(
                 "status_label": utils._humanize_status(utils._normalize_status_for_author(ms.get("status"))),
                 "created_at": utils._safe_iso(ms.get("created_at")),
                 "updated_at": utils._safe_iso(ms.get("updated_at")),
+                "submission_email": str(ms.get("submission_email") or "").strip().lower() or None,
+                "author_contacts": author_contacts,
             },
             "files": {
                 "current_pdf_signed_url": current_pdf_url,
