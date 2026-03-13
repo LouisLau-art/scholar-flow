@@ -1186,6 +1186,20 @@ export default function EditorManuscriptDetailPage() {
   ])
 
   const handleOpenAuthorEmailPreview = useCallback(async (mode: 'technical' | 'revision') => {
+    const normalizedPreCheckStatus = String(ms?.pre_check_status || '').trim().toLowerCase()
+    if (mode === 'technical') {
+      const canOpenTechnicalPreview =
+        statusLower === 'revision_before_review' ||
+        (statusLower === 'pre_check' && ['intake', 'technical'].includes(normalizedPreCheckStatus))
+      if (!canOpenTechnicalPreview) {
+        toast.error('Technical revision email is only available for intake / technical return flows.')
+        return
+      }
+    } else if (!['major_revision', 'minor_revision'].includes(statusLower)) {
+      toast.error('Formal revision request email is only available after the manuscript is already in major/minor revision.')
+      return
+    }
+
     setAuthorEmailPreviewMode(mode)
     setAuthorEmailPreviewOpen(true)
     setAuthorEmailPreviewLoading(true)
@@ -1211,7 +1225,7 @@ export default function EditorManuscriptDetailPage() {
     } finally {
       setAuthorEmailPreviewLoading(false)
     }
-  }, [id, statusLower])
+  }, [id, ms?.pre_check_status, statusLower])
 
   const handleCloseAuthorEmailPreview = useCallback(() => {
     if (authorEmailPreviewSending) return
@@ -1490,6 +1504,7 @@ export default function EditorManuscriptDetailPage() {
             canSubmitFinalDecision={capability.canSubmitFinalDecision}
             canOpenProductionWorkspace={canOpenProductionWorkspace}
             statusLower={statusLower}
+            preCheckStatus={ms.pre_check_status}
             finalPdfPath={ms.final_pdf_path}
             invoice={ms.invoice}
             showDirectStatusTransitions={showDirectStatusTransitions}
@@ -1558,7 +1573,7 @@ export default function EditorManuscriptDetailPage() {
         description={
           authorEmailPreviewMode === 'technical'
             ? '发送技术退修邮件给作者。邮件发出后需要人工将稿件推进到 revision_before_review 状态。'
-            : '发送修回请求给作者。邮件发出后需确认稿件已处于正确的状态。'
+            : '发送正式修回请求给作者。此入口只用于 major/minor revision 阶段的手工补发，不改变稿件状态。'
         }
         loading={authorEmailPreviewLoading}
         sending={authorEmailPreviewSending}

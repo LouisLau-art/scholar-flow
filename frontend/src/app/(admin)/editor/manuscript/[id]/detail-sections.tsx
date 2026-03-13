@@ -878,6 +878,7 @@ type EditorialActionsCardProps = {
   canSubmitFinalDecision: boolean
   canOpenProductionWorkspace: boolean
   statusLower: string
+  preCheckStatus?: string | null
   finalPdfPath?: string | null
   invoice?: ManuscriptDetail['invoice']
   showDirectStatusTransitions: boolean
@@ -907,6 +908,7 @@ export function EditorialActionsCard({
   canSubmitFinalDecision,
   canOpenProductionWorkspace,
   statusLower,
+  preCheckStatus,
   finalPdfPath,
   invoice,
   showDirectStatusTransitions,
@@ -923,6 +925,15 @@ export function EditorialActionsCard({
   getTransitionActionLabel,
   onOpenAuthorEmailPreview,
 }: EditorialActionsCardProps) {
+  const normalizedPreCheckStatus = String(preCheckStatus || '').trim().toLowerCase()
+  const showTechnicalRevisionEmailAction =
+    statusLower === 'revision_before_review' ||
+    (statusLower === 'pre_check' && ['intake', 'technical'].includes(normalizedPreCheckStatus))
+  const showFormalRevisionRequestEmailAction = ['major_revision', 'minor_revision'].includes(statusLower)
+  const showAuthorCommunication =
+    !['published', 'rejected'].includes(statusLower) &&
+    (showTechnicalRevisionEmailAction || showFormalRevisionRequestEmailAction)
+
   return (
     <Card className="border-t-4 border-t-purple-500 shadow-sm">
       <CardHeader>
@@ -971,16 +982,16 @@ export function EditorialActionsCard({
         )}
 
         {/* Author Communication Section */}
-        {!['published', 'rejected'].includes(statusLower) && (
+        {showAuthorCommunication && (
           <div className="space-y-2 pt-2 border-t border-border/60">
             <div className="text-xs font-semibold text-muted-foreground mb-2">AUTHOR COMMUNICATION</div>
-            {['pre_check', 'revision_before_review'].includes(statusLower) && (
+            {showTechnicalRevisionEmailAction && (
               <Button className="w-full justify-start" variant="outline" onClick={() => onOpenAuthorEmailPreview?.('technical')}>
                 <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
                 Send Technical Revision Email
               </Button>
             )}
-            {['under_review', 'resubmitted', 'decision', 'decision_done', 'major_revision', 'minor_revision'].includes(statusLower) && (
+            {showFormalRevisionRequestEmailAction && (
               <Button className="w-full justify-start" variant="outline" onClick={() => onOpenAuthorEmailPreview?.('revision')}>
                 <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
                 Send Formal Revision Request Email

@@ -211,6 +211,38 @@ def test_submit_revision_happy_path_and_failures(supabase_admin, monkeypatch):
     assert out["data"]["manuscript_status"] == "resubmitted"
 
 
+def test_resolve_precheck_resubmit_stage_prefers_waiting_author_technical_with_assigned_ae():
+    svc = revision_service_module.RevisionService()
+
+    resolved = svc.resolve_precheck_resubmit_stage(
+        manuscript={
+            "status": "revision_before_review",
+            "pre_check_status": "technical",
+            "assistant_editor_id": "ae-1",
+        },
+        pending_revision={"id": "r1"},
+        requested_stage=None,
+    )
+
+    assert resolved == "technical"
+
+
+def test_resolve_precheck_resubmit_stage_falls_back_to_intake_without_assigned_ae():
+    svc = revision_service_module.RevisionService()
+
+    resolved = svc.resolve_precheck_resubmit_stage(
+        manuscript={
+            "status": "revision_before_review",
+            "pre_check_status": "technical",
+            "assistant_editor_id": None,
+        },
+        pending_revision={"id": "r1", "__derived_precheck_stage": "technical"},
+        requested_stage="technical",
+    )
+
+    assert resolved == "intake"
+
+
 def test_submit_revision_routes_precheck_technical_return_back_to_precheck(supabase_admin, monkeypatch):
     svc = revision_service_module.RevisionService()
     monkeypatch.setattr(

@@ -264,6 +264,7 @@ async def test_author_submit_revision_uses_persisted_precheck_stage_when_pending
         f"{MOCK_MANUSCRIPT_ID}/v2_revision.pdf",
         f"{MOCK_MANUSCRIPT_ID}/v2_revision.docx",
     ]
+    revision_service.resolve_precheck_resubmit_stage.return_value = PreCheckStatus.TECHNICAL.value
     revision_service.submit_revision.return_value = {
         "success": True,
         "data": {
@@ -304,6 +305,73 @@ async def test_author_submit_revision_uses_persisted_precheck_stage_when_pending
 
     assert response.status_code == 200
     assert revision_service.submit_revision.call_args.kwargs["precheck_resubmit_stage"] == PreCheckStatus.TECHNICAL.value
+    notification_service.create_notification.assert_called()
+
+
+async def test_author_submit_revision_falls_back_to_intake_when_resubmit_stage_has_no_assigned_ae(client, mocker):
+    author_id = str(uuid4())
+    app.dependency_overrides[get_current_user] = lambda: {"id": author_id, "email": "author@example.com"}
+
+    revision_service = mocker.Mock()
+    revision_service.get_manuscript.return_value = {
+        "id": MOCK_MANUSCRIPT_ID,
+        "title": "Waiting Author Intake Fallback",
+        "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+        "pre_check_status": PreCheckStatus.TECHNICAL.value,
+        "assistant_editor_id": None,
+        "author_id": author_id,
+        "version": 2,
+    }
+    revision_service.ensure_pending_revision_for_submit.return_value = {
+        "id": "rev-2",
+        "decision_type": "minor",
+        "__derived_precheck_stage": PreCheckStatus.TECHNICAL.value,
+    }
+    revision_service.resolve_precheck_resubmit_stage.return_value = PreCheckStatus.INTAKE.value
+    revision_service.generate_versioned_file_path.side_effect = [
+        f"{MOCK_MANUSCRIPT_ID}/v3_revision.pdf",
+        f"{MOCK_MANUSCRIPT_ID}/v3_revision.docx",
+    ]
+    revision_service.submit_revision.return_value = {
+        "success": True,
+        "data": {
+            "manuscript_status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.INTAKE.value,
+        },
+    }
+    mocker.patch("app.api.v1.manuscripts_submission.RevisionService", return_value=revision_service)
+
+    storage_bucket = mocker.Mock()
+    storage_bucket.upload.return_value = None
+    supabase_admin = mocker.Mock()
+    supabase_admin.storage.from_.return_value = storage_bucket
+    supabase_admin.table.return_value.upsert.return_value.execute.return_value = SimpleNamespace(data=[{"id": "file-2"}])
+    mocker.patch(
+        "app.api.v1.manuscripts_submission._m",
+        return_value=SimpleNamespace(
+            supabase_admin=supabase_admin,
+            _is_missing_table_error=lambda *_args, **_kwargs: False,
+        ),
+    )
+
+    notification_service = mocker.Mock()
+    mocker.patch("app.api.v1.manuscripts_submission.NotificationService", return_value=notification_service)
+
+    response = await client.post(
+        f"/api/v1/manuscripts/{MOCK_MANUSCRIPT_ID}/revisions",
+        data={"response_letter": "作者已完成修订并重新提交。"},
+        files={
+            "pdf_file": ("revised.pdf", b"%PDF-1.4 mocked", "application/pdf"),
+            "word_file": (
+                "revised.docx",
+                b"PK\x03\x04 mocked docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert revision_service.submit_revision.call_args.kwargs["precheck_resubmit_stage"] == PreCheckStatus.INTAKE.value
     notification_service.create_notification.assert_called()
 
 

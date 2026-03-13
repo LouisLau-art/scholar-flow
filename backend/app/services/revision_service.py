@@ -216,6 +216,51 @@ class RevisionService:
             print(f"[RevisionService] get_next_round_number error: {e}")
             return 1
 
+    def resolve_precheck_resubmit_stage(
+        self,
+        *,
+        manuscript: dict | None,
+        pending_revision: dict | None = None,
+        requested_stage: Optional[Literal["intake", "technical"]] = None,
+    ) -> Optional[Literal["intake", "technical"]]:
+        """
+        统一解析作者修回后的 precheck 回流目标。
+
+        中文注释:
+        - 单一真相放在 service 层，避免 API 层与业务层各自复制一套判断；
+        - `revision_before_review` 永远优先信任稿件上持久化的 `pre_check_status`；
+        - 其余兼容场景再使用 pending revision 的派生 hint 或显式传入值。
+        """
+        ms = manuscript or {}
+        current_status_raw = str(ms.get("status") or "").strip().lower()
+        current_status = normalize_status(current_status_raw) or current_status_raw
+        persisted_stage = str(ms.get("pre_check_status") or "").strip().lower()
+        has_assigned_ae = bool(str(ms.get("assistant_editor_id") or "").strip())
+
+        requested = str(requested_stage or "").strip().lower()
+        if requested not in {"intake", "technical"}:
+            requested = ""
+
+        pending_hint = ""
+        if isinstance(pending_revision, dict):
+            pending_hint = str(pending_revision.get("__derived_precheck_stage") or "").strip().lower()
+            if pending_hint not in {"intake", "technical"}:
+                pending_hint = ""
+
+        resolved = requested or pending_hint or None
+
+        if current_status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
+            if persisted_stage == "technical" and has_assigned_ae:
+                return "technical"
+            if persisted_stage in {"intake", "technical"}:
+                return "intake"
+
+        if resolved == "technical" and not has_assigned_ae:
+            return "intake"
+        if resolved in {"intake", "technical"}:
+            return resolved
+        return None
+
     def create_revision_request(
         self,
         manuscript_id: str,
@@ -435,19 +480,11 @@ class RevisionService:
             return {"success": False, "error": f"Failed to update revision: {e}"}
 
         # 8. 更新稿件
-        resolved_precheck_resubmit_stage = precheck_resubmit_stage
-        if current_status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
-            persisted_precheck_stage = str(manuscript.get("pre_check_status") or "").strip().lower()
-            persisted_assistant_editor_id = str(manuscript.get("assistant_editor_id") or "").strip()
-            if persisted_precheck_stage == "technical" and persisted_assistant_editor_id:
-                resolved_precheck_resubmit_stage = "technical"
-            else:
-                resolved_precheck_resubmit_stage = "intake"
-        elif (
-            resolved_precheck_resubmit_stage == "technical"
-            and not str(manuscript.get("assistant_editor_id") or "").strip()
-        ):
-            resolved_precheck_resubmit_stage = "intake"
+        resolved_precheck_resubmit_stage = self.resolve_precheck_resubmit_stage(
+            manuscript=manuscript,
+            pending_revision=pending_revision,
+            requested_stage=precheck_resubmit_stage,
+        )
 
         is_precheck_revision_flow = (
             current_status in {

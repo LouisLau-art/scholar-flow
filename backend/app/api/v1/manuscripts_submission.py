@@ -385,15 +385,10 @@ async def submit_revision(
     )
     if not pending:
         raise HTTPException(status_code=400, detail="No pending revision request found")
-    precheck_resubmit_stage: str | None = None
-    if isinstance(pending, dict):
-        derived_stage = str(pending.get("__derived_precheck_stage") or "").strip().lower()
-        if derived_stage in {"intake", "technical"}:
-            precheck_resubmit_stage = derived_stage
-    if precheck_resubmit_stage is None and str(manuscript.get("status") or "").strip().lower() == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
-        persisted_stage = str(manuscript.get("pre_check_status") or "").strip().lower()
-        if persisted_stage in {"intake", "technical"}:
-            precheck_resubmit_stage = persisted_stage
+    precheck_resubmit_stage = service.resolve_precheck_resubmit_stage(
+        manuscript=manuscript,
+        pending_revision=pending if isinstance(pending, dict) else None,
+    )
 
     next_version = (manuscript.get("version", 1)) + 1
     pdf_file_path = service.generate_versioned_file_path(
