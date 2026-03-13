@@ -63,7 +63,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
     return map
   }, [staff])
 
-  const [layoutEditorId, setLayoutEditorId] = useState(productionStaff[0]?.id || '')
+  const [initialAssigneeId, setInitialAssigneeId] = useState(productionStaff[0]?.id || '')
   const [collaboratorIds, setCollaboratorIds] = useState<string[]>([])
   const [proofDueAt, setProofDueAt] = useState(() => {
     const n = new Date(Date.now() + 3 * 24 * 3600 * 1000)
@@ -86,14 +86,14 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
   const assignedAuthorId = useMemo(() => String(context.manuscript.author_id || ''), [context.manuscript.author_id])
 
   useEffect(() => {
-    if (!layoutEditorId && productionStaff[0]?.id) {
-      setLayoutEditorId(productionStaff[0].id)
+    if (!initialAssigneeId && productionStaff[0]?.id) {
+      setInitialAssigneeId(productionStaff[0].id)
     }
-  }, [layoutEditorId, productionStaff])
+  }, [initialAssigneeId, productionStaff])
 
   useEffect(() => {
     if (!activeCycle) return
-    setLayoutEditorId(String(activeCycle.layout_editor_id || ''))
+    setInitialAssigneeId(String(activeCycle.layout_editor_id || ''))
     setCollaboratorIds((activeCycle.collaborator_editor_ids || []).map((v) => String(v)))
     
     setCoordinatorAeId(activeCycle.coordinator_ae_id || '')
@@ -104,7 +104,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
   }, [activeCycle?.id])
 
   const handleCreateCycle = async () => {
-    if (!layoutEditorId) {
+    if (!initialAssigneeId) {
       toast.error('请选择负责人')
       return
     }
@@ -120,7 +120,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
     setCreateLoading(true)
     try {
       const res = await EditorApi.createProductionCycle(manuscriptId, {
-        layout_editor_id: layoutEditorId,
+        layout_editor_id: initialAssigneeId,
         collaborator_editor_ids: collaboratorIds,
         proofreader_author_id: assignedAuthorId,
         proof_due_at: new Date(proofDueAt).toISOString(),
@@ -215,8 +215,8 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Create Production Cycle</h3>
           <div>
-            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Layout Editor</Label>
-            <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
+            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Initial Assignee</Label>
+            <Select value={initialAssigneeId} onValueChange={setInitialAssigneeId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select editor" />
               </SelectTrigger>
@@ -351,7 +351,7 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             disabled={!activeCycle.galley_path}
             className="w-full"
           >
-            Open Current Galley (Legacy)
+            Open Current Proof PDF
           </Button>
 
         </div>

@@ -11,6 +11,10 @@ from app.core.doi_generator import generate_mock_doi
 from app.lib.api_client import supabase_admin
 from app.services.editorial_service import EditorialService
 from app.services.production_workspace_service import ProductionWorkspaceService
+from app.services.production_workspace_service_workflow_common import (
+    normalize_production_sop_schema_http_error,
+    production_sop_schema_http_error,
+)
 
 
 POST_ACCEPTANCE_CHAIN: Final[list[str]] = [
@@ -86,20 +90,27 @@ class ProductionService:
             )
             rows = getattr(inv, "data", None) or []
             return rows[0] if rows else None
-        except Exception:
-            return None
+        except Exception as e:
+            normalized = normalize_production_sop_schema_http_error(e)
+            if normalized is not None:
+                raise normalized from e
+            raise
 
     def _load_manuscript_for_gate(self, manuscript_id: str) -> dict[str, Any]:
+        production_gate_enabled = _is_truthy_env("PRODUCTION_GATE_ENABLED", "1")
         try:
             resp = (
                 self.client.table("manuscripts")
-                .select("id, status, final_pdf_path, doi, published_at")
+                .select("id, status, final_pdf_path")
                 .eq("id", manuscript_id)
                 .single()
                 .execute()
             )
             return getattr(resp, "data", None) or {}
         except Exception as e:
+            normalized = normalize_production_sop_schema_http_error(e)
+            if normalized is not None and production_gate_enabled:
+                raise normalized from e
             if _is_missing_column_error(str(e)):
                 resp = (
                     self.client.table("manuscripts")
@@ -130,7 +141,7 @@ class ProductionService:
         if not _is_truthy_env("PRODUCTION_GATE_ENABLED", "1"):
             return
         if "final_pdf_path" not in ms:
-            return
+            raise production_sop_schema_http_error("manuscripts final_pdf_path column missing")
         if not (ms.get("final_pdf_path") or "").strip():
             raise HTTPException(status_code=400, detail="Production PDF required.")
 

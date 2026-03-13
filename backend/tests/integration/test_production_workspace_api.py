@@ -324,3 +324,60 @@ async def test_production_schema_supports_sop_artifacts_events_and_feedback_atta
         assert response_rows[0]["attachment_file_name"] == "annotated-proof.pdf"
     finally:
         _cleanup(supabase_admin_client, manuscript_id, user_ids=[editor.id, author.id])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_production_workspace_route_standardizes_missing_schema_error(
+    client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    editor = make_user(email="prod_schema_missing_route@example.com")
+    set_admin_emails([editor.email])
+    manuscript_id = str(uuid4())
+
+    class _MissingSchemaService:
+        def get_workspace_context(self, **_kwargs):
+            raise RuntimeError('Could not find the table "public.production_cycles" in the schema cache (PGRST205)')
+
+    monkeypatch.setattr("app.api.v1.editor_production._enforce_scope_for_management_roles", lambda **_kwargs: None)
+    monkeypatch.setattr("app.api.v1.editor_production.ProductionWorkspaceService", lambda: _MissingSchemaService())
+
+    res = await client.get(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/production-workspace",
+        headers={"Authorization": f"Bearer {editor.token}"},
+    )
+
+    assert res.status_code == 503, res.text
+    assert res.json()["detail"].startswith("Production SOP schema not migrated:")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_proofreading_email_preview_route_standardizes_missing_schema_error(
+    client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    editor = make_user(email="production_email_schema_editor@example.com")
+    set_admin_emails([editor.email])
+    manuscript_id = str(uuid4())
+    cycle_id = str(uuid4())
+
+    monkeypatch.setattr("app.api.v1.editor_production._enforce_scope_for_management_roles", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "app.api.v1.editor_production._build_proofreading_email_preview",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError('Could not find the table "public.production_cycles" in the schema cache (PGRST205)')
+        ),
+    )
+
+    res = await client.post(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles/{cycle_id}/proofreading-email/preview",
+        headers={"Authorization": f"Bearer {editor.token}"},
+        json={"editor_message": "Please review the proof"},
+    )
+
+    assert res.status_code == 503, res.text
+    assert res.json()["detail"].startswith("Production SOP schema not migrated:")

@@ -889,7 +889,6 @@ type EditorialActionsCardProps = {
   onOpenReviewStageExitDialog: () => void
   onOpenDecisionWorkspace: () => void
   onOpenProductionWorkspace: () => void
-  onProductionStatusChange: (next: string) => void
   onReload: () => void
   onOpenTransitionDialog: (nextStatus: string) => void
   getTransitionActionLabel: (nextStatus: string) => string
@@ -919,7 +918,6 @@ export function EditorialActionsCard({
   onOpenReviewStageExitDialog,
   onOpenDecisionWorkspace,
   onOpenProductionWorkspace,
-  onProductionStatusChange,
   onReload,
   onOpenTransitionDialog,
   getTransitionActionLabel,
@@ -1004,7 +1002,6 @@ export function EditorialActionsCard({
                   status={statusLower || 'approved'}
                   finalPdfPath={finalPdfPath}
                   invoice={invoice}
-                  onStatusChange={onProductionStatusChange}
                   onReload={onReload}
                 />
               </>

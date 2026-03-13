@@ -2,6 +2,7 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from fastapi import HTTPException
 
 from .test_utils import insert_manuscript, make_user
 from .test_production_workspace_api import _require_schema
@@ -178,3 +179,35 @@ async def test_production_sop_author_feedback(client, test_data, supabase_admin_
     assert feedback_res.status_code == 200
     assert feedback_res.json()["data"]["response"]["decision"] == "submit_corrections"
     assert feedback_res.json()["data"]["response"]["attachment_file_name"] == "annotated.pdf"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_create_cycle_route_normalizes_legacy_db_not_migrated_error(
+    client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    editor = make_user(email="sop_schema_error_editor@example.com")
+    set_admin_emails([editor.email])
+    manuscript_id = str(uuid4())
+
+    class _LegacySchemaService:
+        def create_cycle(self, **_kwargs):
+            raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing")
+
+    monkeypatch.setattr("app.api.v1.editor_production._enforce_scope_for_management_roles", lambda **_kwargs: None)
+    monkeypatch.setattr("app.api.v1.editor_production.ProductionWorkspaceService", lambda: _LegacySchemaService())
+
+    res = await client.post(
+        f"/api/v1/editor/manuscripts/{manuscript_id}/production-cycles",
+        headers={"Authorization": f"Bearer {editor.token}"},
+        json={
+            "layout_editor_id": "00000000-0000-0000-0000-000000000001",
+            "proofreader_author_id": "00000000-0000-0000-0000-000000000002",
+            "proof_due_at": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+        },
+    )
+
+    assert res.status_code == 503, res.text
+    assert res.json()["detail"].startswith("Production SOP schema not migrated:")

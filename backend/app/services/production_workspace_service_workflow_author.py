@@ -10,6 +10,7 @@ from app.services.production_workspace_service_workflow_common import (
     AUTHOR_CONTEXT_VISIBLE_STATUSES,
     is_missing_column_error,
     is_table_missing_error,
+    production_sop_schema_http_error,
     utc_now,
 )
 
@@ -42,10 +43,7 @@ class ProductionWorkspaceWorkflowAuthorMixin:
             rows = getattr(resp, "data", None) or []
         except Exception as e:
             if is_table_missing_error(e, "production_cycles"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_cycles table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_cycles table missing") from e
             raise
 
         if not rows:
@@ -178,8 +176,22 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                     "uploaded_by": user_id,
                     "metadata": {"source": "author_feedback"}
                 }).execute()
-            except Exception:
-                pass
+            except Exception as exc:
+                try:
+                    bucket = self.client.storage.from_(attachment_bucket)
+                    remover = getattr(bucket, "remove", None)
+                    if callable(remover):
+                        remover([attachment_path])
+                except Exception:
+                    pass
+                if is_table_missing_error(exc, "production_cycle_artifacts"):
+                    raise production_sop_schema_http_error("production_cycle_artifacts table missing") from exc
+                if any(
+                    is_missing_column_error(exc, column)
+                    for column in ("artifact_kind", "storage_bucket", "storage_path", "metadata")
+                ):
+                    raise production_sop_schema_http_error("production_cycle_artifacts schema missing") from exc
+                raise HTTPException(status_code=500, detail=f"Failed to record author attachment artifact: {exc}") from exc
                 
         try:
             if existing and not existing_is_current and str(existing.get("id") or "").strip():
@@ -208,17 +220,7 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                     )
                 except Exception as e:
                     if is_missing_column_error(e, "attachment_bucket"):
-                        update_payload.pop("attachment_bucket", None)
-                        update_payload.pop("attachment_path", None)
-                        update_payload.pop("attachment_file_name", None)
-                        resp = (
-                            self.client.table("production_proofreading_responses")
-                            .update(update_payload)
-                            .eq("id", response_id)
-                            .eq("cycle_id", cycle_id)
-                            .eq("manuscript_id", manuscript_id)
-                            .execute()
-                        )
+                        raise production_sop_schema_http_error("production_proofreading_responses attachment columns missing") from e
                     else:
                         raise e
                         
@@ -246,10 +248,7 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                     resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
                 except Exception as e:
                     if is_missing_column_error(e, "attachment_bucket"):
-                        response_payload.pop("attachment_bucket", None)
-                        response_payload.pop("attachment_path", None)
-                        response_payload.pop("attachment_file_name", None)
-                        resp = self.client.table("production_proofreading_responses").insert(response_payload).execute()
+                        raise production_sop_schema_http_error("production_proofreading_responses attachment columns missing") from e
                     else:
                         raise e
                         
@@ -260,11 +259,16 @@ class ProductionWorkspaceWorkflowAuthorMixin:
         except HTTPException:
             raise
         except Exception as e:
+            if attachment_path:
+                try:
+                    bucket = self.client.storage.from_(attachment_bucket)
+                    remover = getattr(bucket, "remove", None)
+                    if callable(remover):
+                        remover([attachment_path])
+                except Exception:
+                    pass
             if is_table_missing_error(e, "production_proofreading_responses"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_proofreading_responses table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_proofreading_responses table missing") from e
             raise HTTPException(status_code=500, detail=f"Failed to save proofreading response: {e}") from e
 
         response_id = str(response_row.get("id") or "").strip()
@@ -273,10 +277,9 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                 self.client.table("production_correction_items").delete().eq("response_id", response_id).execute()
         except Exception as e:
             if is_table_missing_error(e, "production_correction_items"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_correction_items table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_correction_items table missing") from e
+            if is_missing_column_error(e, "response_id"):
+                raise production_sop_schema_http_error("production_correction_items schema missing") from e
             raise HTTPException(status_code=500, detail=f"Failed to reset correction items: {e}") from e
 
         if decision == "submit_corrections":
@@ -297,10 +300,12 @@ class ProductionWorkspaceWorkflowAuthorMixin:
                     self.client.table("production_correction_items").insert(items).execute()
             except Exception as e:
                 if is_table_missing_error(e, "production_correction_items"):
-                    raise HTTPException(
-                        status_code=500,
-                        detail="DB not migrated: production_correction_items table missing",
-                    ) from e
+                    raise production_sop_schema_http_error("production_correction_items table missing") from e
+                if any(
+                    is_missing_column_error(e, column)
+                    for column in ("response_id", "line_ref", "original_text", "suggested_text", "reason", "sort_order")
+                ):
+                    raise production_sop_schema_http_error("production_correction_items schema missing") from e
                 raise HTTPException(status_code=500, detail=f"Failed to save correction items: {e}") from e
 
         try:
@@ -320,12 +325,7 @@ class ProductionWorkspaceWorkflowAuthorMixin:
             ).eq("id", cycle_id).eq("manuscript_id", manuscript_id).execute()
         except Exception as e:
             if any(is_missing_column_error(e, column) for column in ("stage", "current_assignee_id")):
-                self.client.table("production_cycles").update(
-                    {
-                        "status": new_status,
-                        "updated_at": submitted_at,
-                    }
-                ).eq("id", cycle_id).eq("manuscript_id", manuscript_id).execute()
+                raise production_sop_schema_http_error("production_cycles SOP columns missing") from e
             else:
                 raise HTTPException(status_code=500, detail=f"Failed to update cycle status: {e}") from e
 

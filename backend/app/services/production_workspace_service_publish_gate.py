@@ -5,6 +5,12 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from app.services.production_workspace_service_workflow_common import (
+    is_missing_column_error,
+    is_table_missing_error,
+    production_sop_schema_http_error,
+)
+
 
 def _is_truthy_env(name: str, default: str = "0") -> bool:
     return (os.getenv(name, default) or "").strip().lower() in {
@@ -14,16 +20,6 @@ def _is_truthy_env(name: str, default: str = "0") -> bool:
         "on",
         "y",
     }
-
-
-def _is_table_missing_error(error: Exception, table_name: str) -> bool:
-    text = str(error).lower()
-    tname = table_name.lower()
-    return tname in text and ("does not exist" in text or "in the schema cache" in text or "pgrst205" in text)
-
-def _is_missing_column_error(error: Exception, column_name: str) -> bool:
-    text = str(error).lower()
-    return column_name.lower() in text and ("column" in text or "schema cache" in text)
 
 
 class ProductionWorkspacePublishGateMixin:
@@ -46,21 +42,18 @@ class ProductionWorkspacePublishGateMixin:
                     .execute()
                 )
             except Exception as e:
-                if _is_missing_column_error(e, "stage"):
-                    resp = (
-                        self.client.table("production_cycles")
-                        .select("id,manuscript_id,cycle_no,status,galley_path,approved_at")
-                        .eq("manuscript_id", manuscript_id)
-                        .order("cycle_no", desc=True)
-                        .limit(1)
-                        .execute()
-                    )
+                if is_missing_column_error(e, "stage"):
+                    raise production_sop_schema_http_error("production_cycles stage column missing") from e
+                if any(is_missing_column_error(e, column) for column in ("approved_at", "galley_path")):
+                    raise production_sop_schema_http_error("production_cycles publish gate columns missing") from e
                 else:
                     raise
             rows = getattr(resp, "data", None) or []
+        except HTTPException:
+            raise
         except Exception as e:
-            if _is_table_missing_error(e, "production_cycles"):
-                return None
+            if is_table_missing_error(e, "production_cycles"):
+                raise production_sop_schema_http_error("production_cycles table missing") from e
             raise HTTPException(status_code=500, detail=f"Failed to validate production cycle gate: {e}") from e
 
         if not rows:

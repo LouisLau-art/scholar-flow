@@ -36,7 +36,7 @@ def _cleanup(db, manuscript_id: str, *, user_ids: list[str]) -> None:
 
 def _require_schema(db) -> None:
     checks = [
-        ("production_cycles", "id,manuscript_id,cycle_no,status,galley_path"),
+        ("production_cycles", "id,manuscript_id,cycle_no,status,stage,galley_path,approved_at"),
         ("invoices", "id,manuscript_id,amount,status"),
         ("manuscripts", "id,status,final_pdf_path"),
     ]
@@ -116,7 +116,7 @@ async def test_publish_requires_approved_production_cycle(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="proofreading",
+        status="approved_for_publish",
         title="Publish Gate Required",
         file_path=f"manuscripts/{manuscript_id}/v1.pdf",
     )
@@ -165,7 +165,7 @@ async def test_publish_succeeds_with_approved_production_cycle(
         supabase_admin_client,
         manuscript_id=manuscript_id,
         author_id=author.id,
-        status="proofreading",
+        status="approved_for_publish",
         title="Publish Gate Success",
         file_path=f"manuscripts/{manuscript_id}/v1.pdf",
     )

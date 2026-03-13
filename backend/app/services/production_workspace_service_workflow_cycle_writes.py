@@ -18,6 +18,7 @@ from app.services.production_workspace_service_workflow_common import (
     POST_ACCEPTANCE_ALLOWED,
     is_missing_column_error,
     is_table_missing_error,
+    production_sop_schema_http_error,
     safe_filename,
     utc_now,
     utc_now_iso,
@@ -132,18 +133,10 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
                 is_missing_column_error(exc, column)
                 for column in ("stage", "typesetter_id", "current_assignee_id")
             ):
-                legacy_payload = dict(payload)
-                legacy_payload.pop("stage", None)
-                legacy_payload.pop("typesetter_id", None)
-                legacy_payload.pop("current_assignee_id", None)
-                resp = self.client.table("production_cycles").insert(legacy_payload).execute()
-                rows = getattr(resp, "data", None) or []
-                if not rows:
-                    raise HTTPException(status_code=500, detail="Failed to create production cycle")
-                row = rows[0]
+                raise production_sop_schema_http_error("production_cycles SOP columns missing") from exc
             else:
                 if is_table_missing_error(exc, "production_cycles"):
-                    raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
+                    raise production_sop_schema_http_error("production_cycles table missing") from exc
                 if "idx_production_cycles_active_unique" in str(exc):
                     raise HTTPException(status_code=409, detail="An active production cycle already exists") from exc
                 raise HTTPException(status_code=500, detail=f"Failed to create production cycle: {exc}") from exc
@@ -231,7 +224,7 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             raise
         except Exception as exc:
             if is_missing_column_error(exc, "collaborator_editor_ids"):
-                raise HTTPException(status_code=500, detail="DB not migrated: collaborator_editor_ids column missing") from exc
+                raise production_sop_schema_http_error("production_cycles collaborator_editor_ids column missing") from exc
             raise HTTPException(status_code=500, detail=f"Failed to update production cycle editors: {exc}") from exc
 
         self._insert_log(
@@ -303,8 +296,7 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             raise
         except Exception as exc:
             if any(is_missing_column_error(exc, col) for col in ["coordinator_ae_id", "typesetter_id", "language_editor_id", "pdf_editor_id"]):
-                # Legacy fallback: just don't update if schema not ready
-                return self._format_cycle(cycle, include_signed_url=False)
+                raise production_sop_schema_http_error("production_cycles assignment columns missing") from exc
             raise HTTPException(status_code=500, detail=f"Failed to update production cycle assignments: {exc}") from exc
 
         self._insert_log(
@@ -380,9 +372,22 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             artifact_id = (getattr(artifact_resp, "data", [{}]) or [{}])[0].get("id")
         except Exception as e:
             if is_table_missing_error(e, "production_cycle_artifacts"):
-                pass
+                try:
+                    self.client.storage.from_("production-proofs").remove([object_path])
+                except Exception:
+                    pass
+                raise production_sop_schema_http_error("production_cycle_artifacts table missing") from e
+            if any(
+                is_missing_column_error(e, column)
+                for column in ("artifact_kind", "storage_bucket", "storage_path", "metadata")
+            ):
+                try:
+                    self.client.storage.from_("production-proofs").remove([object_path])
+                except Exception:
+                    pass
+                raise production_sop_schema_http_error("production_cycle_artifacts schema missing") from e
             else:
-                raise HTTPException(status_code=500, detail=f"Failed to save artifact metadata: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to save artifact metadata: {e}") from e
 
         from app.services.production_workspace_service import _derive_cycle_stage
         current_stage = _derive_cycle_stage(status=cycle.get("status"), stage=cycle.get("stage"))
@@ -447,18 +452,7 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
             row = rows[0]
         except Exception as exc:
             if is_missing_column_error(exc, "stage"):
-                # fallback, just update updated_at
-                resp = (
-                    self.client.table("production_cycles")
-                    .update(patch)
-                    .eq("id", cycle_id)
-                    .eq("manuscript_id", manuscript_id)
-                    .execute()
-                )
-                rows = getattr(resp, "data", None) or []
-                if not rows:
-                    raise HTTPException(status_code=500, detail="Failed to transition cycle stage")
-                row = rows[0]
+                raise production_sop_schema_http_error("production_cycles stage column missing") from exc
             else:
                 raise HTTPException(status_code=500, detail=f"Failed to transition cycle stage: {exc}") from exc
 
@@ -545,8 +539,22 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
                 "uploaded_by": user_id,
                 "metadata": {"version_note": note}
             }).execute()
-        except Exception:
-            pass
+        except Exception as exc:
+            try:
+                bucket = self.client.storage.from_("production-proofs")
+                remover = getattr(bucket, "remove", None)
+                if callable(remover):
+                    remover([object_path])
+            except Exception:
+                pass
+            if is_table_missing_error(exc, "production_cycle_artifacts"):
+                raise production_sop_schema_http_error("production_cycle_artifacts table missing") from exc
+            if any(
+                is_missing_column_error(exc, column)
+                for column in ("artifact_kind", "storage_bucket", "storage_path", "metadata")
+            ):
+                raise production_sop_schema_http_error("production_cycle_artifacts schema missing") from exc
+            raise HTTPException(status_code=500, detail=f"Failed to record galley artifact: {exc}") from exc
 
         patch: dict[str, Any] = {
             "status": "awaiting_author",
@@ -579,20 +587,14 @@ class ProductionWorkspaceWorkflowCycleWritesMixin:
                 is_missing_column_error(exc, column)
                 for column in ("stage", "current_assignee_id")
             ):
-                legacy_patch = dict(patch)
-                legacy_patch.pop("stage", None)
-                legacy_patch.pop("current_assignee_id", None)
-                resp = (
-                    self.client.table("production_cycles")
-                    .update(legacy_patch)
-                    .eq("id", cycle_id)
-                    .eq("manuscript_id", manuscript_id)
-                    .execute()
-                )
-                rows = getattr(resp, "data", None) or []
-                if not rows:
-                    raise HTTPException(status_code=500, detail="Failed to update cycle after galley upload")
-                row = rows[0]
+                try:
+                    bucket = self.client.storage.from_("production-proofs")
+                    remover = getattr(bucket, "remove", None)
+                    if callable(remover):
+                        remover([object_path])
+                except Exception:
+                    pass
+                raise production_sop_schema_http_error("production_cycles SOP columns missing") from exc
             else:
                 raise HTTPException(status_code=500, detail=f"Failed to update cycle: {exc}") from exc
 

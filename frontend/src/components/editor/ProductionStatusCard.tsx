@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Loader2, ArrowRight } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -15,7 +15,6 @@ type Props = {
   status: string
   finalPdfPath?: string | null
   invoice?: { status?: string | null; amount?: number | string | null } | null
-  onStatusChange?: (nextStatus: string) => void
   onReload?: () => Promise<void> | void
 }
 
@@ -60,30 +59,6 @@ export function ProductionStatusCard({
       void onReload?.()
     } catch (e: any) {
       toast.error(e instanceof Error ? e.message : 'Confirm payment failed', { id: toastId })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  async function runPublish() {
-    const toastId = toast.loading('Publishing…')
-    setPending(true)
-    try {
-      const res = await EditorApi.advanceProduction(manuscriptId)
-      if (!res?.success) throw new Error(res?.detail || res?.message || 'Publish failed')
-      toast.success(`Moved to Published`, { id: toastId })
-      void onReload?.()
-    } catch (e: any) {
-      const detail =
-        e instanceof Error ? e.message : typeof e === 'string' ? e : 'Publish failed'
-      // 中文注释：尽量把门禁错误翻译成更友好的提示
-      if (String(detail).toLowerCase().includes('payment required')) {
-        toast.error('Waiting for Payment.', { id: toastId })
-      } else if (String(detail).toLowerCase().includes('production pdf') || String(detail).toLowerCase().includes('approval required')) {
-        toast.error('Production Gate not met.', { id: toastId })
-      } else {
-        toast.error(detail, { id: toastId })
-      }
     } finally {
       setPending(false)
     }
@@ -145,13 +120,6 @@ export function ProductionStatusCard({
             <span>Open Production Workspace</span>
             <ArrowRight className="h-4 w-4 text-muted-foreground" />
           </Link>
-          
-          {normalized === 'approved_for_publish' && (
-            <Button className="w-full justify-between mt-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={runPublish} disabled={pending}>
-              <span>Publish Manuscript</span>
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>

@@ -20,6 +20,11 @@ from app.models.production_workspace import (
 from app.services.notification_service import NotificationService
 from app.services.production_workspace_service_workflow import ProductionWorkspaceWorkflowMixin
 from app.services.production_workspace_service_publish_gate import ProductionWorkspacePublishGateMixin
+from app.services.production_workspace_service_workflow_common import (
+    is_missing_column_error as _common_is_missing_column_error,
+    is_table_missing_error as _common_is_table_missing_error,
+    production_sop_schema_http_error,
+)
 
 
 POST_ACCEPTANCE_ALLOWED = {
@@ -100,14 +105,11 @@ def _is_truthy_env(name: str, default: str = "0") -> bool:
 
 
 def _is_table_missing_error(error: Exception, table_name: str) -> bool:
-    text = str(error).lower()
-    tname = table_name.lower()
-    return tname in text and ("does not exist" in text or "in the schema cache" in text or "pgrst205" in text)
+    return _common_is_table_missing_error(error=error, table_name=table_name)
 
 
 def _is_missing_column_error(error: Exception, column_name: str) -> bool:
-    text = str(error).lower()
-    return column_name.lower() in text and ("column" in text or "schema cache" in text)
+    return _common_is_missing_column_error(error=error, column_name=column_name)
 
 
 def _safe_filename(filename: str) -> str:
@@ -395,19 +397,9 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                     "current_assignee_id",
                 )
             ):
-                resp = (
-                    self.client.table("production_cycles")
-                    .select(_PRODUCTION_CYCLE_SELECT_LEGACY)
-                    .eq("manuscript_id", manuscript_id)
-                    .order("cycle_no", desc=True)
-                    .execute()
-                )
-                return getattr(resp, "data", None) or []
+                raise production_sop_schema_http_error("production_cycles SOP columns missing") from e
             if _is_table_missing_error(e, "production_cycles"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_cycles table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_cycles table missing") from e
             raise
 
     def _get_cycle(self, *, manuscript_id: str, cycle_id: str) -> dict[str, Any]:
@@ -433,25 +425,10 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                     "current_assignee_id",
                 )
             ):
-                try:
-                    resp = (
-                        self.client.table("production_cycles")
-                        .select(_PRODUCTION_CYCLE_SELECT_LEGACY)
-                        .eq("manuscript_id", manuscript_id)
-                        .eq("id", cycle_id)
-                        .single()
-                        .execute()
-                    )
-                    row = getattr(resp, "data", None) or None
-                except Exception as legacy_exc:
-                    raise HTTPException(status_code=404, detail="Production cycle not found") from legacy_exc
-            else:
-                row = None
+                raise production_sop_schema_http_error("production_cycles SOP columns missing") from e
+            row = None
             if _is_table_missing_error(e, "production_cycles"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_cycles table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_cycles table missing") from e
             if row is None:
                 raise HTTPException(status_code=404, detail="Production cycle not found") from e
 
@@ -471,12 +448,12 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             return getattr(resp, "data", None) or []
         except Exception as e:
             if _is_table_missing_error(e, "production_cycle_artifacts"):
-                return []
+                raise production_sop_schema_http_error("production_cycle_artifacts table missing") from e
             if any(
                 _is_missing_column_error(e, column)
                 for column in ("artifact_kind", "storage_bucket", "storage_path", "metadata")
             ):
-                return []
+                raise production_sop_schema_http_error("production_cycle_artifacts schema missing") from e
             raise
 
     def _get_latest_response(self, cycle_id: str) -> dict[str, Any] | None:
@@ -492,10 +469,7 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
             rows = getattr(resp, "data", None) or []
         except Exception as e:
             if _is_table_missing_error(e, "production_proofreading_responses"):
-                raise HTTPException(
-                    status_code=500,
-                    detail="DB not migrated: production_proofreading_responses table missing",
-                ) from e
+                raise production_sop_schema_http_error("production_proofreading_responses table missing") from e
             raise
 
         if not rows:
@@ -512,8 +486,15 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                     .execute()
                 )
                 row["corrections"] = getattr(c, "data", None) or []
-            except Exception:
-                row["corrections"] = []
+            except Exception as e:
+                if _is_table_missing_error(e, "production_correction_items"):
+                    raise production_sop_schema_http_error("production_correction_items table missing") from e
+                if any(
+                    _is_missing_column_error(e, column)
+                    for column in ("line_ref", "original_text", "suggested_text", "reason", "sort_order")
+                ):
+                    raise production_sop_schema_http_error("production_correction_items schema missing") from e
+                raise
         else:
             row["corrections"] = []
         return row
@@ -599,48 +580,29 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
         }
         rows: list[dict[str, Any]] = []
 
-        # 1) 优先写入带 payload 的版本（审计事件完整）。
         row_with_payload = dict(base_row)
         row_with_payload["payload"] = payload
         rows.append(row_with_payload)
 
-        # 2) 兼容：某些云端/老 schema 可能缺 payload 列（写入降级）。
-        rows.append(dict(base_row))
-
-        # 3) 兼容：changed_by 外键指向 auth.users，在测试/种子数据下可能不存在。
-        #    用 changed_by=None 写入，同时把原值放进 payload 以便追溯。
         row_no_fk = dict(base_row)
         row_no_fk["changed_by"] = None
         row_no_fk["payload"] = {**payload, "changed_by_raw": changed_by}
         rows.append(row_no_fk)
 
-        # 4) 最小兜底：避免所有 insert 都失败导致无审计。
-        rows.append(
-            {
-                "manuscript_id": manuscript_id,
-                "from_status": from_status,
-                "to_status": to_status,
-                "comment": comment,
-                "changed_by": None,
-                "created_at": now,
-            }
-        )
-
+        log_written = False
         for row in rows:
             try:
                 self.client.table("status_transition_logs").insert(row).execute()
+                log_written = True
                 break
             except Exception as e:
-                # 缺 payload 列时，尝试去掉 payload 再写一次
-                if "payload" in row and _is_missing_column_error(e, "payload"):
-                    fallback = dict(row)
-                    fallback.pop("payload", None)
-                    try:
-                        self.client.table("status_transition_logs").insert(fallback).execute()
-                        break
-                    except Exception:
-                        pass
+                if _is_table_missing_error(e, "status_transition_logs"):
+                    raise production_sop_schema_http_error("status_transition_logs table missing") from e
+                if _is_missing_column_error(e, "payload"):
+                    raise production_sop_schema_http_error("status_transition_logs payload column missing") from e
                 continue
+        if not log_written:
+            raise HTTPException(status_code=500, detail="Failed to write status transition log")
 
         # SOP Enhancement: Write to production_cycle_events if cycle_id is present
         cycle_id = payload.get("cycle_id")
@@ -667,8 +629,15 @@ class ProductionWorkspaceService(ProductionWorkspaceWorkflowMixin, ProductionWor
                         event_payload["actor_user_id"] = None
                         
                 self.client.table("production_cycle_events").insert(event_payload).execute()
-            except Exception:
-                pass
+            except Exception as e:
+                if _is_table_missing_error(e, "production_cycle_events"):
+                    raise production_sop_schema_http_error("production_cycle_events table missing") from e
+                if any(
+                    _is_missing_column_error(e, column)
+                    for column in ("event_type", "from_stage", "to_stage", "actor_user_id", "comment", "payload")
+                ):
+                    raise production_sop_schema_http_error("production_cycle_events schema missing") from e
+                raise HTTPException(status_code=500, detail=f"Failed to write production cycle event: {e}") from e
                 
         return
 

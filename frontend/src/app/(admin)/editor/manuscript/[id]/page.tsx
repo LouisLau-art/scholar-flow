@@ -1050,10 +1050,6 @@ export default function EditorManuscriptDetailPage() {
     router.push(`/editor/production/${encodeURIComponent(id)}`)
   }, [id, router])
 
-  const handleProductionStatusChange = useCallback((next: string) => {
-    setMs((prev) => (prev ? { ...prev, status: next } : prev))
-  }, [])
-
   const handleRetryReviews = useCallback(() => {
     reviewsRetryAttemptRef.current = 0
     if (reviewsRetryTimerRef.current) {
@@ -1505,7 +1501,6 @@ export default function EditorManuscriptDetailPage() {
             onOpenReviewStageExitDialog={handleOpenReviewStageExitDialog}
             onOpenDecisionWorkspace={handleOpenDecisionWorkspace}
             onOpenProductionWorkspace={handleOpenProductionWorkspace}
-            onProductionStatusChange={handleProductionStatusChange}
             onReload={() => void refreshDetail({ force: true })}
             onOpenTransitionDialog={openTransitionDialog}
             getTransitionActionLabel={getTransitionActionLabel}

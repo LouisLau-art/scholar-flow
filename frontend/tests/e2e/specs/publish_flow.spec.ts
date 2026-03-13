@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import path from 'path'
 import { buildSession, fulfillJson, seedSession } from '../utils'
 
 async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
@@ -7,31 +6,43 @@ async function enableE2EAuthBypass(page: import('@playwright/test').Page) {
 }
 
 test.describe('Publish workflow (mocked backend)', () => {
-  test('Editor uploads final PDF then publishes', async ({ page }) => {
+  test('Editor publishes from production workspace when gates are ready', async ({ page }) => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('00000000-0000-0000-0000-000000000123', 'editor@example.com'))
 
     const manuscriptId = '00000000-0000-0000-0000-000000000456'
-    const manuscriptTitle = 'Mocked Post-Acceptance Manuscript'
-    const nowIso = new Date().toISOString()
 
-    let manuscript: any = {
-      id: manuscriptId,
-      title: manuscriptTitle,
-      status: 'proofreading',
-      final_pdf_path: null,
-      updated_at: nowIso,
-      invoice: { amount: 1000, status: 'paid' },
-      signed_files: {
-        original_manuscript: { signed_url: 'https://example.com/original.pdf', path: `${manuscriptId}/v1.pdf` },
-        peer_review_reports: [],
+    let workspaceContext: any = {
+      manuscript: {
+        id: manuscriptId,
+        title: 'Mocked Post-Acceptance Manuscript',
+        status: 'approved_for_publish',
+        author_id: '00000000-0000-0000-0000-000000000999',
+        pdf_url: 'https://example.com/proof.pdf',
+      },
+      active_cycle: {
+        id: 'cycle-1',
+        manuscript_id: manuscriptId,
+        cycle_no: 1,
+        status: 'approved_for_publish',
+        stage: 'ready_to_publish',
+        layout_editor_id: '00000000-0000-0000-0000-000000000123',
+        proofreader_author_id: '00000000-0000-0000-0000-000000000999',
+        galley_path: `production_cycles/${manuscriptId}/cycle-1/proof.pdf`,
+        artifacts: [],
+      },
+      cycle_history: [],
+      permissions: {
+        can_create_cycle: false,
+        can_manage_editors: true,
+        can_upload_galley: true,
+        can_approve: true,
       },
     }
 
     await page.route('**/api/v1/**', async (route) => {
       const req = route.request()
-      const url = new URL(req.url())
-      const pathname = url.pathname
+      const pathname = new URL(req.url()).pathname
 
       if (pathname === '/api/v1/user/profile') {
         return fulfillJson(route, 200, { success: true, data: { roles: ['managing_editor'] } })
@@ -50,71 +61,33 @@ test.describe('Publish workflow (mocked backend)', () => {
         })
       }
 
-      if (pathname === '/api/v1/stats/author') {
-        return fulfillJson(route, 200, {
-          success: true,
-          data: { total_submissions: 0, published: 0, under_review: 0, revision_required: 0 },
-        })
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/production-workspace`) {
+        return fulfillJson(route, 200, { success: true, data: workspaceContext })
       }
 
-      if (pathname === '/api/v1/manuscripts/mine') {
+      if (pathname === '/api/v1/editor/internal-staff') {
         return fulfillJson(route, 200, { success: true, data: [] })
       }
 
-      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}`) {
-        return fulfillJson(route, 200, { success: true, data: manuscript })
-      }
-
-      if (pathname.includes(`/api/v1/manuscripts/${manuscriptId}/production-file`) && req.method() === 'POST') {
-        manuscript = { ...manuscript, final_pdf_path: `production/${manuscriptId}/final.pdf`, updated_at: new Date().toISOString() }
-        return fulfillJson(route, 200, { success: true, data: { final_pdf_path: manuscript.final_pdf_path } })
-      }
-
       if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/production/advance` && req.method() === 'POST') {
-        manuscript = { ...manuscript, status: 'published', updated_at: new Date().toISOString() }
+        workspaceContext = {
+          ...workspaceContext,
+          manuscript: {
+            ...workspaceContext.manuscript,
+            status: 'published',
+          },
+        }
         return fulfillJson(route, 200, { success: true, data: { new_status: 'published' } })
       }
 
-      if (pathname.includes('/comments')) return fulfillJson(route, 200, { success: true, data: [] })
-      if (pathname.includes('/tasks')) return fulfillJson(route, 200, { success: true, data: [] })
-      if (pathname.includes('/audit-logs')) return fulfillJson(route, 200, { success: true, data: [] })
-      if (pathname.includes('/timeline-context')) return fulfillJson(route, 200, { success: true, data: { events: [] } })
-      if (pathname.includes('/cards-context')) {
-        return fulfillJson(route, 200, { success: true, data: { task_summary: {}, role_queue: {} } })
-      }
-      if (pathname.includes('/versions')) return fulfillJson(route, 200, { success: true, data: [] })
-
-      // 默认兜底：避免 Next rewrites 代理到 127.0.0.1:8000（单测环境下可能未启动后端）
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto(`/editor/manuscript/${manuscriptId}`)
-    await expect(page.getByTestId('production-status-card')).toBeVisible()
-
-    // 上传最终稿
-    await page.getByRole('button', { name: 'Upload Final PDF' }).click()
-    const fixture = path.join(__dirname, '..', 'fixtures', 'revised.pdf')
-    const dialog = page.locator('[role="dialog"][data-state="open"]').filter({ hasText: 'Production Upload' })
-    await expect(dialog).toBeVisible()
-    await dialog.locator('input[type="file"]').setInputFiles(fixture)
-    await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled()
-    const uploadResponse = page.waitForResponse(
-      (res) =>
-        res.url().includes(`/api/v1/manuscripts/${manuscriptId}/production-file`) &&
-        res.request().method() === 'POST'
-    )
-    await dialog.getByRole('button', { name: 'Upload' }).click()
-    await uploadResponse
-    await expect(page.locator('[role="dialog"][data-state="open"]').filter({ hasText: 'Production Upload' })).toHaveCount(0)
-
-    // Publish（proofreading -> published）
-    const publishResult = await page.evaluate(async (id) => {
-      const res = await fetch(`/api/v1/editor/manuscripts/${id}/production/advance`, { method: 'POST' })
-      const body = await res.json().catch(() => null)
-      return { ok: res.ok, status: res.status, body }
-    }, manuscriptId)
-    expect(publishResult.ok).toBeTruthy()
-    await page.reload()
-    await expect(page.getByTestId('production-stage')).toHaveText('Published')
+    await page.goto(`/editor/production/${manuscriptId}`)
+    await expect(page.getByRole('button', { name: 'Publish Manuscript' })).toBeVisible()
+    await page.getByRole('button', { name: 'Publish Manuscript' }).click()
+    await expect(page.getByText('Moved to Published')).toBeVisible()
+    await expect(page.getByText('Current status: published')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Publish Manuscript' })).toHaveCount(0)
   })
 })

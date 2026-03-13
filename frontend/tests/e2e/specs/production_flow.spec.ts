@@ -65,7 +65,7 @@ test.describe('Production workflow (mocked backend)', () => {
   })
 
 
-  test('Publish shows friendly payment error', async ({ page }) => {
+  test('Publish lives in workspace and shows friendly payment error', async ({ page }) => {
     await enableE2EAuthBypass(page)
     await seedSession(page, buildSession('00000000-0000-0000-0000-000000000123', 'editor@example.com'))
 
@@ -105,6 +105,43 @@ test.describe('Production workflow (mocked backend)', () => {
         })
       }
 
+      if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/production-workspace`) {
+        return fulfillJson(route, 200, {
+          success: true,
+          data: {
+            manuscript: {
+              id: manuscriptId,
+              title: 'Mocked Publish Gate Manuscript',
+              status: 'approved_for_publish',
+              author_id: '00000000-0000-0000-0000-000000000999',
+              pdf_url: 'https://example.com/proof.pdf',
+            },
+            active_cycle: {
+              id: 'cycle-1',
+              manuscript_id: manuscriptId,
+              cycle_no: 1,
+              status: 'approved_for_publish',
+              stage: 'ready_to_publish',
+              layout_editor_id: '00000000-0000-0000-0000-000000000123',
+              proofreader_author_id: '00000000-0000-0000-0000-000000000999',
+              galley_path: `production_cycles/${manuscriptId}/cycle-1/proof.pdf`,
+              artifacts: [],
+            },
+            cycle_history: [],
+            permissions: {
+              can_create_cycle: false,
+              can_manage_editors: true,
+              can_upload_galley: true,
+              can_approve: true,
+            },
+          },
+        })
+      }
+
+      if (pathname === '/api/v1/editor/internal-staff') {
+        return fulfillJson(route, 200, { success: true, data: [] })
+      }
+
       if (pathname === `/api/v1/editor/manuscripts/${manuscriptId}/production/advance` && req.method() === 'POST') {
         return fulfillJson(route, 403, { detail: 'Payment Required: Invoice is unpaid.' })
       }
@@ -119,10 +156,12 @@ test.describe('Production workflow (mocked backend)', () => {
       return fulfillJson(route, 200, { success: true, data: {} })
     })
 
-    await page.goto(`/editor/manuscript/${manuscriptId}`)
+      await page.goto(`/editor/manuscript/${manuscriptId}`)
 
-    await expect(page.getByTestId('production-stage')).toHaveText('approved_for_publish')
-    await page.getByRole('button', { name: 'Publish Manuscript' }).click()
-    await expect(page.getByText('Waiting for Payment.')).toBeVisible()
+      await expect(page.getByTestId('production-stage')).toHaveText('approved_for_publish')
+      await expect(page.getByRole('button', { name: 'Publish Manuscript' })).toHaveCount(0)
+      await page.goto(`/editor/production/${manuscriptId}`)
+      await page.getByRole('button', { name: 'Publish Manuscript' }).click()
+      await expect(page.getByText('Waiting for Payment.')).toBeVisible()
+    })
   })
-})

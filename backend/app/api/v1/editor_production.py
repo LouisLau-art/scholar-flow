@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
@@ -22,6 +22,9 @@ from app.models.production_workspace import (
 )
 from app.services.production_service import ProductionService
 from app.services.production_workspace_service import ProductionWorkspaceService
+from app.services.production_workspace_service_workflow_common import (
+    normalize_production_sop_schema_http_error,
+)
 
 # 与 editor.py 保持一致：这些角色可进入 Editor Command Center。
 EDITOR_SCOPE_COMPAT_ROLES = [
@@ -33,6 +36,7 @@ EDITOR_SCOPE_COMPAT_ROLES = [
 ]
 
 router = APIRouter(tags=["Editor Command Center"])
+_T = TypeVar("_T")
 
 
 class ProofreadingEmailPayload(BaseModel):
@@ -231,6 +235,21 @@ def _enforce_scope_for_management_roles(*, manuscript_id: str, current_user: dic
         )
 
 
+def _run_production_sop_call(fn: Callable[[], _T]) -> _T:
+    try:
+        return fn()
+    except HTTPException as exc:
+        normalized = normalize_production_sop_schema_http_error(exc)
+        if normalized is not None and normalized is not exc:
+            raise normalized from exc
+        raise
+    except Exception as exc:
+        normalized = normalize_production_sop_schema_http_error(exc)
+        if normalized is not None:
+            raise normalized from exc
+        raise
+
+
 @router.post("/manuscripts/{id}/production/advance")
 async def advance_production_stage(
     id: str,
@@ -238,14 +257,19 @@ async def advance_production_stage(
     profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
-    Feature 031: 录用后出版流水线 - 前进一个阶段（approved->layout->english_editing->proofreading->published）。
+    Feature 031 / SOP: 仅处理录用后发布门禁的最终推进。
+
+    当前只允许 `approved_for_publish -> published`。
+    中间排版、作者校对、回退与返工统一由 Production Workspace / production cycles 管理。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
     allow_skip = "admin" in (profile.get("roles") or [])
-    res = ProductionService().advance(
-        manuscript_id=id,
-        changed_by=str(current_user.get("id")),
-        allow_skip=bool(allow_skip),
+    res = _run_production_sop_call(
+        lambda: ProductionService().advance(
+            manuscript_id=id,
+            changed_by=str(current_user.get("id")),
+            allow_skip=bool(allow_skip),
+        )
     )
     return {
         "success": True,
@@ -264,14 +288,19 @@ async def revert_production_stage(
     profile: dict = Depends(require_any_role(["managing_editor", "admin"])),
 ):
     """
-    Feature 031: 录用后出版流水线 - 回退一个阶段（proofreading->english_editing->layout->approved）。
+    Feature 031 / SOP: 直接回退 manuscript.status 已废弃。
+
+    返工与阶段回退统一通过 Production Workspace / production cycles 完成；
+    本接口保留为显式报错入口，避免旧客户端静默走错链路。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
     allow_skip = "admin" in (profile.get("roles") or [])
-    res = ProductionService().revert(
-        manuscript_id=id,
-        changed_by=str(current_user.get("id")),
-        allow_skip=bool(allow_skip),
+    res = _run_production_sop_call(
+        lambda: ProductionService().revert(
+            manuscript_id=id,
+            changed_by=str(current_user.get("id")),
+            allow_skip=bool(allow_skip),
+        )
     )
     return {
         "success": True,
@@ -293,10 +322,12 @@ async def get_production_workspace_context(
     Feature 042: 编辑端生产工作间上下文。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().get_workspace_context(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().get_workspace_context(
+            manuscript_id=id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+        )
     )
     return {"success": True, "data": data}
 
@@ -312,11 +343,13 @@ async def create_production_cycle(
     Feature 042: 创建生产轮次。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().create_cycle(
-        manuscript_id=id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        request=payload,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().create_cycle(
+            manuscript_id=id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            request=payload,
+        )
     )
     return {"success": True, "data": {"cycle": data}}
 
@@ -333,12 +366,14 @@ async def update_production_cycle_editors(
     Feature 042B: 更新生产轮次的负责人/协作者列表（仅 ME/EIC/Admin）。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().update_cycle_editors(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        request=payload,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().update_cycle_editors(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            request=payload,
+        )
     )
     return {"success": True, "data": {"cycle": data}}
 
@@ -351,12 +386,14 @@ async def update_production_cycle_assignments(
     profile: dict = Depends(require_any_role(["managing_editor", "editor_in_chief", "admin"])),
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().update_assignments(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        request=payload,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().update_assignments(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            request=payload,
+        )
     )
     return {"success": True, "data": {"cycle": data}}
 
@@ -373,16 +410,18 @@ async def upload_production_artifact(
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
     raw = await file.read()
-    data = ProductionWorkspaceService().upload_artifact(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        artifact_kind=artifact_kind,
-        filename=file.filename or "artifact.bin",
-        content=raw,
-        version_note=version_note,
-        content_type=file.content_type,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().upload_artifact(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            artifact_kind=artifact_kind,
+            filename=file.filename or "artifact.bin",
+            content=raw,
+            version_note=version_note,
+            content_type=file.content_type,
+        )
     )
     
     # Locate the created artifact in the returned cycle
@@ -407,13 +446,15 @@ async def transition_production_cycle(
     profile: dict = Depends(require_any_role(EDITOR_SCOPE_COMPAT_ROLES)),
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().transition_stage(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        target_stage=payload.target_stage,
-        comment=payload.comment,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().transition_stage(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            target_stage=payload.target_stage,
+            comment=payload.comment,
+        )
     )
     return {"success": True, "data": {"cycle": data}}
 
@@ -440,16 +481,18 @@ async def upload_production_galley(
             raise HTTPException(status_code=422, detail=f"Invalid proof_due_at: {proof_due_at}") from e
 
     raw = await file.read()
-    data = ProductionWorkspaceService().upload_galley(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        filename=file.filename or "proof.pdf",
-        content=raw,
-        version_note=version_note,
-        proof_due_at=due_dt,
-        content_type=file.content_type,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().upload_galley(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            filename=file.filename or "proof.pdf",
+            content=raw,
+            version_note=version_note,
+            proof_due_at=due_dt,
+            content_type=file.content_type,
+        )
     )
     return {"success": True, "data": {"cycle": data}}
 
@@ -465,11 +508,13 @@ async def get_production_galley_signed_url_editor(
     Feature 042: 编辑端获取清样 signed URL。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    signed_url = ProductionWorkspaceService().get_galley_signed_url(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
+    signed_url = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().get_galley_signed_url(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+        )
     )
     return {"success": True, "data": {"signed_url": signed_url}}
 
@@ -483,7 +528,7 @@ async def preview_proofreading_email(
     profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    preview = _build_proofreading_email_preview(id, cycle_id, payload)
+    preview = _run_production_sop_call(lambda: _build_proofreading_email_preview(id, cycle_id, payload))
     return {"success": True, "data": {k: v for k, v in preview.items() if k != "context"}}
 
 
@@ -496,7 +541,7 @@ async def send_proofreading_email(
     profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    preview = _build_proofreading_email_preview(id, cycle_id, payload)
+    preview = _run_production_sop_call(lambda: _build_proofreading_email_preview(id, cycle_id, payload))
     result = email_service.send_rendered_email(
         to_emails=preview["resolved_recipients"]["to"],
         cc_emails=preview["resolved_recipients"]["cc"],
@@ -539,7 +584,7 @@ async def mark_proofreading_email_external_sent(
     profile: dict = Depends(require_any_role(["managing_editor", "production_editor", "editor_in_chief", "admin"])),
 ):
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    preview = _build_proofreading_email_preview(id, cycle_id, payload)
+    preview = _run_production_sop_call(lambda: _build_proofreading_email_preview(id, cycle_id, payload))
     channel = str(payload.channel or "other").strip() or "other"
     email_service.log_attempt(
         recipient=preview["resolved_recipients"]["to"][0],
@@ -584,11 +629,13 @@ async def approve_production_cycle(
     Feature 042: 编辑确认发布前核准（approved_for_publish）。
     """
     _enforce_scope_for_management_roles(manuscript_id=id, current_user=current_user, profile=profile)
-    data = ProductionWorkspaceService().approve_cycle(
-        manuscript_id=id,
-        cycle_id=cycle_id,
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().approve_cycle(
+            manuscript_id=id,
+            cycle_id=cycle_id,
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+        )
     )
     return {"success": True, "data": data}
 
@@ -603,9 +650,11 @@ async def list_production_queue(
     Production Editor Queue:
     - 返回当前 production_editor 被分配（layout_editor_id）的活跃 production cycles。
     """
-    data = ProductionWorkspaceService().list_my_queue(
-        user_id=str(current_user.get("id") or ""),
-        profile_roles=profile.get("roles") or [],
-        limit=limit,
+    data = _run_production_sop_call(
+        lambda: ProductionWorkspaceService().list_my_queue(
+            user_id=str(current_user.get("id") or ""),
+            profile_roles=profile.get("roles") or [],
+            limit=limit,
+        )
     )
     return {"success": True, "data": data}

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 
 type Props = {
   manuscriptId: string
+  manuscriptStatus?: string | null
   activeCycle: ProductionCycle | null
   canApprove: boolean
   onApproved: () => Promise<void>
@@ -37,12 +38,22 @@ function statusHint(status: string | undefined, stage: string | undefined): stri
   }
 }
 
-export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, onApproved, onOpenProofreadingEmail }: Props) {
+export function ProductionActionPanel({
+  manuscriptId,
+  manuscriptStatus,
+  activeCycle,
+  canApprove,
+  onApproved,
+  onOpenProofreadingEmail,
+}: Props) {
   const [loading, setLoading] = useState(false)
   const [targetStage, setTargetStage] = useState<string>('')
 
   const latest = useMemo(() => activeCycle?.latest_response || null, [activeCycle])
   const correctionItems = useMemo(() => latest?.corrections || [], [latest?.corrections])
+  const normalizedManuscriptStatus = String(manuscriptStatus || '').trim().toLowerCase()
+  const canShowPublish = normalizedManuscriptStatus === 'approved_for_publish'
+  const canShowApprove = Boolean(activeCycle && canApproveProductionCycle(activeCycle.status))
 
   const handleApprove = async () => {
     if (!activeCycle) return
@@ -74,6 +85,30 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
       await onApproved()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '流转失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    setLoading(true)
+    try {
+      const res = await EditorApi.advanceProduction(manuscriptId)
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || 'Publish failed')
+      }
+      toast.success('Moved to Published')
+      await onApproved()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Publish failed'
+      const normalizedDetail = String(detail).toLowerCase()
+      if (normalizedDetail.includes('payment required')) {
+        toast.error('Waiting for Payment.')
+      } else if (normalizedDetail.includes('production pdf') || normalizedDetail.includes('approval required')) {
+        toast.error('Production Gate not met.')
+      } else {
+        toast.error(detail)
+      }
     } finally {
       setLoading(false)
     }
@@ -155,15 +190,29 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => void handleApprove()}
-            disabled={loading || !activeCycle || !canApprove || !canApproveProductionCycle(activeCycle.status)}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Approve for Publication
-          </button>
+          {canShowApprove ? (
+            <button
+              type="button"
+              onClick={() => void handleApprove()}
+              disabled={loading || !activeCycle || !canApprove}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Approve for Publication
+            </button>
+          ) : null}
+
+          {canShowPublish ? (
+            <button
+              type="button"
+              onClick={() => void handlePublish()}
+              disabled={loading}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              Publish Manuscript
+            </button>
+          ) : null}
         </div>
       </div>
     </section>

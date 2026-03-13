@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.services.production_workspace_service_workflow_common import (
     is_missing_column_error,
     is_truthy_env,
+    production_sop_schema_http_error,
     utc_now_iso,
 )
 from app.services.production_workspace_service_workflow_cycle_context_queue import (
@@ -115,13 +116,7 @@ class ProductionWorkspaceWorkflowCycleMixin(
                 )
             except Exception as e:
                 if is_missing_column_error(e, "stage"):
-                    resp = (
-                        self.client.table("production_cycles")
-                        .update(update_payload)
-                        .eq("id", cycle_id)
-                        .eq("manuscript_id", manuscript_id)
-                        .execute()
-                    )
+                    raise production_sop_schema_http_error("production_cycles stage column missing") from e
                 else:
                     raise
             
@@ -139,10 +134,7 @@ class ProductionWorkspaceWorkflowCycleMixin(
         except Exception as exc:
             if is_missing_column_error(exc, "final_pdf_path"):
                 if is_truthy_env("PRODUCTION_GATE_ENABLED", "0"):
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Database schema missing final_pdf_path while PRODUCTION_GATE_ENABLED=1",
-                    ) from exc
+                    raise production_sop_schema_http_error("manuscripts final_pdf_path column missing") from exc
             else:
                 raise
 

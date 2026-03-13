@@ -240,6 +240,7 @@ export default function EditorProductionWorkspacePage() {
           <ProductionWorkspacePanel manuscriptId={manuscriptId} context={context} staff={staff} onReload={load} />
           <ProductionActionPanel
             manuscriptId={manuscriptId}
+            manuscriptStatus={context.manuscript.status}
             activeCycle={context.active_cycle || null}
             canApprove={Boolean(context.permissions?.can_approve)}
             onApproved={load}

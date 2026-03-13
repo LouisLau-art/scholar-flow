@@ -39,6 +39,10 @@ class _UploadTable:
         self._row = row
         self._payload: dict | None = None
 
+    def insert(self, payload: dict):
+        self._payload = payload
+        return self
+
     def update(self, payload: dict):
         self._payload = payload
         return self
@@ -55,9 +59,13 @@ class _UploadTable:
 class _UploadBucket:
     def __init__(self):
         self.uploads: list[dict] = []
+        self.removals: list[list[str]] = []
 
     def upload(self, path: str, content: bytes, options: dict):
         self.uploads.append({"path": path, "content": content, "options": options})
+
+    def remove(self, paths: list[str]):
+        self.removals.append(paths)
 
 
 class _UploadStorage:
@@ -81,6 +89,66 @@ def _svc() -> ProductionWorkspaceService:
     svc = ProductionWorkspaceService()
     svc.client = _NoopClient()  # type: ignore[assignment]
     return svc
+
+
+class _SchemaErrorQuery:
+    def __init__(self, responses: list[object]):
+        self._responses = responses
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def insert(self, *_args, **_kwargs):
+        return self
+
+    def update(self, *_args, **_kwargs):
+        return self
+
+    def delete(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def in_(self, *_args, **_kwargs):
+        return self
+
+    def contains(self, *_args, **_kwargs):
+        return self
+
+    def or_(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def single(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        if not self._responses:
+            raise AssertionError("No schema error response queued")
+        response = self._responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+class _SchemaErrorClient:
+    def __init__(self, responses_by_table: dict[str, list[object]]):
+        self._responses_by_table = {name: list(items) for name, items in responses_by_table.items()}
+
+    def table(self, name: str):
+        return _SchemaErrorQuery(self._responses_by_table.setdefault(name, []))
+
+
+class _SchemaErrorClientWithStorage(_SchemaErrorClient):
+    def __init__(self, responses_by_table: dict[str, list[object]]):
+        super().__init__(responses_by_table)
+        self.storage = _UploadStorage()
 
 
 def test_create_cycle_rejects_active_cycle(monkeypatch: pytest.MonkeyPatch):
@@ -147,6 +215,468 @@ def test_create_cycle_requires_mvp_author_binding(monkeypatch: pytest.MonkeyPatc
             ),
         )
     assert exc.value.status_code == 422
+
+
+def test_create_cycle_rejects_missing_sop_columns_instead_of_legacy_fallback(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "stage" does not exist'),
+                SimpleNamespace(data=[{"id": "cycle-1", "status": "draft"}]),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "approved",
+            "author_id": "00000000-0000-0000-0000-000000000002",
+            "editor_id": "editor-1",
+            "owner_id": "",
+        },
+    )
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_get_cycles", lambda _id: [])
+    monkeypatch.setattr(svc, "_get_profile_roles", lambda _user_id: {"production_editor"})
+
+    with pytest.raises(HTTPException) as exc:
+        svc.create_cycle(
+            manuscript_id="ms-1",
+            user_id="editor-1",
+            profile_roles=["managing_editor"],
+            request=CreateProductionCycleRequest(
+                layout_editor_id="00000000-0000-0000-0000-000000000001",
+                proofreader_author_id="00000000-0000-0000-0000-000000000002",
+                proof_due_at=datetime.now(timezone.utc) + timedelta(days=2),
+            ),
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_update_assignments_rejects_missing_assignment_columns(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "coordinator_ae_id" does not exist'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    cycle = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "status": "draft",
+        "stage": "received",
+        "layout_editor_id": "editor-1",
+        "proofreader_author_id": "author-1",
+    }
+    monkeypatch.setattr(svc, "_get_manuscript", lambda _id: {"id": _id, "status": "approved"})
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle))
+
+    request = SimpleNamespace(
+        coordinator_ae_id="editor-1",
+        typesetter_id=None,
+        language_editor_id=None,
+        pdf_editor_id=None,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        svc.update_assignments(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="editor-1",
+            profile_roles=["managing_editor"],
+            request=request,
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_transition_stage_rejects_missing_stage_column(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "stage" does not exist'),
+                SimpleNamespace(data=[{"id": "cycle-1", "status": "draft", "updated_at": datetime.now(timezone.utc).isoformat()}]),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    cycle = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "status": "draft",
+        "stage": "received",
+        "layout_editor_id": "editor-1",
+        "proofreader_author_id": "author-1",
+    }
+    monkeypatch.setattr(svc, "_get_manuscript", lambda _id: {"id": _id, "status": "approved"})
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle))
+
+    with pytest.raises(HTTPException) as exc:
+        svc.transition_stage(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="editor-1",
+            profile_roles=["production_editor"],
+            target_stage="typesetting",
+            comment=None,
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_assert_publish_gate_ready_rejects_missing_stage_column(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "stage" does not exist'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc.assert_publish_gate_ready(manuscript_id="ms-1")
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+@pytest.mark.parametrize("missing_column", ["approved_at", "galley_path"])
+def test_assert_publish_gate_ready_rejects_other_required_columns(
+    monkeypatch: pytest.MonkeyPatch,
+    missing_column: str,
+):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError(f'column "{missing_column}" does not exist'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc.assert_publish_gate_ready(manuscript_id="ms-1")
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_get_cycles_rejects_missing_sop_columns(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "stage" does not exist'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc._get_cycles("ms-1")
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_get_cycle_artifacts_rejects_missing_table(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycle_artifacts": [
+                RuntimeError('Could not find the table "public.production_cycle_artifacts" in the schema cache'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc._get_cycle_artifacts("cycle-1")
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_list_my_queue_rejects_missing_sop_columns(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "production_cycles": [
+                RuntimeError('column "stage" does not exist'),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc.list_my_queue(user_id="editor-1", profile_roles=["production_editor"])
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_upload_galley_rejects_missing_sop_columns(monkeypatch: pytest.MonkeyPatch):
+    cycle_row = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "cycle_no": 1,
+        "status": "draft",
+        "proofreader_author_id": "author-1",
+        "layout_editor_id": "editor-1",
+    }
+    svc = _svc()
+    svc.client = _SchemaErrorClientWithStorage(
+        {
+            "production_cycle_artifacts": [SimpleNamespace(data=[{"id": "artifact-1"}])],
+            "production_cycles": [RuntimeError('column "stage" does not exist')],
+        }
+    )  # type: ignore[assignment]
+
+    monkeypatch.setattr(
+        svc,
+        "_get_manuscript",
+        lambda _id: {
+            "id": _id,
+            "status": "english_editing",
+            "title": "Demo Manuscript",
+            "author_id": "author-1",
+        },
+    )
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle_row))
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_notify", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_format_cycle", lambda row, include_signed_url: row)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.upload_galley(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="editor-1",
+            profile_roles=["production_editor"],
+            filename="proof.pdf",
+            content=b"%PDF-1.4 proof",
+            version_note="v1",
+            proof_due_at=datetime.now(timezone.utc) + timedelta(days=2),
+            content_type="application/pdf",
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_submit_proofreading_rejects_missing_attachment_columns(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClientWithStorage(
+        {
+            "production_cycle_artifacts": [SimpleNamespace(data=[{"id": "artifact-1"}])],
+            "production_proofreading_responses": [RuntimeError('column "attachment_bucket" does not exist')],
+        }
+    )  # type: ignore[assignment]
+
+    manuscript = {
+        "id": "ms-1",
+        "status": "proofreading",
+        "author_id": "author-1",
+        "editor_id": "editor-1",
+        "owner_id": "",
+        "title": "Demo",
+    }
+    cycle = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "status": "awaiting_author",
+        "proofreader_author_id": "author-1",
+        "proof_due_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+        "layout_editor_id": "editor-1",
+        "coordinator_ae_id": "editor-1",
+        "current_assignee_id": "author-1",
+    }
+    monkeypatch.setattr(svc, "_get_manuscript", lambda _id: manuscript)
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle))
+    monkeypatch.setattr(svc, "_ensure_author_or_internal_access", lambda **_kwargs: False)
+    monkeypatch.setattr(svc, "_get_latest_response", lambda _cycle_id: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_notify", lambda **_kwargs: None)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_proofreading(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="author-1",
+            profile_roles=["author"],
+            request=SubmitProofreadingRequest(
+                decision="submit_corrections",
+                summary="Fixes attached",
+                corrections=[{"suggested_text": "Fix typo"}],
+            ),
+            attachment_filename="annotated.pdf",
+            attachment_content=b"%PDF-1.4 mock",
+            attachment_content_type="application/pdf",
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_insert_log_rejects_missing_payload_column(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "status_transition_logs": [
+                RuntimeError('column "payload" does not exist'),
+                SimpleNamespace(data=[{"id": "log-1"}]),
+            ]
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc._insert_log(
+            manuscript_id="ms-1",
+            from_status="approved_for_publish",
+            to_status="published",
+            changed_by="editor-1",
+            comment="publish",
+            payload={"cycle_id": "cycle-1", "event_type": "publish"},
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_insert_log_rejects_missing_production_cycle_events_table(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClient(
+        {
+            "status_transition_logs": [SimpleNamespace(data=[{"id": "log-1"}])],
+            "production_cycle_events": [
+                RuntimeError('Could not find the table "public.production_cycle_events" in the schema cache (PGRST205)'),
+            ],
+        }
+    )  # type: ignore[assignment]
+
+    with pytest.raises(HTTPException) as exc:
+        svc._insert_log(
+            manuscript_id="ms-1",
+            from_status="approved_for_publish",
+            to_status="published",
+            changed_by="editor-1",
+            comment="publish",
+            payload={"cycle_id": "cycle-1", "event_type": "publish"},
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_upload_artifact_rejects_missing_artifact_columns(monkeypatch: pytest.MonkeyPatch):
+    cycle_row = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "cycle_no": 1,
+        "status": "draft",
+        "stage": "received",
+        "proofreader_author_id": "author-1",
+        "layout_editor_id": "editor-1",
+    }
+    svc = _svc()
+    svc.client = _SchemaErrorClientWithStorage(
+        {
+            "production_cycle_artifacts": [RuntimeError('column "artifact_kind" does not exist')],
+        }
+    )  # type: ignore[assignment]
+
+    monkeypatch.setattr(svc, "_get_manuscript", lambda _id: {"id": _id, "status": "approved"})
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle_row))
+    monkeypatch.setattr(svc, "_ensure_editor_access", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_format_cycle", lambda row, include_signed_url: row)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.upload_artifact(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="editor-1",
+            profile_roles=["production_editor"],
+            artifact_kind="typeset_output",
+            filename="typeset.pdf",
+            content=b"%PDF-1.4 artifact",
+            version_note="v1",
+            content_type="application/pdf",
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
+
+
+def test_submit_proofreading_rejects_missing_correction_item_columns(monkeypatch: pytest.MonkeyPatch):
+    svc = _svc()
+    svc.client = _SchemaErrorClientWithStorage(
+        {
+            "production_proofreading_responses": [SimpleNamespace(data=[{"id": "resp-1"}])],
+            "production_correction_items": [
+                SimpleNamespace(data=[]),
+                RuntimeError('column "suggested_text" does not exist'),
+            ],
+        }
+    )  # type: ignore[assignment]
+
+    manuscript = {
+        "id": "ms-1",
+        "status": "proofreading",
+        "author_id": "author-1",
+        "editor_id": "editor-1",
+        "owner_id": "",
+        "title": "Demo",
+    }
+    cycle = {
+        "id": "cycle-1",
+        "manuscript_id": "ms-1",
+        "status": "awaiting_author",
+        "proofreader_author_id": "author-1",
+        "proof_due_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+        "layout_editor_id": "editor-1",
+        "coordinator_ae_id": "editor-1",
+        "current_assignee_id": "author-1",
+    }
+    monkeypatch.setattr(svc, "_get_manuscript", lambda _id: manuscript)
+    monkeypatch.setattr(svc, "_get_cycle", lambda manuscript_id, cycle_id: dict(cycle))
+    monkeypatch.setattr(svc, "_ensure_author_or_internal_access", lambda **_kwargs: False)
+    monkeypatch.setattr(svc, "_get_latest_response", lambda _cycle_id: None)
+    monkeypatch.setattr(svc, "_ensure_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(svc, "_insert_log", lambda **_kwargs: None)
+    monkeypatch.setattr(svc, "_notify", lambda **_kwargs: None)
+
+    with pytest.raises(HTTPException) as exc:
+        svc.submit_proofreading(
+            manuscript_id="ms-1",
+            cycle_id="cycle-1",
+            user_id="author-1",
+            profile_roles=["author"],
+            request=SubmitProofreadingRequest(
+                decision="submit_corrections",
+                summary="Fixes attached",
+                corrections=[{"suggested_text": "Fix typo"}],
+            ),
+        )
+
+    assert exc.value.status_code == 503
+    assert str(exc.value.detail).startswith("Production SOP schema not migrated:")
 
 
 def test_submit_proofreading_blocks_after_due(monkeypatch: pytest.MonkeyPatch):

@@ -10,6 +10,7 @@ from app.services.production_workspace_service_workflow_common import (
     POST_ACCEPTANCE_ALLOWED,
     is_table_missing_error,
     is_missing_column_error,
+    production_sop_schema_http_error,
 )
 
 
@@ -138,38 +139,22 @@ class ProductionWorkspaceWorkflowCycleContextQueueMixin:
             )
             cycles.extend(getattr(collab, "data", None) or [])
         except Exception as e:
-            if any(is_missing_column_error(e, col) for col in ["stage", "current_assignee_id", "coordinator_ae_id"]):
-                active_statuses = sorted(ACTIVE_CYCLE_STATUSES)
-                try:
-                    primary = (
-                        self.client.table("production_cycles")
-                        .select("id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proof_due_at,updated_at,created_at")
-                        .eq("layout_editor_id", uid)
-                        .in_("status", active_statuses)
-                        .order("updated_at", desc=True)
-                        .limit(safe_limit)
-                        .execute()
-                    )
-                    cycles.extend(getattr(primary, "data", None) or [])
-                    
-                    collab = (
-                        self.client.table("production_cycles")
-                        .select("id,manuscript_id,cycle_no,status,layout_editor_id,collaborator_editor_ids,proof_due_at,updated_at,created_at")
-                        .contains("collaborator_editor_ids", [uid])
-                        .in_("status", active_statuses)
-                        .order("updated_at", desc=True)
-                        .limit(safe_limit)
-                        .execute()
-                    )
-                    cycles.extend(getattr(collab, "data", None) or [])
-                except Exception as exc:
-                    if is_table_missing_error(exc, "production_cycles"):
-                        raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from exc
-                    raise HTTPException(status_code=500, detail=f"Failed to list production queue: {exc}") from exc
-            else:
-                if is_table_missing_error(e, "production_cycles"):
-                    raise HTTPException(status_code=500, detail="DB not migrated: production_cycles table missing") from e
-                raise HTTPException(status_code=500, detail=f"Failed to list production queue: {e}") from e
+            if any(
+                is_missing_column_error(e, col)
+                for col in [
+                    "stage",
+                    "current_assignee_id",
+                    "coordinator_ae_id",
+                    "typesetter_id",
+                    "language_editor_id",
+                    "pdf_editor_id",
+                    "collaborator_editor_ids",
+                ]
+            ):
+                raise production_sop_schema_http_error("production_cycles queue columns missing") from e
+            if is_table_missing_error(e, "production_cycles"):
+                raise production_sop_schema_http_error("production_cycles table missing") from e
+            raise HTTPException(status_code=500, detail=f"Failed to list production queue: {e}") from e
 
         unique_cycles: dict[str, dict[str, Any]] = {}
         for row in cycles:
