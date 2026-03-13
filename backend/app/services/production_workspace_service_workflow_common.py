@@ -66,7 +66,8 @@ def is_truthy_env(name: str, default: str = "0") -> bool:
 
 def is_table_missing_error(error: Exception, table_name: str) -> bool:
     text = str(error).lower()
-    return table_name.lower() in text and "does not exist" in text
+    tname = table_name.lower()
+    return tname in text and ("does not exist" in text or "in the schema cache" in text or "pgrst205" in text)
 
 
 def is_missing_column_error(error: Exception, column_name: str) -> bool:

@@ -8,7 +8,8 @@
       "Bash(netstat:*)",
       "WebFetch(domain:api.github.com)",
       "WebSearch",
-      "WebFetch(domain:mirrors.cernet.edu.cn)"
+      "WebFetch(domain:mirrors.cernet.edu.cn)",
+      "WebFetch(domain:opencode.ai)"
     ]
   }
 }
