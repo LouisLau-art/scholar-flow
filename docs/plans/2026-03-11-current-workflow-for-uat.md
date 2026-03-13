@@ -1,6 +1,6 @@
 # 当前系统已实现业务流程说明（给验收方）
 
-更新时间：2026-03-12
+更新时间：2026-03-13
 
 本文档只描述**当前系统已经落代码并可运行的真实流程**，不描述理想方案，也不描述尚未实现的规划项。  
 目的：
@@ -483,11 +483,69 @@ AE 必须对其逐个明确处理，例如：
 - `decision_reject_resubmit`
 - `decision_reject_decline`
 
-## 10. 当前已实现但仍建议验收方重点确认的点
+## 10. Production / Publish 阶段（2026-03-13 更新）
+
+### 10.1 当前入口口径
+
+录用后的 production 流程，当前已经切换为：
+
+- 由 `production workspace` 作为唯一主操作入口
+- 由 `production_cycles.stage + status` 承载详细生产阶段
+
+当前不再建议通过稿件详情页直接推进 production。
+
+也就是说：
+
+- 稿件详情页主要承担摘要与跳转入口
+- 详细排版 / 校对 / 发布动作集中在 production workspace
+
+### 10.2 当前发布规则
+
+当前系统里，最终发布只允许：
+
+- `approved_for_publish -> published`
+
+不会再沿用旧的：
+
+- `layout -> english_editing -> proofreading -> published`
+
+这种直接靠 `manuscript.status` 推进的 legacy 旁路。
+
+### 10.3 当前 publish gate
+
+发布前，当前系统会同时检查：
+
+- Payment Gate
+- Production Publish Gate
+- 如启用 `PRODUCTION_GATE_ENABLED=1`，还会检查 `final_pdf_path`
+
+若 production cycle 尚未满足可发布条件，系统不会直接发布。
+
+### 10.4 作者校对反馈
+
+当前作者在 production proofreading 阶段提交反馈时，已支持：
+
+- 仅上传带批注 PDF
+- 不强制同时提交结构化 `correction_items`
+
+这意味着作者可以直接提交批注稿，由编辑部后续在 production workspace 继续处理。
+
+### 10.5 当前 schema / migration 行为
+
+若线上缺少 production SOP 所需 schema，当前接口不会再静默回退到旧逻辑。
+
+当前统一行为是：
+
+- 返回 `503`
+- detail 以 `Production SOP schema not migrated: ...` 明确提示缺失的表或列
+
+这条口径已覆盖 production workspace、publish gate、author feedback 等关键入口。
+
+## 11. 当前已实现但仍建议验收方重点确认的点
 
 以下并非系统错误，但建议验收方重点确认是否符合最终业务口径：
 
-### 10.1 Academic 预审与 Decision Workspace 共用同一决策空间
+### 11.1 Academic 预审与 Decision Workspace 共用同一决策空间
 
 当前实现中：
 
@@ -498,7 +556,7 @@ AE 必须对其逐个明确处理，例如：
 
 这比旧实现更符合业务边界，但是否还需要单独的“待编辑部执行 academic recommendation”看板，仍建议验收时确认。
 
-### 10.2 AE 可直接给 major/minor
+### 11.2 AE 可直接给 major/minor
 
 当前系统已支持：
 
@@ -507,7 +565,7 @@ AE 必须对其逐个明确处理，例如：
 
 是否将这条作为最终长期规则，建议由验收方明确确认。
 
-### 10.3 AE 不直接 reject，而是通过 first decision recommendation 表达
+### 11.3 AE 不直接 reject，而是通过 first decision recommendation 表达
 
 当前系统方向已在向：
 
@@ -518,7 +576,7 @@ AE 必须对其逐个明确处理，例如：
 
 这条建议继续作为正式业务规则进行验收确认。
 
-## 11. 总结
+## 12. 总结
 
 当前系统已实现的真实流程可以概括为：
 

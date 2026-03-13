@@ -76,6 +76,36 @@
 - 仅展示 reviewer 自己的记录
 - 不暴露其他 reviewer、编辑内部备注或内部决策流
 
+### 1.2 Production SOP 收口
+
+当前状态：
+
+- 本轮已完成
+
+结果：
+
+- production 详细流程已收口到 `production workspace + production_cycles.stage/status`
+- 稿件详情页不再直接承担 production 推进或发布动作
+- 最终发布只允许：
+  - `approved_for_publish -> published`
+- publish 前仍必须通过：
+  - payment gate
+  - production publish gate
+- production 相关 schema 缺失现在统一返回：
+  - `503 + Production SOP schema not migrated: ...`
+- linked Supabase 缺失的 production / email envelope migrations 已推到云端
+- post-migration 残余问题已收口：
+  - author feedback multipart 支持仅上传带批注 PDF
+  - 审计日志保留 `approved_for_publish` 等 SOP 扩展状态
+  - production integration tests 的 `user_profiles` seed 已按邮箱可重入
+- 当前定向 backend 回归结果：
+  - `69 passed`
+
+后续仅保留：
+
+- 做真实 UAT，再确认 production workspace 的 stage/action 文案是否还需要继续压缩
+- 若后面扩展 production 前端交互，继续保持单入口，不要把 direct publish / legacy next action 放回 detail 页
+
 ## 二、高优先级未完成
 
 ### 2. 邮箱唯一性与重复用户问题
