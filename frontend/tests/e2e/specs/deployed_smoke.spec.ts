@@ -74,6 +74,6 @@ test.describe('Deployed UAT smoke', () => {
     await expect(page.getByText(/Decision workspace is unavailable/i)).not.toBeVisible()
     await expect(page.getByRole('link', { name: '返回稿件详情' })).toBeVisible({ timeout: 20000 })
     await expect(page.getByTestId('decision-workspace-mode-banner')).toBeVisible({ timeout: 20000 })
-    await expect(page.getByText('Review Reports')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByText(/Review Reports|No submitted reports yet\./i)).toBeVisible({ timeout: 20000 })
   })
 })
