@@ -65,7 +65,6 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
 
   const [layoutEditorId, setLayoutEditorId] = useState(productionStaff[0]?.id || '')
   const [collaboratorIds, setCollaboratorIds] = useState<string[]>([])
-  const [collaboratorPick, setCollaboratorPick] = useState<string>('')
   const [proofDueAt, setProofDueAt] = useState(() => {
     const n = new Date(Date.now() + 3 * 24 * 3600 * 1000)
     n.setMinutes(n.getMinutes() - n.getTimezoneOffset())
@@ -75,8 +74,14 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
 
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [versionNote, setVersionNote] = useState('')
-  const [uploadDueAt, setUploadDueAt] = useState(() => toDateTimeLocal(activeCycle?.proof_due_at || proofDueAt))
+  const [uploadKind, setUploadKind] = useState('typeset_output')
   const [uploadLoading, setUploadLoading] = useState(false)
+
+  // SOP Assignments
+  const [coordinatorAeId, setCoordinatorAeId] = useState('')
+  const [typesetterId, setTypesetterId] = useState('')
+  const [languageEditorId, setLanguageEditorId] = useState('')
+  const [pdfEditorId, setPdfEditorId] = useState('')
 
   const assignedAuthorId = useMemo(() => String(context.manuscript.author_id || ''), [context.manuscript.author_id])
 
@@ -88,16 +93,19 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
 
   useEffect(() => {
     if (!activeCycle) return
-    // active cycle -> sync UI state (ME/EIC/Admin may adjust editors)
     setLayoutEditorId(String(activeCycle.layout_editor_id || ''))
     setCollaboratorIds((activeCycle.collaborator_editor_ids || []).map((v) => String(v)))
-    setCollaboratorPick('')
+    
+    setCoordinatorAeId(activeCycle.coordinator_ae_id || '')
+    setTypesetterId(activeCycle.typesetter_id || '')
+    setLanguageEditorId(activeCycle.language_editor_id || '')
+    setPdfEditorId(activeCycle.pdf_editor_id || '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCycle?.id])
 
   const handleCreateCycle = async () => {
     if (!layoutEditorId) {
-      toast.error('请选择排版负责人')
+      toast.error('请选择负责人')
       return
     }
     if (!assignedAuthorId) {
@@ -129,27 +137,53 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
     }
   }
 
-  const handleUpdateEditors = async () => {
+  const handleUpdateAssignments = async () => {
     if (!activeCycle) return
-    if (!layoutEditorId) {
-      toast.error('请选择排版负责人')
-      return
-    }
     setCreateLoading(true)
     try {
-      const res = await EditorApi.updateProductionCycleEditors(manuscriptId, activeCycle.id, {
-        layout_editor_id: layoutEditorId,
-        collaborator_editor_ids: collaboratorIds,
+      const res = await EditorApi.updateProductionCycleAssignments(manuscriptId, activeCycle.id, {
+        coordinator_ae_id: coordinatorAeId || undefined,
+        typesetter_id: typesetterId || undefined,
+        language_editor_id: languageEditorId || undefined,
+        pdf_editor_id: pdfEditorId || undefined,
       })
       if (!res?.success) {
-        throw new Error(res?.detail || res?.message || '更新负责人失败')
+        throw new Error(res?.detail || res?.message || '更新 SOP 分配失败')
       }
-      toast.success('负责人已更新')
+      toast.success('SOP 负责人已更新')
       await onReload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新负责人失败')
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  const handleUploadArtifact = async () => {
+    if (!activeCycle) return
+    if (!uploadFile) {
+      toast.error('请选择文件')
+      return
+    }
+
+    setUploadLoading(true)
+    try {
+      const res = await EditorApi.uploadProductionArtifact(manuscriptId, activeCycle.id, {
+        artifact_kind: uploadKind,
+        file: uploadFile,
+        version_note: versionNote,
+      })
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || '上传产物失败')
+      }
+      setUploadFile(null)
+      setVersionNote('')
+      toast.success('产物已上传')
+      await onReload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '上传失败')
+    } finally {
+      setUploadLoading(false)
     }
   }
 
@@ -167,38 +201,6 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
       window.open(String(res.data.signed_url), '_blank', 'noopener,noreferrer')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '打开清样失败')
-    }
-  }
-
-  const handleUploadGalley = async () => {
-    if (!activeCycle) return
-    if (!uploadFile) {
-      toast.error('请选择 PDF 清样文件')
-      return
-    }
-    if (!versionNote.trim()) {
-      toast.error('请填写版本说明')
-      return
-    }
-
-    setUploadLoading(true)
-    try {
-      const res = await EditorApi.uploadProductionGalley(manuscriptId, activeCycle.id, {
-        file: uploadFile,
-        version_note: versionNote,
-        proof_due_at: uploadDueAt ? new Date(uploadDueAt).toISOString() : undefined,
-      })
-      if (!res?.success) {
-        throw new Error(res?.detail || res?.message || '上传清样失败')
-      }
-      setUploadFile(null)
-      setVersionNote('')
-      toast.success('清样已上传，已通知作者校对')
-      await onReload()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '上传清样失败')
-    } finally {
-      setUploadLoading(false)
     }
   }
 
@@ -226,57 +228,6 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
                 ))}
               </SelectContent>
             </Select>
-            {productionStaff.length === 0 ? (
-              <p className="mt-1 text-xs text-destructive">未找到 production_editor 账号，请先在 Admin User Management 里分配 Production Editor 角色。</p>
-            ) : null}
-          </div>
-
-          <div>
-            <Label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Collaborators (Optional)</Label>
-            {collaboratorIds.length ? (
-              <div className="flex flex-wrap gap-2 pb-2">
-                {collaboratorIds.map((cid) => (
-                  <Badge key={cid} variant="secondary" className="gap-1">
-                    {staffNameById.get(cid) || cid}
-                    <button
-                      type="button"
-                      className="ml-1 inline-flex items-center text-muted-foreground hover:text-foreground"
-                      onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
-                      aria-label="Remove collaborator"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-            <Select
-              value={collaboratorPick}
-              onValueChange={(value) => {
-                const v = String(value || '').trim()
-                if (!v) return
-                if (v === layoutEditorId) {
-                  toast.error('协作者不能与主负责人重复')
-                  setCollaboratorPick('')
-                  return
-                }
-                setCollaboratorIds((prev) => (prev.includes(v) ? prev : [...prev, v]))
-                setCollaboratorPick('')
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Add collaborator…" />
-              </SelectTrigger>
-              <SelectContent>
-                {productionStaff
-                  .filter((item) => item.id !== layoutEditorId && !collaboratorIds.includes(item.id))
-                  .map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name || item.email || item.id}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div>
@@ -301,79 +252,98 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Active Cycle #{activeCycle.cycle_no}</h3>
           <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <p>Stage: <span className="font-semibold">{activeCycle.stage || activeCycle.status}</span></p>
             <p>Status: <span className="font-semibold">{activeCycle.status}</span></p>
             <p>Due: <span className="font-semibold">{formatDate(activeCycle.proof_due_at)}</span></p>
           </div>
 
           {context.permissions?.can_manage_editors ? (
             <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Editors</p>
-              <Select value={layoutEditorId} onValueChange={setLayoutEditorId}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select layout editor" />
-                </SelectTrigger>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assignments</p>
+              <Select value={coordinatorAeId} onValueChange={setCoordinatorAeId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Coordinator AE" /></SelectTrigger>
                 <SelectContent>
-                  {productionStaff.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name || item.email || item.id}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">-- None --</SelectItem>
+                  {staff.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={typesetterId} onValueChange={setTypesetterId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Typesetter" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- None --</SelectItem>
+                  {productionStaff.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={languageEditorId} onValueChange={setLanguageEditorId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Language Editor" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- None --</SelectItem>
+                  {productionStaff.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={pdfEditorId} onValueChange={setPdfEditorId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="PDF Editor" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- None --</SelectItem>
+                  {productionStaff.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
                 </SelectContent>
               </Select>
 
-              {collaboratorIds.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {collaboratorIds.map((cid) => (
-                    <Badge key={cid} variant="secondary" className="gap-1">
-                      {staffNameById.get(cid) || cid}
-                      <button
-                        type="button"
-                        className="ml-1 inline-flex items-center text-muted-foreground hover:text-foreground"
-                        onClick={() => setCollaboratorIds((prev) => prev.filter((x) => x !== cid))}
-                        aria-label="Remove collaborator"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-
-              <Select
-                value={collaboratorPick}
-                onValueChange={(value) => {
-                  const v = String(value || '').trim()
-                  if (!v) return
-                  if (v === layoutEditorId) {
-                    toast.error('协作者不能与主负责人重复')
-                    setCollaboratorPick('')
-                    return
-                  }
-                  setCollaboratorIds((prev) => (prev.includes(v) ? prev : [...prev, v]))
-                  setCollaboratorPick('')
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Add collaborator…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {productionStaff
-                    .filter((item) => item.id !== layoutEditorId && !collaboratorIds.includes(item.id))
-                    .map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name || item.email || item.id}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-
-              <Button type="button" variant="outline" onClick={() => void handleUpdateEditors()} disabled={createLoading}>
+              <Button type="button" variant="outline" onClick={() => void handleUpdateAssignments()} disabled={createLoading}>
                 {createLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Update Editors
+                Update Assignments
               </Button>
             </div>
           ) : null}
 
+          {activeCycle.artifacts && activeCycle.artifacts.length > 0 && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Artifacts</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                {activeCycle.artifacts.map(a => (
+                  <li key={a.id}>- {a.artifact_kind}: {a.file_name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upload Artifact</p>
+            <Select value={uploadKind} onValueChange={setUploadKind}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select artifact kind" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="source_manuscript_snapshot">Source Manuscript Snapshot</SelectItem>
+                <SelectItem value="typeset_output">Typeset Output</SelectItem>
+                <SelectItem value="language_output">Language Output</SelectItem>
+                <SelectItem value="ae_internal_proof">AE Internal Proof</SelectItem>
+                <SelectItem value="final_confirmation_pdf">Final Confirmation PDF</SelectItem>
+                <SelectItem value="publication_pdf">Publication PDF</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="file"
+              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+              className="w-full text-xs"
+            />
+            <Textarea
+              value={versionNote}
+              onChange={(event) => setVersionNote(event.target.value)}
+              rows={2}
+              placeholder="Note"
+            />
+            <Button
+              type="button"
+              onClick={() => void handleUploadArtifact()}
+              disabled={uploadLoading || !uploadFile}
+              className="w-full gap-2"
+            >
+              {uploadLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Upload Artifact
+            </Button>
+          </div>
+          
           <Button
             type="button"
             variant="outline"
@@ -381,34 +351,9 @@ export function ProductionWorkspacePanel({ manuscriptId, context, staff, onReloa
             disabled={!activeCycle.galley_path}
             className="w-full"
           >
-            Open Current Galley
+            Open Current Galley (Legacy)
           </Button>
 
-          <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upload / Replace Galley</p>
-            <Input
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-              className="w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
-            />
-            <Textarea
-              value={versionNote}
-              onChange={(event) => setVersionNote(event.target.value)}
-              rows={3}
-              placeholder="版本说明（例如：修复图表排版 + 统一参考文献样式）"
-            />
-            <DateTimePicker value={uploadDueAt} onChange={setUploadDueAt} />
-            <Button
-              type="button"
-              onClick={() => void handleUploadGalley()}
-              disabled={uploadLoading || !context.permissions?.can_upload_galley}
-              className="w-full gap-2"
-            >
-              {uploadLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Upload Galley
-            </Button>
-          </div>
         </div>
       )}
     </section>

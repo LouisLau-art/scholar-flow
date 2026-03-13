@@ -92,6 +92,63 @@ export function createDecisionProductionApi(deps: DecisionProductionApiDeps) {
       return json
     },
 
+    async updateProductionCycleAssignments(
+      manuscriptId: string, 
+      cycleId: string, 
+      payload: { coordinator_ae_id?: string; typesetter_id?: string; language_editor_id?: string; pdf_editor_id?: string }
+    ) {
+      const res = await authedFetch(
+        `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/assignments`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      )
+      const json = await res.json()
+      if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+      return json
+    },
+
+    async uploadProductionArtifact(
+      manuscriptId: string,
+      cycleId: string,
+      payload: { artifact_kind: string; file: File; version_note?: string }
+    ) {
+      const formData = new FormData()
+      formData.append('artifact_kind', payload.artifact_kind)
+      formData.append('file', payload.file)
+      if (payload.version_note) formData.append('version_note', payload.version_note)
+      const res = await authedFetch(
+        `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/artifacts`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
+      const json = await res.json()
+      if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+      return json
+    },
+
+    async transitionProductionCycle(
+      manuscriptId: string,
+      cycleId: string,
+      payload: { target_stage: string; comment?: string }
+    ) {
+      const res = await authedFetch(
+        `/api/v1/editor/manuscripts/${encodeURIComponent(manuscriptId)}/production-cycles/${encodeURIComponent(cycleId)}/transitions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      )
+      const json = await res.json()
+      if (res.ok) invalidateManuscriptDetailCache(manuscriptId)
+      return json
+    },
+
     async uploadProductionGalley(
       manuscriptId: string,
       cycleId: string,

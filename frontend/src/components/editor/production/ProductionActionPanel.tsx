@@ -1,11 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Loader2, Mail } from 'lucide-react'
+import { CheckCircle2, Loader2, Mail, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
 import type { ProductionCycle } from '@/types/production'
 import { canApproveProductionCycle } from '@/lib/production-utils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 
 type Props = {
   manuscriptId: string
@@ -15,7 +17,8 @@ type Props = {
   onOpenProofreadingEmail?: () => void
 }
 
-function statusHint(status: string | undefined): string {
+function statusHint(status: string | undefined, stage: string | undefined): string {
+  if (stage) return `SOP Stage: ${stage}`
   switch (status) {
     case 'draft':
       return '请先上传清样后进入作者校对。'
@@ -36,6 +39,7 @@ function statusHint(status: string | undefined): string {
 
 export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, onApproved, onOpenProofreadingEmail }: Props) {
   const [loading, setLoading] = useState(false)
+  const [targetStage, setTargetStage] = useState<string>('')
 
   const latest = useMemo(() => activeCycle?.latest_response || null, [activeCycle])
   const correctionItems = useMemo(() => latest?.corrections || [], [latest?.corrections])
@@ -57,16 +61,34 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
     }
   }
 
+  const handleTransition = async () => {
+    if (!activeCycle || !targetStage) return
+    setLoading(true)
+    try {
+      const res = await EditorApi.transitionProductionCycle(manuscriptId, activeCycle.id, { target_stage: targetStage })
+      if (!res?.success) {
+        throw new Error(res?.detail || res?.message || '阶段流转失败')
+      }
+      toast.success('已流转到新阶段')
+      setTargetStage('')
+      await onApproved()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '流转失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <section className="space-y-3">
       <div className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">Action Panel</h2>
-        <p className="mt-1 text-xs text-muted-foreground">发布前核准与最新作者反馈摘要。</p>
+        <p className="mt-1 text-xs text-muted-foreground">阶段流转与核准动作。</p>
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="text-sm text-foreground font-semibold">Current Action State</div>
-        <p className="text-xs text-muted-foreground">{statusHint(activeCycle?.status)}</p>
+        <p className="text-xs text-muted-foreground">{statusHint(activeCycle?.status, activeCycle?.stage || undefined)}</p>
 
         {latest ? (
           <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-foreground space-y-1">
@@ -95,6 +117,29 @@ export function ProductionActionPanel({ manuscriptId, activeCycle, canApprove, o
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">暂无作者反馈。</p>
+        )}
+
+        {activeCycle && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transition Stage</p>
+            <div className="flex items-center gap-2">
+              <Select value={targetStage} onValueChange={setTargetStage}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select target stage" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="typesetting">Typesetting</SelectItem>
+                  <SelectItem value="language_editing">Language Editing</SelectItem>
+                  <SelectItem value="ae_internal_proof">AE Internal Proof</SelectItem>
+                  <SelectItem value="author_proofreading">Author Proofreading</SelectItem>
+                  <SelectItem value="ae_final_review">AE Final Review</SelectItem>
+                  <SelectItem value="pdf_preparation">PDF Preparation</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button type="button" onClick={() => void handleTransition()} disabled={loading || !targetStage} className="h-9 px-3 gap-1">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                Move
+              </Button>
+            </div>
+          </div>
         )}
 
         <div className="space-y-2 pt-2 border-t border-border">

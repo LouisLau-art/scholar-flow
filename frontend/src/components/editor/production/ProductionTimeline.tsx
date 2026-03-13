@@ -36,7 +36,10 @@ export function ProductionTimeline({ cycles }: Props) {
           <li key={cycle.id} className="rounded-md border border-border bg-muted/50 p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-foreground">Cycle #{cycle.cycle_no}</p>
-              <span className="rounded-full bg-card px-2 py-1 text-xs font-semibold text-foreground">{cycle.status}</span>
+              <div className="flex gap-2">
+                <span className="rounded-full bg-card px-2 py-1 text-xs font-semibold text-foreground border border-border">Stage: {cycle.stage || cycle.status}</span>
+                <span className="rounded-full bg-card px-2 py-1 text-xs font-semibold text-muted-foreground">Status: {cycle.status}</span>
+              </div>
             </div>
 
             <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-muted-foreground sm:grid-cols-2">
@@ -45,6 +48,17 @@ export function ProductionTimeline({ cycles }: Props) {
               <p>Due: {formatTime(cycle.proof_due_at)}</p>
               <p>Approved: {formatTime(cycle.approved_at)}</p>
             </div>
+
+            {cycle.artifacts && cycle.artifacts.length > 0 ? (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs font-semibold text-foreground">Artifacts:</p>
+                <ul className="text-xs text-muted-foreground">
+                  {cycle.artifacts.map(a => (
+                    <li key={a.id}>- {a.artifact_kind}: {a.file_name}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {cycle.version_note ? (
               <p className="mt-2 text-xs text-foreground">

@@ -21,6 +21,7 @@ type ProductionQueueItem = {
     id: string
     cycle_no?: number | null
     status?: string | null
+    stage?: string | null
     proof_due_at?: string | null
     updated_at?: string | null
   }
@@ -34,8 +35,17 @@ function formatDate(value?: string | null) {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
-function statusBadge(status?: string | null) {
+function statusBadge(status?: string | null, stage?: string | null) {
   const s = String(status || '').toLowerCase()
+  const stg = String(stage || '').toLowerCase()
+  if (stg) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Badge variant="default" className="w-fit">{stg}</Badge>
+        <span className="text-[10px] text-muted-foreground uppercase">{s || '—'}</span>
+      </div>
+    )
+  }
   if (!s) return <Badge variant="outline">—</Badge>
   if (s === 'awaiting_author') return <Badge variant="secondary">待作者校对</Badge>
   if (s === 'author_corrections_submitted') return <Badge variant="destructive">作者已提交修改</Badge>
@@ -139,7 +149,7 @@ export default function ProductionQueuePage() {
                       {item.manuscript.journal?.title || '—'}
                     </div>
                     <div className="col-span-2 space-y-1">
-                      {statusBadge(item.cycle.status)}
+                      {statusBadge(item.cycle.status, item.cycle.stage)}
                       <p className="text-xs text-muted-foreground">#{item.cycle.cycle_no ?? '—'}</p>
                     </div>
                     <div className="col-span-2 text-sm text-foreground">
