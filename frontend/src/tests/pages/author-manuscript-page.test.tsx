@@ -69,5 +69,7 @@ describe('AuthorManuscriptReviewsPage', () => {
     expect(screen.getByText('delegate@example.com')).toBeInTheDocument()
     expect(screen.getByText('Corresponding Author(s)')).toBeInTheDocument()
     expect(screen.getByText('Lead Author')).toBeInTheDocument()
+    expect(screen.getByText('Corresponding Author Email(s)')).toBeInTheDocument()
+    expect(screen.getByText('lead.author@example.com')).toBeInTheDocument()
   })
 })

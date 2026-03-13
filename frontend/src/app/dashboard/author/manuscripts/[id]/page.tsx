@@ -139,6 +139,13 @@ export default function AuthorManuscriptReviewsPage() {
       .join(', ') ||
     String(correspondingAuthorFallback?.name || correspondingAuthorFallback?.email || '').trim() ||
     '—'
+  const correspondingAuthorEmailLabel =
+    correspondingAuthors
+      .map((item) => String(item?.email || '').trim())
+      .filter(Boolean)
+      .join(', ') ||
+    String(correspondingAuthorFallback?.email || '').trim() ||
+    '—'
   const submissionEmail = String(ctx?.manuscript?.submission_email || '').trim() || '—'
 
   return (
@@ -189,7 +196,7 @@ export default function AuthorManuscriptReviewsPage() {
                     ) : null}
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                     <div className="rounded-md border border-border bg-muted/40 p-3">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">Submission Email</div>
                       <div className="mt-1 font-medium text-foreground">{submissionEmail}</div>
@@ -197,6 +204,10 @@ export default function AuthorManuscriptReviewsPage() {
                     <div className="rounded-md border border-border bg-muted/40 p-3">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">Corresponding Author(s)</div>
                       <div className="mt-1 font-medium text-foreground">{correspondingAuthorLabel}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-muted/40 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Corresponding Author Email(s)</div>
+                      <div className="mt-1 font-medium text-foreground">{correspondingAuthorEmailLabel}</div>
                     </div>
                   </div>
 
