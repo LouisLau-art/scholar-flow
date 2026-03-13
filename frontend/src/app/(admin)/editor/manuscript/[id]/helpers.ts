@@ -146,6 +146,22 @@ export type ReviewerInviteSummaryState =
 
 type ReviewerInviteSummaryItem = NonNullable<ManuscriptDetail['reviewer_invites']>[number]
 
+export function canOpenTechnicalRevisionEmailAction(
+  statusLower: string,
+  preCheckStatus?: string | null
+): boolean {
+  const normalizedStatus = String(statusLower || '').trim().toLowerCase()
+  const normalizedPreCheckStatus = String(preCheckStatus || '').trim().toLowerCase()
+  return (
+    normalizedStatus === 'revision_before_review' ||
+    (normalizedStatus === 'pre_check' && ['intake', 'technical'].includes(normalizedPreCheckStatus))
+  )
+}
+
+export function canOpenFormalRevisionRequestEmailAction(statusLower: string): boolean {
+  return ['major_revision', 'minor_revision'].includes(String(statusLower || '').trim().toLowerCase())
+}
+
 export function resolveReviewerInviteSummaryState(
   invite: ReviewerInviteSummaryItem | null | undefined
 ): ReviewerInviteSummaryState {
