@@ -241,6 +241,36 @@ async def test_revert_technical_check_flow(client, mocker):
     assert body["data"]["pre_check_status"] == PreCheckStatus.TECHNICAL.value
 
 
+async def test_patch_status_blocks_academic_transition_without_bound_academic_editor(client, mocker):
+    mocker.patch("app.core.auth_utils.get_current_user", return_value={"id": MOCK_ME_ID, "roles": ["managing_editor"]})
+    mocker.patch("app.api.v1.editor.ensure_manuscript_scope_access", return_value=None)
+
+    manuscript_table = mocker.Mock()
+    manuscript_table.select.return_value.eq.return_value.single.return_value.execute.return_value = SimpleNamespace(
+        data={
+            "id": MOCK_MANUSCRIPT_ID,
+            "status": ManuscriptStatus.PRE_CHECK.value,
+            "pre_check_status": PreCheckStatus.ACADEMIC.value,
+            "assistant_editor_id": MOCK_AE_ID,
+            "academic_editor_id": None,
+        }
+    )
+    supabase_admin = mocker.Mock()
+    supabase_admin.table.return_value = manuscript_table
+    mocker.patch("app.api.v1.editor.supabase_admin", supabase_admin)
+
+    update_status = mocker.patch("app.services.editorial_service.EditorialService.update_status")
+
+    response = await client.patch(
+        f"/api/v1/editor/manuscripts/{MOCK_MANUSCRIPT_ID}/status",
+        json={"status": ManuscriptStatus.DECISION.value},
+    )
+
+    assert response.status_code == 409
+    assert "Academic Editor" in str(response.json().get("detail", ""))
+    update_status.assert_not_called()
+
+
 async def test_author_submit_revision_uses_persisted_precheck_stage_when_pending_has_no_hint(client, mocker):
     author_id = str(uuid4())
     assistant_editor_id = str(uuid4())

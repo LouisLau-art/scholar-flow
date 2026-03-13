@@ -471,7 +471,7 @@ async def patch_manuscript_status(
         try:
             ms_resp = (
                 supabase_admin.table("manuscripts")
-                .select("id,status,pre_check_status,assistant_editor_id")
+                .select("id,status,pre_check_status,assistant_editor_id,academic_editor_id")
                 .eq("id", id)
                 .single()
                 .execute()
@@ -482,12 +482,18 @@ async def patch_manuscript_status(
         source_status = normalize_status(str(ms_row.get("status") or ""))
         source_precheck_status = str(ms_row.get("pre_check_status") or "").strip().lower()
         assigned_ae = str(ms_row.get("assistant_editor_id") or "").strip()
+        assigned_academic_editor_id = str(ms_row.get("academic_editor_id") or "").strip()
         if target_status == ManuscriptStatus.UNDER_REVIEW.value and source_status == ManuscriptStatus.PRE_CHECK.value and not assigned_ae:
             raise HTTPException(
                 status_code=409,
                 detail="Assistant Editor must be assigned before moving to under_review.",
             )
         if source_status == ManuscriptStatus.PRE_CHECK.value and source_precheck_status == "academic":
+            if not assigned_academic_editor_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Academic Editor must remain assigned before moving academic manuscripts to decision/under_review.",
+                )
             if target_status == ManuscriptStatus.UNDER_REVIEW.value:
                 transition_payload = {
                     "action": "precheck_academic_to_review",
