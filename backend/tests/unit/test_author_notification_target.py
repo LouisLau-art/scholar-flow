@@ -139,6 +139,33 @@ def test_resolve_author_notification_target_includes_all_corresponding_authors_i
     assert target["cc_recipients"] == ["co@example.org"]
 
 
+def test_resolve_author_notification_target_prefers_submission_email_over_non_corresponding_contacts():
+    manuscript = {
+        "submission_email": "delegate@example.org",
+        "author_contacts": [
+            {
+                "name": "Lead Author",
+                "email": "lead.author@example.org",
+                "affiliation": "Example U",
+                "is_corresponding": False,
+            },
+            {
+                "name": "Second Author",
+                "email": "second.author@example.org",
+                "affiliation": "Example U",
+                "is_corresponding": False,
+            },
+        ],
+    }
+
+    target = resolve_author_notification_target(manuscript=manuscript)
+
+    assert target["recipient_email"] == "delegate@example.org"
+    assert target["source"] == "submission_email"
+    assert target["to_recipients"] == ["delegate@example.org"]
+    assert target["cc_recipients"] == ["lead.author@example.org", "second.author@example.org"]
+
+
 def test_resolve_author_notification_target_falls_back_to_profile_email_when_submission_fields_missing():
     target = resolve_author_notification_target(
         manuscript={"author_contacts": []},

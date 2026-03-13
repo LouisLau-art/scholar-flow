@@ -101,3 +101,36 @@ def test_notification_orchestrator_delegates_author_resolution_to_recipient_reso
     resolver.resolve_author_email_targets.assert_called_once()
     assert result["recipient_email"] == "corr@example.org"
     assert result["to_recipients"] == ["corr@example.org"]
+
+
+def test_notification_orchestrator_prefers_submission_email_when_no_corresponding_author():
+    orchestrator = NotificationOrchestrator()
+
+    result = orchestrator.resolve_author_notification_target(
+        manuscript={
+            "journal_public_editorial_email": "office@example.org",
+            "submission_email": "delegate@example.org",
+            "author_contacts": [
+                {
+                    "name": "Lead Author",
+                    "email": "lead.author@example.org",
+                    "is_corresponding": False,
+                },
+                {
+                    "name": "Second Author",
+                    "email": "second.author@example.org",
+                    "is_corresponding": False,
+                },
+            ],
+        }
+    )
+
+    assert result["recipient_email"] == "delegate@example.org"
+    assert result["source"] == "submission_email"
+    assert result["to_recipients"] == ["delegate@example.org"]
+    assert result["cc_recipients"] == [
+        "lead.author@example.org",
+        "second.author@example.org",
+        "office@example.org",
+    ]
+    assert result["reply_to_recipients"] == ["office@example.org"]
