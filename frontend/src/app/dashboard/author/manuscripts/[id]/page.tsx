@@ -35,6 +35,15 @@ type AuthorContextPayload = {
     status_label: string
     created_at: string | null
     updated_at: string | null
+    submission_email?: string | null
+    author_contacts?: Array<{
+      name?: string | null
+      email?: string | null
+      affiliation?: string | null
+      city?: string | null
+      country_or_region?: string | null
+      is_corresponding?: boolean | null
+    }>
   }
   files: {
     current_pdf_signed_url: string | null
@@ -117,6 +126,21 @@ export default function AuthorManuscriptReviewsPage() {
     return { text: 'System', icon: null }
   }
 
+  const correspondingAuthors = Array.isArray(ctx?.manuscript?.author_contacts)
+    ? ctx.manuscript.author_contacts.filter((item) => item?.is_corresponding)
+    : []
+  const correspondingAuthorFallback = Array.isArray(ctx?.manuscript?.author_contacts)
+    ? ctx.manuscript.author_contacts[0] || null
+    : null
+  const correspondingAuthorLabel =
+    correspondingAuthors
+      .map((item) => String(item?.name || item?.email || '').trim())
+      .filter(Boolean)
+      .join(', ') ||
+    String(correspondingAuthorFallback?.name || correspondingAuthorFallback?.email || '').trim() ||
+    '—'
+  const submissionEmail = String(ctx?.manuscript?.submission_email || '').trim() || '—'
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <SiteHeader />
@@ -163,6 +187,17 @@ export default function AuthorManuscriptReviewsPage() {
                         Updated {new Date(ctx.manuscript.updated_at).toLocaleString()}
                       </div>
                     ) : null}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                    <div className="rounded-md border border-border bg-muted/40 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Submission Email</div>
+                      <div className="mt-1 font-medium text-foreground">{submissionEmail}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-muted/40 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Corresponding Author(s)</div>
+                      <div className="mt-1 font-medium text-foreground">{correspondingAuthorLabel}</div>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-3">
