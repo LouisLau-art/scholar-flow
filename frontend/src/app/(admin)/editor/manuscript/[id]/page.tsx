@@ -29,6 +29,8 @@ import {
   allowedNext,
   buildAuthorResponseHistory,
   buildFileHubProps,
+  canOpenFormalRevisionRequestEmailAction,
+  canOpenTechnicalRevisionEmailAction,
   formatReviewerAuditVia,
   formatReviewerEmailEventLabel,
   formatReviewerHistoryAssignmentState,
@@ -1186,16 +1188,13 @@ export default function EditorManuscriptDetailPage() {
   ])
 
   const handleOpenAuthorEmailPreview = useCallback(async (mode: 'technical' | 'revision') => {
-    const normalizedPreCheckStatus = String(ms?.pre_check_status || '').trim().toLowerCase()
     if (mode === 'technical') {
-      const canOpenTechnicalPreview =
-        statusLower === 'revision_before_review' ||
-        (statusLower === 'pre_check' && ['intake', 'technical'].includes(normalizedPreCheckStatus))
+      const canOpenTechnicalPreview = canOpenTechnicalRevisionEmailAction(statusLower, ms?.pre_check_status)
       if (!canOpenTechnicalPreview) {
         toast.error('Technical revision email is only available for intake / technical return flows.')
         return
       }
-    } else if (!['major_revision', 'minor_revision'].includes(statusLower)) {
+    } else if (!canOpenFormalRevisionRequestEmailAction(statusLower)) {
       toast.error('Formal revision request email is only available after the manuscript is already in major/minor revision.')
       return
     }

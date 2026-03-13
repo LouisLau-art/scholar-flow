@@ -16,6 +16,8 @@ import { getStatusColor, getStatusLabel } from '@/lib/statusStyles'
 import type { ReviewEmailTemplateOption } from '@/types/email-template'
 
 import {
+  canOpenFormalRevisionRequestEmailAction,
+  canOpenTechnicalRevisionEmailAction,
   formatReviewerAuditVia,
   formatReviewerDeclineReason,
   formatReviewerEmailEventLabel,
@@ -925,11 +927,8 @@ export function EditorialActionsCard({
   getTransitionActionLabel,
   onOpenAuthorEmailPreview,
 }: EditorialActionsCardProps) {
-  const normalizedPreCheckStatus = String(preCheckStatus || '').trim().toLowerCase()
-  const showTechnicalRevisionEmailAction =
-    statusLower === 'revision_before_review' ||
-    (statusLower === 'pre_check' && ['intake', 'technical'].includes(normalizedPreCheckStatus))
-  const showFormalRevisionRequestEmailAction = ['major_revision', 'minor_revision'].includes(statusLower)
+  const showTechnicalRevisionEmailAction = canOpenTechnicalRevisionEmailAction(statusLower, preCheckStatus)
+  const showFormalRevisionRequestEmailAction = canOpenFormalRevisionRequestEmailAction(statusLower)
   const showAuthorCommunication =
     !['published', 'rejected'].includes(statusLower) &&
     (showTechnicalRevisionEmailAction || showFormalRevisionRequestEmailAction)
