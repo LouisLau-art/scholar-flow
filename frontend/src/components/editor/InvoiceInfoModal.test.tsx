@@ -36,4 +36,28 @@ describe('InvoiceInfoModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save & Send Invoice Email' }))
     expect(onSaveAndSend).toHaveBeenCalledTimes(1)
   })
+
+  it('locks fields and actions while invoice email is sending', () => {
+    render(
+      <InvoiceInfoModal
+        open
+        onOpenChange={vi.fn()}
+        form={form}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onSaveAndSend={vi.fn()}
+        canSendEmail
+        invoiceNumber="INV-2026-001"
+        sendingEmail
+      />
+    )
+
+    expect(screen.getByDisplayValue('Corr Author')).toBeDisabled()
+    expect(screen.getByDisplayValue('Example University')).toBeDisabled()
+    expect(screen.getByDisplayValue('1200')).toBeDisabled()
+    expect(screen.getByDisplayValue('Grant 1')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Save & Send Invoice Email/i })).toBeDisabled()
+  })
 })

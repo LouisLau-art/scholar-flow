@@ -385,6 +385,60 @@ def test_get_intake_queue_excludes_waiting_author_placeholders():
     assert out[0]["waiting_resubmit"] is False
 
 
+def test_get_managing_workspace_waiting_author_includes_return_reason_context():
+    svc = _new_service()
+    svc.client = _ClientStub(
+        [
+            {
+                "table": "manuscripts",
+                "data": [
+                    {
+                        "id": "wait-1",
+                        "title": "Waiting Author Manuscript",
+                        "status": ManuscriptStatus.REVISION_BEFORE_REVIEW.value,
+                        "pre_check_status": PreCheckStatus.TECHNICAL.value,
+                        "assistant_editor_id": "ae-1",
+                        "owner_id": "owner-1",
+                        "created_at": "2026-03-11T08:00:00Z",
+                        "updated_at": "2026-03-12T10:00:00Z",
+                    }
+                ],
+            },
+            {
+                "table": "user_profiles",
+                "data": [
+                    {"id": "ae-1", "full_name": "AE One", "email": "ae1@example.com"},
+                    {"id": "owner-1", "full_name": "Owner One", "email": "owner1@example.com"},
+                ],
+            },
+        ]
+    )
+    svc._load_latest_precheck_intake_revision_logs = Mock(  # type: ignore[attr-defined]
+        return_value={
+            "wait-1": {
+                "created_at": "2026-03-12T10:00:00Z",
+                "comment": "Need higher-resolution figures",
+            }
+        }
+    )
+    svc._apply_process_visibility_scope = Mock(side_effect=lambda *, rows, **_kwargs: rows)  # type: ignore[attr-defined]
+
+    out = svc.get_managing_workspace(
+        viewer_user_id="me-1",
+        viewer_roles=["managing_editor"],
+        page=1,
+        page_size=20,
+    )
+
+    assert len(out) == 1
+    assert out[0]["workspace_bucket"] == "awaiting_author"
+    assert out[0]["waiting_resubmit"] is True
+    assert out[0]["waiting_resubmit_reason"] == "Need higher-resolution figures"
+    assert out[0]["waiting_resubmit_at"] == "2026-03-12T10:00:00Z"
+    assert out[0]["intake_return_reason"] == "Need higher-resolution figures"
+    assert out[0]["assistant_editor"]["full_name"] == "AE One"
+
+
 def test_submit_technical_check_revision_requires_comment():
     svc = _new_service()
     with pytest.raises(HTTPException) as ei:

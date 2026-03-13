@@ -26,9 +26,13 @@ export function InvoiceInfoModal(props: {
   invoiceNumber?: string | null
 }) {
   const actionBusy = Boolean(props.saving || props.sendingEmail)
+  const handleOpenChange = (open: boolean) => {
+    if (actionBusy) return
+    props.onOpenChange(open)
+  }
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit Invoice Info</DialogTitle>
@@ -41,22 +45,26 @@ export function InvoiceInfoModal(props: {
           <Input
             placeholder="Authors"
             value={props.form.authors}
+            disabled={actionBusy}
             onChange={(e) => props.onChange({ authors: e.target.value })}
           />
           <Input
             placeholder="Affiliation"
             value={props.form.affiliation}
+            disabled={actionBusy}
             onChange={(e) => props.onChange({ affiliation: e.target.value })}
           />
           <Input
             placeholder="APC Amount (USD)"
             inputMode="decimal"
             value={props.form.apcAmount}
+            disabled={actionBusy}
             onChange={(e) => props.onChange({ apcAmount: e.target.value })}
           />
           <Textarea
             placeholder="Funding Info"
             value={props.form.fundingInfo}
+            disabled={actionBusy}
             onChange={(e) => props.onChange({ fundingInfo: e.target.value })}
           />
 
@@ -70,7 +78,7 @@ export function InvoiceInfoModal(props: {
           ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => props.onOpenChange(false)}>
+            <Button variant="outline" onClick={() => props.onOpenChange(false)} disabled={actionBusy}>
               Cancel
             </Button>
             <Button disabled={actionBusy} onClick={props.onSave}>

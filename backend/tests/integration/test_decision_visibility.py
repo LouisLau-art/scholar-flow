@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 from postgrest.exceptions import APIError
 
 from .test_utils import insert_manuscript, make_user
+
+
+def _ensure_profile(db, *, user_id: str, email: str, roles: list[str]) -> None:
+    db.table("user_profiles").upsert(
+        {
+            "id": user_id,
+            "email": email,
+            "roles": roles,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        on_conflict="id",
+    ).execute()
 
 
 def _cleanup(db, manuscript_id: str) -> None:
@@ -41,11 +54,30 @@ async def test_author_can_only_access_attachment_after_final_submit(
     supabase_admin_client,
     set_admin_emails,
 ):
-    editor = make_user(email="decision_visibility_editor@example.com")
-    author = make_user(email="decision_visibility_author@example.com")
-    reviewer = make_user(email="decision_visibility_reviewer@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_visibility_editor_{suffix}@example.com")
+    author = make_user(email=f"decision_visibility_author_{suffix}@example.com")
+    reviewer = make_user(email=f"decision_visibility_reviewer_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=reviewer.id,
+        email=reviewer.email,
+        roles=["reviewer"],
+    )
 
     manuscript_id = str(uuid4())
     attachment_ref = f"att-123|decision_letters/{manuscript_id}/att-123_demo.pdf"

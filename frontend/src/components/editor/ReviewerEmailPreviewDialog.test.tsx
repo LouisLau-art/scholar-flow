@@ -120,4 +120,34 @@ describe('ReviewerEmailPreviewDialog', () => {
     fireEvent.change(screen.getByLabelText('Reply-To'), { target: { value: 'reply@example.org' } })
     expect(onReplyToChange).toHaveBeenCalledWith('reply@example.org')
   })
+
+  it('locks envelope inputs while sending', () => {
+    render(
+      <ReviewerEmailPreviewDialog
+        open
+        loading={false}
+        sending
+        preview={preview}
+        recipientEmail={preview.recipient_email}
+        ccValue="office@example.org"
+        replyToValue="office@example.org"
+        subjectValue={preview.subject}
+        htmlValue={preview.html}
+        onSubjectChange={vi.fn()}
+        onHtmlChange={vi.fn()}
+        onRecipientEmailChange={vi.fn()}
+        onCcChange={vi.fn()}
+        onReplyToChange={vi.fn()}
+        onClose={vi.fn()}
+        onSend={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('Recipient')).toBeDisabled()
+    expect(screen.getByLabelText('CC')).toBeDisabled()
+    expect(screen.getByLabelText('Reply-To')).toBeDisabled()
+    expect(screen.getByLabelText('Subject')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Send Email/i })).toBeDisabled()
+  })
 })

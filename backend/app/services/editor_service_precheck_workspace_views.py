@@ -247,6 +247,17 @@ class EditorServicePrecheckWorkspaceViewMixin:
             for item in precheck_enriched
             if str(item.get("id") or "").strip()
         }
+        waiting_author_ids = [
+            str(row.get("id") or "").strip()
+            for row in rows
+            if normalize_status(str(row.get("status") or "")) == ManuscriptStatus.REVISION_BEFORE_REVIEW.value
+            and str(row.get("id") or "").strip()
+        ]
+        waiting_author_logs = (
+            self._load_latest_precheck_intake_revision_logs(waiting_author_ids)
+            if waiting_author_ids
+            else {}
+        )
         out: list[dict[str, Any]] = []
         for base_row in rows:
             row = dict(base_row)
@@ -270,6 +281,13 @@ class EditorServicePrecheckWorkspaceViewMixin:
                 normalized_precheck = PreCheckStatus.INTAKE.value
             row["status"] = normalized_status
             row["pre_check_status"] = normalized_precheck
+            if normalized_status == ManuscriptStatus.REVISION_BEFORE_REVIEW.value:
+                waiting_log = waiting_author_logs.get(row_id) or {}
+                waiting_reason = str(waiting_log.get("comment") or "").strip() or None
+                row["waiting_resubmit"] = True
+                row["waiting_resubmit_at"] = str(waiting_log.get("created_at") or "").strip() or None
+                row["waiting_resubmit_reason"] = waiting_reason
+                row["intake_return_reason"] = waiting_reason
             row["workspace_bucket"] = self._derive_managing_workspace_bucket(
                 status=normalized_status,
                 pre_check_status=normalized_precheck,

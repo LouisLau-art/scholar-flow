@@ -747,6 +747,18 @@ class EmailService:
         }
         if not self.is_configured():
             result["error_message"] = "Email provider is not configured"
+            self._log_attempt(
+                to_email,
+                result["subject"],
+                template_key,
+                EmailStatus.FAILED,
+                error_message=result["error_message"],
+                to_recipients=[to_email],
+                cc_recipients=cc_emails,
+                bcc_recipients=bcc_emails,
+                reply_to_recipients=reply_to_emails,
+                audit_context=audit_context,
+            )
             return result
 
         try:
@@ -826,13 +838,26 @@ class EmailService:
             "provider_id": None,
             "error_message": None,
         }
+        subject_value = result["subject"]
+        attachment_manifest = self._build_attachment_manifest(envelope.attachments)
         if not self.is_configured():
             result["error_message"] = "Email provider is not configured"
+            self._log_attempt(
+                envelope.to_emails[0],
+                subject_value,
+                template_key,
+                EmailStatus.FAILED,
+                error_message=result["error_message"],
+                to_recipients=envelope.to_emails,
+                cc_recipients=envelope.cc_emails,
+                bcc_recipients=envelope.bcc_emails,
+                reply_to_recipients=envelope.reply_to_emails,
+                attachment_manifest=attachment_manifest,
+                audit_context=audit_context,
+            )
             return result
 
-        subject_value = result["subject"]
         text_value = envelope.text_body if envelope.text_body is not None else self._build_plain_text_from_html(envelope.html_body)
-        attachment_manifest = self._build_attachment_manifest(envelope.attachments)
 
         if self.smtp_config:
             ok = self.send_email(
@@ -882,6 +907,19 @@ class EmailService:
         resend_cfg = self._effective_resend_config()
         if not resend_cfg:
             result["error_message"] = "Resend is not configured"
+            self._log_attempt(
+                envelope.to_emails[0],
+                subject_value,
+                template_key,
+                EmailStatus.FAILED,
+                error_message=result["error_message"],
+                to_recipients=envelope.to_emails,
+                cc_recipients=envelope.cc_emails,
+                bcc_recipients=envelope.bcc_emails,
+                reply_to_recipients=envelope.reply_to_emails,
+                attachment_manifest=attachment_manifest,
+                audit_context=audit_context,
+            )
             return result
 
         merged_tags = self._merge_inline_email_tags(template_key=template_key, tags=tags)
@@ -1060,10 +1098,13 @@ class EmailService:
             normalized_bcc = self._normalize_email_list(bcc_recipients)
             normalized_reply_to = self._normalize_email_list(reply_to_recipients)
             delivery_mode = str(context.get("delivery_mode") or "").strip() or None
-            communication_status = (
-                str(context.get("communication_status") or "").strip()
-                or ("system_sent" if status == EmailStatus.SENT else "system_failed")
-            )
+            raw_communication_status = str(context.get("communication_status") or "").strip()
+            if raw_communication_status in {"system_sent", "system_failed"}:
+                communication_status = "system_sent" if status == EmailStatus.SENT else "system_failed"
+            else:
+                communication_status = raw_communication_status or (
+                    "system_sent" if status == EmailStatus.SENT else "system_failed"
+                )
             normalized_provider = str(provider or context.get("provider") or "").strip() or None
             normalized_attachment_manifest = self._build_attachment_manifest(attachment_manifest)
             data = {

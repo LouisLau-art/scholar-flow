@@ -95,6 +95,7 @@ export function ReviewerEmailPreviewDialog({
                     id="reviewer-email-preview-recipient"
                     type="email"
                     value={recipientEmail}
+                    disabled={sending}
                     onChange={(event) => onRecipientEmailChange(event.target.value)}
                     placeholder={preview.reviewer_email}
                     autoComplete="off"

@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import MagicMock, patch
 
+from app.core.mail import EmailService
 from app.api.v1.reviews import _DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES
 
 
@@ -222,6 +223,84 @@ async def test_invoice_email_send_uses_pdf_attachment_and_resolved_recipients(
     assert send_kwargs["reply_to_emails"] == ["office@example.org"]
     assert send_kwargs["attachments"][0]["filename"] == "INV-2026-SEND.pdf"
     assert send_kwargs["attachments"][0]["content_type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_invoice_email_send_logs_failed_delivery_when_provider_unconfigured(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    invoice_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa1f")
+    manuscript_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb11f")
+
+    supabase_admin = _Client(
+        {
+            "invoices": [
+                {
+                    "id": str(invoice_id),
+                    "manuscript_id": str(manuscript_id),
+                    "amount": 900,
+                    "status": "unpaid",
+                    "invoice_number": "INV-2026-NOCFG",
+                    "pdf_path": f"{manuscript_id}/{invoice_id}.pdf",
+                    "pdf_generated_at": "2026-03-12T10:00:00Z",
+                    "pdf_error": None,
+                },
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Invoice No Provider Manuscript",
+                    "author_id": "author-1",
+                    "journal_id": "journal-1",
+                    "submission_email": "login@example.org",
+                    "author_contacts": [
+                        {"name": "Corr Author", "email": "corr@example.org", "is_corresponding": True},
+                        {"name": "Co Author", "email": "co@example.org", "is_corresponding": False},
+                    ],
+                }
+            ],
+            "journals": [
+                {"title": "Journal One", "public_editorial_email": "office@example.org"},
+            ],
+        }
+    )
+    email_log_client = _Client({})
+    email_service = EmailService(
+        smtp_config=None,
+        resend_config=None,
+        supabase_client=email_log_client,
+    )
+
+    with (
+        patch("app.api.v1.invoices.supabase_admin", supabase_admin),
+        patch("app.api.v1.invoices.email_service", email_service),
+    ):
+        resp = await client.post(
+            f"/api/v1/invoices/{invoice_id}/email/send",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["delivery_status"] == "failed"
+    assert data["delivery_error"] == "Email provider is not configured"
+    logged_payload = email_log_client._insert_calls["email_logs"][0]
+    assert logged_payload["recipient"] == "corr@example.org"
+    assert logged_payload["status"] == "failed"
+    assert logged_payload["to_recipients"] == ["corr@example.org"]
+    assert logged_payload["cc_recipients"] == ["co@example.org", "office@example.org"]
+    assert logged_payload["reply_to_recipients"] == ["office@example.org"]
+    assert logged_payload["communication_status"] == "system_failed"
+    assert logged_payload["attachment_manifest"] == [
+        {
+            "filename": "INV-2026-NOCFG.pdf",
+            "content_type": "application/pdf",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -1055,3 +1134,72 @@ async def test_reviewer_email_mark_external_sent_logs_external_delivery_with_def
     assert log_kwargs["cc_recipients"] == ["office@example.org"]
     assert log_kwargs["reply_to_recipients"] == ["office@example.org"]
     assert log_kwargs["audit_context"]["communication_status"] == "external_sent"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_email_mark_external_sent_blocks_reminder_for_declined_assignment(
+    client: AsyncClient,
+    auth_token: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@example.com")
+    assignment_id = UUID("ffffffff-ffff-ffff-ffff-fffffffff114")
+    manuscript_id = UUID("abababab-abab-abab-abab-ababababab14")
+    reviewer_id = UUID("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcd14")
+
+    supabase_admin = _Client(
+        {
+            "review_assignments": [
+                {
+                    "id": str(assignment_id),
+                    "manuscript_id": str(manuscript_id),
+                    "reviewer_id": str(reviewer_id),
+                    "status": "declined",
+                    "due_at": "2026-03-20T00:00:00+00:00",
+                    "declined_at": "2026-03-12T10:00:00Z",
+                }
+            ],
+            "manuscripts": [
+                {
+                    "id": str(manuscript_id),
+                    "title": "Reviewer Declined Reminder",
+                    "journal_id": "journal-1",
+                    "assistant_editor_id": "editor-1",
+                    "status": "under_review",
+                }
+            ],
+            "user_profiles": [
+                {
+                    "email": "reviewer@example.org",
+                    "full_name": "Reviewer One",
+                }
+            ],
+            "journals": [
+                {
+                    "title": "Journal One",
+                    "public_editorial_email": "office@example.org",
+                }
+            ],
+        }
+    )
+    log_mock = MagicMock()
+
+    with (
+        patch("app.api.v1.reviews.supabase_admin", supabase_admin),
+        patch("app.api.v1.reviews._ensure_review_management_access", return_value=None),
+        patch(
+            "app.api.v1.reviews._load_review_assignment_template",
+            return_value=dict(_DEFAULT_REVIEW_ASSIGNMENT_TEMPLATES["reviewer_reminder_polite"]),
+        ),
+        patch("app.api.v1.reviews.email_service.log_attempt", log_mock),
+    ):
+        resp = await client.post(
+            f"/api/v1/reviews/assignments/{assignment_id}/mark-external-sent",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"channel": "gmail_web", "template_key": "reviewer_reminder_polite"},
+        )
+
+    assert resp.status_code == 409, resp.text
+    assert "declined" in str(resp.json().get("detail", "")).lower()
+    assert log_mock.call_count == 0
+    assert supabase_admin._insert_calls.get("email_logs") in (None, [])

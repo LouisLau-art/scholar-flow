@@ -52,7 +52,7 @@ test.describe('Pre-check workflow (mocked)', () => {
         })
       }
 
-      if (pathname.startsWith('/api/v1/editor/intake') && req.method() === 'GET') {
+      if (pathname.startsWith('/api/v1/editor/managing-workspace') && req.method() === 'GET') {
         const data =
           stage === 'intake'
             ? [
@@ -61,6 +61,7 @@ test.describe('Pre-check workflow (mocked)', () => {
                   title: 'Mocked Precheck Manuscript',
                   status: 'pre_check',
                   pre_check_status: 'intake',
+                  workspace_bucket: 'intake',
                 },
               ]
             : []
@@ -179,8 +180,8 @@ test.describe('Pre-check workflow (mocked)', () => {
 
     // 1) ME Intake -> assign AE
     await page.goto('/editor/intake')
-    await expect(page.getByRole('heading', { name: 'Managing Editor Intake Queue' })).toBeVisible()
-    await page.getByPlaceholder('搜索标题 / UUID / 作者 / 期刊').fill('precheck-e2e')
+    await expect(page.getByRole('heading', { name: 'Managing Editor Workspace' })).toBeVisible()
+    await page.getByPlaceholder('Search by title / manuscript id / owner / AE / journal').fill('precheck-e2e')
     await page.getByRole('button', { name: '搜索' }).click()
     await expect(page.getByRole('button', { name: '通过并分配 AE' })).toBeVisible()
     await page.getByRole('button', { name: '通过并分配 AE' }).click()
@@ -205,9 +206,10 @@ test.describe('Pre-check workflow (mocked)', () => {
     // 3) EIC Academic -> send to review
     await page.goto('/editor/academic')
     await expect(page.getByRole('heading', { name: 'Academic Editor Workspace' })).toBeVisible()
-    await expect(page.getByText('Mocked Precheck Manuscript')).toBeVisible()
-    await page.getByRole('button', { name: 'Make Decision' }).click()
-    await page.getByLabel('Send to External Review').check()
+    const academicRow = page.locator('tbody tr').filter({ hasText: 'Mocked Precheck Manuscript' }).first()
+    await expect(academicRow).toBeVisible()
+    await academicRow.getByRole('button', { name: 'Submit Recommendation' }).click()
+    await page.getByLabel('Recommend External Review').check()
     await page.getByRole('button', { name: 'Submit' }).click()
   })
 })

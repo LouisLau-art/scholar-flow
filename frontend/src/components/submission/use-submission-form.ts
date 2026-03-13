@@ -229,6 +229,14 @@ export function useSubmissionForm() {
     setWordFile(null)
     setWordFilePath(null)
     setWordFileUploadError(null)
+    if (hasDocxAutoMetadata) {
+      setMetadata((prev) => ({
+        ...prev,
+        title: touched.title ? prev.title : '',
+        abstract: touched.abstract ? prev.abstract : '',
+        authorContacts: touched.authorContacts ? prev.authorContacts : [createAuthorContact({ isCorresponding: true })],
+      }))
+    }
     setHasDocxAutoMetadata(false)
     if (options?.resetInput) {
       setWordInputResetKey((value) => value + 1)
@@ -784,6 +792,7 @@ export function useSubmissionForm() {
     showJournalError,
     showPolicyConsentError,
     showEthicsConsentError,
+    duplicateAuthorEmail,
     submitDisabled:
       !fileValid ||
       !manuscriptSourceValid ||

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from uuid import uuid4
 
 import pytest
@@ -87,6 +88,32 @@ def _require_review_assignment_schema(db) -> None:
     )
 
 
+def _insert_review_assignments_compatible(db, rows: list[dict]) -> list[dict]:
+    payloads = [dict(row) for row in rows]
+    while True:
+        try:
+            return db.table("review_assignments").insert(payloads).execute().data or []
+        except APIError as e:
+            message = getattr(e, "message", str(e))
+            if "review_assignments" not in message or "schema cache" not in message:
+                raise
+            match = re.search(r"'([^']+)'", message)
+            missing_column = match.group(1) if match else ""
+            if not missing_column:
+                raise
+            changed = False
+            next_payloads: list[dict] = []
+            for row in payloads:
+                next_row = dict(row)
+                if missing_column in next_row:
+                    next_row.pop(missing_column, None)
+                    changed = True
+                next_payloads.append(next_row)
+            if not changed:
+                raise
+            payloads = next_payloads
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_submit_final_accept_persists_decision_letter_and_updates_status(
@@ -94,11 +121,24 @@ async def test_submit_final_accept_persists_decision_letter_and_updates_status(
     supabase_admin_client,
     set_admin_emails,
 ):
-    editor = make_user(email="decision_editor_accept@example.com")
-    author = make_user(email="decision_author_accept@example.com")
-    reviewer = make_user(email="decision_reviewer_accept@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_accept_{suffix}@example.com")
+    author = make_user(email=f"decision_author_accept_{suffix}@example.com")
+    reviewer = make_user(email=f"decision_reviewer_accept_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
 
     manuscript_id = str(uuid4())
     insert_manuscript(
@@ -172,9 +212,10 @@ async def test_reject_blocked_outside_decision_stage(
     supabase_admin_client,
     set_admin_emails,
 ):
-    editor = make_user(email="decision_editor_reject_block@example.com")
-    author = make_user(email="decision_author_reject_block@example.com")
-    reviewer = make_user(email="decision_reviewer_reject_block@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_reject_block_{suffix}@example.com")
+    author = make_user(email=f"decision_author_reject_block_{suffix}@example.com")
+    reviewer = make_user(email=f"decision_reviewer_reject_block_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
 
@@ -222,10 +263,23 @@ async def test_draft_optimistic_lock_conflict_returns_409(
     supabase_admin_client,
     set_admin_emails,
 ):
-    editor = make_user(email="decision_editor_conflict@example.com")
-    author = make_user(email="decision_author_conflict@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_conflict_{suffix}@example.com")
+    author = make_user(email=f"decision_author_conflict_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
 
     manuscript_id = str(uuid4())
     insert_manuscript(
@@ -503,17 +557,32 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
     client,
     supabase_admin_client,
     set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    editor = make_user(email="decision_editor_exit@example.com")
-    author = make_user(email="decision_author_exit@example.com")
-    reviewer_selected = make_user(email="decision_reviewer_selected@example.com")
-    reviewer_invited = make_user(email="decision_reviewer_invited@example.com")
-    reviewer_opened = make_user(email="decision_reviewer_opened@example.com")
-    reviewer_accepted = make_user(email="decision_reviewer_accepted@example.com")
-    reviewer_submitted = make_user(email="decision_reviewer_submitted@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_exit_{suffix}@example.com")
+    author = make_user(email=f"decision_author_exit_{suffix}@example.com")
+    recipient = make_user(email=f"decision_recipient_exit_{suffix}@example.com")
+    reviewer_selected = make_user(email=f"decision_reviewer_selected_{suffix}@example.com")
+    reviewer_invited = make_user(email=f"decision_reviewer_invited_{suffix}@example.com")
+    reviewer_opened = make_user(email=f"decision_reviewer_opened_{suffix}@example.com")
+    reviewer_accepted = make_user(email=f"decision_reviewer_accepted_{suffix}@example.com")
+    reviewer_submitted = make_user(email=f"decision_reviewer_submitted_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
     _require_review_assignment_schema(supabase_admin_client)
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
 
     manuscript_id = str(uuid4())
     insert_manuscript(
@@ -567,13 +636,7 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         },
     ]
-    inserted = (
-        supabase_admin_client.table("review_assignments")
-        .insert(assignments)
-        .execute()
-        .data
-        or []
-    )
+    inserted = _insert_review_assignments_compatible(supabase_admin_client, assignments)
     accepted_assignment_id = next(
         row["id"] for row in inserted if row["reviewer_id"] == reviewer_accepted.id
     )
@@ -585,6 +648,11 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
             "content": "Proceed to decision",
         }
     ).execute()
+    email_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.services.first_decision_request_email.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
 
     try:
         res = await client.post(
@@ -593,6 +661,7 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
             json={
                 "target_stage": "first",
                 "requested_outcome": "major_revision",
+                "recipient_emails": [recipient.email],
                 "note": "Enough review evidence collected",
                 "accepted_pending_resolutions": [
                     {
@@ -608,6 +677,10 @@ async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers
         assert payload["success"] is True
         assert payload["data"]["manuscript_status"] == "decision"
         assert accepted_assignment_id in payload["data"]["manually_cancelled_assignment_ids"]
+        assert payload["data"]["first_decision_email_sent_recipients"] == [recipient.email]
+        assert payload["data"]["first_decision_email_failed_recipients"] == []
+        assert email_calls
+        assert email_calls[0]["to_email"] == recipient.email
 
         manuscript = (
             supabase_admin_client.table("manuscripts")
@@ -722,14 +795,29 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
     client,
     supabase_admin_client,
     set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    editor = make_user(email="decision_editor_zero_reports@example.com")
-    author = make_user(email="decision_author_zero_reports@example.com")
-    reviewer_selected = make_user(email="decision_reviewer_zero_selected@example.com")
-    reviewer_invited = make_user(email="decision_reviewer_zero_invited@example.com")
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_zero_reports_{suffix}@example.com")
+    author = make_user(email=f"decision_author_zero_reports_{suffix}@example.com")
+    recipient = make_user(email=f"decision_recipient_zero_reports_{suffix}@example.com")
+    reviewer_selected = make_user(email=f"decision_reviewer_zero_selected_{suffix}@example.com")
+    reviewer_invited = make_user(email=f"decision_reviewer_zero_invited_{suffix}@example.com")
     set_admin_emails([editor.email])
     _require_decision_schema(supabase_admin_client)
     _require_review_assignment_schema(supabase_admin_client)
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
 
     manuscript_id = str(uuid4())
     insert_manuscript(
@@ -741,7 +829,8 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
         version=2,
         file_path=f"manuscripts/{manuscript_id}/v2.pdf",
     )
-    supabase_admin_client.table("review_assignments").insert(
+    _insert_review_assignments_compatible(
+        supabase_admin_client,
         [
             {
                 "manuscript_id": manuscript_id,
@@ -757,7 +846,13 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
                 "invited_at": datetime.now(timezone.utc).isoformat(),
             },
         ]
-    ).execute()
+    )
+
+    email_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.services.first_decision_request_email.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
 
     try:
         res = await client.post(
@@ -766,6 +861,7 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
             json={
                 "target_stage": "first",
                 "requested_outcome": "accept_after_minor_revision",
+                "recipient_emails": [recipient.email],
                 "note": "Proceed without waiting for reviewer reports",
                 "accepted_pending_resolutions": [],
             },
@@ -776,6 +872,10 @@ async def test_review_stage_exit_allows_zero_submitted_reports(
         assert payload["data"]["manuscript_status"] == "decision"
         assert payload["data"]["auto_cancelled_assignment_ids"]
         assert payload["data"]["manually_cancelled_assignment_ids"] == []
+        assert payload["data"]["first_decision_email_sent_recipients"] == [recipient.email]
+        assert payload["data"]["first_decision_email_failed_recipients"] == []
+        assert email_calls
+        assert email_calls[0]["to_email"] == recipient.email
 
         manuscript = (
             supabase_admin_client.table("manuscripts")
@@ -880,5 +980,83 @@ async def test_review_stage_exit_first_decision_sends_request_email_with_academi
             email_calls[0]["context"]["requested_outcome_label"]
             == "Accept After Minor Revision"
         )
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_stage_exit_direct_minor_revision_returns_author_email_delivery_summary(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_direct_minor_{suffix}@example.com")
+    author = make_user(email=f"decision_author_direct_minor_{suffix}@example.com")
+    set_admin_emails([editor.email])
+    _require_decision_schema(supabase_admin_client)
+
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="under_review",
+        title="Review Stage Exit Direct Minor Revision Manuscript",
+        version=2,
+        file_path=f"manuscripts/{manuscript_id}/v2.pdf",
+        submission_email=author.email,
+    )
+
+    email_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.services.decision_service.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
+
+    try:
+        res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/review-stage-exit",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "target_stage": "minor_revision",
+                "note": "Move directly to minor revision after editorial synthesis.",
+                "accepted_pending_resolutions": [],
+            },
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["success"] is True
+        assert payload["data"]["manuscript_status"] == "minor_revision"
+        assert payload["data"]["author_revision_email_sent_recipient"] == author.email
+        assert payload["data"]["author_revision_email_failed_recipient"] is None
+        assert email_calls
+        assert email_calls[0]["to_email"] == author.email
+        assert email_calls[0]["template_key"] == "direct_revision_request"
+
+        manuscript = (
+            supabase_admin_client.table("manuscripts")
+            .select("status")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert manuscript["status"] == "minor_revision"
     finally:
         _cleanup(supabase_admin_client, manuscript_id)

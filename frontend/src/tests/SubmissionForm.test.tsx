@@ -308,6 +308,84 @@ describe('SubmissionForm Component', () => {
     expect(fetchMock.mock.calls.find((call) => call[0] === '/api/v1/manuscripts')).toBeFalsy()
   })
 
+  it('shows the duplicated normalized author email in a dedicated warning notice', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+    ;(authService.getAccessToken as any).mockResolvedValue('token')
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: { title: 'Parsed Title', abstract: 'A'.repeat(40), authors: [] },
+            }),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('submission-file'), {
+      target: { files: [new File(['pdf'], 'paper.pdf', { type: 'application/pdf' })] },
+    })
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Parsed Title')).toBeInTheDocument()
+    })
+
+    selectWordSourceType()
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Word manuscript uploaded:/i)).toBeInTheDocument()
+    })
+
+    fillRequiredAuthorFields()
+    fireEvent.click(screen.getByTestId('submission-add-author'))
+    fireEvent.change(screen.getByTestId('submission-author-name-1'), {
+      target: { value: 'Alice Zhang' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-email-1'), {
+      target: { value: ' ALICE.ZHANG@example.com ' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-affiliation-1'), {
+      target: { value: 'Wuhan University' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-city-1'), {
+      target: { value: 'Wuhan' },
+    })
+    fireEvent.change(screen.getByTestId('submission-author-country-1'), {
+      target: { value: 'China' },
+    })
+    fireEvent.blur(screen.getByTestId('submission-author-email-1'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-duplicate-author-email-warning')).toHaveTextContent(
+        'alice.zhang@example.com',
+      )
+    })
+  })
+
   it('explains that submission email can differ from listed author emails', () => {
     render(<SubmissionForm />)
 
@@ -663,6 +741,76 @@ describe('SubmissionForm Component', () => {
     })
 
     expect(screen.queryByDisplayValue('Carol Wang')).not.toBeInTheDocument()
+  })
+
+  it('clears untouched DOCX-derived metadata when the uploaded Word manuscript is removed', async () => {
+    ;(authService.getSession as any).mockResolvedValue({
+      user: { id: 'u1', email: 'user@example.com' },
+      access_token: 'token',
+    })
+
+    const fetchMock = vi.fn(async (url: any) => {
+      if (url === '/api/v1/public/journals') {
+        return { ok: true, json: async () => JOURNAL_LIST_SUCCESS } as any
+      }
+      if (url === '/api/v1/manuscripts/upload') {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              success: true,
+              data: {
+                title: 'Word First Title',
+                abstract: 'A'.repeat(40),
+                author_contacts: [
+                  {
+                    name: 'Alice Chen',
+                    email: 'alice.chen@example.edu',
+                    affiliation: 'Central China Normal University',
+                    city: 'Wuhan',
+                    country_or_region: 'China',
+                    is_corresponding: true,
+                  },
+                ],
+                parser_source: 'gemini',
+              },
+            }),
+        } as any
+      }
+      return { ok: true, json: async () => ({ success: true }) } as any
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SubmissionForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-user')).toBeInTheDocument()
+    })
+
+    selectWordSourceType()
+    fireEvent.change(screen.getByTestId('submission-word-file'), {
+      target: {
+        files: [
+          new File(['word'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Word First Title')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('alice.chen@example.edu')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /remove word manuscript/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('submission-title')).toHaveValue('')
+      expect(screen.getByTestId('submission-abstract')).toHaveValue('')
+      expect(screen.getByTestId('submission-author-name-0')).toHaveValue('')
+      expect(screen.getByTestId('submission-author-email-0')).toHaveValue('')
+    })
   })
 
   it('handles file upload failure gracefully', async () => {

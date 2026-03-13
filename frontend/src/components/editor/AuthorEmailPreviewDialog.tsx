@@ -101,6 +101,7 @@ export function AuthorEmailPreviewDialog({
                     id="author-email-preview-recipient"
                     type="email"
                     value={recipientEmail}
+                    disabled={sending}
                     onChange={(event) => onRecipientEmailChange(event.target.value)}
                     placeholder={preview.recipient_email}
                     autoComplete="off"

@@ -14,6 +14,7 @@ import {
   SubmissionWordUploadCard,
   useSubmissionForm,
 } from '@/components/submission'
+import { InlineNotice } from '@/components/ui/inline-notice'
 
 export default function SubmissionForm() {
   const form = useSubmissionForm()
@@ -71,6 +72,12 @@ export default function SubmissionForm() {
         onPolicyConsentChange={form.onPolicyConsentChange}
         onEthicsConsentChange={form.onEthicsConsentChange}
       />
+
+      {form.duplicateAuthorEmail ? (
+        <InlineNotice tone="danger" size="sm" data-testid="submission-duplicate-author-email-warning">
+          Duplicate author email detected: {form.duplicateAuthorEmail}. Each author email must be unique.
+        </InlineNotice>
+      ) : null}
 
       <SubmissionCoverLetterCard
         isUploadingCoverLetter={form.isUploadingCoverLetter}

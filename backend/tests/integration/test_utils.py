@@ -60,6 +60,7 @@ def insert_manuscript(
     version: int = 1,
     file_path: str = "",
     journal_id: Optional[str] = None,
+    submission_email: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     插入一条 manuscripts 记录（用于修订循环的前置状态）
@@ -77,6 +78,8 @@ def insert_manuscript(
         payload["file_path"] = file_path
     if journal_id:
         payload["journal_id"] = journal_id
+    if submission_email:
+        payload["submission_email"] = submission_email
 
     resp = db.table("manuscripts").insert(payload).execute()
     data = getattr(resp, "data", None) or []
