@@ -1,13 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Loader2, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Loader2, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { EditorApi } from '@/services/editorApi'
 import { getStatusLabel } from '@/lib/statusStyles'
-import ProductionUploadDialog from '@/components/ProductionUploadDialog'
+import { cn } from '@/lib/utils'
 
 type Props = {
   manuscriptId: string
@@ -16,31 +17,6 @@ type Props = {
   invoice?: { status?: string | null; amount?: number | string | null } | null
   onStatusChange?: (nextStatus: string) => void
   onReload?: () => Promise<void> | void
-}
-
-const NEXT: Record<string, string | null> = {
-  approved: 'layout',
-  layout: 'english_editing',
-  english_editing: 'proofreading',
-  proofreading: 'published',
-  published: null,
-}
-
-const PREV: Record<string, string | null> = {
-  approved: null,
-  layout: 'approved',
-  english_editing: 'layout',
-  proofreading: 'english_editing',
-  published: null,
-}
-
-function nextActionLabel(status: string): string {
-  const s = (status || '').toLowerCase()
-  if (s === 'approved') return 'Start Layout'
-  if (s === 'layout') return 'Start English Editing'
-  if (s === 'english_editing') return 'Start Proofreading'
-  if (s === 'proofreading') return 'Publish'
-  return 'Advance'
 }
 
 function isPaid(invoice?: Props['invoice']) {
@@ -57,36 +33,26 @@ export function ProductionStatusCard({
   status,
   finalPdfPath,
   invoice,
-  onStatusChange,
   onReload,
 }: Props) {
   const normalized = (status || '').toLowerCase()
-  const nextStatus = NEXT[normalized] ?? null
-  const prevStatus = PREV[normalized] ?? null
+  const [pending, setPending] = useState(false)
 
-  const [pending, setPending] = useState<'advance' | 'revert' | null>(null)
-  const [optimistic, setOptimistic] = useState<string | null>(null)
-
-  const effectiveStatus = optimistic ?? normalized
-
+  const paymentOk = isPaid(invoice)
+  const hasFinal = Boolean((finalPdfPath || '').trim())
+  
   const gateHint = useMemo(() => {
-    if ((nextStatus || '').toLowerCase() !== 'published') return null
-    const paymentOk = isPaid(invoice)
-    const hasFinal = Boolean((finalPdfPath || '').trim())
     return {
       paymentOk,
       hasFinal,
     }
-  }, [finalPdfPath, invoice, nextStatus])
+  }, [hasFinal, paymentOk])
 
-  const showAdvance = nextStatus != null
-  const showRevert = prevStatus != null
-  const paymentOk = isPaid(invoice)
   const shouldShowMarkPaid = !paymentOk
-  const shouldShowUpload = effectiveStatus !== 'published'
 
   async function markPaid() {
     const toastId = toast.loading('Confirming payment…')
+    setPending(true)
     try {
       const res = await EditorApi.confirmInvoicePaid(manuscriptId)
       if (!res?.success) throw new Error(res?.detail || res?.message || 'Confirm payment failed')
@@ -94,72 +60,32 @@ export function ProductionStatusCard({
       void onReload?.()
     } catch (e: any) {
       toast.error(e instanceof Error ? e.message : 'Confirm payment failed', { id: toastId })
+    } finally {
+      setPending(false)
     }
   }
 
-  async function runAdvance() {
-    if (!nextStatus) return
-
-    const previous = normalized
-    const optimisticNext = nextStatus.toLowerCase()
-
-    setPending('advance')
-    setOptimistic(optimisticNext)
-    onStatusChange?.(optimisticNext)
-
+  async function runPublish() {
+    const toastId = toast.loading('Publishing…')
+    setPending(true)
     try {
       const res = await EditorApi.advanceProduction(manuscriptId)
-      if (!res?.success) throw new Error(res?.detail || res?.message || 'Advance failed')
-      const newStatus = String(res?.data?.new_status || optimisticNext).toLowerCase()
-      setOptimistic(null)
-      onStatusChange?.(newStatus)
-      toast.success(`Moved to ${getStatusLabel(newStatus)}`)
+      if (!res?.success) throw new Error(res?.detail || res?.message || 'Publish failed')
+      toast.success(`Moved to Published`, { id: toastId })
       void onReload?.()
     } catch (e: any) {
-      setOptimistic(null)
-      onStatusChange?.(previous)
-
       const detail =
-        e instanceof Error ? e.message : typeof e === 'string' ? e : 'Advance failed'
+        e instanceof Error ? e.message : typeof e === 'string' ? e : 'Publish failed'
       // 中文注释：尽量把门禁错误翻译成更友好的提示
       if (String(detail).toLowerCase().includes('payment required')) {
-        toast.error('Waiting for Payment.')
-      } else if (String(detail).toLowerCase().includes('production pdf')) {
-        toast.error('Production PDF required.')
+        toast.error('Waiting for Payment.', { id: toastId })
+      } else if (String(detail).toLowerCase().includes('production pdf') || String(detail).toLowerCase().includes('approval required')) {
+        toast.error('Production Gate not met.', { id: toastId })
       } else {
-        toast.error(detail)
+        toast.error(detail, { id: toastId })
       }
     } finally {
-      setPending(null)
-    }
-  }
-
-  async function runRevert() {
-    if (!prevStatus) return
-
-    const previous = normalized
-    const optimisticNext = prevStatus.toLowerCase()
-
-    setPending('revert')
-    setOptimistic(optimisticNext)
-    onStatusChange?.(optimisticNext)
-
-    try {
-      const res = await EditorApi.revertProduction(manuscriptId)
-      if (!res?.success) throw new Error(res?.detail || res?.message || 'Revert failed')
-      const newStatus = String(res?.data?.new_status || optimisticNext).toLowerCase()
-      setOptimistic(null)
-      onStatusChange?.(newStatus)
-      toast.success(`Reverted to ${getStatusLabel(newStatus)}`)
-      void onReload?.()
-    } catch (e: any) {
-      setOptimistic(null)
-      onStatusChange?.(previous)
-      const detail =
-        e instanceof Error ? e.message : typeof e === 'string' ? e : 'Revert failed'
-      toast.error(detail)
-    } finally {
-      setPending(null)
+      setPending(false)
     }
   }
 
@@ -171,8 +97,8 @@ export function ProductionStatusCard({
       <CardContent className="space-y-3 text-sm">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Current Stage</span>
-          <span className="text-foreground" data-testid="production-stage">
-            {getStatusLabel(effectiveStatus)}
+          <span className="text-foreground font-semibold" data-testid="production-stage">
+            {getStatusLabel(normalized)}
           </span>
         </div>
 
@@ -180,35 +106,22 @@ export function ProductionStatusCard({
           <div className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground space-y-1">
             <div className="flex items-center justify-between">
               <span>Payment</span>
-              <span className={gateHint.paymentOk ? 'text-emerald-700' : 'text-amber-700'}>
+              <span className={gateHint.paymentOk ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
                 {gateHint.paymentOk ? 'OK' : 'Pending'}
               </span>
             </div>
             <div className="flex items-center justify-between">
+              <span>Final SOP Approval</span>
+              <span className={normalized === 'approved_for_publish' || normalized === 'published' ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+                {normalized === 'approved_for_publish' || normalized === 'published' ? 'Approved' : 'Pending'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
               <span>Final PDF</span>
-              <span className={gateHint.hasFinal ? 'text-emerald-700' : 'text-amber-700'}>
+              <span className={gateHint.hasFinal ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
                 {gateHint.hasFinal ? 'Uploaded' : 'Missing'}
               </span>
             </div>
-            <div className="text-muted-foreground">Note: Production Gate may be disabled in MVP.</div>
-          </div>
-        ) : null}
-
-        {shouldShowUpload ? (
-          <div className="rounded-lg border border-border bg-card p-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Final PDF</span>
-              <span className="font-mono text-[11px] text-foreground truncate max-w-44" title={finalPdfPath || ''}>
-                {finalPdfPath ? 'Uploaded' : 'Missing'}
-              </span>
-            </div>
-            <ProductionUploadDialog
-              manuscriptId={manuscriptId}
-              disabled={pending != null}
-              onUploaded={() => {
-                void onReload?.()
-              }}
-            />
           </div>
         ) : null}
 
@@ -218,33 +131,27 @@ export function ProductionStatusCard({
               <span className="text-muted-foreground">Payment</span>
               <span className="text-amber-700 font-medium">Pending</span>
             </div>
-            <Button type="button" variant="outline" className="w-full" onClick={markPaid} disabled={pending != null}>
+            <Button type="button" variant="outline" className="w-full" onClick={markPaid} disabled={pending}>
               Mark Paid
             </Button>
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-2">
-          {showAdvance ? (
-            <Button className="w-full justify-between" onClick={runAdvance} disabled={pending != null}>
-              <span>{nextActionLabel(normalized)}</span>
-              {pending === 'advance' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+        <div className="flex flex-col gap-2 pt-2 border-t border-border">
+          <Link
+            href={`/editor/production/${encodeURIComponent(manuscriptId)}`}
+            className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-between')}
+          >
+            <span>Open Production Workspace</span>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+          
+          {normalized === 'approved_for_publish' && (
+            <Button className="w-full justify-between mt-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={runPublish} disabled={pending}>
+              <span>Publish Manuscript</span>
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </Button>
-          ) : (
-            <div className="text-sm text-muted-foreground">No next actions available.</div>
           )}
-
-          {showRevert ? (
-            <Button
-              className="w-full justify-between"
-              variant="outline"
-              onClick={runRevert}
-              disabled={pending != null}
-            >
-              <span>Revert</span>
-              {pending === 'revert' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
-            </Button>
-          ) : null}
         </div>
       </CardContent>
     </Card>

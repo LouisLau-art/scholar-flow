@@ -15,23 +15,12 @@ from app.services.production_workspace_service import ProductionWorkspaceService
 
 POST_ACCEPTANCE_CHAIN: Final[list[str]] = [
     "approved",
-    "layout",
-    "english_editing",
-    "proofreading",
+    "approved_for_publish",
     "published",
 ]
 
 _NEXT: Final[dict[str, str]] = {
-    "approved": "layout",
-    "layout": "english_editing",
-    "english_editing": "proofreading",
-    "proofreading": "published",
-}
-
-_PREV: Final[dict[str, str]] = {
-    "layout": "approved",
-    "english_editing": "layout",
-    "proofreading": "english_editing",
+    "approved_for_publish": "published",
 }
 
 
@@ -67,11 +56,11 @@ class ProductionResult:
 
 class ProductionService:
     """
-    Feature 031：录用后出版流水线（Post-Acceptance Workflow）。
+    Feature 031 / SOP: 录用后出版流水线（Post-Acceptance Workflow）。
 
     中文注释:
-    - 本服务只处理 approved/layout/english_editing/proofreading/published 这一段链路。
-    - Published 必须显式执行 Payment Gate（+ 可选 Production Gate）。
+    - 本服务现在只负责 published 发布门禁聚合。
+    - 中间阶段由 SOP 的 production cycles 管理。
     """
 
     def __init__(
@@ -101,9 +90,6 @@ class ProductionService:
             return None
 
     def _load_manuscript_for_gate(self, manuscript_id: str) -> dict[str, Any]:
-        """
-        Gate 只需要 status + final_pdf_path（若列不存在要降级兼容）。
-        """
         try:
             resp = (
                 self.client.table("manuscripts")
@@ -126,14 +112,9 @@ class ProductionService:
             raise
 
     def _payment_gate(self, manuscript_id: str, ms_status: str) -> None:
-        """
-        Payment Gate（强制）：
-        - amount > 0 且 status 不在 (paid, waived) -> 403
-        - 若 invoice 缺失但 manuscript 已在 post-acceptance（approved+）-> 403
-        """
         invoice = self._load_invoice(manuscript_id)
         if invoice is None:
-            if (ms_status or "").lower() in {"approved", "layout", "english_editing", "proofreading"}:
+            if (ms_status or "").lower() in {"approved", "approved_for_publish"}:
                 raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
             return
 
@@ -146,12 +127,6 @@ class ProductionService:
             raise HTTPException(status_code=403, detail="Payment Required: Invoice is unpaid.")
 
     def _production_gate(self, ms: dict[str, Any]) -> None:
-        """
-        Production Gate（可选）：
-        - PRODUCTION_GATE_ENABLED=true 时启用
-        - 仅当 schema 存在 final_pdf_path 时拦截（字段缺失则降级不拦截）
-        """
-        # 默认开启（测试/生产更安全）；如需提速可显式设置 PRODUCTION_GATE_ENABLED=0
         if not _is_truthy_env("PRODUCTION_GATE_ENABLED", "1"):
             return
         if "final_pdf_path" not in ms:
@@ -174,23 +149,13 @@ class ProductionService:
         if current not in _NEXT:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported production advance from status '{current}'.",
+                detail=f"Unsupported production advance from status '{current}'. SOP workflow only allows advance to published.",
             )
 
         nxt = _NEXT[current]
-        if nxt != "published":
-            updated = self.editorial.update_status(
-                manuscript_id=manuscript_id,
-                to_status=nxt,
-                changed_by=changed_by,
-                comment="production advance",
-                allow_skip=allow_skip,
-            )
-            return ProductionResult(previous_status=current, new_status=nxt, manuscript=updated)
 
         # Publish：必须过门禁 + 填充 doi/published_at（尽力写入，缺列则降级为仅 status）
         self._payment_gate(manuscript_id, current)
-        # Feature 042：发布前应绑定到“已核准生产轮次”（严格模式可通过环境变量控制）
         self.workspace.assert_publish_gate_ready(manuscript_id=manuscript_id)
         self._production_gate(ms)
 
@@ -206,7 +171,6 @@ class ProductionService:
                 extra_updates={"published_at": now, "doi": doi},
             )
         except HTTPException as e:
-            # 兼容云端 schema 未同步（published_at/doi 缺列）
             cause = getattr(e, "__cause__", None)
             if e.status_code == 500 and _is_missing_column_error(str(cause) if cause else str(e)):
                 updated = self.editorial.update_status(
@@ -228,25 +192,7 @@ class ProductionService:
         changed_by: str | None,
         allow_skip: bool = False,
     ) -> ProductionResult:
-        ms = self._load_manuscript_for_gate(manuscript_id)
-        if not ms:
-            raise HTTPException(status_code=404, detail="Manuscript not found")
-
-        current = (ms.get("status") or "").strip().lower()
-        if current not in _PREV:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported production revert from status '{current}'.",
-            )
-        prev = _PREV[current]
-        # 中文注释：
-        # - revert 入口本身已被 _PREV 白名单约束为“单步回退”；
-        # - 通用状态机是前进导向（不含回退边），这里需显式跳过该检查。
-        updated = self.editorial.update_status(
-            manuscript_id=manuscript_id,
-            to_status=prev,
-            changed_by=changed_by,
-            comment="production revert",
-            allow_skip=True,
+        raise HTTPException(
+            status_code=400,
+            detail="Direct manuscript status revert is no longer supported in SOP workflow. Please use the Production Workspace for revisions.",
         )
-        return ProductionResult(previous_status=current, new_status=prev, manuscript=updated)

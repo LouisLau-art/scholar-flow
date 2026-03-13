@@ -689,7 +689,7 @@ export default function EditorManuscriptDetailPage() {
   const status = String(ms?.status || '')
   const statusLower = normalizeWorkflowStatus(status)
   const isPrecheckActive = statusLower === 'pre_check'
-  const isPostAcceptance = ['approved', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
+  const isPostAcceptance = ['approved', 'approved_for_publish', 'layout', 'english_editing', 'proofreading', 'published'].includes(statusLower)
   const nextStatuses = useMemo(
     () => allowedNext(status, { preCheckStatus: ms?.pre_check_status }),
     [ms?.pre_check_status, status]
