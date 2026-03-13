@@ -14,7 +14,7 @@
 当前 ScholarFlow 的编辑流程主线分为五段：
 
 1. 作者投稿
-2. ME 入口分配
+2. ME 入口 / Managing Workspace 分配
 3. AE 技术检查
 4. 外审 / 学术预审分流
 5. 决策阶段
@@ -129,11 +129,11 @@
 投稿成功后，稿件进入：
 
 - `status = pre_check`
-- `pre_check_status = technical`
+- `pre_check_status = intake`
 
 ### 3.2 ME 可执行动作
 
-Managing Editor 在 Intake Queue 中可执行：
+Managing Editor 在 `/editor/intake` 兼容入口对应的 `Managing Editor Workspace` 中可执行：
 
 1. 分配 Assistant Editor
 2. 技术退回作者

@@ -1,7 +1,7 @@
 # Open Work Items
 
 日期：2026-03-10  
-当前代码锚点：`0162528` 之后的本地收口中  
+当前代码锚点：`2a1d2ad` 之后的本地收口中
 目的：把最近连续插入的新需求与遗留问题收敛成一份可执行清单，避免工作流漂移。
 
 ## 一、正在收口
@@ -24,10 +24,12 @@
   - `PDF + Cover Letter + (Word xor ZIP)`
   - `LaTeX` 当前只支持 `.zip`
   - ZIP 仅进入 Storage / manuscript_files，不参与 AI 解析
-  - 投稿页交互也已收成：
-    - 先选 `Manuscript Source`
-    - 再只显示单一 `Word` 或 `ZIP` 上传入口
-    - 切换 source type 时要求确认并清空当前 source 文件
+- 投稿页交互也已收成：
+  - 先选 `Manuscript Source`
+  - 再只显示单一 `Word` 或 `ZIP` 上传入口
+  - 切换 source type 时要求确认并清空当前 source 文件
+- 前端已补作者邮箱重复 warning，会直接提示归一化后的重复邮箱
+- 移除已上传 Word 稿或切换 away 时，会清理未被手动触碰的 DOCX 派生元数据，避免旧解析结果残留
 - 作者顺序已支持前端调整（`Move Up / Move Down`）
 - 后端模型、写库逻辑、远端 Supabase migration 已完成
 - 通讯作者现在已放宽为“至少一个，可多个”
@@ -175,6 +177,7 @@
     - `HTML Body` 可编辑
     - `Plain Text` 由当前 HTML 自动派生，只读
   - override 收件人时按 preview/test-send 处理，不推进 reviewer 状态机
+  - sending / saving 期间会锁定 compose dialog 与 invoice modal 关键输入，避免半提交状态
 
 ## 三、Reviewer / Decision 仍需继续收口
 
