@@ -49,7 +49,14 @@
   - 发票邮件
   - 发表通知
   现在全部优先使用 `submission_email / corresponding author email`
+- direct revision / decision workflow 的 author email envelope 也已收口：
+  - 无通讯作者时优先主送 `submission_email`
+  - 普通作者联系人继续保留在 `cc`
+  - journal public editorial email 继续保留在 `reply-to`
 - 投稿确认邮件（Submission Received）也已统一走相同收件人解析逻辑
+- 作者稿件详情页已补 mocked Playwright smoke：
+  - 锁定 `Submission Email`
+  - 锁定 `Corresponding Author Email(s)`
 
 剩余收尾：
 
@@ -62,6 +69,11 @@
   - 导出
   - 决策信
   是否还在默认使用账号邮箱
+- 当前只读审计结论：
+  - `invoice`
+  - `final decision auto mail`
+  - `decision workflow notify`
+  已走统一 `resolve_author_notification_target` 口径，没有新的硬 blocker
 
 ### 1.1 Reviewer Dashboard 个人历史归档
 
