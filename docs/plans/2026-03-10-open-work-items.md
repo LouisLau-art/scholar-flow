@@ -53,7 +53,15 @@
 
 剩余收尾：
 
-- 继续检查作者详情、作者看板、导出/决策信中是否还在默认使用账号邮箱
+- 作者详情页已展示：
+  - `Submission Email`
+  - `Corresponding Author(s)`
+  - `Corresponding Author Email(s)`
+- 作者看板当前仅通过列表跳转到作者详情页，不单独消费 `author-context`
+- 后续仅需继续检查：
+  - 导出
+  - 决策信
+  是否还在默认使用账号邮箱
 
 ### 1.1 Reviewer Dashboard 个人历史归档
 
