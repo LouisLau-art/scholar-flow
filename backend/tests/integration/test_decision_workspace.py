@@ -553,6 +553,142 @@ async def test_academic_recommendation_then_editorial_execute_to_review_writes_p
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_academic_assignee_survives_review_round_trip_and_can_open_decision_context(
+    client,
+    supabase_admin_client,
+    set_admin_emails,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    suffix = uuid4().hex[:8]
+    editor = make_user(email=f"decision_editor_academic_continuity_{suffix}@example.com")
+    academic = make_user(email=f"decision_academic_continuity_{suffix}@example.com")
+    author = make_user(email=f"decision_author_academic_continuity_{suffix}@example.com")
+    recipient = make_user(email=f"decision_recipient_academic_continuity_{suffix}@example.com")
+    reviewer = make_user(email=f"decision_reviewer_academic_continuity_{suffix}@example.com")
+    set_admin_emails([editor.email])
+    _require_precheck_schema(supabase_admin_client)
+    _require_decision_schema(supabase_admin_client)
+    _require_review_assignment_schema(supabase_admin_client)
+
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=academic.id,
+        email=academic.email,
+        roles=["academic_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=editor.id,
+        email=editor.email,
+        roles=["managing_editor"],
+    )
+    _ensure_profile(
+        supabase_admin_client,
+        user_id=author.id,
+        email=author.email,
+        roles=["author"],
+    )
+
+    manuscript_id = str(uuid4())
+    insert_manuscript(
+        supabase_admin_client,
+        manuscript_id=manuscript_id,
+        author_id=author.id,
+        status="pre_check",
+        title="Academic Continuity Manuscript",
+        version=2,
+        file_path=f"manuscripts/{manuscript_id}/v2.pdf",
+    )
+    supabase_admin_client.table("manuscripts").update(
+        {
+            "pre_check_status": "academic",
+            "academic_editor_id": academic.id,
+            "assistant_editor_id": editor.id,
+        }
+    ).eq("id", manuscript_id).execute()
+
+    _insert_review_assignments_compatible(
+        supabase_admin_client,
+        [
+            {
+                "manuscript_id": manuscript_id,
+                "reviewer_id": reviewer.id,
+                "round_number": 1,
+                "status": "invited",
+                "invited_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+    )
+
+    email_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.services.first_decision_request_email.email_service.send_inline_email",
+        lambda **kwargs: email_calls.append(kwargs) or {"status": "sent", "ok": True},
+    )
+
+    try:
+        academic_res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/academic-check",
+            headers={"Authorization": f"Bearer {academic.token}"},
+            json={
+                "decision": "review",
+                "comment": "Recommend external review and stay attached through decision.",
+            },
+        )
+        assert academic_res.status_code == 200, academic_res.text
+
+        execute_review_res = await client.patch(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/status",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "status": "under_review",
+                "comment": "Editorial office moved manuscript into under_review.",
+            },
+        )
+        assert execute_review_res.status_code == 200, execute_review_res.text
+
+        execute_decision_res = await client.post(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/review-stage-exit",
+            headers={"Authorization": f"Bearer {editor.token}"},
+            json={
+                "target_stage": "first",
+                "requested_outcome": "major_revision",
+                "recipient_emails": [recipient.email],
+                "note": "Round trip back to decision after review collection.",
+                "accepted_pending_resolutions": [],
+            },
+        )
+        assert execute_decision_res.status_code == 200, execute_decision_res.text
+
+        manuscript_after_round_trip = (
+            supabase_admin_client.table("manuscripts")
+            .select("status,pre_check_status,academic_editor_id")
+            .eq("id", manuscript_id)
+            .single()
+            .execute()
+            .data
+        )
+        assert manuscript_after_round_trip["status"] == "decision"
+        assert manuscript_after_round_trip["pre_check_status"] is None
+        assert manuscript_after_round_trip["academic_editor_id"] == academic.id
+
+        context_res = await client.get(
+            f"/api/v1/editor/manuscripts/{manuscript_id}/decision-context",
+            headers={"Authorization": f"Bearer {academic.token}"},
+        )
+        assert context_res.status_code == 200, context_res.text
+        context_payload = context_res.json()
+        assert context_payload["data"]["manuscript"]["id"] == manuscript_id
+        assert context_payload["data"]["manuscript"]["status"] == "decision"
+        assert context_payload["data"]["permissions"]["submission_mode"] == "recommendation"
+        assert email_calls
+        assert email_calls[0]["to_email"] == recipient.email
+    finally:
+        _cleanup(supabase_admin_client, manuscript_id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_review_stage_exit_moves_to_decision_and_cancels_pending_reviewers(
     client,
     supabase_admin_client,
