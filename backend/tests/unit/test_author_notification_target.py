@@ -8,6 +8,7 @@ import pytest
 from fastapi import BackgroundTasks
 
 from app.api.v1.editor_common import IntakeRevisionRequest, resolve_author_notification_target
+from app.api.v1.editor_decision import request_revision as decision_request_revision
 from app.api.v1.editor_heavy_decision import submit_final_decision_impl
 from app.api.v1.editor_heavy_publish import publish_manuscript_dev_impl
 from app.api.v1.editor_heavy_revision import request_revision_impl
@@ -236,6 +237,42 @@ async def test_request_revision_impl_keeps_author_notification_in_app_only(monke
     assert str(result["data"]["revision"]["id"])
     resolve_target_mock.assert_not_called()
     assert len(background_tasks.tasks) == 0
+
+
+@pytest.mark.asyncio
+async def test_editor_decision_request_revision_preserves_author_email_envelope(monkeypatch):
+    manuscript = {
+        "id": str(uuid4()),
+        "author_id": str(uuid4()),
+        "title": "Decision Revision Manuscript",
+        "submission_email": "submission@example.org",
+        "author_contacts": [],
+    }
+    background_tasks = BackgroundTasks()
+    request = SimpleNamespace(
+        manuscript_id=manuscript["id"],
+        decision_type="minor",
+        comment="Please revise",
+    )
+
+    monkeypatch.setattr("app.api.v1.editor_decision.RevisionService", lambda: _FakeRevisionService(manuscript))
+    with patch("app.api.v1.editor_decision.NotificationService.create_notification", return_value=None), patch(
+        "app.api.v1.editor_decision.resolve_author_notification_target",
+        return_value=_normalize_target("submission@example.org", "Corr Author"),
+    ):
+        result = await decision_request_revision(
+            request=request,
+            current_user={"id": str(uuid4())},
+            profile={"roles": ["managing_editor"]},
+            background_tasks=background_tasks,
+        )
+
+    assert str(result.data.id)
+    assert len(background_tasks.tasks) == 1
+    task = background_tasks.tasks[0]
+    assert task.kwargs["to_email"] == "submission@example.org"
+    assert task.kwargs["cc_emails"] == ["coauthor@example.org", "office@example.org"]
+    assert task.kwargs["reply_to_emails"] == ["office@example.org"]
 
 
 @pytest.mark.asyncio

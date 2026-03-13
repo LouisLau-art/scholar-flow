@@ -231,6 +231,8 @@ async def request_revision(
                         background_tasks.add_task(
                             email_service.send_email_background,
                             to_email=author_email,
+                            cc_emails=target.get("cc_recipients") or [],
+                            reply_to_emails=target.get("reply_to_recipients") or [],
                             subject="Revision Requested",
                             template_name="status_update.html",
                             context={
