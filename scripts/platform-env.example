@@ -55,8 +55,8 @@ EMAIL_SENDER=ScholarFlow <no-reply@send.yourdomain.com>
 
 # ---------- Vercel ----------
 # 前端必填
-NEXT_PUBLIC_API_URL=https://louisshawn-scholarflow-api.hf.space
-BACKEND_ORIGIN=https://louisshawn-scholarflow-api.hf.space
+NEXT_PUBLIC_API_URL=https://YOUR_BACKEND_SPACE.hf.space
+BACKEND_ORIGIN=https://YOUR_BACKEND_SPACE.hf.space
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 NEXT_PUBLIC_APP_ENV=staging

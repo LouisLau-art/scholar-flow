@@ -1,0 +1,125 @@
+@page {
+  size: A4;
+  margin: 16mm 14mm 18mm 14mm;
+
+  @bottom-center {
+    content: "ScholarFlow 交接文档  ·  第 " counter(page) " 页";
+    font-size: 9pt;
+    color: #5b6470;
+  }
+}
+
+html {
+  font-size: 12pt;
+}
+
+body {
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #1f2933;
+  line-height: 1.65;
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #0f3557;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 1.1em;
+  margin-bottom: 0.45em;
+}
+
+h1 {
+  font-size: 24pt;
+  padding-bottom: 0.2em;
+  border-bottom: 2px solid #0f3557;
+}
+
+h2 {
+  font-size: 16pt;
+  border-left: 4px solid #0f3557;
+  padding-left: 0.45em;
+}
+
+h3 {
+  font-size: 13pt;
+}
+
+p,
+li {
+  font-size: 10.5pt;
+}
+
+code {
+  font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", monospace;
+  font-size: 9pt;
+  background: #edf3f8;
+  padding: 0.08em 0.32em;
+  border-radius: 4px;
+}
+
+pre {
+  background: #0f1720;
+  color: #f3f6f8;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 9pt;
+  line-height: 1.5;
+}
+
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0 1em;
+  table-layout: fixed;
+  font-size: 9.4pt;
+}
+
+thead {
+  background: #dce8f3;
+}
+
+th,
+td {
+  border: 1px solid #9fb1c1;
+  padding: 8px 9px;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+blockquote {
+  margin: 1em 0;
+  padding: 0.1em 1em;
+  background: #f4f8fb;
+  border-left: 4px solid #0f3557;
+  color: #314355;
+}
+
+ul,
+ol {
+  padding-left: 1.35em;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #c8d2dc;
+  margin: 1.3em 0;
+}
+
+a {
+  color: #0f3557;
+  text-decoration: none;
+}
+
+strong {
+  color: #102a43;
+}
