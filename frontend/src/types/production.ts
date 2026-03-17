@@ -60,6 +60,9 @@ export type ProductionProofreadingResponse = {
   summary?: string | null
   submitted_at?: string
   is_late?: boolean
+  attachment_bucket?: string | null
+  attachment_path?: string | null
+  attachment_file_name?: string | null
   corrections?: ProductionCorrectionItem[]
 }
 
