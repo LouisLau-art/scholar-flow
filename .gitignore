@@ -45,6 +45,7 @@ htmlcov/
 # Local scratch files (do not commit)
 /Text File.txt
 /apple-touch-icon.png
+/.claude/handoffs/
 
 # Local deploy env files (do not commit)
 /deploy/*.env

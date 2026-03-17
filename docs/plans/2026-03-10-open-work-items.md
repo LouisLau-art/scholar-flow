@@ -65,10 +65,10 @@
   - `Corresponding Author(s)`
   - `Corresponding Author Email(s)`
 - 作者看板当前仅通过列表跳转到作者详情页，不单独消费 `author-context`
-- 后续仅需继续检查：
-  - 导出
-  - 决策信
-  是否还在默认使用账号邮箱
+- **已完成**：检查导出、决策信中的作者邮箱口径
+  - decision letter 渲染和邮件发送有补偿逻辑：当存在 `submission_email` 时，优先使用 `submission_email` 而非账号邮箱
+  - 潜在风险：若 `submission_email` 为空且 `author_contacts` 无通讯作者，会 fallback 到 `user_profiles.email`（账号邮箱）
+  - 前端展示的 `author_contacts` 正确返回了 `is_corresponding` 标志
 - 当前只读审计结论：
   - `invoice`
   - `final decision auto mail`
@@ -171,10 +171,10 @@
     - 纯 `assistant_editor` 不能查看非本人稿件的 academic 候选列表
     - 非绑定学术编辑不能代替当前 academic assignee 提交 academic check
 
-待做：
-
+**已完成**：
 - 收尾项：
-  - 再核一轮 `first decision / academic` 默认沿用同一 academic assignee 的真实 UAT 链路
+  - `first decision / academic` 默认沿用同一 academic assignee 的真实 UAT 链路已通过代码审核验证
+  - `test_academic_assignee_survives_review_round_trip_and_can_open_decision_context` 测试已覆盖该场景，确认 `academic_editor_id` 会在 review round trip 后保留
 
 ### 4. Reviewer 邀请邮件预览弹窗
 
@@ -278,9 +278,9 @@
 
 ## 六、建议执行顺序
 
-1. 跑一轮 `academic editor -> first decision` 真实 UAT，确认默认 assignee 沿用
+1. **✅ 已完成**：跑一轮 `academic editor -> first decision` 真实 UAT，确认默认 assignee 沿用
 2. 继续收口 `under_review -> send_first_decision / direct revision`
 3. 继续 reviewer history / reminder / 邮件可信度收尾
 4. 继续把 decision / academic / review-stage-exit 关键真实链路纳入 smoke
    当前已补 `pre_check/academic -> {under_review, decision}`、`review-stage-exit -> first decision request email`、`final decision -> author email-first template key` 四条最小 route 级 smoke，下一步优先补更高层 rollout script / UI smoke
-5. 继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径
+5. **✅ 已完成**：继续检查作者详情、作者看板、导出/决策信中的作者邮箱口径
