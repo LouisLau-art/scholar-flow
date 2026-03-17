@@ -50,7 +50,7 @@ def test_send_first_decision_request_email_adds_journal_mailbox_cc_and_reply_to(
             return_value=dict(_DEFAULT_FIRST_DECISION_TEMPLATE),
         ),
         patch("app.services.first_decision_request_email._resolve_user_name", return_value="AE User"),
-        patch("app.services.first_decision_request_email.email_service.send_rendered_email", send_mock),
+        patch("app.services.first_decision_request_email.email_service.send_inline_email", send_mock),
     ):
         result = send_first_decision_request_email(
             manuscript={
@@ -101,7 +101,7 @@ def test_send_reviewer_assignment_cancellation_email_adds_journal_mailbox_cc_and
             "app.services.reviewer_assignment_cancellation_email._load_cancellation_template",
             return_value=dict(_DEFAULT_REVIEWER_CANCELLATION_TEMPLATE),
         ),
-        patch("app.services.reviewer_assignment_cancellation_email.email_service.send_rendered_email", send_mock),
+        patch("app.services.reviewer_assignment_cancellation_email.email_service.send_inline_email", send_mock),
     ):
         result = send_reviewer_assignment_cancellation_email(
             assignment={
